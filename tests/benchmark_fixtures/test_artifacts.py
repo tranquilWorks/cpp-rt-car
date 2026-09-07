@@ -181,7 +181,9 @@ class Artifacts(unittest.TestCase):
             self.assertFalse((self.root/"unused").exists())
             self.assertEqual(self.baseline,{p.name:p.read_bytes() for p in self.good.iterdir()})
         proc=subprocess.run([str(CLI),"list"],capture_output=True,text=True,check=True,timeout=30)
-        self.assertEqual(proc.stdout,"rtfw.self:structural\n")
+        catalog=json.loads((ROOT/"bench/fixtures/cpu_cases.json").read_text(encoding="utf-8"))
+        expected=["rtfw.self:structural"]+["rtfw.cpu:"+case["id"] for case in catalog["cases"]]
+        self.assertEqual(proc.stdout,"".join(name+"\n" for name in sorted(expected)))
         for clock in ("fake","steady"):
             out=self.root/clock
             subprocess.run(base+["--clock",clock,"--output",str(out)],check=True,capture_output=True,timeout=30)
