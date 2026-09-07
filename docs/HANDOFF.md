@@ -2,25 +2,28 @@
 
 ## Active batch: M23-02
 
-Baseline `b52b42a6c64066553ce55fb08c874061d78e036e` is merged PR #251.
-M23-01 repaired head `cb136d671088ed01bc75b5be0c67d991e7814cdf` passed
-CI run 34080242894. Preserve its initial failures and do not invent a separate
-human-review record. The complete M23-02 canonical contract is bound by
-`contracts/active-batch.yaml`; control PR #365 merged at
-`0a2885232090c85620ff61aada1b0a5ee18d38ad`.
+M23-02 source merged as PR #252 at
+`543af2b4728a171243e6d756554efa188c2e7d2f`. The original planning baseline
+remains merged PR #251 at `b52b42a6c64066553ce55fb08c874061d78e036e`.
+Control PR #366 merged at `7549d5d647fada8fad7637779301226c3ad87296`, adding
+`tests/benchmark_fixtures/test_artifacts.py` to the approved scope. The local
+active contract binds that canonical revision/blob without rewriting its
+original planning baseline.
 
-Read [benchmarking](benchmarking.md) and
-[M23-02 evidence](evidence/M23-02-2026-09-07.md). The candidate has 51 finite CPU
-cases, independent work oracles, explicit host preparation and checked cleanup,
-and installed source consumers. The runner and all Runtime sources, schemas,
-ABI and support claims remain unchanged. Review the current evidence for
-unresolved CI and control-scope checks before integrating or advancing.
+Read [benchmarking](benchmarking.md), the preserved
+[M23-02 evidence](evidence/M23-02-2026-09-07.md), and the new
+[discovery closure](evidence/M23-02-discovery-closure-2026-09-07.md).
+The CLI regression now expects the exact sorted self-plus-51-CPU inventory;
+malformed input, destination preservation, privacy, and self-provider checks
+remain enforced. PR #252's final CI run passed the Windows optional SDK and
+cross-platform artifact exchange but failed the obsolete list assertion in
+nine matrix jobs. Keep those historical failures; follow-up CI is authoritative
+for the correction.
 
-The original CLI artifact regression assumes only the self provider appears
-in list. Control PR #366 adds its omitted path to M23-02 scope. Until that
-correction is integrated, do not edit or disable the regression and do not
-claim all target tests pass. M23-03 through M23-05, M24 CUDA maturity, M25 SDK
-and M26 golden system remain future work. M18 hardware/RT, M19 Unreal and
+M23-03 multi-rate/control/replay/observability is the next software batch after
+this closure passes its gates. A validated, integrated canonical M23-03 contract
+is required before implementation. M23-04/M23-05, M24 CUDA maturity, M25 SDK and
+M26 golden system remain future work. M18 hardware/RT, M19 Unreal and
 signing/release/deployment remain separate gates.
 
 ## Restart context

@@ -1,9 +1,10 @@
 # Current state
 
 Last audited: 2026-09-07
-Batch baseline: `b52b42a6c64066553ce55fb08c874061d78e036e`
+Planning baseline: `b52b42a6c64066553ce55fb08c874061d78e036e`
+Continuation baseline: `543af2b4728a171243e6d756554efa188c2e7d2f` (merged PR #252)
 
-## M23-02 CPU benchmark candidate
+## M23-02 CPU benchmarks and discovery closure
 
 M23-01 merged as PR #251 after repaired head
 `cb136d671088ed01bc75b5be0c67d991e7814cdf` passed CI run 34080242894.
@@ -11,10 +12,13 @@ Its initial Clang failure and local dependency blockage remain historical
 facts in the unchanged M23-01 evidence. No separate human-review record is
 inferred from merge. M22/CAP-M22 remain portable-software complete.
 
-The active M23-02 candidate adds 51 CPU graph/executor/memory cases through the
+Merged PR #252 adds 51 CPU graph/executor/memory cases through the
 unchanged optional runner, explicit CLI selection, installed source examples,
 structural oracles and checked cleanup. See [benchmarking](benchmarking.md) and
-[M23-02 evidence](evidence/M23-02-2026-09-07.md) for actual validation and blocks.
+[M23-02 evidence](evidence/M23-02-2026-09-07.md) for the original validation and failures.
+Control PR #366 merged and authorizes the exact CLI inventory regression
+correction. The [discovery closure](evidence/M23-02-discovery-closure-2026-09-07.md)
+records the follow-up verification; merged source alone does not imply passing CI.
 M23/CAP-M23, M24-M26, hardware/RT, Unreal, signing/release and deployment remain
 incomplete. M23-03 is the next software scope only after M23-02 acceptance.
 
@@ -42,7 +46,7 @@ incomplete. M23-03 is the next software scope only after M23-02 acceptance.
   current Linux-host batch. M20-PRE-01, M21-01, and M21-02 are merged. M21-03
   and M21-04 are merged. M21-05 is merged at the audited baseline and closes
   the portable M21 software path. M22-01 through M22-03 are merged. M22-04 is merged as PR #250 and closes the portable M22 software path.
-  M23-01 is merged; M23-02 is the active CPU benchmark candidate.
+  M23-01 and M23-02 source are merged; M23-02 discovery/CI closure is active.
 
 ## M22-04 typed live-control SDK and stress (merged foundation)
 
