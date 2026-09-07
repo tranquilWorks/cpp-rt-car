@@ -497,3 +497,8 @@ qualify latency, hardware, RT1/RT2, or Unreal integration. See
 M23-01 adds only the optional `<rtfw/benchmark.hpp>` host-side source API and `rtfw::benchmark` component. It does not complete CAP-M23 or add Runtime/subsystem behavior. The canonical M23-M26 program remains required for software-framework feature completion.
 
 See [benchmarking](benchmarking.md) for build, install, provider and artifact contracts.
+
+
+## CPU benchmarks (M23-02)
+
+M23-02 adds 51 optional CPU graph/executor/memory cases using existing public Runtime APIs. Preparation is explicit, completed operations are checked independently, and cleanup must succeed before publication. It changes no Runtime behavior, ABI, schema, release or qualification claim.

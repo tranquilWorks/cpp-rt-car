@@ -490,3 +490,8 @@ Licensed under the [Apache License 2.0](LICENSE).
 The optional M23-01 host-side C++20 benchmark framework provides explicit external providers, a library/CLI, fake/steady clocks, canonical raw/result artifacts and offline validation. It does not require experimental SimCore and does not complete the M23-M26 software program.
 
 See [benchmarking](docs/benchmarking.md) for build, install, provider and artifact contracts.
+
+
+## CPU benchmarks (M23-02)
+
+M23-02 adds the optional `rtfw.cpu` source provider with 51 graph, executor, memory, queue-pressure and lifecycle cases. Each executes public Runtime operations with independent correctness checks; real timings remain portable characterization. The default build and SDK remain unchanged.

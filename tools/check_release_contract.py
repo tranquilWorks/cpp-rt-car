@@ -50,6 +50,16 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'bench/providers/cpu_provider.hpp',
+    'bench/providers/cpu_provider.cpp',
+    'bench/fixtures/cpu_cases.json',
+    'tests/test_benchmark_cpu.cpp',
+    'tests/benchmark_fixtures/test_cpu_cases.py',
+    'tests/benchmark_fixtures/cpu_consumer/CMakeLists.txt',
+    'tests/benchmark_fixtures/cpu_consumer/noalloc.cpp',
+    'tests/benchmark_fixtures/cpu_consumer/verify_package.py',
+    'tests/package_consumer/benchmark_cpu_consumer.cpp',
+
     'bench/CMakeLists.txt',
     'bench/include/rtfw/benchmark.hpp',
     'bench/src/benchmark.cpp',

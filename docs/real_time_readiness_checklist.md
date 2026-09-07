@@ -256,3 +256,8 @@ native-v2/v1-adapter boundary is in the [HAL v2 contract](hal_v2.md).
 M23-01 is host-side benchmark framework evidence only. It cannot establish controlled-host performance, near-optimality, physical hardware support, HIL, RT1/RT2, Unreal, signed provenance, release or deployment qualification. Human API/privacy/package review remains an explicit gate.
 
 See [benchmarking](benchmarking.md) for build, install, provider and artifact contracts.
+
+
+## CPU benchmarks (M23-02)
+
+M23-02 structural and simulated provider evidence establishes CPU work/counter/ownership correctness only. Native residency is explicit unprivileged process-local observation. Real clocks add portable characterization, with no elapsed-time gate or controlled-host latency/RT qualification claim.

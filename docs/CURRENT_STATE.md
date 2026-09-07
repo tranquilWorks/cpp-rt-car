@@ -1,15 +1,22 @@
 # Current state
 
-Last audited: 2026-09-06
-Batch baseline: `290397e86b65136c5479f7b1d69c961f73f8ac14`
+Last audited: 2026-09-07
+Batch baseline: `b52b42a6c64066553ce55fb08c874061d78e036e`
 
-## M23-01 candidate frontier
+## M23-02 CPU benchmark candidate
 
-M22-04 merged as PR #250; M22/CAP-M22 are portable-software complete. The
-optional M23-01 benchmark framework is a candidate under separate hosted and
-human review gates. See [benchmarking](benchmarking.md) and
-[retained evidence](evidence/M23-01-2026-09-06.md). No M23/CAP-M23, M24-M26,
-hardware/RT, Unreal, release, signing or deployment completion is claimed.
+M23-01 merged as PR #251 after repaired head
+`cb136d671088ed01bc75b5be0c67d991e7814cdf` passed CI run 34080242894.
+Its initial Clang failure and local dependency blockage remain historical
+facts in the unchanged M23-01 evidence. No separate human-review record is
+inferred from merge. M22/CAP-M22 remain portable-software complete.
+
+The active M23-02 candidate adds 51 CPU graph/executor/memory cases through the
+unchanged optional runner, explicit CLI selection, installed source examples,
+structural oracles and checked cleanup. See [benchmarking](benchmarking.md) and
+[M23-02 evidence](evidence/M23-02-2026-09-07.md) for actual validation and blocks.
+M23/CAP-M23, M24-M26, hardware/RT, Unreal, signing/release and deployment remain
+incomplete. M23-03 is the next software scope only after M23-02 acceptance.
 
 ## Product state
 
@@ -35,7 +42,7 @@ hardware/RT, Unreal, release, signing or deployment completion is claimed.
   current Linux-host batch. M20-PRE-01, M21-01, and M21-02 are merged. M21-03
   and M21-04 are merged. M21-05 is merged at the audited baseline and closes
   the portable M21 software path. M22-01 through M22-03 are merged. M22-04 is merged as PR #250 and closes the portable M22 software path.
-  M23-01 is the active optional benchmark candidate.
+  M23-01 is merged; M23-02 is the active CPU benchmark candidate.
 
 ## M22-04 typed live-control SDK and stress (merged foundation)
 

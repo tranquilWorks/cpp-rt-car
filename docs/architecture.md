@@ -566,3 +566,8 @@ public API, signing, publication, support-promotion, hardware, or Unreal path.
 The M23 benchmark library has no Runtime link edge. Providers are explicitly registered, borrowed, instance-local host-side callbacks; timing/counters are separated from artifact I/O. Canonical schemas and the offline validator form a separate evidence boundary, never a Runtime state input.
 
 See [benchmarking](benchmarking.md) for build, install, provider and artifact contracts.
+
+
+## CPU benchmarks (M23-02)
+
+M23-02 adds a non-exported CPU fixture library and installed example sources. Only that provider and the CLI link Runtime; the `rtfw::benchmark` dependency boundary remains unchanged. Runtime dies before its borrowed queue, memory and callback owners. Metadata discovery executes no workload or policy operation.

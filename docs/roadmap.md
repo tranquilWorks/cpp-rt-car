@@ -1,7 +1,7 @@
 # RTFW Completion Roadmap
 
-M21 and M22 are portable-software complete through merged PR #250. M23-01 is
-the active optional benchmark candidate. Software feature completion remains
+M21 and M22 are portable-software complete through merged PR #250. M23-01 merged as PR #251. M23-02 is
+the active CPU benchmark candidate. Software feature completion remains
 M26-06, not M22 or the presence of a benchmark framework.
 
 The roadmap converts the [product contract](product_contract.md) into
@@ -45,7 +45,7 @@ pass; file presence or a passing smoke test is not sufficient.
 | M20 | In progress | M20-PRE-01 is merged with deterministic host-independent fuzz, static, dependency, candidate-SBOM/provenance, strict-manifest, offline-fixture, and relocated-package assurance without signing or release; CAP-M20 remains open |
 | M21 | Complete | M21-01 through M21-05 are merged with fixed logical actions, conditional checkpoint state, deterministic active replay, and reusable public-surface conformance; physical/RT qualification remains separate |
 | M22 | Complete | M22-01 through M22-04 merged; typed controls, replay and stress closure at portable RT0 |
-| M23 | In progress | M23-01 optional benchmark candidate; subsystem providers and comparison policy remain M23-02 through M23-05 |
+| M23 | In progress | M23-01 merged; M23-02 CPU provider candidate; remaining providers/comparison policy belong to M23-03 through M23-05 |
 | M24 | Planned | Runtime-integrated CUDA physics, CPU oracle, bounded failure/lifetime and capability coverage |
 | M25 | Planned | Consumer SDK, backend kit, external CIL, independent host adapter and installed docs |
 | M26 | Planned | Golden full-system scenario, fault/benchmark/replay/documentation and final software audit |

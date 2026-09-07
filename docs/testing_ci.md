@@ -404,3 +404,8 @@ not physical, Unreal, HIL, field, RT1/RT2, or production evidence.
 M23-01 adds the `m23_benchmark`, `m23_benchmark_artifact_validator`, and `benchmark_package_consumer` gates. Existing compiler/sanitizer/ABI/release checks are retained. Constant-identity fake-clock artifacts are compared across compilers; real timing is characterization, never a CI latency threshold.
 
 See [benchmarking](benchmarking.md) for build, install, provider and artifact contracts.
+
+
+## CPU benchmarks (M23-02)
+
+M23-02 adds `BenchmarkCpu.*`, `m23_benchmark_cpu_inventory`, `m23_benchmark_cpu_noalloc`, and `benchmark_cpu_package_consumer`. The canonical CPU host-adapter fixture is compared separately across seven compiler/FMA/SDK configurations; platform-dependent memory and native scheduling observations are not byte-equality inputs. The CPU suite is included in existing sanitizer matrices and optional static analysis. Check retained evidence for actual results, including any unresolved scope or hosted gate.

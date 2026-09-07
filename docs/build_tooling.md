@@ -270,3 +270,8 @@ headers and targets remain excluded from the default install.
 `RTFW_BUILD_BENCHMARKS=ON` now enables the optional supported host-side library/CLI without requiring experiments. With it OFF, the default target/header inventory is unchanged. The old AoSoA/SoA executable still requires experiments and remains unpromoted.
 
 See [benchmarking](benchmarking.md) for build, install, provider and artifact contracts.
+
+
+## CPU benchmarks (M23-02)
+
+With benchmarks enabled, the optional install also contains CPU provider/example sources under `share/rtfw/bench/examples`. Consumers compile them against explicitly requested `rtfw::runtime` and `rtfw::benchmark`; no CPU target is added to the exported SDK. `tests/benchmark_fixtures/cpu_consumer/verify_package.py` extends the original clean relocation and embedding gate.

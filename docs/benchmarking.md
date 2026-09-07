@@ -1,4 +1,4 @@
-# Optional host-side benchmarks (M23-01)
+# Optional host-side benchmarks (M23-01 and M23-02)
 
 The C++20 `<rtfw/benchmark.hpp>` API and `rtfw-bench` CLI are an optional,
 instance-local host-control component. `RTFW_BUILD_BENCHMARKS=OFF` preserves
@@ -17,7 +17,7 @@ build/bench/bench/rtfw-bench run --provider rtfw.self --case structural --clock 
 python3 tools/check_benchmark_artifact.py --artifact-root build/bench-evidence
 ```
 
-`list` prints `rtfw.self:structural`. The fake-clock self case performs two
+`list` prints the sorted 51 `rtfw.cpu` cases and `rtfw.self:structural`. The fake-clock self case performs two
 warm-up and five measured calls, each with 16 operations and correctness token
 120. Its 100 ns fake increments produce 100 ns per sample and 500 ns total.
 These are **structural_fixture** values, not performance measurements. The
@@ -193,10 +193,122 @@ variants and MSVC. Existing sanitizers, ABI, package, release, no-allocation and
 portable-assurance gates remain required. Public API/privacy/portability and
 claim review remain explicit human gates; CI does not fabricate those reviews.
 
-M23-02 still owns CPU/graph/executor/memory cases; M23-03 owns multi-rate,
+M23-02 adds the CPU/graph/executor/memory cases described below; M23-03 owns multi-rate,
 control/replay/observability cases; M23-04 owns HAL/CUDA/XDMA/pipeline providers;
 M23-05 owns baseline comparison/noise/confidence/threshold policy. M24 CUDA
 physics, M25 general SDK experience, and M26 golden-system composition remain
 separate. No controlled-host performance, optimization/near-optimality,
 hardware support, HIL, RT1/RT2, Unreal, signing, release, deployment, or
 production evidence is established by this component.
+
+
+## CPU provider (M23-02)
+
+`rtfw.cpu` is an explicit instance-local ProviderV1, implementation version 1.
+It uses only installed Runtime APIs. The runner still has no Runtime link edge;
+the CPU source example and CLI explicitly link both components. Discovery and
+describe only copy metadata. The CLI validates input and output destination
+before preparing the selected case. Preparation may allocate and create the
+configured workers on the host control thread. It never prepares other cases.
+
+```sh
+build/bench/bench/rtfw-bench describe --provider rtfw.cpu --case host-adapter-64 --clock fake
+build/bench/bench/rtfw-bench run --provider rtfw.cpu --case host-adapter-64 --clock steady --output build/cpu-evidence
+python3 tools/check_benchmark_artifact.py --artifact-root build/cpu-evidence
+```
+
+The finite [inventory](../bench/fixtures/cpu_cases.json) has 51 cases, two warm-ups
+and five retained samples each. It covers the thirteen contracted areas; memory
+and native residency use separate catalog family labels. Bounds are four
+workers, 64 phases, 4096 entities, 256 nested tasks and 16 parameters/counters.
+Cases are representative workload points, not maximum-capacity certification.
+
+| Area | Cases / geometry | Independent checks |
+| --- | --- | --- |
+| Compile/finalize | Chain, wide DAG and invalid cycle, 4/32 phases | Compiled order/count/dependencies; exact cycle status; no callbacks/workers |
+| Empty dispatch | 1/32 callbacks | Exactly one visit per phase, zero entity work |
+| Width/depth | 4/32 phases, 64 entities each | Dependency order and per-phase integer sums |
+| Grain | 1/16/64 over 128 entities | Exact accepted ranges without overlap or gaps |
+| Workers/policy | 1/2/4, static and throughput, 1024 entities | Completed work includes local executions and successful steals |
+| Nested for/reduce | Two depths, 64 entities | Public nested operations, fixed partials, integer oracle |
+| Entity scaling | 64/1024/4096 | Per-index outputs and exact completed counts |
+| Queue pressure | Host queue capacity 2/8 | Accepted prefix, one real rejection, all accepted work settled, recovery submission |
+| Host adapter | 64/1024, caller-thread FIFO | Exact native counterparts: entities-64 / workers-static_workers-1; explicit bounded fixture |
+| Trace | Capacity 0/256, four phases | Identical output; observed emitted/overwritten/dropped deltas |
+| Memory/residency | Scratch 64/256; inactive zero; native 4096/8192 | Six-row MemoryPlan equation; ownership, policy results and cleanup |
+| Multiple Runtime | Two live owners, 64/1024 | Independent counters/work; one stops while the other continues |
+| Lifecycle | 1/4 fresh objects per invocation | Configure/finalize/start/step/checked-stop on each fresh instance |
+
+All integer leaf work computes `3*i+1`; the independent sum is
+`n*(3*n-1)/2`. Parallel range cases verify every output and visit, deterministic
+reduce verifies its fixed partial reduction, and graphs check each phase's sum.
+No counter substitutes declared entity size for completed work. The queue case
+uses actual Runtime admission with a host-owned FIFO; capacities 2/8 accept that
+many children, reject the next, drain the prefix, then accept a recovery task.
+The rejected child never runs. Native throughput scheduling is not assumed to
+have deterministic ordering or steal counts.
+
+### Timing, counters and ownership
+
+`step-and-observation` includes reset, the full public Runtime step, oracle and
+counter inspection, and observation writes. Configuration/start are prepared
+before the runner, and checked stop happens before publication.
+`lifecycle-setup-inspect-cleanup` includes construction, configuration,
+registration, finalize, inspection and cleanup; memory/lifecycle cases also
+include start and step when their expected status permits. Compile cases are
+**not finalize-only timings**. The unchanged ProviderV1 cannot subtract those
+costs. Multiple-owner continuation after stopping the second owner is a checked
+post-run assertion outside measured samples.
+
+`operations`, `phase_calls`, `range_calls`, `submitted`, and `rejected` are
+per-invocation counts. Non-host cases additionally expose observed worker-start
+and MemoryPlan gauges, provider acquire/apply/observe/rollback/release counts,
+residency gauges, and trace event deltas. The inventory declares aggregation and
+availability. Runner totals sum all five samples: summed gauges are neither
+peaks, RSS, leaks nor a count of workers created during a steady step. Worker
+start counters advance at loop entry, which can be observed after start returns. Default
+or native memory has no host-provider callbacks, so its host callback counts
+are zero; this does not mean Runtime acquired no memory. Host FIFO storage and
+fixture arrays are not Runtime-owned MemoryPlan bytes.
+
+The bounded simulated provider reports explicitly simulated policy/residency
+facts. Acquire failure, apply failure and one failed rollback followed by a
+checked retry exercise actual Runtime ownership. Inactive regions acquire
+nothing. Native residency is opt-in Linux process-local base-page/prefault
+behavior, with locking, pinning and huge pages disabled. It changes no affinity,
+NUMA, governor or system configuration. An unavailable native probe yields
+NOT RUN before successful warm-up; it never becomes measured zero residency.
+Successful stop is terminal; repeated lifecycle always constructs a fresh
+Runtime. Unexpected unresolved teardown preserves ownership until retry; an
+unresolved destructor terminates instead of freeing borrowed live resources.
+The CLI publishes no success bundle if post-run cleanup fails.
+
+Fake clocks exercise structural outcomes only. The fixed-identity installed
+CPU consumer uses the deterministic host-adapter case and just its five
+portable operation counters for byte equality across compilers, FMA settings
+and Windows. Native MemoryPlan sizes, residency and scheduling observations
+are excluded from that cross-platform fixture. Real-clock results remain
+portable_characterization with comparison policy `none`, no timing threshold,
+noise filter, confidence claim, or optimality conclusion.
+
+### CPU source example and tests
+
+The optional clean install includes `cpu_provider.hpp`, `cpu_provider.cpp`,
+`cpu_cases.json`, and `benchmark_cpu_consumer.cpp` under
+`share/rtfw/bench/examples`. The provider is source, not another exported target
+or C++ binary ABI. Request `find_package(rtfw CONFIG REQUIRED COMPONENTS runtime
+benchmark)`, compile those example sources, include their directory, and link
+`rtfw::runtime` plus `rtfw::benchmark`. The standalone project in
+`tests/benchmark_fixtures/cpu_consumer` supports either `CMAKE_PREFIX_PATH` for
+the relocated installation or `RTFW_SOURCE_DIR` for embedding.
+
+`BenchmarkCpu.*` covers metadata, every case, oracles, queue recovery, memory
+faults, repeated runs, concurrent independent owners and clock-failure cleanup.
+`m23_benchmark_cpu_inventory` checks exact discovery/descriptors, all artifacts
+with the unchanged validator, collisions, invalid selections and a real clock.
+`m23_benchmark_cpu_noalloc` guards full steady invocations on prestarted workers
+with a pre-reserved output vector; host registration, runner serialization and
+lifecycle allocation are deliberately outside that claim.
+`benchmark_cpu_package_consumer` verifies public source consumption. The CPU
+package wrapper runs every unchanged M23-01 packaging check before the additional
+installed-source, relocated and add-subdirectory CPU consumers.
