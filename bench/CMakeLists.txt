@@ -58,7 +58,11 @@ target_compile_definitions(rtfw_benchmark PRIVATE
     RTFW_BENCH_BUILD_CONFIG="$<IF:$<BOOL:$<CONFIG>>,$<CONFIG>,unknown>"
     RTFW_BENCH_BUILD_FLAGS="${_bench_flags}")
 add_executable(rtfw-bench src/benchmark_cli.cpp)
-target_link_libraries(rtfw-bench PRIVATE rtfw_benchmark)
+add_library(rtfw_benchmark_cpu STATIC providers/cpu_provider.cpp)
+target_link_libraries(rtfw_benchmark_cpu PUBLIC rtfw_benchmark rtfw_runtime)
+target_include_directories(rtfw_benchmark_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/providers)
+rtfw_enable_project_warnings(rtfw_benchmark_cpu)
+target_link_libraries(rtfw-bench PRIVATE rtfw_benchmark_cpu)
 rtfw_enable_project_warnings(rtfw-bench)
 install(TARGETS rtfw_benchmark EXPORT rtfwBenchmarkTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -74,13 +78,28 @@ install(FILES "${RTFW_PROJECT_SOURCE_DIR}/docs/benchmarking.md"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/docs)
 install(FILES "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_consumer.cpp"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench/examples)
+install(FILES providers/cpu_provider.hpp providers/cpu_provider.cpp fixtures/cpu_cases.json
+    "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_cpu_consumer.cpp"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench/examples)
 
 if (RTFW_BUILD_TESTS)
+    add_executable(rtfw_benchmark_cpu_consumer "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_cpu_consumer.cpp")
+    target_link_libraries(rtfw_benchmark_cpu_consumer PRIVATE rtfw_benchmark_cpu)
+    rtfw_enable_project_warnings(rtfw_benchmark_cpu_consumer)
+    add_test(NAME benchmark_cpu_package_consumer COMMAND rtfw_benchmark_cpu_consumer)
+    add_executable(rtfw_benchmark_cpu_noalloc "${RTFW_PROJECT_SOURCE_DIR}/tests/benchmark_fixtures/cpu_consumer/noalloc.cpp")
+    target_link_libraries(rtfw_benchmark_cpu_noalloc PRIVATE rtfw_benchmark_cpu)
+    rtfw_enable_project_warnings(rtfw_benchmark_cpu_noalloc)
+    add_test(NAME m23_benchmark_cpu_noalloc COMMAND rtfw_benchmark_cpu_noalloc)
     add_executable(rtfw_benchmark_consumer "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_consumer.cpp")
     target_link_libraries(rtfw_benchmark_consumer PRIVATE rtfw_benchmark)
     rtfw_enable_project_warnings(rtfw_benchmark_consumer)
     add_test(NAME benchmark_package_consumer COMMAND rtfw_benchmark_consumer)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME m23_benchmark_cpu_inventory
+        COMMAND "${Python3_EXECUTABLE}" "${RTFW_PROJECT_SOURCE_DIR}/tests/benchmark_fixtures/test_cpu_cases.py"
+            --cli $<TARGET_FILE:rtfw-bench> --inventory "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/cpu_cases.json")
+    set_tests_properties(m23_benchmark_cpu_inventory m23_benchmark_cpu_noalloc PROPERTIES TIMEOUT 120)
     add_test(NAME m23_benchmark_artifact_validator
         COMMAND "${Python3_EXECUTABLE}" "${RTFW_PROJECT_SOURCE_DIR}/tests/benchmark_fixtures/test_artifacts.py"
             --cli $<TARGET_FILE:rtfw-bench> --consumer $<TARGET_FILE:rtfw_benchmark_consumer>)

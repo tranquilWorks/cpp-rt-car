@@ -1,25 +1,27 @@
 # Handoff
 
-## Active batch: M23-01
+## Active batch: M23-02
 
-Baseline `290397e86b65136c5479f7b1d69c961f73f8ac14` is merged PR #250.
-M22 is portable-software complete; M23-01 is a candidate, not the end of M23.
-The complete control contract at `products/cpp-rt-car/batches/M23-01.yaml`
-(control revision `e2c9c15b42f30c537bbf32b8e42290e4f55b5ba7`, blob
-`f751f71073dca828ca434dbd0b3284a15c145427`) is binding in full.
+Baseline `b52b42a6c64066553ce55fb08c874061d78e036e` is merged PR #251.
+M23-01 repaired head `cb136d671088ed01bc75b5be0c67d991e7814cdf` passed
+CI run 34080242894. Preserve its initial failures and do not invent a separate
+human-review record. The complete M23-02 canonical contract is bound by
+`contracts/active-batch.yaml`; control PR #365 merged at
+`0a2885232090c85620ff61aada1b0a5ee18d38ad`.
 
 Read [benchmarking](benchmarking.md) and
-[M23-01 evidence](evidence/M23-01-2026-09-06.md) for implementation, commands,
-actual checks and unresolved review/environment gates. The new component is
-optional, host-side, and independent of Runtime. Preserve every existing ABI,
-schema, support matrix and prior evidence. Human review and hosted validation
-remain mandatory; do not reinterpret successful source import as a passed gate.
+[M23-02 evidence](evidence/M23-02-2026-09-07.md). The candidate has 51 finite CPU
+cases, independent work oracles, explicit host preparation and checked cleanup,
+and installed source consumers. The runner and all Runtime sources, schemas,
+ABI and support claims remain unchanged. Review the current evidence for
+unresolved CI and control-scope checks before integrating or advancing.
 
-M23-02 is the next implementation scope after M23-01 acceptance. M23-03 through
-M23-05, M24 CUDA maturity, M25 general SDK and M26 golden system are not delivered
-by a benchmark framework. M18 hardware/RT, M19 Unreal, signing/release and
-deployment remain separate. The earlier empty portable-software-completion
-branch must not be merged or labeled as product implementation.
+The original CLI artifact regression assumes only the self provider appears
+in list. Control PR #366 adds its omitted path to M23-02 scope. Until that
+correction is integrated, do not edit or disable the regression and do not
+claim all target tests pass. M23-03 through M23-05, M24 CUDA maturity, M25 SDK
+and M26 golden system remain future work. M18 hardware/RT, M19 Unreal and
+signing/release/deployment remain separate gates.
 
 ## Restart context
 

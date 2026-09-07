@@ -1,20 +1,58 @@
 schema_version: 1
 batch:
-  id: M23-01
-  title: Establish the benchmark contract, runner, and host identity
-  goal: Implement the optional host-side C++20 provider/runner/CLI, sanitized identities, closed schemas
-    and failure-atomic artifacts. No Runtime or subsystem implementation changes.
+  id: M23-02
+  title: Benchmark CPU graph, executor, and memory
+  goal: Add correctness-bound CPU graph/executor/memory providers to the merged M23-01 runner using only
+    installed Runtime APIs. Cover the complete M23-02 family matrix with explicit timing boundaries, deterministic
+    structural verification, bounded representative scaling, machine-readable observations, package consumption,
+    and checked cleanup. Preserve the framework schemas, Runtime implementation, ABI and qualification
+    boundaries.
 sources:
-  baseline_commit: 290397e86b65136c5479f7b1d69c961f73f8ac14
+  product: products/cpp-rt-car/product.yaml
+  requirements:
+  - products/cpp-rt-car/PRD.md#cap-m23--extensible-subsystem-benchmarking
+  - products/cpp-rt-car/acceptance.yaml#CAP-M23
+  - products/cpp-rt-car/telemetry-plan.yaml#Q-23
+  - products/cpp-rt-car/risk-register.yaml#R-011
+  milestone: products/cpp-rt-car/milestones/M23.md#M23-02--cpu-graph-executor-and-memory-benchmarks
+  baseline_commit: b52b42a6c64066553ce55fb08c874061d78e036e
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M23-01.yaml
-  control_plane_revision: e2c9c15b42f30c537bbf32b8e42290e4f55b5ba7
-  canonical_blob_sha: f751f71073dca828ca434dbd0b3284a15c145427
-  incorporation: The entire canonical M23-01 contract is incorporated by reference, including every acceptance
-    criterion, validation command, manual gate, stop condition and rollback requirement. This target activation
-    index does not replace or waive any canonical requirement.
+  control_plane_path: products/cpp-rt-car/batches/M23-02.yaml
+  control_plane_revision: 5a742360260998cce97cfcace913fa8da9c0f680
+  target_contracts:
+  - AGENTS.md
+  - contracts/active-batch.yaml
+  - contracts/repo-profile.yaml
+  - contracts/profile-requirements.yaml
+  - contracts/verification.yaml
+  - docs/CURRENT_STATE.md
+  - docs/HANDOFF.md
+  - docs/product_contract.md
+  - docs/architecture.md
+  - docs/roadmap.md
+  - docs/benchmarking.md
+  - docs/executor.md
+  - docs/memory_plan.md
+  - docs/cpu_memory_policy.md
+  - docs/observability.md
+  - docs/release_policy.md
+  - bench/include/rtfw/benchmark.hpp
+  - bench/src/benchmark.cpp
+  - bench/src/benchmark_cli.cpp
+  - bench/CMakeLists.txt
+  - rt/include/rt/runtime.hpp
+  - rt/include/rt/config.hpp
+  - tests/host_adapter_tests.cpp
+  - tests/test_executor.cpp
+  - tests/test_memory_policy.cpp
+  - tests/test_memory_plan.cpp
+  - tests/test_host_runtime.cpp
+  - release/rtfw-release-contract.json
+  - docs/evidence/M23-01-2026-09-06.md
+  canonical_revision: 0a2885232090c85620ff61aada1b0a5ee18d38ad
+  canonical_blob_sha: 0dc164c3210266f1cdadb95b13203e9ccfe7f968
 dependencies:
-- M22-04
+- M23-01
 scope:
   allowed_paths:
   - .portfolio-harness.json
@@ -23,22 +61,17 @@ scope:
   - contracts/repo-profile.yaml
   - CMakeLists.txt
   - bench/CMakeLists.txt
-  - bench/include/rtfw/benchmark.hpp
-  - bench/src/benchmark.cpp
   - bench/src/benchmark_cli.cpp
-  - bench/schemas/descriptor.schema.json
-  - bench/schemas/result.schema.json
-  - bench/fixtures/**
-  - cmake/rtfwConfig.cmake.in
+  - bench/providers/cpu_provider.hpp
+  - bench/providers/cpu_provider.cpp
+  - bench/fixtures/cpu_cases.json
   - tests/CMakeLists.txt
-  - tests/test_benchmark_contract.cpp
-  - tests/test_benchmark_runner.cpp
-  - tests/test_benchmark_artifacts.cpp
-  - tests/benchmark_fixtures/**
+  - tests/test_benchmark_cpu.cpp
+  - tests/benchmark_fixtures/test_cpu_cases.py
+  - tests/benchmark_fixtures/cpu_consumer/**
   - tests/package_consumer/CMakeLists.txt
-  - tests/package_consumer/benchmark_consumer.cpp
+  - tests/package_consumer/benchmark_cpu_consumer.cpp
   - tests/package_consumer/package_contract.cmake
-  - tools/check_benchmark_artifact.py
   - tools/check_docs_contract.py
   - tools/check_release_contract.py
   - tools/static_analysis_sources.txt
@@ -54,20 +87,27 @@ scope:
   - docs/benchmarking.md
   - docs/testing_ci.md
   - docs/real_time_readiness_checklist.md
-  - docs/evidence/M23-01-*.md
+  - docs/evidence/M23-02-*.md
   forbidden_paths:
   - abi/
-  - rt/src/
-  - rt/include/
+  - rt/
   - src/c_abi.cpp
   - core/
   - hal/
   - gpu/
+  - include/simcore/
   - examples/
+  - samples/
   - integrations/
   - configs/
   - profiles/
   - qualification/
+  - bench/include/rtfw/benchmark.hpp
+  - bench/src/benchmark.cpp
+  - bench/schemas/
+  - bench/bench_aosoa_vs_soa.cpp
+  - cmake/rtfwConfig.cmake.in
+  - tools/check_benchmark_artifact.py
   - release/keys/
   - release/signatures/
   - .github/workflows/cuda-qualification.yml
@@ -84,62 +124,235 @@ scope:
   - docs/evidence/M20-*.md
   - docs/evidence/M21-*.md
   - docs/evidence/M22-*.md
+  - docs/evidence/M23-01-*.md
   - VERSION.txt
   - LICENSE
   - CHANGELOG.md
   - SECURITY.md
-  - include/simcore/**
   - tests/test_jobqueue_perf.cpp
-  - bench/bench_aosoa_vs_soa.cpp
   - tools/rt_harden.sh
   - tools/rt_harden.ps1
 acceptance:
-- Default benchmark-OFF SDK inventory and every M15-M22 implementation/evidence/ABI/schema/support boundary
-  remain unchanged.
-- Strict closed descriptor/result schemas, explicit size/versioned borrowed provider tables, deterministic
-  registration/list/describe/run, bounded fake/real clocks and samples, and exact external consumer semantics.
-- Canonical descriptor/raw/result artifacts with SHA-256 binding, create-new atomic publication, no symlink
-  following or overwrite, bounded failure diagnostics and offline semantic validation.
-- Privacy-bounded source/build/host/workload identity with explicit unavailable facts; no hardware, privilege,
-  secret, network, scheduler, Runtime-lane or experimental dependency.
-- Only self/provider framework cases; M23-02 through M23-05, M24-M26, hardware, RT, Unreal, signing, release
-  and deployment remain outside this batch.
-- All canonical focused/full/CI/package/sanitizer/determinism/ABI/release and human review gates pass
-  before merge; M23/CAP-M23 remain incomplete.
+- 'Start from clean target main b52b42a6c64066553ce55fb08c874061d78e036e, the merged PR #251. Retain M23-01''s
+  initial Clang failure and local full-profile dependency blockage as historical evidence. Its repaired
+  head cb136d671088ed01bc75b5be0c67d991e7814cdf passed hosted CI run 34080242894 before merge. Merge and
+  CI are observed facts; do not invent a separate human-review record. This contract must be validated
+  and integrated in the control plane before target activation; target activation binds the actual canonical
+  blob/revision without changing the contract''s audited planning baseline.'
+- Add one explicit instance-local ProviderV1 with ID rtfw.cpu, implementation version 1, using only installed
+  rt/runtime.hpp and its public dependencies plus rtfw/benchmark.hpp. Provider registration and list/describe
+  are side-effect-free metadata operations. They do not create Runtime workers, acquire resident storage,
+  change policies, or execute workloads. CLI retains the unchanged rtfw.self provider and exact list/describe/run
+  selection, rejects invalid input and output destinations before fixture preparation, then prepares only
+  the selected CPU case on the host control thread.
+- Keep rtfw::benchmark itself free of Runtime and experimental dependencies. Only the CPU provider and
+  CLI link rtfw::runtime explicitly. Preserve the existing benchmark library header/ProviderV1 API, all
+  three schema versions, artifact validator, canonical encodings, atomic publication and default benchmark-OFF
+  SDK inventory. Install the CPU provider as example source under share/rtfw/bench/examples, not as another
+  public compiled ABI or package component. Installed consumers compile that source against explicitly
+  requested benchmark and Runtime targets without private headers.
+- Publish a checked finite case inventory in bench/fixtures/cpu_cases.json and match it exactly against
+  provider enumeration. It covers all thirteen families below, at least two distinct declared workload
+  points for each scalable family, positive bounded counts, canonical sorted IDs, operation units, correctness
+  invariants, measurement scope, and counter availability. Bound the complete inventory to 64 cases, each
+  with at most 16 parameters/counters, at most four workers, 64 graph phases, 4096 entities, and 256 nested
+  tasks. Each descriptor uses two warm-ups and five measured repetitions. These are representative characterization
+  sizes, not maximum-capacity certification.
+- Graph compile/finalize cases cover narrow/deep and wide/shallow valid DAGs at 4 and 32 phases, and deterministic
+  malformed dependency rejection. With unchanged ProviderV1 timing, construction/configuration/registration/finalization/inspection/checked
+  cleanup within invoke are included and the descriptor configuration calls this lifecycle scope. Do not
+  call the observed duration isolated graph-compiler or finalize-only time. Assert compiled count, dependencies/topological
+  validity, and successful cleanup; invalid graphs must fail with the contracted status before callbacks
+  or workers run.
+- Steady-state graph cases include empty callbacks, width/depth at 4 and 32 phases, fixed work per phase,
+  static_deterministic and bounded_throughput policies, worker counts 1/2/4, task grain points 1/16/64
+  over fixed entity work, and entity counts 64/1024/4096. Prepare/configure/finalize/start before Runner::run,
+  time only complete invoke work including Runtime::step and observation collection, and perform checked
+  stop after run before publication. Declare included observation cost; no hidden timing subtraction or
+  secondary undeclared clock is permitted.
+- Nested parallel_for and deterministic parallel_reduce cases use two nesting depths, fixed preallocated
+  per-index data and reduction partials, exact accepted range coverage without duplicates, and an independently
+  computed integer oracle. Invoke must perform actual public TaskContext operations, not substitute a
+  serial loop for the Runtime work. Callback state is thread-safe, bounded, and allocation-free; callback
+  failures must propagate and fail the result.
+- Queue-pressure cases use the actual Runtime host_adapter reservation plus a bounded caller-owned host
+  queue with deterministic admission/rejection scheduling. Cover an accepted prefix and guaranteed queue_full
+  without timing sleeps, unbounded spinning, or a mocked observation that bypasses Runtime. Reconcile
+  attempted, accepted, completed and rejected operations; every accepted child must settle, no rejected
+  child runs, and subsequent legal work succeeds. Native queue-pressure characterization may have schedule-dependent
+  rejection counts and must not assert a portable exact number or speedup.
+- Native-worker versus host-job-adapter cases execute the same correctness-bound workload with explicit
+  policy and worker geometry. The included bounded host adapter is a declared fixture, not a claim about
+  an external engine's scheduler. Host submit/help/context callbacks obey public capacity, generation,
+  worker-index, no-inline-on-failure, and lifetime rules; all fixed queue/scratch storage is prepared
+  before measurement. Host-owned resources remain separate from Runtime-owned MemoryPlan counters.
+- Trace-off/on paired cases execute identical workloads at trace capacities 0 and 256, expose observed
+  emitted/dropped/overwritten events where the public surface supplies them, and verify identical application
+  results. Trace collection and event ordering must not be falsely deterministic across workers. These
+  cases measure trace impact only; general exporters, rate/control telemetry, replay, and watchdog cases
+  remain M23-03.
+- Memory cases cover default allocation and an explicit host-owned bounded memory provider at two phase/task
+  scratch sizes, actual acquire/apply/observe/rollback/release ownership, successful and injected-failure
+  cleanup, zero-byte inactive regions, and the unchanged six-row MemoryPlan equation. The deterministic
+  provider's policy/residency observations are declared simulated. Add an explicitly selected Linux base-page/prefault/residency
+  case using the existing public process-local provider with no mlock, huge-page provisioning, affinity/NUMA/governor
+  mutation, or privileged operation. Unsupported native observations produce NOT RUN before successful
+  warm-up; unavailable residency is not reported as measured zero or qualified locking.
+- Multiple-runtime cases exercise two simultaneously live independent Runtime objects with separate workload
+  data, queues, providers and counters, including stopping one while the other continues. Run one deterministic
+  same-owner alternating case; separate focused concurrency tests may use explicit bounded fixture-owned
+  threads with independent owners and joined teardown. Lifecycle cases repeatedly construct/configure/finalize/start/step/checked-stop
+  fresh instances at two bounded cycle counts. Follow actual Runtime lifecycle semantics; do not reinterpret
+  stop as permitting an unsupported restart of a terminal object.
+- Use only observed public executor/trace/provider/resource counters and application oracle counts. Do
+  not substitute declared workload size for completed work. Distinguish per-invocation deltas, gauges
+  and sums in the inventory; summed MemoryPlan gauges are not a peak, RSS, residency, or leak measurement.
+  Counter totals must fit existing integer limits. Throughput is derivable from successful completed operations
+  and nonzero real measured nanoseconds; fake-clock throughput is structural only. Existing p50/p95/p99/max
+  remain runner-supplied. Comparison policy stays none and no threshold, noise filtering, baseline delta,
+  confidence, or optimality claim is added.
+- Warm-up is excluded from retained sample/counter totals and all stateful cases use exact ordinal/frame
+  advancement without cross-run contamination. Every measured observation asserts independent output checksums,
+  expected statuses, bounded resource ownership and operation reconciliation. Incorrect output, malformed
+  provider state, runtime failure or incomplete cleanup yields an existing failure status and bounded
+  nonsensitive diagnostic. Cleanup failure may never leave a success bundle; preserve borrowed ownership
+  until checked teardown succeeds or explicitly fail and retain it for caller resolution.
+- Fake runner clocks test exact invocation/warm-up/sample counts and structural outcomes. Deterministic
+  byte-equality fixtures use constant declared identity and deterministic host-adapter/oracle observations;
+  exclude inherently platform-dependent MemoryPlan sizes and scheduler-dependent counters from cross-platform
+  byte-equality claims. Never overwrite a real observation with a fixed number to force equality. Real-clock
+  smoke is portable_characterization with correctness gates only, not elapsed-time thresholds.
+- Verify steady-state Runtime and workload callbacks allocate no heap and create no hidden thread; runner
+  Observation vectors, metadata encoding and file output remain host-control operations outside the guarded
+  Runtime callback lanes. Preparation and lifecycle cases may allocate and start their explicitly declared
+  fixed worker team on the host. Independent providers/runners and multiple Runtime instances remain isolated
+  under TSan; tests use bounded synchronization and cleanup rather than sleeps.
+- Source-tree, independent add-subdirectory, installed non-default-prefix, archive-relocated and benchmark-unrequested
+  consumers remain usable. Compile installed CPU provider source with public targets, run a deterministic
+  CPU case, and validate artifacts using the unchanged offline validator. The optional install ledger
+  accounts for every new example/fixture file and no Runtime/private header or project warning policy
+  leaks to consumers.
+- Preserve C ABI v8's exact 70 exports/fingerprint 0xd0e7a5a14bf35f97 and SONAME librtfw.so.8, device
+  ABI v1, extension ABI v1, HAL tables, Runtime statuses and source implementation, profile schema 7/25
+  keys, all checkpoint/action/replay/control/observability schemas, MemoryPlan equations, release 1.2.1,
+  support matrices, Apache-2.0 and prior evidence.
+- Update target current state, handoff, build/docs/roadmap, static source manifest, release digest ledger,
+  CI and retained M23-02 evidence with exact passed/failed/blocked/unperformed results. Run focused and
+  full local checks and mandatory hosted gates; do not waive or reclassify failures. M23/CAP-M23 remain
+  incomplete pending M23-03 through M23-05; M24-M26, real device providers, controlled timing, physical/HIL/RT
+  qualification, Unreal, signing, release and deployment remain outside this batch.
 validation:
   local:
+  - git status --short --branch
+  - test "$(git rev-parse HEAD)" = b52b42a6c64066553ce55fb08c874061d78e036e
+  - git merge-base --is-ancestor b52b42a6c64066553ce55fb08c874061d78e036e HEAD
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh quick
-  - cmake -S . -B build/m23-supported -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF
+  - cmake -S . -B build/m23-cpu -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF
     -DRTFW_BUILD_BENCHMARKS=ON -DSIM_SANITIZERS= -DSIM_WERROR=ON
-  - cmake --build build/m23-supported --parallel 2
-  - ctest --test-dir build/m23-supported --output-on-failure -R 'm23_benchmark|benchmark_package_consumer'
+  - cmake --build build/m23-cpu --parallel 2
+  - ctest --test-dir build/m23-cpu --output-on-failure -R 'm23_benchmark|benchmark_package_consumer'
+  - ./build/m23-cpu/tests/simcore_tests --gtest_filter='BenchmarkCpu.*:BenchmarkContract.*:BenchmarkRunner.*:BenchmarkArtifacts.*'
+  - python3 tests/benchmark_fixtures/test_cpu_cases.py --cli build/m23-cpu/bench/rtfw-bench --inventory
+    bench/fixtures/cpu_cases.json
+  - cmake -S . -B build/m23-cpu-install-build -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF -DRTFW_BUILD_EXPERIMENTAL=OFF
+    -DRTFW_BUILD_BENCHMARKS=ON -DSIM_SANITIZERS= -DSIM_WERROR=ON
+  - cmake --build build/m23-cpu-install-build --parallel 2
+  - cmake --install build/m23-cpu-install-build --prefix "$PWD/build/m23-cpu-prefix"
+  - cmake -S tests/benchmark_fixtures/cpu_consumer -B build/m23-cpu-consumer -DCMAKE_PREFIX_PATH="$PWD/build/m23-cpu-prefix"
+  - cmake --build build/m23-cpu-consumer --parallel 2
+  - ctest --test-dir build/m23-cpu-consumer --output-on-failure
   - ./scripts/agent-verify.sh full
-  - python3 tools/check_c_abi.py --library build/m23-supported/librtfw.so
+  - python3 tools/check_c_abi.py --library build/m23-cpu/librtfw.so
+  - readelf -d build/m23-cpu/librtfw.so | rg 'SONAME.*librtfw.so.8'
+  - ./scripts/verify-portable-assurance.sh --build-dir build/portable-assurance --source-commit "$(git
+    rev-parse HEAD)" all
   - git diff --check
+  - git diff --name-only b52b42a6c64066553ce55fb08c874061d78e036e
+  focused_tests_to_add:
+  - Exact finite inventory and thirteen-family coverage, deterministic ordering, two-or-more scaling points,
+    bounds, descriptor digests/counter units/timing-scope checks, metadata-only list/describe and unknown-input
+    rejection before preparation.
+  - Independent graph and integer-work oracles, non-overlapping parallel ranges, reduction-tree correctness,
+    configured worker/grain/entity geometry, exact warm-up exclusion and state reset across reruns.
+  - Actual Runtime accepted-prefix queue_full, completion drain and subsequent recovery; host queue/scratch/generation/lifetime
+    rules; no sleeps or unbounded waits.
+  - Trace-off/on application parity, truthful variable trace counters, MemoryPlan six-row accounting,
+    provider acquire/rollback/release exact ownership and injected failures, native unavailable-before-warmup
+    behavior.
+  - Checked cleanup before artifact publication on success/failure; repeated legal lifecycle and two live
+    independent Runtime objects, joined concurrent owners, no callback allocation and no hidden threads.
+  - Canonical deterministic host-adapter artifacts with constant identity across compilers; unchanged
+    M23-01 self/external provider and malformed-artifact/privacy/atomic-publication regressions.
+  - Clean optional and default SDK inventory, installed/relocated/add-subdirectory CPU example consumer
+    with no private header or leaked policy, unchanged ABI and Runtime source hashes.
   required_ci:
-  - Existing GCC11/Clang14 Debug/RelWithDebInfo sanitizer matrices and MSVC v143 matrices
-  - GCC ThreadSanitizer, deterministic artifact exchange, portable assurance and dependency review
-  - Default and optional installed/archive/add-subdirectory consumers, ABI, docs, release hashes, scaling
-    and autotune
+  - Existing Linux GCC11/Clang14 Debug/RelWithDebInfo ASan+UBSan matrices and Windows MSVC matrices, plus
+    optional CPU provider build and every deterministic case.
+  - Existing GCC ThreadSanitizer job including CPU provider isolation, host adapter queue, nested work,
+    independent Runtime ownership and prior executor/memory/control tests.
+  - GCC/Clang FMA determinism exchange plus MSVC deterministic fixed-identity host-adapter fixture; native
+    scheduler observations and platform resource sizes excluded from byte equality without falsifying
+    counters.
+  - Default and optional installed/add-subdirectory/archive-relocated/non-default-prefix package checks,
+    unchanged C ABI export/fingerprint/SONAME and release digests.
+  - Documentation contract, Clang14 portable static/fuzz/artifact assurance, dependency review, scaling/autotune
+    and all prior no-allocation and compatibility gates.
   manual:
-  - Human schema/API/borrowed-lifetime review
-  - Human portability, artifact, privacy/security review
-  - Human package/compatibility and claim review
+  - Review timing boundaries, public API-only provider ownership, deterministic oracle/counter validity,
+    queue rejection/cleanup, host-adapter fidelity, privacy, package compatibility and claim accuracy.
+    Preserve applicable repository review gates; standing software publication authorization does not
+    manufacture a review result.
+  - Controlled-host performance threshold approval, actual physical/RT qualification and release promotion
+    remain separate future gates; they are not prerequisites for correctly labeled portable structural
+    implementation.
 risk:
   class: high
+  hazards:
+  - Lifecycle/setup/inspection work misrepresented as isolated dispatch or finalize latency.
+  - Noisy native scheduling or platform-dependent resource observations mislabeled deterministic or used
+    as elapsed pass/fail gates.
+  - Fixture computes declared counters without executing or validating actual Runtime work, masks rejection,
+    leaks borrowed ownership, or publishes success before stop.
+  - MemoryPlan logical bytes mislabeled resident/peak/process memory; simulated provider observations
+    mislabeled OS readback.
+  - Optional provider leaks Runtime or experimental dependencies into the standalone framework/default
+    SDK, or changes Runtime/private headers to instrument timings.
   stop_conditions:
-  - Any canonical stop condition applies unchanged.
-  - No forbidden path, Runtime lane/ABI/schema/support change, incomplete publication, manufactured evidence
-    or weakened gate.
+  - Audited target baseline or predecessor merge/CI no longer matches; reconcile/rebase contract before
+    activation, never silently reuse stale scope.
+  - Any required implementation changes Runtime source/header, frozen framework API/schema/validator,
+    ABI/support/release boundary or another forbidden path.
+  - An actual Runtime defect prevents the declared public-API case; retain a reproducer and request a
+    separate repair batch rather than fake successful measurements.
+  - Isolated timings require new runner lifecycle hooks or a second clock, or a missing counter requires
+    Runtime instrumentation; retain the declared honest whole-invocation scope or stop for a separate
+    API batch.
+  - Verification requires weakening a gate, timing thresholds on uncontrolled hosts, privileged mutation,
+    fabricated counters, uncontrolled worker counts, unsafe teardown or relabeled physical evidence.
 rollback:
-  strategy: Revert the complete optional component, tests, package/CI integration and documentation/governance
-    as a bounded batch. No runtime artifact migration.
+  strategy: Revert the CPU provider/example sources, CLI registration, focused tests and optional package/CI/docs/digest/governance
+    updates as one bounded batch. The merged M23-01 standalone framework and self/external providers remain
+    usable; Runtime and existing schemas require no migration.
   data_migration: none
-  release_action: No release, deployment, signing, threshold approval, hardware support promotion or repository
-    settings change.
+  release_action: No release, signing, support promotion, threshold approval, deployment or repository-setting
+    change.
 evidence:
   output:
-  - docs/evidence/M23-01-2026-09-06.md
-  claim_boundary: Candidate portable host-side framework evidence only; no complete M23/CAP-M23 claim
-    and no controlled-host, physical, RT, Unreal, signing or release claim.
+  - docs/evidence/M23-02-<date>.md
+  - Exact control canonical blob/revision and target baseline/head/tree, acceptance map, changed paths,
+    commands/exit codes, local logs, CI run/job IDs and actual review state.
+  - Complete finite case inventory, structural/capacity family coverage, declared timing scopes, operation/counter
+    formulas and observed independent-oracle values.
+  - Raw/summary/descriptor bundles validated offline; fake structural and real portable characterization
+    labeled separately, with sanitized source/build/host identity.
+  - No-allocation, failure/recovery/checked cleanup, isolation/concurrency, package inventory/relocation,
+    ABI/SONAME and preserved Runtime/prior-evidence hashes.
+  - Verified recovery Git bundle, baseline-relative patch and exact source/PR IDs before session exit;
+    source publication is not implementation verification.
+  - Every failed, blocked or unperformed compiler/sanitizer/control-host/native-residency/hardware/RT/release
+    gate and residual timing/fixture limitations.
+  claim_boundary: Only CPU/graph/executor/memory provider implementation, deterministic structural correctness
+    and portable characterization on executed toolchains. Simulated memory/host fixtures are labeled.
+    No portable performance guarantee, optimality, comparison/threshold, maximum-capacity certification,
+    physical/RT/HIL, Unreal, signing, release, deployment or M23/CAP-M23 completion.

@@ -1,4 +1,5 @@
 #include <rtfw/benchmark.hpp>
+#include "cpu_provider.hpp"
 #include <iostream>
 #include <map>
 
@@ -52,23 +53,40 @@ int main(int argc,char** argv) {
             if (checked!=b::Status::ok) { std::cerr << "output rejected: " << b::status_name(checked) << '\n'; return 2; }
         }
         Self self;
+        b::cpu::Provider cpu;
         b::ProviderV1 provider;
         provider.id="rtfw.self"; provider.case_count=1; provider.user=&self;
         provider.describe=describe; provider.invoke=invoke;
         b::Runner runner; b::ProviderHandle handle;
         if (runner.register_provider(provider,handle)!=b::Status::ok) return 1;
+        b::ProviderHandle cpu_handle;
+        if (runner.register_provider(cpu.table(),cpu_handle)!=b::Status::ok) return 1;
         if (command=="list") {
             for (const auto& id:runner.list()) std::cout << id << '\n';
         } else {
             b::Descriptor d;
             if (runner.describe(options.at("--provider"),options.at("--case"),d)!=b::Status::ok) return usage();
             const auto kind=options.count("--clock") && options.at("--clock")=="fake" ? b::ClockKind::fake : b::ClockKind::steady;
-            if (command=="describe") std::cout << b::encode_descriptor(provider.id,1,d,kind);
+            const auto& selected=options.at("--provider");
+            if (command=="describe") std::cout << b::encode_descriptor(selected,1,d,kind);
             else {
+                if (selected=="rtfw.cpu") {
+                    const auto prepared=cpu.prepare(d.case_id);
+                    if (prepared!=b::Status::ok && prepared!=b::Status::not_run) {
+                        std::cerr << "CPU fixture preparation failed\n";
+                        return 1;
+                    }
+                }
                 std::uint64_t counter=0;
                 auto clock=b::steady_clock();
                 if (kind==b::ClockKind::fake) { clock.kind=kind; clock.user=&counter; clock.read_ns=fake_clock; }
-                const auto result=runner.run(provider.id,d.case_id,clock,b::capture_identity());
+                const auto result=runner.run(selected,d.case_id,clock,b::capture_identity());
+                // A failed checked stop must never publish a success bundle.
+                // The unchanged schema cannot encode a post-run cleanup error.
+                if (cpu.finish()!=b::Status::ok) {
+                    std::cerr << "CPU fixture cleanup failed\n";
+                    return 1;
+                }
                 const auto written=b::publish(result,options.at("--output"));
                 if (written!=b::Status::ok) { std::cerr << "publication failed: " << b::status_name(written) << '\n'; return 1; }
                 std::cout << "status=" << b::status_name(result.status) << " evidence="
@@ -77,7 +95,8 @@ int main(int argc,char** argv) {
                 if (result.status!=b::Status::ok) return result.status==b::Status::not_run ? 3 : 1;
             }
         }
-        return runner.unregister_provider(handle)==b::Status::ok ? 0 : 1;
+        return runner.unregister_provider(cpu_handle)==b::Status::ok &&
+               runner.unregister_provider(handle)==b::Status::ok ? 0 : 1;
     } catch (...) {
         // Native exceptions may contain paths or input; never echo their text.
         std::cerr << "benchmark operation failed\n";

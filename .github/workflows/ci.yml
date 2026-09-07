@@ -53,7 +53,7 @@ jobs:
       - name: Build determinism tests
         run: |
           cmake --build build --config ${BUILD_TYPE} \
-            --target simcore_tests rtfw_determinism_artifact rtfw_benchmark_consumer \
+            --target simcore_tests rtfw_determinism_artifact rtfw_benchmark_consumer rtfw_benchmark_cpu_consumer \
                      rtfw_cpu_gpu_fpga_cpu_sample_tests \
                      sample_cpu_gpu_fpga_cpu -- -j2
       - name: Run determinism tests
@@ -80,11 +80,20 @@ jobs:
         run: |
           build/bench/rtfw_benchmark_consumer m23-canonical
           python3 tools/check_benchmark_artifact.py --artifact-root m23-canonical
+          build/bench/rtfw_benchmark_cpu_consumer m23-cpu-canonical
+          python3 tools/check_benchmark_artifact.py --artifact-root m23-cpu-canonical
       - name: Upload M23 canonical fixture
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: m23-canonical-${{ matrix.compiler }}-${{ matrix.fma }}
           path: m23-canonical/*.json
+          if-no-files-found: error
+
+      - name: Upload M23 canonical CPU fixture
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: m23-cpu-canonical-${{ matrix.compiler }}-${{ matrix.fma }}
+          path: m23-cpu-canonical/*.json
           if-no-files-found: error
 
   determinism-artifact-exchange:
@@ -120,6 +129,21 @@ jobs:
           from pathlib import Path
           root=Path("benchmark-artifacts")
           bundles=sorted(root.iterdir())
+          assert len(bundles)==7, len(bundles)
+          for name in ("descriptor.json","raw.json","result.json"):
+              values=[(p/name).read_bytes() for p in bundles]
+              assert all(v==values[0] for v in values), name
+
+      - name: Download M23 CPU fixtures
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: m23-cpu-canonical-*
+          path: cpu-benchmark-artifacts
+      - name: Compare deterministic host-adapter CPU artifacts
+        shell: python
+        run: |
+          from pathlib import Path
+          bundles=sorted(Path("cpu-benchmark-artifacts").iterdir())
           assert len(bundles)==7, len(bundles)
           for name in ("descriptor.json","raw.json","result.json"):
               values=[(p/name).read_bytes() for p in bundles]
@@ -177,7 +201,7 @@ jobs:
             -artifact_prefix="$RUNNER_TEMP/rtfw-portable-assurance/fuzz-artifacts/"
       - name: Analyze optional host-side benchmark sources
         run: |
-          clang++-14 --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Ibench/include bench/src/benchmark.cpp bench/src/benchmark_cli.cpp
+          clang++-14 --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Ibench/include -Ibench/providers -Irt/include -Icore/include -Iinclude bench/src/benchmark.cpp bench/src/benchmark_cli.cpp bench/providers/cpu_provider.cpp
       - name: Retain candidate verification evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -298,7 +322,7 @@ jobs:
             -- -j2
       - name: Run executor ThreadSanitizer gate
         env:
-          GTEST_FILTER: BenchmarkContract.*:BenchmarkRunner.*:LiveControlSdk.*:LiveControlStress.*:LiveControlMailbox.*:LiveControlActions.*:ExtensionAbi.*:ExtensionRegistration.*:ExtensionLifecycle.*:UnifiedExecutor.*:CommandBatch.*:CrossRateData.*:RateTimeline.*:RateDispatch.*:RateShedding.*:RateTelemetry.*:CompiledGraph.*Rate*:HostRuntime.*Rate*:TraceNoAlloc.*:MemoryPolicy.*:ThreadPolicy.*:CpuMemoryPolicy.*:MemoryPlan.*:PeriodicRuntime.*:PlatformPreflight.*:Observability.*:DeterminismReplay.*:HeterogeneousMemory.*:HalV2.*:VendorHalV2.*:DeviceRuntime.*:DeviceMock.*:CudaBackend.*Graph*:CudaBackend.*HalV2*:XdmaBackend.*Control*:XdmaBackend.*Event*-ThreadPolicy.StrictFailuresRollbackWithoutCallbacksAndCanRecover:ThreadPolicy.LinuxAppliesAndReadsBackAvailableNativeFields
+          GTEST_FILTER: BenchmarkContract.*:BenchmarkRunner.*:BenchmarkCpu.*:LiveControlSdk.*:LiveControlStress.*:LiveControlMailbox.*:LiveControlActions.*:ExtensionAbi.*:ExtensionRegistration.*:ExtensionLifecycle.*:UnifiedExecutor.*:CommandBatch.*:CrossRateData.*:RateTimeline.*:RateDispatch.*:RateShedding.*:RateTelemetry.*:CompiledGraph.*Rate*:HostRuntime.*Rate*:TraceNoAlloc.*:MemoryPolicy.*:ThreadPolicy.*:CpuMemoryPolicy.*:MemoryPlan.*:PeriodicRuntime.*:PlatformPreflight.*:Observability.*:DeterminismReplay.*:HeterogeneousMemory.*:HalV2.*:VendorHalV2.*:DeviceRuntime.*:DeviceMock.*:CudaBackend.*Graph*:CudaBackend.*HalV2*:XdmaBackend.*Control*:XdmaBackend.*Event*-ThreadPolicy.StrictFailuresRollbackWithoutCallbacksAndCanRecover:ThreadPolicy.LinuxAppliesAndReadsBackAvailableNativeFields
           TSAN_OPTIONS: halt_on_error=1
         run: |
           ctest --test-dir build-tsan \
@@ -617,10 +641,16 @@ jobs:
           echo "CC=${{ matrix.cc }}" >> "$GITHUB_ENV"
           echo "CXX=${{ matrix.cxx }}" >> "$GITHUB_ENV"
       - name: Verify optional package relocation isolation and embedding
-        run: python tests/benchmark_fixtures/verify_package.py --work-directory m23-package-work --artifact-output m23-canonical
+        run: python tests/benchmark_fixtures/cpu_consumer/verify_package.py --work-directory m23-package-work --artifact-output m23-canonical --cpu-artifact-output m23-cpu-canonical
       - name: Upload canonical package-provider fixture
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: m23-canonical-sdk-${{ matrix.name }}
           path: m23-canonical/*.json
+          if-no-files-found: error
+      - name: Upload canonical CPU package-provider fixture
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: m23-cpu-canonical-sdk-${{ matrix.name }}
+          path: m23-cpu-canonical/*.json
           if-no-files-found: error
