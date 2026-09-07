@@ -539,10 +539,32 @@ Status Provider::prepare(std::string_view id) {
     const auto& c = *s.selected;
     if (c.memory == Memory::native) {
 #if defined(__linux__)
-        // Explicit selection only. Probe before the first warm-up, with the same
-        // public process-local policy. Failure is NOT RUN, never zero residency.
-        Totals probe;
-        if (!run_lifecycle(c, 0, probe)) { s.preparation = Status::not_run; return s.preparation; }
+        // Probe only availability before warm-up. Never turn a workload,
+        // accounting or cleanup failure into NOT RUN.
+        auto probe = std::make_unique<Fixture>(c);
+        auto status = probe->setup();
+        bool unavailable = status == rt::Status::resource_exhausted;
+        bool valid = status == rt::Status::ok;
+        if (valid) {
+            status = probe->start();
+            valid = status == rt::Status::ok;
+            if (!valid) {
+                rt::CpuMemoryPolicyReport report;
+                if (probe->runtime.cpu_memory_policy_report(report)) {
+                    for (std::size_t i = 0; i < report.memory_count; ++i) {
+                        const auto& row = report.memory[i];
+                        unavailable = unavailable || (row.accounted_bytes != 0 &&
+                            (row.verified == rt::PolicyOperationState::failed ||
+                             row.verified == rt::PolicyOperationState::mismatched));
+                    }
+                }
+            }
+        }
+        Totals accounting;
+        if (valid) valid = probe->accounting(accounting);
+        if (!probe->close()) return s.preparation;
+        if (unavailable) { s.preparation = Status::not_run; return s.preparation; }
+        if (!valid) return s.preparation;
 #else
         s.preparation = Status::not_run; return s.preparation;
 #endif

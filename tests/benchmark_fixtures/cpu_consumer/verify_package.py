@@ -27,8 +27,8 @@ run(consumer, output)
 run(sys.executable, ROOT/'tools/check_benchmark_artifact.py', '--artifact-root', output)
 for mode in ('installed-cpu', 'embedded-cpu'):
     build = work/mode
-    option = (f'-DCMAKE_PREFIX_PATH={work / "relocated/stage"}' if mode == 'installed-cpu'
-              else f'-DRTFW_SOURCE_DIR={ROOT}')
+    option = (f'-DCMAKE_PREFIX_PATH={(work / "relocated/stage").as_posix()}' if mode == 'installed-cpu'
+              else f'-DRTFW_SOURCE_DIR={ROOT.as_posix()}')
     run('cmake', '-S', ROOT/'tests/benchmark_fixtures/cpu_consumer', '-B', build,
         '-DCMAKE_BUILD_TYPE=Release', option)
     run('cmake', '--build', build, '--config', 'Release', '--target', 'cpu_example', '--parallel', '2')
