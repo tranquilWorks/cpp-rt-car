@@ -53,7 +53,7 @@ jobs:
       - name: Build determinism tests
         run: |
           cmake --build build --config ${BUILD_TYPE} \
-            --target simcore_tests rtfw_determinism_artifact rtfw_benchmark_consumer rtfw_benchmark_cpu_consumer \
+            --target simcore_tests rtfw_determinism_artifact rtfw_benchmark_consumer rtfw_benchmark_cpu_consumer rtfw_benchmark_runtime_consumer \
                      rtfw_cpu_gpu_fpga_cpu_sample_tests \
                      sample_cpu_gpu_fpga_cpu -- -j2
       - name: Run determinism tests
@@ -82,6 +82,8 @@ jobs:
           python3 tools/check_benchmark_artifact.py --artifact-root m23-canonical
           build/bench/rtfw_benchmark_cpu_consumer m23-cpu-canonical
           python3 tools/check_benchmark_artifact.py --artifact-root m23-cpu-canonical
+          build/bench/rtfw_benchmark_runtime_consumer m23-runtime-canonical
+          python3 tools/check_benchmark_artifact.py --artifact-root m23-runtime-canonical
       - name: Upload M23 canonical fixture
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -641,7 +643,7 @@ jobs:
           echo "CC=${{ matrix.cc }}" >> "$GITHUB_ENV"
           echo "CXX=${{ matrix.cxx }}" >> "$GITHUB_ENV"
       - name: Verify optional package relocation isolation and embedding
-        run: python tests/benchmark_fixtures/cpu_consumer/verify_package.py --work-directory m23-package-work --artifact-output m23-canonical --cpu-artifact-output m23-cpu-canonical
+        run: python tests/benchmark_fixtures/runtime_consumer/verify_package.py --work-directory m23-package-work --artifact-output m23-canonical --cpu-artifact-output m23-cpu-canonical --runtime-artifact-output m23-runtime-canonical
       - name: Upload canonical package-provider fixture
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

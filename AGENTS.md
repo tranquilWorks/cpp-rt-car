@@ -5,7 +5,7 @@ portable product is release 1.2.1 at RT0 with stable C ABI v8, SONAME 8, device
 ABI v1, and Apache-2.0. M14, M14.1, M15, M16, and the portable M17 software
 path through M17-06 are complete, while hardware/RT qualification remains
 incomplete. M20-PRE-01, M21-01 through M21-05, and M22-01 through M22-04 are
-merged. M23-01 is merged as PR #251; M23-02 is the active approved batch.
+merged. M23-01 is merged as PR #251; M23-02 is merged; M23-03 is the active approved batch.
 M16-01 supplies the exact reference timeline, M16-02 adds deterministic
 CPU-only cross-rate channel selection and bounded SPSC stores, and M16-03 adds
 opt-in mandatory admission, dispatch, transfer, and late actions. M16-04 adds
@@ -138,9 +138,9 @@ mandatory hardware/RT evidence, signing, release, or deployment gate. See
   not actually produced.
 <!-- END PORTFOLIO-CONTROL MANAGED -->
 
-## M23-02 delivery frontier
+## M23-03 delivery frontier
 
-The CPU graph/executor/memory provider is the current implementation batch.
+The Runtime benchmark provider is the current implementation batch. Its nested active/live-control replay composition is blocked by a retained public-API regression. Runtime edits require the separately planned repair contract. The CPU graph/executor/memory provider is merged.
 The optional M23-01 host-side C++20 benchmark runner is the merged foundation. Read `docs/benchmarking.md` and the complete canonical contract referenced
 by `contracts/active-batch.yaml`. Do not confuse checked source publication with
 passed CI, human API/privacy review, milestone completion, or release promotion.

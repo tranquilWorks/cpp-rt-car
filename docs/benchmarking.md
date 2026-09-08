@@ -312,3 +312,43 @@ lifecycle allocation are deliberately outside that claim.
 `benchmark_cpu_package_consumer` verifies public source consumption. The CPU
 package wrapper runs every unchanged M23-01 packaging check before the additional
 installed-source, relocated and add-subdirectory CPU consumers.
+
+## M23-03 Runtime provider draft
+
+The optional `rtfw.runtime` provider is an instance-local installed source example,
+compiled internally for `rtfw-bench`. Its finite catalog is
+`bench/fixtures/runtime_cases.json`. `list` and `describe` allocate no Runtime;
+`run` validates selection and destination before preparing the selected fixture.
+The standalone `rtfw::benchmark` target remains free of Runtime dependencies.
+
+The runner measures the entire invocation. Descriptor scopes include frame work,
+inspection and any checkpoint reset, rejection, drain, replay, or export inside it.
+Prepared owners retain clocks, loopback backends, callback state and borrowed
+buffers through checked stop; failed cleanup cannot publish a successful bundle.
+Synthetic logical clocks are monotonic atomic control inputs, separate from the
+runner fake clock (`structural_fixture`) or steady clock
+(`portable_characterization`). The watchdog uses a 60-second logical budget and
+synthetically advances beyond it; no sleep or measured-duration threshold is used.
+
+The catalog separates reference inspection, executed dispatch, full configured
+occupancy and absolute configuration rejection. It includes a full 65536-record
+control queue across 64 mailboxes and 256 producer declarations, and separate
+65536-byte payload, 256-channel, 64-state and 64-input points. A checked 1 GiB
+configuration boundary does not allocate or benchmark 1 GiB. Each fixture declares
+at most 512 MiB Runtime memory budget and 16 MiB retained host artifacts.
+
+Observed counters report the declared per-invocation operations. Rate, mixed-rate
+and live-control action counts have separate columns and remain separate from the
+schema-2 JSON exporter. The exported checksum is the observed integer digest modulo
+2^63; internal correctness checks retain full values. Runtime callback storage is
+preallocated; host replay buffers and bounded JSON streams are outside those lanes.
+Synthetic replay artifacts contain explicitly retained test payloads in memory and
+are not included in public benchmark bundles.
+
+Current status is incomplete: four composition fixtures reproduce a nested
+active/live-control replay failure. The retained public-only
+`tests/benchmark_fixtures/runtime_consumer/replay_regression.cpp` demonstrates
+correct application state and admissions with a failing complete replay-state
+comparison. A separate Runtime repair is required by the active batch. Remaining
+acceptance and verification are listed in the M23-03 evidence; source availability
+is not a claim of passed CI or completed M23. M23-04 and M23-05 remain future work.

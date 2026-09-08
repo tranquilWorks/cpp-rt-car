@@ -1,5 +1,6 @@
 #include <rtfw/benchmark.hpp>
 #include "cpu_provider.hpp"
+#include "runtime_provider.hpp"
 #include <iostream>
 #include <map>
 
@@ -54,6 +55,7 @@ int main(int argc,char** argv) {
         }
         Self self;
         b::cpu::Provider cpu;
+        b::runtime::Provider runtime;
         b::ProviderV1 provider;
         provider.id="rtfw.self"; provider.case_count=1; provider.user=&self;
         provider.describe=describe; provider.invoke=invoke;
@@ -61,6 +63,8 @@ int main(int argc,char** argv) {
         if (runner.register_provider(provider,handle)!=b::Status::ok) return 1;
         b::ProviderHandle cpu_handle;
         if (runner.register_provider(cpu.table(),cpu_handle)!=b::Status::ok) return 1;
+        b::ProviderHandle runtime_handle;
+        if (runner.register_provider(runtime.table(),runtime_handle)!=b::Status::ok) return 1;
         if (command=="list") {
             for (const auto& id:runner.list()) std::cout << id << '\n';
         } else {
@@ -77,14 +81,18 @@ int main(int argc,char** argv) {
                         return 1;
                     }
                 }
+                if (selected=="rtfw.runtime" && runtime.prepare(d.case_id)!=b::Status::ok) {
+                    std::cerr << "Runtime fixture preparation failed\n";
+                    return 1;
+                }
                 std::uint64_t counter=0;
                 auto clock=b::steady_clock();
                 if (kind==b::ClockKind::fake) { clock.kind=kind; clock.user=&counter; clock.read_ns=fake_clock; }
                 const auto result=runner.run(selected,d.case_id,clock,b::capture_identity());
                 // A failed checked stop must never publish a success bundle.
                 // The unchanged schema cannot encode a post-run cleanup error.
-                if (cpu.finish()!=b::Status::ok) {
-                    std::cerr << "CPU fixture cleanup failed\n";
+                if (cpu.finish()!=b::Status::ok || runtime.finish()!=b::Status::ok) {
+                    std::cerr << "fixture cleanup failed\n";
                     return 1;
                 }
                 const auto written=b::publish(result,options.at("--output"));
@@ -95,7 +103,8 @@ int main(int argc,char** argv) {
                 if (result.status!=b::Status::ok) return result.status==b::Status::not_run ? 3 : 1;
             }
         }
-        return runner.unregister_provider(cpu_handle)==b::Status::ok &&
+        return runner.unregister_provider(runtime_handle)==b::Status::ok &&
+               runner.unregister_provider(cpu_handle)==b::Status::ok &&
                runner.unregister_provider(handle)==b::Status::ok ? 0 : 1;
     } catch (...) {
         // Native exceptions may contain paths or input; never echo their text.

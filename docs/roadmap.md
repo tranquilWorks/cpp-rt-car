@@ -818,3 +818,7 @@ does not establish physical control, HIL, RT1/RT2, Unreal hot reload, release,
 deployment, or production readiness.
 M22-04 closes only CAP-M22 portable software after every hosted and human gate
 passes and the candidate merges.
+
+M23-03 is active as a draft Runtime benchmark batch. Its complete-frame replay
+composition requires the separately scoped Runtime repair recorded in
+`docs/evidence/M23-03-2026-09-08.md`; M23/CAP-M23 remain incomplete.
