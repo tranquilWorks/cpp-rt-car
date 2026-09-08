@@ -143,14 +143,14 @@ if (SIM_GTEST_AVAILABLE)
     endif()
 
     if (RTFW_BUILD_BENCHMARKS)
-        list(APPEND TEST_SOURCES test_benchmark_contract.cpp test_benchmark_runner.cpp test_benchmark_artifacts.cpp test_benchmark_cpu.cpp)
+        list(APPEND TEST_SOURCES test_benchmark_contract.cpp test_benchmark_runner.cpp test_benchmark_artifacts.cpp test_benchmark_cpu.cpp test_benchmark_runtime.cpp)
     endif()
     add_executable(simcore_tests ${TEST_SOURCES})
     if (RTFW_BUILD_BENCHMARKS)
-        target_link_libraries(simcore_tests PRIVATE rtfw_benchmark rtfw_benchmark_cpu)
+        target_link_libraries(simcore_tests PRIVATE rtfw_benchmark rtfw_benchmark_cpu rtfw_benchmark_runtime)
         add_test(NAME m23_benchmark COMMAND simcore_tests
-            --gtest_filter=BenchmarkContract.*:BenchmarkRunner.*:BenchmarkArtifacts.*:BenchmarkCpu.*)
-        set_tests_properties(m23_benchmark PROPERTIES TIMEOUT 120)
+            --gtest_filter=BenchmarkContract.*:BenchmarkRunner.*:BenchmarkArtifacts.*:BenchmarkCpu.*:BenchmarkRuntime.*)
+        set_tests_properties(m23_benchmark PROPERTIES TIMEOUT 600)
     endif()
     add_library(test_extension_fixture SHARED extension_fixture.c)
     target_include_directories(

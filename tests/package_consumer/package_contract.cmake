@@ -61,13 +61,27 @@ if (RTFW_TEST_BENCHMARK)
     if (benchmark_links)
         message(FATAL_ERROR "Standalone benchmark target has unexpected dependencies: ${benchmark_links}")
     endif()
-    if (TARGET rtfw::benchmark_cpu OR TARGET rtfw_benchmark_cpu)
+    if (TARGET rtfw::benchmark_cpu OR TARGET rtfw_benchmark_cpu OR TARGET rtfw::benchmark_runtime OR TARGET rtfw_benchmark_runtime)
         message(FATAL_ERROR "CPU example leaked as an installed target")
     endif()
     set(expected_benchmark_examples
         benchmark_consumer.cpp benchmark_cpu_consumer.cpp
-        cpu_provider.hpp cpu_provider.cpp cpu_cases.json)
-    file(GLOB actual_benchmark_examples RELATIVE "${RTFW_DATA_DIR}/bench/examples"
+        cpu_provider.hpp cpu_provider.cpp cpu_cases.json
+        benchmark_runtime_consumer.cpp
+        runtime_provider.hpp
+        runtime_provider.cpp
+        runtime_cases.json
+        runtime_cases/capacity.cpp
+        runtime_cases/catalog.inc
+        runtime_cases/checkpoint.cpp
+        runtime_cases/control_support.hpp
+        runtime_cases/controls.cpp
+        runtime_cases/device.cpp
+        runtime_cases/observability.cpp
+        runtime_cases/rates.cpp
+        runtime_cases/replay.cpp
+        runtime_cases/support.hpp)
+    file(GLOB_RECURSE actual_benchmark_examples LIST_DIRECTORIES FALSE RELATIVE "${RTFW_DATA_DIR}/bench/examples"
         "${RTFW_DATA_DIR}/bench/examples/*")
     list(SORT expected_benchmark_examples)
     list(SORT actual_benchmark_examples)

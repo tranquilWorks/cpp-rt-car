@@ -1,6 +1,32 @@
 # Current state
 
-Last audited: 2026-09-07
+## M23-03 Runtime benchmark work in progress
+
+M23-02 discovery closure merged as PR #253 at
+`795a56cabb78dd2c6ccf51796f54c4f6eff84f9f`. The active M23-03 contract
+is bound to portfolio-control PR #367, revision
+`38a7c91d8c3fe7a663a57d0353a3e60773ded20d`.
+
+The draft adds 78 public Runtime benchmark descriptors, implementation, CLI
+registration and source-example consumers. Standalone fixture checks cover
+CPU/device rates, cross-rate payloads, controls, checkpoints, replay, watchdog
+and telemetry. Four combined live-control/active-replay cases remain failing.
+A small public-only reproducer returns `incompatible_artifact` with application
+state, callback count, generation count and accepted-admission count all correct.
+The complete Runtime replay-state comparison requires a separately scoped repair;
+no Runtime implementation or schema has been changed in this benchmark batch.
+The proposed repair scope is [portfolio-control PR #369](https://github.com/tranquilWorks/portfolio-control/pull/369); it remains a draft requiring approval.
+
+Local package, ABI and contract checks pass. Quick CTest is 33/33; strict full
+CTest is 36/37, with an additional unresolved failure in unchanged
+`PredictiveAdaptive.PrestepsReduceReactiveCatchup`. No full-profile pass is claimed.
+
+The owner temporarily waived unavailable hosted CI/CD on 2026-09-08 because of
+utilization limits. This does not waive functional verification. M23-03 and
+M23/CAP-M23 remain incomplete. Follow the exact failed/unperformed results and
+remaining acceptance work in [M23-03 evidence](evidence/M23-03-2026-09-08.md).
+
+Historical M23-02 audit: 2026-09-07
 Planning baseline: `b52b42a6c64066553ce55fb08c874061d78e036e`
 Continuation baseline: `543af2b4728a171243e6d756554efa188c2e7d2f` (merged PR #252)
 
@@ -20,7 +46,7 @@ Control PR #366 merged and authorizes the exact CLI inventory regression
 correction. The [discovery closure](evidence/M23-02-discovery-closure-2026-09-07.md)
 records the follow-up verification; merged source alone does not imply passing CI.
 M23/CAP-M23, M24-M26, hardware/RT, Unreal, signing/release and deployment remain
-incomplete. M23-03 is the next software scope only after M23-02 acceptance.
+incomplete. Correction PR #253 passed all 32 hosted checks before merge; M23-03 is active as described above.
 
 ## Product state
 
@@ -46,7 +72,7 @@ incomplete. M23-03 is the next software scope only after M23-02 acceptance.
   current Linux-host batch. M20-PRE-01, M21-01, and M21-02 are merged. M21-03
   and M21-04 are merged. M21-05 is merged at the audited baseline and closes
   the portable M21 software path. M22-01 through M22-03 are merged. M22-04 is merged as PR #250 and closes the portable M22 software path.
-  M23-01 and M23-02 source are merged; M23-02 discovery/CI closure is active.
+  M23-01 and M23-02 are merged; M23-03 is active and blocked on the replay repair.
 
 ## M22-04 typed live-control SDK and stress (merged foundation)
 
