@@ -126,6 +126,7 @@ mandatory hardware/RT evidence, signing, release, or deployment gate. See
 <!-- BEGIN PORTFOLIO-CONTROL MANAGED -->
 ## Governed agentic delivery
 
+- Read `.agents/skills/engineering-execution/SKILL.md` for nontrivial work: complete the requested outcome, verify its entry point, and preserve context.
 - Product: `cpp-rt-car`; delivery profile: `assurance`.
 - Control revision: `aeebab5f0140c2ac9161ff88f8fe42749ce42ebc`; harness version: `2`.
 - Read `contracts/profile-requirements.yaml` and the approved
