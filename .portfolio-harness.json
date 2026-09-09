@@ -4,16 +4,16 @@
   "harness_version": 2,
   "managed_paths": {
     ".agents/skills/ci-diagnose/SKILL.md": "sha256:93a7ce82-51786852-39d6f3f1-24e5670f-648b7f6a-242be771-6e86fd8b-10f653b0",
-    ".agents/skills/ci-repair/SKILL.md": "sha256:0a87cc3c-3e9c82e9-8de6ec26-d66fbe64-128f85fa-132cfac4-3532e9c6-765c977a",
-    ".agents/skills/implement-batch/SKILL.md": "sha256:eb90572d-988fd0fc-ba3f4076-418e26b8-b53ed4bb-51aa5ebf-22591bd2-52e40a2e",
+    ".agents/skills/ci-repair/SKILL.md": "sha256:ead9f123-648ddc36-c8250c62-eefd5d98-ba09b6c0-c952fc17-edd7e7c8-13dbc916",
+    ".agents/skills/implement-batch/SKILL.md": "sha256:2b0966b6-c6bd8088-4ce18cc7-d5281210-d9bded90-e4eb564c-f972d392-9a754f44",
     ".agents/skills/incident-replay/SKILL.md": "sha256:34ee63aa-4dfb2465-bc7774e5-8725ac9a-978b492c-97c30837-dd32dd0a-2dfddf80",
-    ".agents/skills/plan-batch/SKILL.md": "sha256:b2f6ceb1-ceeadc6c-6e9b182c-f963c1a2-31f63c15-4eefa1b1-ac068364-dea9aa93",
+    ".agents/skills/plan-batch/SKILL.md": "sha256:5afb131d-223b6704-3ae7587e-1b184260-b91b688b-d9f2ba77-8e48d0c5-07678eff",
     ".agents/skills/playtest-evaluate/SKILL.md": "sha256:17d9bd53-4d5313f6-f4112a2a-21828d84-5d2a1414-f2551937-231526ac-db7840a8",
     ".agents/skills/pr-risk-review/SKILL.md": "sha256:4eb870b4-e1a731c5-1a45c312-a99b64bc-a990a07b-11049ea1-8af4219a-93c2d759",
     ".agents/skills/product-intake/SKILL.md": "sha256:093d4fdb-95f0594c-89ac3e0c-b5262bde-fe243ae3-adbfe571-f7e39d3e-77ac8020",
     ".agents/skills/product-to-contract/SKILL.md": "sha256:3f60527a-cd248fa5-0e7a6cd6-958e1188-5028fc10-3f230d53-dfc80cdd-05fe1b92",
     ".agents/skills/release-readiness/SKILL.md": "sha256:3901277e-ba6c7ff9-734365fd-0606283e-07949338-31a4501c-c243258a-2ee64723",
-    ".agents/skills/verify-change/SKILL.md": "sha256:e61f62b9-b3a446cb-c2fa14b4-df0594ba-d9fb368f-cbaeef81-32d3e3f7-a2f1ec92",
+    ".agents/skills/verify-change/SKILL.md": "sha256:154e8575-e3bef53a-4d7a4a66-86473dce-d7bc58ad-84bd9b16-090fb551-154d30d2",
     ".github/codex/pr-risk-review.md": "sha256:aff8587d-dab8509c-9f6581ca-34f39100-9cbdc925-ce2afc15-7764089e-4d0973b5",
     ".github/codex/prompts/repo-onboarding.md": "sha256:e7333173-d8dce663-4c5829bd-bb8e9410-5da895e4-3b27e2f6-97c840b2-cd06df23",
     ".github/codex/release-readiness.md": "sha256:98f2986a-62f263d2-7a2fce01-74604896-c47881de-a78ae013-aca10f63-7be21e3e",
@@ -26,11 +26,29 @@
     ".github/codex/schemas/planner-review.schema.json": "sha256:0b6e73da-860c4c6d-9024f6e2-c2889162-f4d49813-e4c50691-87f68ef7-9183eba9",
     ".github/codex/schemas/product.schema.json": "sha256:18d0bd3f-439c1050-33309579-43c6daa8-b28aaccb-d8f7613f-0901b3aa-35535cfe",
     ".gitignore": "sha256:a55b5990-61dfcc0c-7a818cf5-3ef865ee-1d68dd9b-e83bffab-f72143c1-8254dfa3",
-    "AGENTS.md": "sha256:989f3d44-c5a1f428-99781adc-3eb1ae18-59ba3146-3a7692c5-041916a8-23de9590",
+    "AGENTS.md": "sha256:7092b7a3-b1a2fb92-0c7a45be-002a8f72-c4a22d13-92cbb3d4-fb8d8438-19fc9960",
     "contracts/profile-requirements.yaml": "sha256:36a421b8-53f07496-95b773da-201489f7-b17e0d49-3baa4787-482d9f49-715d8bc1",
-    "contracts/repo-profile.yaml": "sha256:b5b0639c-762a906b-a0ab8c39-5a5dbcd6-b0baf57c-3304d33c-50cd7543-370da3dd"
+    "contracts/repo-profile.yaml": "sha256:b5b0639c-762a906b-a0ab8c39-5a5dbcd6-b0baf57c-3304d33c-50cd7543-370da3dd",
+    ".agents/skills/engineering-execution/SKILL.md": "sha256:15a43638-cdf4cc0c-dd4e352f-f6db776a-60c876e4-e12ffb81-ca1bc6f6-0095da7d"
   },
   "product": "cpp-rt-car",
   "profile": "assurance",
-  "schema_version": 1
+  "schema_version": 1,
+  "agent_guidance_update": {
+    "version": 1,
+    "date": "2026-09-09",
+    "scope": "execution philosophy and context-management opt-in; not a full harness reconciliation",
+    "source": "tranquilWorks/portfolio-control",
+    "source_branch": "codex/astra-execution-context-2026-09-09",
+    "paths": [
+      ".agents/skills/ci-repair/SKILL.md",
+      ".agents/skills/engineering-execution/SKILL.md",
+      ".agents/skills/implement-batch/SKILL.md",
+      ".agents/skills/plan-batch/SKILL.md",
+      ".agents/skills/verify-change/SKILL.md",
+      ".codex/config.toml",
+      "AGENTS.md"
+    ],
+    "source_revision": "22a8804d53a2cbd411cbacfdbfb021ed81eca740"
+  }
 }
