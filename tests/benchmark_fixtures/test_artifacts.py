@@ -184,6 +184,7 @@ class Artifacts(unittest.TestCase):
         catalog=json.loads((ROOT/"bench/fixtures/cpu_cases.json").read_text(encoding="utf-8"))
         runtime_catalog=json.loads((ROOT/"bench/fixtures/runtime_cases.json").read_text(encoding="utf-8"))
         expected=["rtfw.self:structural"]+["rtfw.cpu:"+case["id"] for case in catalog["cases"]]+["rtfw.runtime:"+case["id"] for case in runtime_catalog["cases"]]
+        expected += ["rtfw.device:"+case["id"] for case in json.loads((ROOT/"bench/fixtures/device_cases.json").read_text())["cases"]]
         self.assertEqual(proc.stdout,"".join(name+"\n" for name in sorted(expected)))
         for clock in ("fake","steady"):
             out=self.root/clock

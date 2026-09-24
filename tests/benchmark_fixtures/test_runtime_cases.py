@@ -20,7 +20,7 @@ cpu=json.loads((ROOT/'bench/fixtures/cpu_cases.json').read_text())['cases']
 def command(*args):
     return subprocess.run([str(cli),*map(str,args)],capture_output=True,text=True,timeout=600)
 listing=command('list');assert listing.returncode==0
-assert listing.stdout.splitlines()==sorted(['rtfw.runtime:'+i for i in ids]+['rtfw.cpu:'+r['id'] for r in cpu]+['rtfw.self:structural'])
+assert listing.stdout.splitlines()==sorted(['rtfw.runtime:'+i for i in ids]+['rtfw.cpu:'+r['id'] for r in cpu]+['rtfw.device:'+r['id'] for r in json.loads((ROOT/'bench/fixtures/device_cases.json').read_text())['cases']]+['rtfw.self:structural'])
 with tempfile.TemporaryDirectory(prefix='m23-runtime-') as tmp:
     root=Path(tmp)
     for row in rows:

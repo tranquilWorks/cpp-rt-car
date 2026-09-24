@@ -824,3 +824,8 @@ M23-03 provides 87 public Runtime benchmark cases in PR #254. Repairs #256,
 verification passes; final exact-head CI and merge identities are in the PR
 and its completion/integration evidence. M23/CAP-M23 remain incomplete pending M23-04 and
 M23-05. Physical characterization requires a named accessible bench.
+
+M23-03 is merged as PR #254 at `03e4c36b24a7a4a6a2a6083aef26b6f45b1dcd9e`.
+M23-04 is active under control PR #488. Its CUDA benchmark segment is in progress;
+HAL/XDMA/pipeline coverage and full integration remain pending. M23-05 and
+physical characterization remain separate and unperformed.

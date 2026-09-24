@@ -1,5 +1,22 @@
 # Handoff
 
+M23-04 is active under merged control PR #488 at
+`49b134215e74b2d6f27ae1cab3801ac9dc8c139d`, canonical blob
+`479bbb95244b1ad7817158bf025dcc12568e8af3`. Baseline is merged benchmark
+PR #254, `03e4c36b24a7a4a6a2a6083aef26b6f45b1dcd9e`; all its 32 exact-head
+hosted checks passed. M23-03 is complete; its historical evidence is unchanged.
+
+The current M23-04 implementation is incomplete. The first CUDA transaction,
+queue/poll and failure/recovery segment passes 4 focused GTests and 24 normal
+CLI/artifact cases (16 portable executions, 8 absent real sessions reported
+NOT RUN). A supplied-session test executes injected drivers and checks actual
+kernel output and cleanup. An opt-in native CUDA host executable is written;
+it has not yet been compiled with a toolkit or run on hardware. CUDA Graph,
+XDMA, Runtime pipeline, complete package/sanitizer/CI and acceptance closure
+remain pending. See `docs/evidence/M23-04-2026-09-24.md`.
+
+## Historical M23-03 completion checkpoint
+
 M23-03 implementation and portable local verification are complete: 87 public
 Runtime benchmark cases, all 51 allocation-tracked cases, original 51 CPU cases,
 legacy artifacts, independent owners, sanitizer suites and SDK integration pass.

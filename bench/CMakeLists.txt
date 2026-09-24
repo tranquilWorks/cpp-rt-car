@@ -58,6 +58,15 @@ target_compile_definitions(rtfw_benchmark PRIVATE
     RTFW_BENCH_BUILD_CONFIG="$<IF:$<BOOL:$<CONFIG>>,$<CONFIG>,unknown>"
     RTFW_BENCH_BUILD_FLAGS="${_bench_flags}")
 add_executable(rtfw-bench src/benchmark_cli.cpp)
+add_library(rtfw_benchmark_device STATIC providers/device_provider.cpp)
+target_link_libraries(rtfw_benchmark_device PUBLIC rtfw_benchmark rtfw_cuda_backend rtfw_xdma_backend rtfw_runtime)
+target_include_directories(rtfw_benchmark_device PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/providers)
+rtfw_enable_project_warnings(rtfw_benchmark_device)
+if (RTFW_ENABLE_CUDA)
+    add_executable(rtfw-bench-cuda real_device/cuda.cpp)
+    target_link_libraries(rtfw-bench-cuda PRIVATE rtfw_benchmark_device rtfw_cuda_driver)
+    rtfw_enable_project_warnings(rtfw-bench-cuda)
+endif()
 add_library(rtfw_benchmark_cpu STATIC providers/cpu_provider.cpp)
 target_link_libraries(rtfw_benchmark_cpu PUBLIC rtfw_benchmark rtfw_runtime)
 target_include_directories(rtfw_benchmark_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/providers)
@@ -74,7 +83,7 @@ add_library(rtfw_benchmark_runtime STATIC
 target_link_libraries(rtfw_benchmark_runtime PUBLIC rtfw_benchmark rtfw_runtime)
 target_include_directories(rtfw_benchmark_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/providers)
 rtfw_enable_project_warnings(rtfw_benchmark_runtime)
-target_link_libraries(rtfw-bench PRIVATE rtfw_benchmark_cpu rtfw_benchmark_runtime)
+target_link_libraries(rtfw-bench PRIVATE rtfw_benchmark_cpu rtfw_benchmark_runtime rtfw_benchmark_device)
 rtfw_enable_project_warnings(rtfw-bench)
 install(TARGETS rtfw_benchmark EXPORT rtfwBenchmarkTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -121,6 +130,10 @@ if (RTFW_BUILD_TESTS)
     rtfw_enable_project_warnings(rtfw_benchmark_consumer)
     add_test(NAME benchmark_package_consumer COMMAND rtfw_benchmark_consumer)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME m23_benchmark_device_inventory
+        COMMAND "${Python3_EXECUTABLE}" "${RTFW_PROJECT_SOURCE_DIR}/tests/benchmark_fixtures/test_device_cases.py"
+            --cli $<TARGET_FILE:rtfw-bench> --inventory "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/device_cases.json")
+    set_tests_properties(m23_benchmark_device_inventory PROPERTIES TIMEOUT 600)
     add_test(NAME m23_benchmark_runtime_inventory
         COMMAND "${Python3_EXECUTABLE}" "${RTFW_PROJECT_SOURCE_DIR}/tests/benchmark_fixtures/test_runtime_cases.py"
             --cli $<TARGET_FILE:rtfw-bench> --inventory "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/runtime_cases.json")
