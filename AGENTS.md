@@ -6,7 +6,7 @@ ABI v1, and Apache-2.0. M14, M14.1, M15, M16, and the portable M17 software
 path through M17-06 are complete, while hardware/RT qualification remains
 incomplete. M20-PRE-01, M21-01 through M21-05, and M22-01 through M22-04 are
 merged. M23-01 and M23-02 are merged. M23-03R2 is the active approved repair batch;
-M23-03 remains an unmerged benchmark draft.
+CI-QUEUE-01 is merged as PR #257. M23-03 remains an unmerged benchmark draft.
 M16-01 supplies the exact reference timeline, M16-02 adds deterministic
 CPU-only cross-rate channel selection and bounded SPSC stores, and M16-03 adds
 opt-in mandatory admission, dispatch, transfer, and late actions. M16-04 adds
@@ -154,3 +154,12 @@ authorization. The hosted-utilization waiver never waives local functional failu
 Physical characterization requires an actual accessible bench. Workspace cleanup
 removed the unpublished earlier v2 candidate; reconstructed source requires fresh
 verification. Preserve durable draft checkpoints throughout this continuation.
+
+## Replay integration after CI-QUEUE-01
+
+Queue repair PR #257 merged at `da22fdaff9e7e5d3fbffa8013c0db7bd81f3697c`
+after all 32 exact-head checks passed. Preserve its sources/evidence unchanged.
+Reactivate M23-03R2 relative to this integrated main, reconcile draft #256,
+verify the combined source and integrate before editing benchmark draft #254.
+M23-03's v2 fixture amendment is already merged in control PR #475 at
+`b489a1a32e1ddd84f7213bae053114a2f17e79d7`; activate it only after R2 integration.

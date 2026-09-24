@@ -9,32 +9,44 @@
 namespace simcore {
 
 // Simple hazard pointer implementation for lock-free structures.
-// One hazard pointer per thread; retired nodes are reclaimed when unprotected.
+// Every live guard owns one record; retired nodes are reclaimed when unprotected.
 
 struct HazardRecord {
   std::atomic<void *> pointer{nullptr};
+  std::atomic<bool> owned{false};
   HazardRecord *next{nullptr};
 };
 
 inline std::atomic<HazardRecord *> global_hazard_head{nullptr};
 
 inline HazardRecord *acquire_hazard() {
-  thread_local HazardRecord *rec = nullptr;
-  if (rec)
-    return rec;
-  rec = new HazardRecord();
-  HazardRecord *old = global_hazard_head.load(std::memory_order_acquire);
+  for (HazardRecord *rec = global_hazard_head.load(std::memory_order_seq_cst);
+       rec; rec = rec->next) {
+    bool expected = false;
+    if (rec->owned.compare_exchange_strong(expected, true,
+                                           std::memory_order_acquire,
+                                           std::memory_order_relaxed))
+      return rec;
+  }
+  auto *rec = new HazardRecord();
+  rec->owned.store(true, std::memory_order_relaxed);
+  HazardRecord *old = global_hazard_head.load(std::memory_order_seq_cst);
   do {
     rec->next = old;
   } while (!global_hazard_head.compare_exchange_weak(
-      old, rec, std::memory_order_release, std::memory_order_relaxed));
+      old, rec, std::memory_order_seq_cst, std::memory_order_relaxed));
   return rec;
 }
 
 class HazardGuard {
 public:
   HazardGuard() : rec_(acquire_hazard()) {}
-  ~HazardGuard() { clear(); }
+  HazardGuard(const HazardGuard &) = delete;
+  HazardGuard &operator=(const HazardGuard &) = delete;
+  ~HazardGuard() {
+    clear();
+    rec_->owned.store(false, std::memory_order_release);
+  }
 
   template <typename T> T *protect(std::atomic<T *> &src) noexcept {
     T *p = nullptr;
@@ -47,7 +59,7 @@ public:
     return p;
   }
 
-  void clear() { rec_->pointer.store(nullptr, std::memory_order_seq_cst); }
+  void clear() noexcept { rec_->pointer.store(nullptr, std::memory_order_seq_cst); }
 
 private:
   HazardRecord *rec_;
@@ -68,7 +80,7 @@ inline std::vector<RetiredNode> &retired_list() {
 inline void scan() {
   // Gather all hazard pointers
   std::vector<void *> hazards;
-  for (HazardRecord *r = global_hazard_head.load(std::memory_order_acquire); r;
+  for (HazardRecord *r = global_hazard_head.load(std::memory_order_seq_cst); r;
        r = r->next) {
     hazards.push_back(r->pointer.load(std::memory_order_seq_cst));
   }

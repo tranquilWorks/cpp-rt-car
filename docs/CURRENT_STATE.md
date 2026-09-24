@@ -1,5 +1,26 @@
 # Current state
 
+## 2026-09-24: replay integration after verified queue repair
+
+Queue PR #257 merged at `da22fdaff9e7e5d3fbffa8013c0db7bd81f3697c` after
+all 32 hosted checks passed on `f4ac9a06ad2a46293a41f33b620c02ed5b191500`.
+Local queue verification passed six focused tests under GCC ASan/UBSan/TSan
+and the official 33/33 quick plus 37/37 full profile. Original failure and
+artifact-relink evidence remain in [CI-QUEUE-01](evidence/CI-QUEUE-01-2026-09-24.md).
+
+M23-03R2 is reactivated under its unchanged approved canonical scope. Replay
+PR #256 is reconciled onto that exact main; no replay Runtime source changed
+from its previously verified head `76f6b8ed8a5a2aad4fd37c2e0d47d3d6406852ae`.
+The combined head still requires local and hosted integration checks. The prior
+replay CI failure was the separately repaired experimental queue use-after-free.
+See [replay evidence](evidence/M23-03R2-2026-09-24.md).
+
+Next: integrate verified replay, then activate the already merged M23-03
+amendment (control #475), finish all 78 existing cases and remaining benchmark
+acceptance. No Unreal work or physical qualification is claimed. The execution
+host exposes no NVIDIA/XDMA device nodes; physical characterization remains
+unperformed. Earlier checkpoint text below is historical.
+
 ## 2026-09-24: approved M23-03R2 reconstruction and verification
 
 The owner approved opt-in lossless trusted replay v2 and merged Portfolio Control
