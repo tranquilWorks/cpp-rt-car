@@ -1,5 +1,13 @@
 # Handoff
 
+Latest M23-04 checkpoint: draft PR #260; 52 device cases, 8 focused GTests,
+independent CLI oracles and the steady allocation guard pass locally. Native
+CUDA graph and full Runtime kernel/graph pipelines are implemented. Linux XDMA
+host compiles; hardware and CUDA toolkit execution are unperformed. Package
+verification is running; full acceptance and hosted verification remain pending.
+See the appended checkpoint in `docs/evidence/M23-04-2026-09-24.md`.
+
+
 M23-04 is active under merged control PR #488 at
 `49b134215e74b2d6f27ae1cab3801ac9dc8c139d`, canonical blob
 `479bbb95244b1ad7817158bf025dcc12568e8af3`. Baseline is merged benchmark

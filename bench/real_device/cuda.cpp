@@ -13,6 +13,9 @@ struct Resources {
     CUstream stream{};
     CUmodule module{};
     CUfunction function{};
+    CUgraph graph{};
+    CUgraphExec graph_exec{};
+    CUdeviceptr graph_buffer{};
     bool current{};
 
     bool close() noexcept {
@@ -20,6 +23,18 @@ struct Resources {
         if (!current) {
             if (cuCtxPushCurrent(context)!=CUDA_SUCCESS) return false;
             current=true;
+        }
+        if(graph_exec) {
+            if(cuGraphExecDestroy(graph_exec)!=CUDA_SUCCESS) return false;
+            graph_exec=nullptr;
+        }
+        if(graph) {
+            if(cuGraphDestroy(graph)!=CUDA_SUCCESS) return false;
+            graph=nullptr;
+        }
+        if(graph_buffer) {
+            if(cuMemFree(graph_buffer)!=CUDA_SUCCESS) return false;
+            graph_buffer=0;
         }
         if (module) {
             if (cuModuleUnload(module)!=CUDA_SUCCESS) return false;
@@ -48,7 +63,8 @@ int main(int argc, char** argv) {
         const std::string_view selected=argv[1];
         const auto catalog=b::device::cases();
         bool allowed=false;
-        for(const auto& c:catalog) if(c.real && selected==c.id) allowed=true;
+        std::size_t bytes=0;
+        for(const auto& c:catalog) if(c.real && selected==c.id && selected.starts_with("real-cuda-")) { allowed=true; bytes=c.bytes; }
         if(!allowed || b::check_destination(argv[2])!=b::Status::ok) return 2;
         Resources resources;
         b::device::CudaSession session;
@@ -70,6 +86,22 @@ int main(int argc, char** argv) {
                cuModuleLoadData(&resources.module,b::device::native::kPtx.data())!=CUDA_SUCCESS ||
                cuModuleGetFunction(&resources.function,resources.module,"rtfw_add_one")!=CUDA_SUCCESS ||
                cuDriverGetVersion(&version)!=CUDA_SUCCESS) return 1;
+            if(selected.starts_with("real-cuda-graph-")) {
+                if(cuMemAlloc(&resources.graph_buffer,bytes)!=CUDA_SUCCESS ||
+                   cuGraphCreate(&resources.graph,0)!=CUDA_SUCCESS) return 1;
+                auto count=static_cast<unsigned>(bytes/4);
+                void* arguments[]{&resources.graph_buffer,&count};
+                CUDA_KERNEL_NODE_PARAMS kernel{};
+                kernel.func=resources.function; kernel.gridDimX=(count+127)/128;
+                kernel.gridDimY=kernel.gridDimZ=1;
+                kernel.blockDimX=128; kernel.blockDimY=kernel.blockDimZ=1;
+                kernel.kernelParams=arguments;
+                CUgraphNode node{};
+                if(cuGraphAddKernelNode(&node,resources.graph,nullptr,0,&kernel)!=CUDA_SUCCESS ||
+                   cuGraphInstantiate(&resources.graph_exec,resources.graph,nullptr,nullptr,0)!=CUDA_SUCCESS) return 1;
+                session.increment_graph=reinterpret_cast<rt::CudaGraphExec>(resources.graph_exec);
+                session.graph_buffer=resources.graph_buffer; session.graph_bytes=bytes;
+            }
             CUcontext popped{};
             if(cuCtxPopCurrent(&popped)!=CUDA_SUCCESS || popped!=resources.context) return 1;
             resources.current=false;

@@ -67,6 +67,11 @@ if (RTFW_ENABLE_CUDA)
     target_link_libraries(rtfw-bench-cuda PRIVATE rtfw_benchmark_device rtfw_cuda_driver)
     rtfw_enable_project_warnings(rtfw-bench-cuda)
 endif()
+if (RTFW_ENABLE_XDMA)
+    add_executable(rtfw-bench-xdma real_device/xdma.cpp)
+    target_link_libraries(rtfw-bench-xdma PRIVATE rtfw_benchmark_device rtfw_xdma_linux)
+    rtfw_enable_project_warnings(rtfw-bench-xdma)
+endif()
 add_library(rtfw_benchmark_cpu STATIC providers/cpu_provider.cpp)
 target_link_libraries(rtfw_benchmark_cpu PUBLIC rtfw_benchmark rtfw_runtime)
 target_include_directories(rtfw_benchmark_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/providers)
@@ -108,7 +113,22 @@ install(FILES providers/runtime_provider.hpp providers/runtime_provider.cpp fixt
 install(DIRECTORY providers/runtime_cases
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench/examples)
 
+install(FILES providers/device_provider.hpp providers/device_provider.cpp fixtures/device_cases.json
+    "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_device_consumer.cpp"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench/examples)
+install(DIRECTORY providers/device_cases real_device
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench/examples)
+
 if (RTFW_BUILD_TESTS)
+    add_executable(rtfw_benchmark_device_consumer "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_device_consumer.cpp")
+    target_link_libraries(rtfw_benchmark_device_consumer PRIVATE rtfw_benchmark_device)
+    rtfw_enable_project_warnings(rtfw_benchmark_device_consumer)
+    add_test(NAME benchmark_device_package_consumer COMMAND rtfw_benchmark_device_consumer)
+    add_executable(rtfw_benchmark_device_noalloc "${RTFW_PROJECT_SOURCE_DIR}/tests/benchmark_fixtures/device_consumer/noalloc.cpp")
+    target_link_libraries(rtfw_benchmark_device_noalloc PRIVATE rtfw_benchmark_device)
+    rtfw_enable_project_warnings(rtfw_benchmark_device_noalloc)
+    add_test(NAME m23_benchmark_device_noalloc COMMAND rtfw_benchmark_device_noalloc)
+    set_tests_properties(m23_benchmark_device_noalloc PROPERTIES TIMEOUT 120)
     add_executable(rtfw_benchmark_runtime_consumer "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_runtime_consumer.cpp")
     target_link_libraries(rtfw_benchmark_runtime_consumer PRIVATE rtfw_benchmark_runtime)
     rtfw_enable_project_warnings(rtfw_benchmark_runtime_consumer)

@@ -50,6 +50,23 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'bench/fixtures/device_cases.json',
+    'bench/providers/device_cases/cuda_graph.inc',
+    'bench/providers/device_cases/fake_cuda.hpp',
+    'bench/providers/device_cases/fake_xdma.hpp',
+    'bench/providers/device_cases/pipeline.inc',
+    'bench/providers/device_provider.cpp',
+    'bench/providers/device_provider.hpp',
+    'bench/real_device/cuda.cpp',
+    'bench/real_device/increment_ptx.hpp',
+    'bench/real_device/xdma.cpp',
+    'tests/benchmark_fixtures/device_consumer/CMakeLists.txt',
+    'tests/benchmark_fixtures/device_consumer/noalloc.cpp',
+    'tests/benchmark_fixtures/device_consumer/verify_package.py',
+    'tests/benchmark_fixtures/test_device_cases.py',
+    'tests/package_consumer/benchmark_device_consumer.cpp',
+    'tests/test_benchmark_device.cpp',
+
     'bench/fixtures/runtime_cases.json',
     'bench/providers/runtime_cases/capacity.cpp',
     'bench/providers/runtime_cases/catalog.inc',

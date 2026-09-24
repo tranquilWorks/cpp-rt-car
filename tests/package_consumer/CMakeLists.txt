@@ -188,6 +188,11 @@ if (UNIX)
 endif()
 
 if (RTFW_TEST_BENCHMARK)
+    add_executable(rtfw_consumer_benchmark_device benchmark_device_consumer.cpp
+        "${RTFW_DATA_DIR}/bench/examples/device_provider.cpp")
+    target_include_directories(rtfw_consumer_benchmark_device PRIVATE "${RTFW_DATA_DIR}/bench/examples")
+    target_link_libraries(rtfw_consumer_benchmark_device PRIVATE rtfw::runtime rtfw::benchmark rtfw::cuda_backend rtfw::xdma_backend)
+    add_test(NAME benchmark_device_package_consumer COMMAND rtfw_consumer_benchmark_device)
     add_executable(rtfw_consumer_benchmark benchmark_consumer.cpp)
     target_link_libraries(rtfw_consumer_benchmark PRIVATE rtfw::benchmark)
     add_test(NAME benchmark_package_consumer COMMAND rtfw_consumer_benchmark)

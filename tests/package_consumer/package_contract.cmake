@@ -61,10 +61,13 @@ if (RTFW_TEST_BENCHMARK)
     if (benchmark_links)
         message(FATAL_ERROR "Standalone benchmark target has unexpected dependencies: ${benchmark_links}")
     endif()
-    if (TARGET rtfw::benchmark_cpu OR TARGET rtfw_benchmark_cpu OR TARGET rtfw::benchmark_runtime OR TARGET rtfw_benchmark_runtime)
+    if (TARGET rtfw::benchmark_device OR TARGET rtfw_benchmark_device OR TARGET rtfw::benchmark_cpu OR TARGET rtfw_benchmark_cpu OR TARGET rtfw::benchmark_runtime OR TARGET rtfw_benchmark_runtime)
         message(FATAL_ERROR "CPU example leaked as an installed target")
     endif()
     set(expected_benchmark_examples
+        benchmark_device_consumer.cpp device_provider.hpp device_provider.cpp device_cases.json
+        device_cases/fake_cuda.hpp device_cases/fake_xdma.hpp device_cases/cuda_graph.inc device_cases/pipeline.inc
+        real_device/cuda.cpp real_device/xdma.cpp real_device/increment_ptx.hpp
         benchmark_consumer.cpp benchmark_cpu_consumer.cpp
         cpu_provider.hpp cpu_provider.cpp cpu_cases.json
         benchmark_runtime_consumer.cpp

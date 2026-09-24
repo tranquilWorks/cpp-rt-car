@@ -95,6 +95,8 @@ public:
     std::atomic<std::uint64_t> launches{0};
     std::atomic<std::uint64_t> graph_launches{0};
     std::atomic<bool> fail_next_graph_launch{false};
+    std::int32_t* graph_values{};
+    std::size_t graph_elements{};
     std::array<char, 32> call_order{};
     std::atomic<std::size_t> call_order_count{0};
 
@@ -511,10 +513,12 @@ private:
         }
         record(*driver, 'G');
         driver->graph_launches.fetch_add(1, std::memory_order_relaxed);
-        return driver->fail_next_graph_launch.exchange(
-                   false, std::memory_order_acq_rel)
-            ? rt::CudaDriverResult::launch_failure
-            : rt::CudaDriverResult::success;
+        if(driver->fail_next_graph_launch.exchange(false, std::memory_order_acq_rel))
+            return rt::CudaDriverResult::launch_failure;
+        if(!driver->graph_values || !driver->graph_elements || driver->graph_elements>1024)
+            return rt::CudaDriverResult::invalid_value;
+        for(std::size_t i=0;i<driver->graph_elements;++i) ++driver->graph_values[i];
+        return rt::CudaDriverResult::success;
     }
 
     static std::uint64_t monotonic_time_ns(
