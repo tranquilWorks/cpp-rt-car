@@ -6,7 +6,10 @@ CI-QUEUE-01 is active, from merged control PR #476. Exact main baseline is
 `3df07d756c626fd5453c62a23920c6e521c867e5`. Replay draft #256 encountered a real
 ASan use-after-free in unchanged experimental LockFreeQueue code; the repair
 has a separate scope and may not change supported Runtime or benchmark sources.
-See [repair evidence](evidence/CI-QUEUE-01-2026-09-24.md).
+See [repair evidence](evidence/CI-QUEUE-01-2026-09-24.md). Draft PR #257
+preserves the repair. Focused GCC sanitizer checks and the official local
+profile pass (33/33 quick, 37/37 full); hosted final-head checks remain the
+merge gate. No independent human review or physical qualification is claimed.
 
 Integrate the verified queue repair first, then reconcile replay #256 and resume
 benchmark #254 under merged contract amendment #475. Preserve all earlier
