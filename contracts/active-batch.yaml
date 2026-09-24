@@ -19,6 +19,12 @@ sources:
   control_plane_repository: tranquilWorks/portfolio-control
   control_plane_path: products/cpp-rt-car/batches/M23-03.yaml
   control_plane_revision: 7549d5d647fada8fad7637779301226c3ad87296
+  continuation_2026_09_24:
+    approved_replay_contract: portfolio-control PR 463; 092bab84f4228acc35a2eacf024ba0a61d1fe2e7
+    repair_prerequisite: cpp-rt-car PR 256 must be integrated after its required verification before target activation.
+    preserved_draft: cpp-rt-car PR 254; head 09d6b0df41edc430c40c093be12066b6dc6567d3
+    baseline_rule: Preserve the original planning baseline and failures; bind the actual integrated repair/main SHA and this amendment revision/blob on activation.
+    owner_direction: Finish the remaining planned features, scope and polish; exclude Unreal and use actual accessible hardware for characterization.
   target_contracts:
   - AGENTS.md
   - contracts/active-batch.yaml
@@ -63,10 +69,14 @@ sources:
   - tests/package_consumer/package_contract.cmake
   - release/rtfw-release-contract.json
   - docs/evidence/M23-02-discovery-closure-2026-09-07.md
-  canonical_revision: 38a7c91d8c3fe7a663a57d0353a3e60773ded20d
-  canonical_blob_sha: 7edf42f9c060f794abf1c7f4847ebe5ef06cc599
+  canonical_revision: b489a1a32e1ddd84f7213bae053114a2f17e79d7
+  canonical_blob_sha: a6e1ea91b9e2b93833ea8992b46fdbe347797ecf
+  reconciled_target_main: 52fbdd3b029f1531f8d5d40af85e3f8e11603571
+  integrated_replay: PR 256; all 32 hosted checks passed at c9a86254a25ffecbe97536a2f422bf470c083bec.
+  integrated_queue: PR 257; da22fdaff9e7e5d3fbffa8013c0db7bd81f3697c.
 dependencies:
 - M23-02
+- M23-03R2
 scope:
   allowed_paths:
   - .portfolio-harness.json
@@ -159,6 +169,8 @@ scope:
   - tests/mixed_rate_conformance.hpp
   - docs/evidence/M23-02-*.md
 acceptance:
+- 'This continuation additionally requires the verified, integrated M23-03R2 opt-in trusted replay repair. Explicitly select LiveControlReplayRetentionPolicy only in benchmark-owned synthetic replay/composition fixtures that need complete admission history, with declared bounded identity, descriptor and original-payload capacities. Preserve default v1 fixtures and all Runtime/private/ABI/schema/framework/validator/prior-provider forbidden paths. This is fixture integration of the separately approved public API, not further Runtime evolution.'
+- 'Retain and rerun every one of the original 78 catalog cases, including all four nominal/fault compositions, with the same logical workloads and independent oracles. Preserve original 74/78 and intermediate 76/78 failures as historical evidence. Complete every partial acceptance item in the retained draft evidence, including late/failed device nonpublication, separate shedding action/counter inspection, invalid-target and capacity boundaries, sanitizer/allocation/package and compiler/FMA checks. Add truthful cases within the existing 96-row ceiling where a separate timing scope is required; do not remove failing families or loosen checks.'
 - 'Start from the exact clean merged target baseline recorded in sources. M23-02 provider PR #252 and
   discovery correction PR #253 must be integrated, with the correction exact-head mandatory CI passed.
   Preserve the original M23-02 failures and absent review records as historical facts. This canonical
@@ -347,6 +359,7 @@ validation:
   - Unchanged prior artifact bytes and CPU schema, fixed-identity new CPU-only artifact exchange, optional/default
     package/relocation/embedding and exact source ledger.
   required_ci:
+  - The 2026-09-08 owner utilization waiver applies only to genuinely unavailable hosted jobs. Preserve exact-head actual results and never waive local or hosted functional failures; use hosted gates when available.
   - Existing Linux GCC11/Clang14 Debug/RelWithDebInfo ASan+UBSan matrices and Windows MSVC matrices, plus
     optional CPU provider build and every deterministic case.
   - Existing GCC ThreadSanitizer job including CPU provider isolation, host adapter queue, nested work,

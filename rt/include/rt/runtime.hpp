@@ -80,6 +80,7 @@ inline constexpr std::uint64_t live_control_total_storage_limit =
     std::uint64_t{1} << 30u;
 inline constexpr std::uint32_t live_control_action_schema_version = 1;
 inline constexpr std::uint32_t live_control_replay_schema_version = 1;
+inline constexpr std::uint32_t live_control_lossless_replay_schema_version = 2;
 inline constexpr std::size_t live_control_action_capacity_limit =
     live_control_record_capacity_limit * 4u;
 inline constexpr std::size_t live_control_retained_generation_capacity_limit =
@@ -1348,6 +1349,20 @@ struct LiveControlClosurePolicy {
 static_assert(sizeof(LiveControlClosurePolicy) == 72);
 static_assert(alignof(LiveControlClosurePolicy) == 8);
 
+// Explicit trusted retention: includes original accepted payloads even when
+// replaced, rolled back, missed or stopped. Default replay remains format v1.
+struct LiveControlReplayRetentionPolicy {
+    std::uint32_t schema_version = live_control_lossless_replay_schema_version;
+    std::uint32_t struct_size = sizeof(LiveControlReplayRetentionPolicy);
+    std::uint64_t policy_identity = 0;
+    std::size_t admission_capacity = 0;
+    std::size_t payload_capacity_bytes = 0;
+    std::array<std::byte, 16> reserved{};
+};
+
+static_assert(sizeof(LiveControlReplayRetentionPolicy) == 48);
+static_assert(alignof(LiveControlReplayRetentionPolicy) == 8);
+
 enum class LiveControlActionId : std::uint8_t {
     admission = 1,
     boundary_empty = 2,
@@ -2492,6 +2507,8 @@ public:
         const LiveControlPolicy& policy) noexcept;
     [[nodiscard]] Status set_live_control_closure_policy(
         const LiveControlClosurePolicy& policy) noexcept;
+    [[nodiscard]] Status set_live_control_replay_retention_policy(
+        const LiveControlReplayRetentionPolicy& policy) noexcept;
     [[nodiscard]] Status configure_key(
         std::string_view key,
         std::string_view value) noexcept;

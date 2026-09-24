@@ -2,6 +2,7 @@
 #include <atomic>
 #include <gtest/gtest.h>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 using namespace simcore;
@@ -82,4 +83,41 @@ TEST(HazardPointer, StackCorrectness) {
   for (int iteration = 0; iteration < 32; ++iteration) {
     EXPECT_EQ(exercise_stack(N), 2u * N);
   }
+}
+
+TEST(HazardPointer, SimultaneousGuardsRetainIndependentObjects) {
+  struct Tracked {
+    int *destroyed;
+    ~Tracked() { ++*destroyed; }
+  };
+  static_assert(!std::is_copy_constructible_v<HazardGuard>);
+  static_assert(!std::is_copy_assignable_v<HazardGuard>);
+  int first_destroyed = 0, second_destroyed = 0;
+  std::atomic<Tracked *> first{new Tracked{&first_destroyed}};
+  std::atomic<Tracked *> second{new Tracked{&second_destroyed}};
+  HazardGuard outer;
+  EXPECT_EQ(outer.protect(first), first.load());
+  {
+    HazardGuard inner;
+    EXPECT_EQ(inner.protect(second), second.load());
+    retire(first.exchange(nullptr), [](void *p) { delete static_cast<Tracked *>(p); });
+    retire(second.exchange(nullptr), [](void *p) { delete static_cast<Tracked *>(p); });
+    scan();
+    EXPECT_EQ(first_destroyed, 0);
+    EXPECT_EQ(second_destroyed, 0);
+    inner.clear();
+    scan();
+    EXPECT_EQ(first_destroyed, 0);
+    EXPECT_EQ(second_destroyed, 1);
+  }
+  // A recycled record must not alias the still-live outer guard.
+  {
+    HazardGuard reused;
+    EXPECT_EQ(reused.protect(second), nullptr);
+  }
+  scan();
+  EXPECT_EQ(first_destroyed, 0);
+  outer.clear();
+  scan();
+  EXPECT_EQ(first_destroyed, 1);
 }

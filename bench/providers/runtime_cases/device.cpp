@@ -96,7 +96,17 @@ struct Loopback final:Fixture {
         okay(owner.rt.configure(cfg));okay(owner.rt.set_rate_execution_policy({64,23,1,1,1024}));
         okay(owner.rt.set_mixed_rate_closure_policy({23,1024,1024,1024*1024,64,
             rt::MixedRateOverflowPolicy::overwrite_committed,true,true,{}}));
-        if(composition) configure_controls(owner.rt,1,1,8,8,true,true);
+        if(composition) {
+            configure_controls(owner.rt,1,1,8,8,true,true);
+            // Composition replay includes rejected admissions as well as the
+            // original accepted payloads. Select the integrated public v2
+            // retention API explicitly; ordinary replay fixtures remain v1.
+            rt::LiveControlReplayRetentionPolicy retention;
+            retention.policy_identity=230302;
+            retention.admission_capacity=4*c.count+8;
+            retention.payload_capacity_bytes=16*c.count+64;
+            okay(owner.rt.set_live_control_replay_retention_policy(retention));
+        }
         okay(owner.rt.register_state({"loopback-observation",1,state}));
         okay(owner.rt.register_device_backend(backend.hal_v2_registration(),backend_handle));
         rt::DeviceMemoryDomainHandle memory_domain;rt::HalV2MemoryDomain memory;

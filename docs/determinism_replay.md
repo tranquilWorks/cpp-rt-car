@@ -397,3 +397,13 @@ M17-06 adds no checkpoint, input-log, rate-action, or compatibility schema and
 no replay action. Runtime-generated batch IDs, native handles, host pointers,
 thread IDs, failure switches, timeline progress, and simulated device state do
 not enter compatibility identity.
+
+### Explicit lossless live-control retention
+
+The optional `LiveControlReplayRetentionPolicy` selects the separate trusted v2
+format described in [live controls](live_controls.md#opt-in-lossless-trusted-replay-format-v2).
+It retains original non-survivor payloads and admission ownership within finalized
+bounds. The default v1 artifact and existing public structure layouts remain
+unchanged. V2 validates ownership before restore and compares complete canonical
+state plus transcripts; malformed, foreign or incomplete histories fail explicitly.
+The format does not roll back application/backend side effects or qualify hardware.

@@ -5,7 +5,8 @@ portable product is release 1.2.1 at RT0 with stable C ABI v8, SONAME 8, device
 ABI v1, and Apache-2.0. M14, M14.1, M15, M16, and the portable M17 software
 path through M17-06 are complete, while hardware/RT qualification remains
 incomplete. M20-PRE-01, M21-01 through M21-05, and M22-01 through M22-04 are
-merged. M23-01 is merged as PR #251; M23-02 is merged; M23-03 is the active approved batch.
+merged. M23-01 and M23-02 are merged. M23-03R2 is merged; M23-03 is the active approved benchmark batch;
+CI-QUEUE-01 is merged as PR #257. M23-03 remains an unmerged benchmark draft.
 M16-01 supplies the exact reference timeline, M16-02 adds deterministic
 CPU-only cross-rate channel selection and bounded SPSC stores, and M16-03 adds
 opt-in mandatory admission, dispatch, transfer, and late actions. M16-04 adds
@@ -126,6 +127,7 @@ mandatory hardware/RT evidence, signing, release, or deployment gate. See
 <!-- BEGIN PORTFOLIO-CONTROL MANAGED -->
 ## Governed agentic delivery
 
+- Read `.agents/skills/engineering-execution/SKILL.md` for nontrivial work: complete the requested outcome, verify its entry point, and preserve context.
 - Product: `cpp-rt-car`; delivery profile: `assurance`.
 - Control revision: `aeebab5f0140c2ac9161ff88f8fe42749ce42ebc`; harness version: `2`.
 - Read `contracts/profile-requirements.yaml` and the approved
@@ -138,11 +140,38 @@ mandatory hardware/RT evidence, signing, release, or deployment gate. See
   not actually produced.
 <!-- END PORTFOLIO-CONTROL MANAGED -->
 
-## M23-03 delivery frontier
+## M23-03R2 continuation (2026-09-24)
 
-The Runtime benchmark provider is the current implementation batch. Its nested active/live-control replay composition is blocked by a retained public-API regression. Runtime edits require the separately planned repair contract. The CPU graph/executor/memory provider is merged.
-The optional M23-01 host-side C++20 benchmark runner is the merged foundation. Read `docs/benchmarking.md` and the complete canonical contract referenced
-by `contracts/active-batch.yaml`. Do not confuse checked source publication with
-passed CI, human API/privacy review, milestone completion, or release promotion.
-Preserve a verified Git bundle and commit/PR identifiers before ending a session;
-an empty tree comparison must never be described as product delivery.
+The owner approved opt-in trusted replay v2 and confirmed merged control PR #463
+at `092bab84f4228acc35a2eacf024ba0a61d1fe2e7`. Its canonical blob and reconciled
+main/repair baselines are bound in `contracts/active-batch.yaml`.
+Finish the lossless repair in draft PR #256, verify and integrate it, then amend
+M23-03 separately before its benchmark fixtures select v2. Preserve default v1
+bytes, existing public layouts, stable ABIs, complete state/transcript checks and
+all earlier failed evidence. M23-03 and dependent scopes remain open.
+Continue the requested non-Unreal work under standing scoped publication/merge
+authorization. The hosted-utilization waiver never waives local functional failures.
+Physical characterization requires an actual accessible bench. Workspace cleanup
+removed the unpublished earlier v2 candidate; reconstructed source requires fresh
+verification. Preserve durable draft checkpoints throughout this continuation.
+
+## Replay integration after CI-QUEUE-01
+
+Queue repair PR #257 merged at `da22fdaff9e7e5d3fbffa8013c0db7bd81f3697c`
+after all 32 exact-head checks passed. Preserve its sources/evidence unchanged.
+Reactivate M23-03R2 relative to this integrated main, reconcile draft #256,
+verify the combined source and integrate before editing benchmark draft #254.
+M23-03's v2 fixture amendment is already merged in control PR #475 at
+`b489a1a32e1ddd84f7213bae053114a2f17e79d7`; activate it only after R2 integration.
+
+## M23-03 completion after replay integration
+
+PR #256 merged at `52fbdd3b029f1531f8d5d40af85e3f8e11603571` after all 32
+exact-head hosted checks, focused/full/default-v1/ABI/no-allocation and relocated
+consumer checks passed. Activate merged control amendment #475 and complete
+the retained Runtime benchmark draft #254. Preserve all 78 original cases and
+logical workloads, explicitly opt in to v2 only in fixtures needing admission
+history, and close all partial acceptance without changing Runtime or prior
+providers/framework/validators. M23-04 and M23-05 remain separate later scopes.
+Standing scoped publication/merge authorization continues; no functional gate
+waiver, Unreal work or invented physical qualification is permitted.

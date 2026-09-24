@@ -1,5 +1,24 @@
 # Current state
 
+## 2026-09-24: M23-03 benchmark completion activated
+
+Queue PR #257 and replay v2 PR #256 are integrated. Exact main is
+`52fbdd3b029f1531f8d5d40af85e3f8e11603571`; replay final head
+`c9a86254a25ffecbe97536a2f422bf470c083bec` passed all 32 hosted checks,
+51 focused tests, quick 33/33/full 37/37 and 20 relocated consumers. Default-v1
+bytes/public layouts/ABIs remain unchanged and all three public replay consumers
+report zero measured run/replay allocations. Original failures remain retained.
+
+M23-03 now binds merged control amendment #475 at
+`b489a1a32e1ddd84f7213bae053114a2f17e79d7`, blob
+`a6e1ea91b9e2b93833ea8992b46fdbe347797ecf`. Draft #254 is reconciled onto main.
+Retain all 78 cases and original 74/78/intermediate 76/78 failures; integrate
+explicit v2 retention into composition fixtures, then complete every partial
+acceptance item before merging. M23/CAP-M23 remain open for M23-04/M23-05.
+No Runtime or prior-provider/framework/validator changes are authorized here.
+Unreal remains excluded. Hardware characterization is unperformed because this
+host exposes no NVIDIA/XDMA device nodes. Earlier text below is historical.
+
 ## M23-03 Runtime benchmark work in progress
 
 M23-02 discovery closure merged as PR #253 at

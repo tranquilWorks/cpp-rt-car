@@ -122,6 +122,7 @@ if (SIM_GTEST_AVAILABLE)
         test_live_control_actions.cpp
         test_live_control_sdk.cpp
         test_live_control_stress.cpp
+        test_live_control_active_replay.cpp
         test_mixed_rate_actions.cpp
         test_mixed_rate_replay.cpp
         test_mixed_rate_conformance.cpp
