@@ -43,7 +43,10 @@ Status Provider::describe(void*,std::size_t index,Descriptor& d) {
         {"variant",c.variant,c.variant,c.variant}};
     d.counters={{"operations",c.unit},{"callbacks","count"},{"rejected","count"},
         {"records","count"},{"bytes","bytes"},{"transitions","count"},{"gaps","count"},
-        {"rate_actions","records"},{"mixed_actions","records"},{"control_actions","records"}};
+        {"rate_actions","records"},{"mixed_actions","records"},{"control_actions","records"},
+        {"admissions","admissions"},{"peak_outstanding","batches"}};
+    if(c.family==Family::composition || (c.family==Family::replay && std::string_view(c.mode)=="active"))
+        d.counters[3].unit="copies";
     return Status::ok;
 }
 Status Provider::prepare(std::string_view id) {

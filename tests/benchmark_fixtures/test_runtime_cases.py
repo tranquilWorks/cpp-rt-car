@@ -41,7 +41,17 @@ with tempfile.TemporaryDirectory(prefix='m23-runtime-') as tmp:
             if row['family']=='rates' and row['mode']=='dispatch':
                 assert c['operations']==row['count']*row['width']*row['variant']==c['callbacks']==c['records']
             if row['family']=='controls':
-                assert c['operations']==row['count'] and c['callbacks']==1 and c['records']==row['width']
+                assert c['operations']==c['admissions']==row['count'] and c['callbacks']==1 and c['records']==row['width']
+            if row['family']=='composition' or row['family']=='replay' and row['mode']=='active':
+                frames=row['count'];fault=row['family']=='composition' and row['variant']!=0
+                shedding=row['family']=='composition' and row['variant']==2
+                assert c['operations']==2*frames and c['records']==4*frames
+                assert c['callbacks']==frames*(10+4*int(fault)+2*int(shedding))
+                assert c['admissions']==(frames if row['family']=='composition' else 0)
+                assert c['transitions']==(2*frames if shedding else 0)
+            if row['mode']=='inflight':
+                assert c['operations']==1 and c['callbacks']==c['records']==c['peak_outstanding']==4
+                assert c['bytes']==32 and c['rejected']==0
             if row['family']=='watchdog':
                 assert c['operations']==4 and c['callbacks']==4 and c['records']==(4 if row['variant']==2 else 0)
         before={p.name:p.read_bytes() for p in output.iterdir()}

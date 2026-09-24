@@ -175,3 +175,14 @@ history, and close all partial acceptance without changing Runtime or prior
 providers/framework/validators. M23-04 and M23-05 remain separate later scopes.
 Standing scoped publication/merge authorization continues; no functional gate
 waiver, Unreal work or invented physical qualification is permitted.
+
+## Benchmark continuation after M23-03R3
+
+Watchdog repair PR #258 merged at `8ba51b3effa6174eaeb5382aef3404eeb5c160d1`
+after all 32 exact-head hosted gates passed at `a520626bd0fa024afb54f3fe2270669acf1db562`.
+Its full local profiles, ASan/UBSan, TSan, 20 relocated package consumers, ABI,
+default-v1 golden and unchanged 84 benchmark cases passed. The original timeout
+and all earlier failures remain retained in PR #258 and its evidence. Preserve
+this integrated Runtime source and reactivate the existing M23-03 amendment
+(control #475). Finish benchmark PR #254 under standing scoped publication/merge
+authorization. No cybersecurity, Daybreak or Unreal scope is authorized.

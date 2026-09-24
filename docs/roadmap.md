@@ -819,6 +819,7 @@ deployment, or production readiness.
 M22-04 closes only CAP-M22 portable software after every hosted and human gate
 passes and the candidate merges.
 
-M23-03 is active as a draft Runtime benchmark batch. Its complete-frame replay
-composition requires the separately scoped Runtime repair recorded in
-`docs/evidence/M23-03-2026-09-08.md`; M23/CAP-M23 remain incomplete.
+M23-03 provides 87 public Runtime benchmark cases in PR #254. Replay prerequisites
+#256 and #258 are integrated; final benchmark verification is tracked in the PR
+and its completion evidence. M23/CAP-M23 remain incomplete pending M23-04 and
+M23-05. Physical characterization requires a named accessible bench.

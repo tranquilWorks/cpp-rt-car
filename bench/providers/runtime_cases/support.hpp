@@ -88,10 +88,10 @@ struct RuntimeOwner {
 };
 struct Measures {
     std::uint64_t operations{},callbacks{},rejected{},records{},bytes{},transitions{},gaps{},checksum{};
-    std::uint64_t rate_actions{},mixed_actions{},control_actions{};
+    std::uint64_t rate_actions{},mixed_actions{},control_actions{},admissions{},peak_outstanding{};
     bool correct{true};
     void observe(Observation& out) const {
-        out.counters={operations,callbacks,rejected,records,bytes,transitions,gaps,rate_actions,mixed_actions,control_actions};
+        out.counters={operations,callbacks,rejected,records,bytes,transitions,gaps,rate_actions,mixed_actions,control_actions,admissions,peak_outstanding};
         // The schema accepts signed-63-bit JSON integers; retain the low bits
         // of the observed digest, while fixture oracles compare full values.
         out.checksum=checksum & max_integer; out.correct=correct;

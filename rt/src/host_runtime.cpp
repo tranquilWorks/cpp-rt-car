@@ -11410,7 +11410,7 @@ Status Runtime::step(
                     std::numeric_limits<std::uint32_t>::max(),
                     0,
                     static_cast<std::int32_t>(Status::ok),
-                    after == 0 ? 0 : after - 1,
+                    current,
                     after,
                     MixedRateActionId::watchdog_transition,
                     MixedRateActionReason::watchdog,

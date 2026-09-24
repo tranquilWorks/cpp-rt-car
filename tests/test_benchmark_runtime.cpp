@@ -44,17 +44,20 @@ TEST(BenchmarkRuntime, EveryCasePreservesWarmupAndMeasuredBoundaries) {
 }
 TEST(BenchmarkRuntime, ConcurrentInstancesOwnIndependentState) {
     std::atomic<unsigned> failures{};
-    const auto run=[&] {
+    const auto run=[&](std::string_view id,std::uint64_t expected) {
         try {
             b::runtime::Provider p;
-            if(p.prepare("rate-dispatch-64-d4-s4")!=b::Status::ok){++failures;return;}
+            if(p.prepare(id)!=b::Status::ok){++failures;return;}
             auto table=p.table();b::Observation out;out.counters.reserve(b::max_counters);
             for(std::uint64_t i=0;i<7;++i) {
-                if(table.invoke(table.user,"rate-dispatch-64-d4-s4",i,out)!=b::Status::ok ||
-                   !out.correct || out.counters[0]!=1024) ++failures;
+                if(table.invoke(table.user,id,i,out)!=b::Status::ok ||
+                   !out.correct || out.counters[0]!=expected) ++failures;
             }
             if(p.finish()!=b::Status::ok) ++failures;
         } catch(...) {++failures;}
     };
-    std::thread first(run),second(run);first.join();second.join();EXPECT_EQ(failures,0u);
+    std::thread first(run,"rate-dispatch-64-d4-s4",1024),second(run,"rate-dispatch-64-d4-s4",1024);
+    first.join();second.join();
+    std::thread device_first(run,"device-inflight-configured-4",1),device_second(run,"device-inflight-configured-4",1);
+    device_first.join();device_second.join();EXPECT_EQ(failures,0u);
 }

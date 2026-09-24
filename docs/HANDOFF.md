@@ -1,5 +1,27 @@
 # Handoff
 
+M23-03 continuation: replay/watchdog prerequisite PR #258 is merged at
+`8ba51b3effa6174eaeb5382aef3404eeb5c160d1`, with all 32 hosted checks passed.
+Its public regression, sanitizer, full-profile and relocated SDK results are
+recorded in PR #258. M23-03 is active again on this integrated baseline.
+Finish the remaining benchmark acceptance audit and verification in #254;
+M23-04/M23-05 and physical characterization remain separate.
+
+
+## 2026-09-24: benchmark acceptance completion
+
+The catalog now contains 87 cases, retaining every original workload. Three final
+additions cover explicit optional shedding during composition/replay and actual
+four-batch loopback occupancy. Callbacks include replay, accepted admissions have
+a separate column, and two-instance budgets total 512 MiB. The optional static
+analysis source routing is corrected; existing TSan includes Runtime provider
+and mixed-rate replay tests. Final all-case/artifact, allocation, sanitizer,
+package, full-profile and exact-head hosted results are tracked in PR #254 and
+`docs/evidence/M23-03-completion-2026-09-24.md`.
+
+The following dated checkpoints retain the original failures and decisions;
+the current source includes the separately merged repairs.
+
 ## 2026-09-24: 84-case checkpoint and watchdog repair prerequisite
 
 PR #254 retains all 78 original workloads and adds six explicit inspection,

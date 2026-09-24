@@ -34,13 +34,14 @@ struct Replay final:Fixture {
         return s.valid?rt::CallbackResult::ok:rt::CallbackResult::error;
     }
     explicit Replay(const Case& value):c(value),values(c.count),inputs(c.count) {
-        auto cfg=config();cfg.determinism_tier=rt::DeterminismTier::schedule_independent;
+        auto cfg=config();cfg.memory_budget_bytes=480U*1024U*1024U;cfg.determinism_tier=rt::DeterminismTier::schedule_independent;
         cfg.replay_input_capacity=c.capacity;
         okay(owner.rt.configure(cfg));okay(owner.rt.register_state({"replay-state",1,state}));
         okay(owner.rt.register_callback({"replay-application",work,this}));
         const bool live=std::string_view(c.mode)=="live";
         if(live) configure_controls(owner.rt,1,1,8,8,true,true);
-        okay(foreign.rt.configure(cfg));
+        auto foreign_cfg=cfg;foreign_cfg.memory_budget_bytes=32U*1024U*1024U;
+        okay(foreign.rt.configure(foreign_cfg));
         okay(foreign.rt.register_state({"foreign-replay-state",1,foreign_state}));
         okay(foreign.rt.register_callback({"replay-application",work,this}));
         if(live) configure_controls(foreign.rt,1,1,8,8,true,true);

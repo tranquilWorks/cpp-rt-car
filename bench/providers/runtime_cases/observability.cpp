@@ -159,7 +159,7 @@ struct Actions final:Fixture {
         for(std::size_t i=0;i<c.count;++i) {
             store64(payload,frames+1);auto update=update_record(handle,frames+1,payload,frames+1);
             rt::LiveControlAdmissionResult result;okay(owner.rt.stage_live_control_update(handle,update,payload,result));
-            require(result==rt::LiveControlAdmissionResult::accepted);
+            require(result==rt::LiveControlAdmissionResult::accepted);++m.admissions;
             const auto release=1000+frames*100;owner.clock.now=release;
             okay(owner.rt.step(frame(frames+1,100,release)));++frames;++m.operations;
         }

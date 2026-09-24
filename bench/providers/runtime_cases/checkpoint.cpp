@@ -7,7 +7,7 @@ struct Checkpoint final:Fixture {
     std::vector<std::byte> state,output,corrupt,foreign;
     RuntimeOwner owner;
     explicit Checkpoint(const Case& value):c(value),state(c.bytes) {
-        auto cfg=config();cfg.state_capacity=c.width;
+        auto cfg=config();cfg.memory_budget_bytes=480U*1024U*1024U;cfg.state_capacity=c.width;
         okay(owner.rt.configure(cfg));
         for(std::size_t i=0;i<c.width;++i)
             okay(owner.rt.register_state({"canonical-state-"+std::to_string(i),1,
@@ -17,7 +17,8 @@ struct Checkpoint final:Fixture {
         // A well-formed checkpoint with a different state schema is rejected by
         // restore, independently of the malformed-byte checks below.
         std::vector<std::byte> other_state(c.bytes);
-        RuntimeOwner other;okay(other.rt.configure(cfg));
+        auto other_cfg=cfg;other_cfg.memory_budget_bytes=32U*1024U*1024U;
+        RuntimeOwner other;okay(other.rt.configure(other_cfg));
         for(std::size_t i=0;i<c.width;++i)
             okay(other.rt.register_state({"foreign-state-"+std::to_string(i),1,
                 std::span<std::byte>(other_state).subspan(i*(c.bytes/c.width),c.bytes/c.width)}));

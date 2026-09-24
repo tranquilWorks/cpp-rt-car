@@ -313,7 +313,7 @@ lifecycle allocation are deliberately outside that claim.
 package wrapper runs every unchanged M23-01 packaging check before the additional
 installed-source, relocated and add-subdirectory CPU consumers.
 
-## M23-03 Runtime provider draft
+## M23-03 Runtime provider
 
 The optional `rtfw.runtime` provider is an instance-local installed source example,
 compiled internally for `rtfw-bench`. Its finite catalog is
@@ -345,16 +345,39 @@ preallocated; host replay buffers and bounded JSON streams are outside those lan
 Synthetic replay artifacts contain explicitly retained test payloads in memory and
 are not included in public benchmark bundles.
 
-The catalog now has 84 cases, retaining all original 78 workloads. Added scopes
+The catalog has 87 cases, retaining all original 78 workloads. Added scopes
 include separate shedding action/counter reads, selection-capacity compilation,
-and failed device nonpublication. The held-completion timeout lifecycle includes
-the existing device-service host-monotonic 1 ms deadline; it checks terminal
-status and checked teardown, with no elapsed-time assertion.
+failed device nonpublication, explicit shedding/recovery composition, and actual
+four-batch occupancy. The held-completion timeout lifecycle includes the existing
+device-service host-monotonic 1 ms deadline; it checks terminal status and checked
+teardown, with no elapsed-time assertion.
 
-Current status is incomplete: 83 cases pass; `composition-fault-8` exposes a
-saturated watchdog action/replay defect. The public-only
-`tests/benchmark_fixtures/runtime_consumer/watchdog_replay_regression.cpp`
-isolates the incorrect prior degradation level at caps 1 and 3. Separate repair
-M23-03R3 is required before integration. The earlier replay failures and repaired
-v2 prerequisite remain in evidence. Final full/package/sanitizer/hosted checks
-are pending; M23-04 and M23-05 remain future work.
+`device-inflight-configured-4` binds four independent device phases to one rate
+release. A fixture-owned public command-extension adapter forwards every command
+to SampledIoLoopbackBackend and defers completion observation until four accepted
+submissions are pending. The adapter does not sleep, create threads, alter Runtime,
+or replace loopback payload execution. It checks exact four-batch occupancy,
+completion/payload counts and terminal recovery to zero. This is a declared
+synthetic completion schedule, not native device latency.
+
+The two additional shedding compositions retain the CPU/loopback/CPU graph and
+add a mandatory three-nanosecond-deadline trigger after the primary domains and
+before two optional domains. Injected logical work makes the first trigger late;
+three subsequent on-time mandatory releases recover the lower-priority optional
+domain. Public actions and counters verify the exact order, and each forward and
+replayed frame observes two optional callbacks and one trigger callback. The
+original nominal and fault cases remain unchanged workloads.
+
+Twelve counter columns distinguish frames, callbacks, copies, admissions, bytes
+and three action streams. Composition callback totals include forward execution
+and replay. Rate transitions/actions are the declared forward observation;
+mixed/control streams are read after replay. The occupancy column reports each
+invocation's observed peak; its sum across samples is not a run-wide peak. Fixtures
+with foreign-identity rejection use a combined 512 MiB declared budget, split
+480/32 MiB across the two Runtime instances. Checkpoint preparation retires its
+second instance before measurement.
+
+The replay prerequisites are integrated as PR #256 (lossless opt-in v2) and
+PR #258 (actual prior watchdog level at saturation). Original failed evidence
+remains in `docs/evidence/M23-03-2026-09-08.md` and the continuation ledger.
+Final verification is tracked in PR #254; M23-04 and M23-05 remain separate work.

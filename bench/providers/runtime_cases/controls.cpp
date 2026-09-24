@@ -80,7 +80,7 @@ struct Controls final:Fixture {
             auto r=record(i,target);rt::LiveControlAdmissionResult result;
             okay(owner.rt.stage_live_control_update(handles[i],r,payload,result));
             require(result==rt::LiveControlAdmissionResult::accepted);
-            ++sequences[i];seeds[mailbox]=seed;++m.operations;m.bytes+=payload.size();
+            ++sequences[i];seeds[mailbox]=seed;++m.operations;++m.admissions;m.bytes+=payload.size();
         }
         // Full/invalid/stale rejections leave the accepted copied records intact.
         put(payload,199);
