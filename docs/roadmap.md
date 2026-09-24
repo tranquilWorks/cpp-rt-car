@@ -45,7 +45,7 @@ pass; file presence or a passing smoke test is not sufficient.
 | M20 | In progress | M20-PRE-01 is merged with deterministic host-independent fuzz, static, dependency, candidate-SBOM/provenance, strict-manifest, offline-fixture, and relocated-package assurance without signing or release; CAP-M20 remains open |
 | M21 | Complete | M21-01 through M21-05 are merged with fixed logical actions, conditional checkpoint state, deterministic active replay, and reusable public-surface conformance; physical/RT qualification remains separate |
 | M22 | Complete | M22-01 through M22-04 merged; typed controls, replay and stress closure at portable RT0 |
-| M23 | In progress | M23-01 and M23-02 source merged; M23-02 discovery/CI closure active; remaining providers/comparison policy belong to M23-03 through M23-05 |
+| M23 | In progress | M23-01/M23-02 merged; M23-03 implementation and portable local verification complete, final integration ledger in PR #254; M23-04/M23-05 remain separate |
 | M24 | Planned | Runtime-integrated CUDA physics, CPU oracle, bounded failure/lifetime and capability coverage |
 | M25 | Planned | Consumer SDK, backend kit, external CIL, independent host adapter and installed docs |
 | M26 | Planned | Golden full-system scenario, fault/benchmark/replay/documentation and final software audit |
@@ -819,7 +819,8 @@ deployment, or production readiness.
 M22-04 closes only CAP-M22 portable software after every hosted and human gate
 passes and the candidate merges.
 
-M23-03 provides 87 public Runtime benchmark cases in PR #254. Replay prerequisites
-#256 and #258 are integrated; final benchmark verification is tracked in the PR
-and its completion evidence. M23/CAP-M23 remain incomplete pending M23-04 and
+M23-03 provides 87 public Runtime benchmark cases in PR #254. Repairs #256,
+#258 and #259 are integrated. Complete CLI/allocation, sanitizer and package
+verification passes; final exact-head CI and merge identities are in the PR
+and its completion/integration evidence. M23/CAP-M23 remain incomplete pending M23-04 and
 M23-05. Physical characterization requires a named accessible bench.

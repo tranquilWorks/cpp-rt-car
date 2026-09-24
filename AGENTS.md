@@ -6,8 +6,9 @@ ABI v1, and Apache-2.0. M14, M14.1, M15, M16, and the portable M17 software
 path through M17-06 are complete, while hardware/RT qualification remains
 incomplete. M20-PRE-01, M21-01 through M21-05, and M22-01 through M22-04 are
 merged. M23-01 and M23-02 are merged. M23-03R2, M23-03R3 and M23-03R4 are merged;
-M23-03 is the active approved benchmark batch;
-CI-QUEUE-01 is merged as PR #257. M23-03 remains an unmerged benchmark draft.
+M23-03 is the active approved benchmark batch, with implementation and local
+verification complete. CI-QUEUE-01 is merged as PR #257. PR #254 records final
+exact-head hosted verification and integration; M23-04/M23-05 remain separate.
 M16-01 supplies the exact reference timeline, M16-02 adds deterministic
 CPU-only cross-rate channel selection and bounded SPSC stores, and M16-03 adds
 opt-in mandatory admission, dispatch, transfer, and late actions. M16-04 adds

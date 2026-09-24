@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "runtime_provider.hpp"
 #include <atomic>
+#include <cstdio>
 #include <thread>
 
 namespace b=rtfw::benchmark;
@@ -28,11 +29,20 @@ TEST(BenchmarkRuntime, MetadataAndLifecycle) {
 TEST(BenchmarkRuntime, EveryCasePreservesWarmupAndMeasuredBoundaries) {
     for(const auto& c:b::runtime::cases()) {
         SCOPED_TRACE(c.id);
+        // Preserve the active case/stage even if a native crash prevents GTest
+        // from printing its scoped trace. This is outside the timed invocation.
+        const auto stage=[&](const char* name) {
+            std::fprintf(stderr,"Runtime case %s: %s\n",c.id,name);
+            std::fflush(stderr);
+        };
+        stage("prepare");
         b::runtime::Provider provider;b::Runner runner;b::ProviderHandle handle;
         ASSERT_EQ(runner.register_provider(provider.table(),handle),b::Status::ok);
         ASSERT_EQ(provider.prepare(c.id),b::Status::ok);
         std::uint64_t time=0;auto clock=b::steady_clock();clock.kind=b::ClockKind::fake;clock.user=&time;clock.read_ns=tick;
+        stage("invoke");
         const auto result=runner.run("rtfw.runtime",c.id,clock,b::Identity{});
+        stage("finish");
         ASSERT_EQ(provider.finish(),b::Status::ok);
         EXPECT_EQ(result.status,b::Status::ok);
         if(result.status!=b::Status::ok) continue;
@@ -40,6 +50,7 @@ TEST(BenchmarkRuntime, EveryCasePreservesWarmupAndMeasuredBoundaries) {
         EXPECT_EQ(provider.invocations(),7u);
         for(const auto& sample:result.samples) {EXPECT_TRUE(sample.observation.correct);EXPECT_EQ(sample.end_ns-sample.start_ns,10u);}
         EXPECT_EQ(runner.unregister_provider(handle),b::Status::ok);
+        stage("complete");
     }
 }
 TEST(BenchmarkRuntime, ConcurrentInstancesOwnIndependentState) {
