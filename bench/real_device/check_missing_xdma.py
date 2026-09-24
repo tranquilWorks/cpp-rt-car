@@ -19,4 +19,10 @@ with tempfile.TemporaryDirectory(prefix='rtfw-missing-xdma-') as directory:
     before={f.name:f.read_bytes() for f in output.iterdir()}
     assert subprocess.run(command,capture_output=True,timeout=30).returncode==2
     assert before=={f.name:f.read_bytes() for f in output.iterdir()}
+    invalid_output=root/'invalid-result'
+    regular=root/'regular-file'; regular.write_bytes(b'not-a-device')
+    invalid=[str(a.host.resolve()),'real-xdma-roundtrip-64',str(invalid_output),str(regular),str(root/'absent-c2h'),'0','64']
+    result=subprocess.run(invalid,capture_output=True,text=True,timeout=30)
+    assert result.returncode==2 and not invalid_output.exists(),(result.returncode,result.stderr)
+    assert regular.read_bytes()==b'not-a-device'
 print('Native XDMA missing-endpoint and destination-preservation checks passed')

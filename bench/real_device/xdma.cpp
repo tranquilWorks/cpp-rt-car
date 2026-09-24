@@ -26,7 +26,10 @@ int main(int argc,char** argv) {
         const std::array<std::string_view,1> h2c{argv[3]},c2h{argv[4]};
         // Absence is NOT RUN. An existing but invalid/unopenable supplied endpoint
         // is an initialization error, never a silent fallback to fake storage.
-        const bool available=std::filesystem::exists(argv[3]) && std::filesystem::exists(argv[4]);
+        const bool h2c_exists=std::filesystem::exists(argv[3]),c2h_exists=std::filesystem::exists(argv[4]);
+        if((h2c_exists && !std::filesystem::is_character_file(argv[3])) ||
+            (c2h_exists && !std::filesystem::is_character_file(argv[4]))) return 2;
+        const bool available=h2c_exists && c2h_exists;
         rt::LinuxXdmaConfig driver_config{}; driver_config.h2c_paths=h2c; driver_config.c2h_paths=c2h;
         rt::LinuxXdmaDriver driver(driver_config);
         session.driver=driver.api();

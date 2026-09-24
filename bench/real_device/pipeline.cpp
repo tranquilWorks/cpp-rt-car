@@ -23,7 +23,10 @@ int main(int argc,char** argv) {
         b::device::XdmaSession xs;
         if(!number(argv[5],xs.device_offset) || !number(argv[6],xs.confirmed_window_bytes) ||
             xs.confirmed_window_bytes<chosen->bytes || xs.device_offset>UINT64_MAX-chosen->bytes) return 2;
-        bool available=std::filesystem::exists(argv[3]) && std::filesystem::exists(argv[4]);
+        const bool h2c_exists=std::filesystem::exists(argv[3]),c2h_exists=std::filesystem::exists(argv[4]);
+        if((h2c_exists && !std::filesystem::is_character_file(argv[3])) ||
+            (c2h_exists && !std::filesystem::is_character_file(argv[4]))) return 2;
+        bool available=h2c_exists && c2h_exists;
         const std::array<std::string_view,1> h2c{argv[3]},c2h{argv[4]};
         rt::LinuxXdmaConfig config{}; config.h2c_paths=h2c; config.c2h_paths=c2h;
         rt::LinuxXdmaDriver xdma(config);
