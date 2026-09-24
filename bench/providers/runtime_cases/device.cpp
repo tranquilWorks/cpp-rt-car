@@ -11,6 +11,7 @@ struct Loopback final:Fixture {
     std::size_t frame_bytes;
     std::vector<std::byte> storage,produced,consumed,initial_input,initial_output;
     std::array<std::byte,8> state{},control_payload{};
+    std::array<std::byte,8> foreign_state{};
     rt::CrossRateChannelHandle input_channel{},output_channel{};
     rt::DeviceCommandBatch declaration{};
     rt::DeviceBackendHandle backend_handle{};
@@ -24,6 +25,7 @@ struct Loopback final:Fixture {
     std::uint64_t clock_base{1000};
     rt::SampledIoLoopbackBackend backend;
     RuntimeOwner owner;
+    RuntimeOwner foreign;
     void fill_frame(std::span<std::byte> bytes,std::uint64_t channel,std::uint64_t seq,
                     std::uint64_t time,std::uint64_t domain,bool is_initial) noexcept {
         put(bytes.subspan(sizeof(rt::SampledIoFrameHeader)),seq+1);
@@ -55,7 +57,12 @@ struct Loopback final:Fixture {
     static rt::CallbackResult dispatch(void* opaque,const rt::DeviceCallbackContext& ctx,rt::DeviceCommandBatch& batch) {
         auto& s=*static_cast<Loopback*>(opaque);
         if(!ctx.rate_release) return rt::CallbackResult::error;
-        batch=s.declaration;batch.timeout_ns=period/2;batch.signals[0].value=++s.signal;
+        batch=s.declaration;
+        // Timeout fixtures deliberately retain a loopback completion until the
+        // existing service deadline expires. This is declared lifecycle work,
+        // with no elapsed-time assertion or benchmark-duration threshold.
+        batch.timeout_ns=std::string_view(s.c.mode)=="timeout"?1'000'000:period/2;
+        batch.signals[0].value=++s.signal;
         ++s.providers;return rt::CallbackResult::ok;
     }
     static rt::CallbackResult consume(void* opaque,const rt::CallbackContext& ctx) {
@@ -156,7 +163,28 @@ struct Loopback final:Fixture {
         if(c.capacity<=rt::cross_rate_snapshot_slot_count) okay(owner.rt.register_sampled_io_channel(sampled));
         finalized(owner);
         if(composition) okay(owner.rt.live_control_producer_handle(101,1001,control_handle));
-        if(replay_mode) initial=checkpoint(owner.rt);
+        if(replay_mode) {
+            initial=checkpoint(owner.rt);
+            // Independently finalized foreign topology: well-formed artifacts
+            // must be rejected before registered state or callbacks change.
+            okay(foreign.rt.configure(config()));
+            okay(foreign.rt.set_rate_execution_policy({64,23,1,1,1024}));
+            okay(foreign.rt.set_mixed_rate_closure_policy({23,1024,1024,1024*1024,64,
+                rt::MixedRateOverflowPolicy::overwrite_committed,true,true,{}}));
+            if(composition) {
+                configure_controls(foreign.rt,1,1,8,8,true,true);
+                rt::LiveControlReplayRetentionPolicy retention;
+                retention.policy_identity=230302;retention.admission_capacity=4*c.count+8;
+                retention.payload_capacity_bytes=16*c.count+64;
+                okay(foreign.rt.set_live_control_replay_retention_policy(retention));
+            }
+            okay(foreign.rt.register_state({"foreign-loopback-observation",1,foreign_state}));
+            rt::PhaseHandle phase;rt::RateDomainHandle domain;
+            okay(foreign.rt.register_callback({"foreign-topology",optional,this},phase));
+            okay(foreign.rt.register_rate_domain({"foreign-rate",period,1,period,1},domain));
+            okay(foreign.rt.bind_phase_to_rate_domain(phase,domain));
+            finalized(foreign);
+        }
     }
     Measures execute(std::uint64_t ordinal) {
         Measures m;const auto previous=backend.stats();const auto before_produced=produced_count,before_providers=providers,before_copied=copied_count;
@@ -218,8 +246,14 @@ struct Loopback final:Fixture {
             okay(owner.rt.write_live_control_replay_artifact(invocation_checkpoint,nested,rt::LiveControlNestedArtifactKind::active_replay,artifact,write));
         }
         corrupt=artifact;corrupt.back()^=std::byte{1};
-        const auto bad=composition?owner.rt.replay_live_control(corrupt,apply,this):owner.rt.replay_active(corrupt,apply,this);
-        require(bad!=rt::Status::ok && load64(state)==expected && applied==0);++m.rejected;
+        for(auto bytes:{std::span<const std::byte>(corrupt),std::span<const std::byte>(artifact).first(artifact.size()-1)}) {
+            const auto bad=composition?owner.rt.replay_live_control(bytes,apply,this):owner.rt.replay_active(bytes,apply,this);
+            require(bad!=rt::Status::ok && load64(state)==expected && applied==0);++m.rejected;
+        }
+        store64(foreign_state,991);const auto previous_optional=optional_calls;
+        const auto bad_identity=composition?foreign.rt.replay_live_control(artifact,apply,this):foreign.rt.replay_active(artifact,apply,this);
+        require(bad_identity==rt::Status::incompatible_artifact && load64(foreign_state)==991 &&
+                load64(state)==expected && applied==0 && optional_calls==previous_optional);++m.rejected;
         const auto before_copied=copied_count;
         // Borrowed device buffer contents are application-owned, outside the
         // registered checkpoint state. Restore their declared initial bytes
@@ -248,9 +282,55 @@ struct Loopback final:Fixture {
         m.operations+=c.count;m.records+=copied_count-before_copied;m.bytes+=artifact.size();m.correct &= valid;
         return m;
     }
-    rt::Status finish() noexcept override{return owner.stop();}
+    rt::Status finish() noexcept override{
+        const auto first=owner.stop(),second=foreign.stop();return first==rt::Status::ok?second:first;
+    }
+};
+struct DeviceFailure final:Fixture {
+    Case c;
+    explicit DeviceFailure(const Case& value):c(value){}
+    Measures run(std::uint64_t) override {
+        Loopback fixture(c);Measures m;
+        const bool timeout=std::string_view(c.mode)=="timeout";
+        const auto expected=timeout?rt::Status::device_timeout:rt::Status::device_error;
+        const auto fault=timeout?rt::SampledIoLoopbackFault::completion_timeout:rt::SampledIoLoopbackFault::completion_error;
+        rt::SampledIoChannelStatus before,after;
+        require(fixture.owner.rt.sampled_io_channel_status(fixture.output_channel,before));
+        okay(fixture.backend.inject_next(fault));
+        rt::StepResult step;
+        require(fixture.owner.rt.step(frame(1,2*period,1000),&step)==expected);
+        require(fixture.owner.rt.sampled_io_channel_status(fixture.output_channel,after));
+        require(after.accepted_frames==before.accepted_frames && after.last_sequence==before.last_sequence);
+        require(fixture.copied_count==0 && load64(fixture.state)==0 && fixture.providers==1 && fixture.produced_count==1);
+        rt::MixedRateActionCursor cursor;rt::MixedRateActionReadResult read;
+        okay(fixture.owner.rt.read_mixed_rate_actions(cursor,fixture.actions,read));
+        require(read.lost_records==0);
+        std::size_t terminals=0;
+        for(std::size_t i=0;i<read.records_read;++i) {
+            const auto& action=fixture.actions[i];
+            if(action.action==rt::MixedRateActionId::device_terminal) {
+                require(action.terminal_status==static_cast<std::int32_t>(expected));++terminals;
+            }
+            require(action.action!=rt::MixedRateActionId::sampled_publish || action.phase_index!=1 ||
+                    action.terminal_status!=static_cast<std::int32_t>(rt::Status::ok));
+        }
+        require(terminals==1 && fixture.backend.stats().submissions==1);
+        // Timeout ownership may be quarantined until this checked stop. Keep
+        // Runtime, backend, clock and borrowed buffers alive through closure.
+        okay(fixture.finish());
+        rt::RuntimeMetricSnapshot snapshot;
+        okay(fixture.owner.rt.metrics_snapshot(rt::RuntimeMetricWindow::cumulative,nullptr,snapshot));
+        require(snapshot.samples[static_cast<std::size_t>(rt::RuntimeMetricId::device_outstanding)].value==0);
+        m.operations=1;m.callbacks=step.callbacks_executed;m.rejected=1;
+        m.records=terminals;m.mixed_actions=read.records_read;m.checksum=load64(fixture.state);
+        return m;
+    }
+    rt::Status finish() noexcept override{return rt::Status::ok;}
 };
 }
-std::unique_ptr<Fixture> make_device(const Case& c){return std::make_unique<Loopback>(c);}
+std::unique_ptr<Fixture> make_device(const Case& c){
+    if(std::string_view(c.mode)=="failure" || std::string_view(c.mode)=="timeout") return std::make_unique<DeviceFailure>(c);
+    return std::make_unique<Loopback>(c);
+}
 std::unique_ptr<Fixture> make_composition(const Case& c){return std::make_unique<Loopback>(c);}
 } // namespace rtfw::benchmark::runtime::detail

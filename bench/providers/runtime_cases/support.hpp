@@ -16,10 +16,26 @@
 #include <vector>
 
 namespace rtfw::benchmark::runtime::detail {
-inline void require(bool value,std::source_location where=std::source_location::current()) {
+#if defined(__cpp_lib_source_location)
+using SourceLocation=std::source_location;
+#else
+// Clang 14 with libstdc++ 11 has the header but not std::source_location.
+// These compiler builtins preserve the caller location in default arguments.
+struct SourceLocation {
+    const char* file;
+    unsigned line_number;
+    static constexpr SourceLocation current(const char* file=__builtin_FILE(),
+                                            unsigned line=__builtin_LINE()) noexcept {
+        return {file,line};
+    }
+    constexpr const char* file_name() const noexcept{return file;}
+    constexpr unsigned line() const noexcept{return line_number;}
+};
+#endif
+inline void require(bool value,SourceLocation where=SourceLocation::current()) {
     if (!value) throw std::runtime_error(std::string(where.file_name())+":"+std::to_string(where.line())+": runtime fixture invariant");
 }
-inline void okay(rt::Status value,std::source_location where=std::source_location::current()) {
+inline void okay(rt::Status value,SourceLocation where=SourceLocation::current()) {
     if(value!=rt::Status::ok) throw std::runtime_error(std::string(where.file_name())+":"+
         std::to_string(where.line())+": "+rt::status_message(value));
 }

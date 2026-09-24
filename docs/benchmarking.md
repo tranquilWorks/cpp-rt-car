@@ -345,10 +345,16 @@ preallocated; host replay buffers and bounded JSON streams are outside those lan
 Synthetic replay artifacts contain explicitly retained test payloads in memory and
 are not included in public benchmark bundles.
 
-Current status is incomplete: four composition fixtures reproduce a nested
-active/live-control replay failure. The retained public-only
-`tests/benchmark_fixtures/runtime_consumer/replay_regression.cpp` demonstrates
-correct application state and admissions with a failing complete replay-state
-comparison. A separate Runtime repair is required by the active batch. Remaining
-acceptance and verification are listed in the M23-03 evidence; source availability
-is not a claim of passed CI or completed M23. M23-04 and M23-05 remain future work.
+The catalog now has 84 cases, retaining all original 78 workloads. Added scopes
+include separate shedding action/counter reads, selection-capacity compilation,
+and failed device nonpublication. The held-completion timeout lifecycle includes
+the existing device-service host-monotonic 1 ms deadline; it checks terminal
+status and checked teardown, with no elapsed-time assertion.
+
+Current status is incomplete: 83 cases pass; `composition-fault-8` exposes a
+saturated watchdog action/replay defect. The public-only
+`tests/benchmark_fixtures/runtime_consumer/watchdog_replay_regression.cpp`
+isolates the incorrect prior degradation level at caps 1 and 3. Separate repair
+M23-03R3 is required before integration. The earlier replay failures and repaired
+v2 prerequisite remain in evidence. Final full/package/sanitizer/hosted checks
+are pending; M23-04 and M23-05 remain future work.

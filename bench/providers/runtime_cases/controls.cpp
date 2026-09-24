@@ -8,6 +8,7 @@ struct Controls final:Fixture {
     std::vector<std::byte> payload;
     std::vector<rt::LiveControlProducerHandle> handles;
     std::vector<std::uint64_t> sequences,seeds;
+    std::array<rt::LiveControlMailboxInfo,64> admission_before{};
     std::array<rt::LiveControlActionRecord,1024> actions{};
     std::vector<std::byte> initial;
     rt::ReferenceRelease release{};
@@ -71,6 +72,8 @@ struct Controls final:Fixture {
         }
         const auto target=ordinal+1,prev_calls=calls,prev_seen=seen;
         rt::LiveControlCommitInfo before;require(owner.rt.live_control_commit_info(before));
+        for(std::size_t i=0;i<c.width;++i)
+            require(owner.rt.live_control_mailbox_info(101+i,admission_before[i]));
         for(std::size_t n=0;n<c.count;++n) {
             const auto i=n%handles.size(),mailbox=i%c.width;
             const auto seed=1+ordinal*c.count+n;put(payload,seed);
@@ -92,8 +95,18 @@ struct Controls final:Fixture {
         invalid=r;invalid.policy_flags=0;
         okay(owner.rt.stage_live_control_update(handles[0],invalid,payload,result));
         require(result==rt::LiveControlAdmissionResult::invalid);++m.rejected;
+        invalid=r;
+        if(std::string_view(c.mode)=="rate") invalid.reference_release_index=1;
+        else invalid.target_frame_index=std::numeric_limits<std::uint64_t>::max();
+        okay(owner.rt.stage_live_control_update(handles[0],invalid,payload,result));
+        require(result==rt::LiveControlAdmissionResult::invalid);++m.rejected;
         auto stale=handles[0];++stale.configuration_generation;
         okay(owner.rt.stage_live_control_update(stale,r,payload,result));
+        require(result==rt::LiveControlAdmissionResult::stale);++m.rejected;
+        // A foreign-generation handle has no attributable mailbox. A stale
+        // sequence on a valid handle increments that mailbox's stale counter.
+        auto stale_record=r;++stale_record.producer_sequence;
+        okay(owner.rt.stage_live_control_update(handles[0],stale_record,payload,result));
         require(result==rt::LiveControlAdmissionResult::stale);++m.rejected;
         std::fill(payload.begin(),payload.end(),std::byte{0});
         fail_callback=rollback;
@@ -115,6 +128,13 @@ struct Controls final:Fixture {
         for(std::size_t i=0;i<c.width;++i) {
             rt::LiveControlMailboxInfo info;require(owner.rt.live_control_mailbox_info(101+i,info));
             m.correct &= info.occupancy==0 && info.record_capacity==c.capacity/c.width;
+            const auto& old=admission_before[i];
+            m.correct &= info.accepted-old.accepted==c.count/c.width &&
+                info.invalid-old.invalid==(i==0?3U:0U) &&
+                info.full-old.full==(i==0 && c.count==c.capacity?1U:0U) &&
+                info.stale-old.stale==(i==0?1U:0U) && info.busy==old.busy &&
+                info.stopped==old.stopped && info.exhausted==old.exhausted &&
+                info.next_mailbox_sequence-old.next_mailbox_sequence==c.count/c.width;
         }
         if(c.capacity<1024) {
             rt::LiveControlActionCursor cursor;rt::LiveControlActionReadResult read;

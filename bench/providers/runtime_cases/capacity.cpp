@@ -40,7 +40,72 @@ struct Capacity final:Fixture {
                 require(owner.rt.configure(cfg)==(field?rt::Status::invalid_config:rt::Status::ok));
                 ++m.operations;m.rejected+=field!=0;
             }
+            // Public policy setters reject oversized bounds before finalization
+            // allocates storage. These are format/configuration checks only.
+            for(unsigned field=0;field<5;++field) {
+                RuntimeOwner bounded;okay(bounded.rt.configure(config()));
+                rt::MixedRateClosurePolicy policy;
+                policy.host_policy_version=23;policy.action_capacity=rt::mixed_rate_action_capacity_limit;
+                policy.active_replay_record_capacity=rt::active_replay_record_capacity_limit;
+                policy.active_replay_max_bytes=rt::active_replay_absolute_max_bytes;
+                policy.maximum_actions_per_step=rt::mixed_rate_action_capacity_limit;
+                if(field==1) ++policy.action_capacity;
+                if(field==2) ++policy.active_replay_record_capacity;
+                if(field==3) ++policy.active_replay_max_bytes;
+                if(field==4) ++policy.maximum_actions_per_step;
+                require(bounded.rt.set_mixed_rate_closure_policy(policy)==(field?rt::Status::invalid_argument:rt::Status::ok));
+                ++m.operations;m.rejected+=field!=0;
+            }
+            for(unsigned field=0;field<7;++field) {
+                RuntimeOwner bounded;okay(bounded.rt.configure(config()));
+                rt::LiveControlClosurePolicy policy;policy.policy_identity=23;
+                policy.action_capacity=rt::live_control_action_capacity_limit;
+                policy.retained_generation_capacity=rt::live_control_retained_generation_capacity_limit;
+                policy.retained_record_capacity=rt::live_control_record_capacity_limit;
+                policy.retained_payload_bytes=rt::live_control_total_storage_limit;
+                policy.replay_record_capacity=rt::live_control_record_capacity_limit;
+                policy.replay_max_bytes=rt::live_control_replay_absolute_max_bytes;
+                if(field==1) ++policy.action_capacity;
+                if(field==2) ++policy.retained_generation_capacity;
+                if(field==3) ++policy.retained_record_capacity;
+                if(field==4) ++policy.retained_payload_bytes;
+                if(field==5) ++policy.replay_record_capacity;
+                if(field==6) ++policy.replay_max_bytes;
+                require(bounded.rt.set_live_control_closure_policy(policy)==(field?rt::Status::invalid_argument:rt::Status::ok));
+                ++m.operations;m.rejected+=field!=0;
+            }
+            for(unsigned overflow=0;overflow<2;++overflow) {
+                RuntimeOwner bounded;okay(bounded.rt.configure(config()));
+                require(bounded.rt.set_rate_execution_policy({64,23,1,1,rt::rate_telemetry_capacity_limit+overflow})==
+                    (overflow?rt::Status::invalid_argument:rt::Status::ok));
+                ++m.operations;m.rejected+=overflow;
+            }
             m.checksum=m.operations*31+m.rejected;return m;
+        }
+        if(mode=="selection-bound") {
+            std::uint64_t calls=0;std::array<std::byte,8> initial{};
+            RuntimeOwner bounded;okay(bounded.rt.configure(config(257)));
+            rt::PhaseHandle consumer;rt::RateDomainHandle fast,slow;
+            okay(bounded.rt.register_callback({"consumer",count_callback,&calls},consumer));
+            okay(bounded.rt.register_rate_domain({"fast",1,1,1,1},fast));
+            okay(bounded.rt.register_rate_domain({"slow",c.count,1,c.count,1},slow));
+            okay(bounded.rt.bind_phase_to_rate_domain(consumer,fast));
+            for(std::size_t i=0;i<256;++i) {
+                const auto name="source-"+std::to_string(i);rt::PhaseHandle producer;rt::CrossRateChannelHandle channel;
+                okay(bounded.rt.register_callback({name,count_callback,&calls},producer));
+                okay(bounded.rt.bind_phase_to_rate_domain(producer,slow));
+                okay(bounded.rt.register_cross_rate_channel({name,producer,consumer,8,initial,
+                    rt::CrossRateMode::sample_and_hold,c.count},channel));
+            }
+            const auto status=bounded.rt.finalize();
+            require(status==(c.variant?rt::Status::capacity_exceeded:rt::Status::ok));
+            if(!c.variant) {
+                m.records=bounded.rt.cross_rate_selection_count();require(m.records==262144);
+                // Compilation/inspection only: no callbacks or releases execute.
+                require(calls==0);
+            } else ++m.rejected;
+            m.operations=1;m.checksum=m.records;m.correct=calls==0;
+            okay(bounded.stop());return m;
         }
         std::uint64_t calls=0;
         RuntimeOwner owner;okay(owner.rt.configure(config(64)));
@@ -63,6 +128,16 @@ struct Capacity final:Fixture {
                 const auto p=overflow?(i?65536U:1U):100U;
                 okay(owner.rt.register_rate_domain({name,p,static_cast<std::uint32_t>(overflow||dispatch?1:c.variant),p,1},domain));
                 okay(owner.rt.bind_phase_to_rate_domain(phase,domain));
+            }
+            if(mode=="domains") {
+                rt::RateDomainHandle extra;
+                require(owner.rt.register_rate_domain({"reject-next-domain",100,1,100,1},extra)==rt::Status::capacity_exceeded);
+                ++m.rejected;
+            }
+            if(mode=="substeps") {
+                rt::RateDomainHandle extra;
+                require(owner.rt.register_rate_domain({"reject-next-substep",100,65,100,1},extra)==rt::Status::invalid_argument);
+                ++m.rejected;
             }
             if(overflow) {
                 require(owner.rt.finalize()==rt::Status::capacity_exceeded);++m.operations;++m.rejected;

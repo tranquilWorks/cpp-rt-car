@@ -98,6 +98,13 @@ jobs:
           path: m23-cpu-canonical/*.json
           if-no-files-found: error
 
+      - name: Upload M23 canonical Runtime fixture
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: m23-runtime-canonical-${{ matrix.compiler }}-${{ matrix.fma }}
+          path: m23-runtime-canonical/*.json
+          if-no-files-found: error
+
   determinism-artifact-exchange:
     name: Determinism artifact exchange
     needs: [determinism-linux, benchmark-sdk]
@@ -146,6 +153,21 @@ jobs:
         run: |
           from pathlib import Path
           bundles=sorted(Path("cpu-benchmark-artifacts").iterdir())
+          assert len(bundles)==7, len(bundles)
+          for name in ("descriptor.json","raw.json","result.json"):
+              values=[(p/name).read_bytes() for p in bundles]
+              assert all(v==values[0] for v in values), name
+
+      - name: Download M23 Runtime fixtures
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: m23-runtime-canonical-*
+          path: runtime-benchmark-artifacts
+      - name: Compare deterministic public Runtime artifacts
+        shell: python
+        run: |
+          from pathlib import Path
+          bundles=sorted(Path("runtime-benchmark-artifacts").iterdir())
           assert len(bundles)==7, len(bundles)
           for name in ("descriptor.json","raw.json","result.json"):
               values=[(p/name).read_bytes() for p in bundles]
@@ -655,4 +677,10 @@ jobs:
         with:
           name: m23-cpu-canonical-sdk-${{ matrix.name }}
           path: m23-cpu-canonical/*.json
+          if-no-files-found: error
+      - name: Upload canonical Runtime package-provider fixture
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: m23-runtime-canonical-sdk-${{ matrix.name }}
+          path: m23-runtime-canonical/*.json
           if-no-files-found: error

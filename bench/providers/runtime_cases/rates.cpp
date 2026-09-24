@@ -189,6 +189,9 @@ struct Shedding final:Fixture {
     std::array<std::uint64_t,3> calls{};
     std::vector<std::byte> initial;
     std::array<rt::RateActionRecord,1024> actions{};
+    rt::RateTelemetryCursor retained_cursor;
+    rt::RateCounterSnapshot counter_before;
+    bool inspection_ready{};
     RuntimeOwner owner;
     static rt::CallbackResult callback(void* opaque,const rt::CallbackContext& context) {
         if(!context.rate_release) return rt::CallbackResult::error;
@@ -208,13 +211,21 @@ struct Shedding final:Fixture {
             okay(owner.rt.bind_phase_to_rate_domain(phase,domain));
         }
         finalized(owner);initial=checkpoint(owner.rt);
+        if(std::string_view(c.mode)=="inspect") {
+            (void)run(0);inspection_ready=true;
+        }
     }
     Measures run(std::uint64_t ordinal) override {
+        if(inspection_ready) {
+            Measures m;m.operations=2;
+            return inspect(retained_cursor,m);
+        }
         okay(owner.rt.restore_checkpoint(initial));calls={};
+        okay(owner.rt.rate_counters_snapshot(counter_before));
         Measures m;rt::RateTelemetryCursor cursor;
         rt::RateTelemetryMetadata before;okay(owner.rt.rate_telemetry_metadata(before));
         cursor.runtime_id=before.runtime_id;cursor.next_sequence=before.next_sequence;
-        std::array<std::uint32_t,4> transitioned{};std::size_t transitions=0;
+        retained_cursor=cursor;
         for(std::uint64_t i=0;i<4*c.count;++i) {
             const auto release=1000U+ordinal*(4*c.count+10)*100U+i*100U;
             owner.clock.now=release+(i<2*c.count?75:0);
@@ -223,6 +234,11 @@ struct Shedding final:Fixture {
             m.rejected+=result.rate.rejected_reference_records;
             m.transitions+=result.rate.shed_transitions+result.rate.recovery_transitions;
         }
+        require(m.transitions==4);
+        return inspect(cursor,m);
+    }
+    Measures inspect(rt::RateTelemetryCursor cursor,Measures m) {
+        std::array<std::uint32_t,4> transitioned{};std::size_t transitions=0;
         rt::RateTelemetryReadResult read;okay(owner.rt.read_rate_actions(cursor,actions,read));
         for(std::size_t i=0;i<read.records_read;++i) {
             if(actions[i].transition!=rt::RateTransitionId::none) {
@@ -233,11 +249,15 @@ struct Shedding final:Fixture {
         rt::RateCounterSnapshot snapshot;okay(owner.rt.rate_counters_snapshot(snapshot));
         m.records=read.records_read;m.gaps=read.lost_records;m.checksum=calls[0]*13+calls[1]*7+calls[2];
         m.rate_actions=read.records_read;
-        require(m.transitions==4);
         require(transitions==4);
         require(transitioned==std::array<std::uint32_t,4>{2,1,1,2});
         require(calls[0]==2*c.count);
-        require(snapshot.values[16]==0 && !m.gaps);
+        require(snapshot.values[static_cast<std::size_t>(rt::RateCounterId::currently_shed_domains)]==0 && !m.gaps);
+        const auto shed=static_cast<std::size_t>(rt::RateCounterId::shed_transitions);
+        const auto recover=static_cast<std::size_t>(rt::RateCounterId::recovery_transitions);
+        require(snapshot.values[shed]-counter_before.values[shed]==2 &&
+                snapshot.values[recover]-counter_before.values[recover]==2);
+        m.transitions=transitions;
         return m;
     }
     rt::Status finish() noexcept override {return owner.stop();}

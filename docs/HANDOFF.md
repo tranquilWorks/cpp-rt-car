@@ -1,5 +1,18 @@
 # Handoff
 
+## 2026-09-24: 84-case checkpoint and watchdog repair prerequisite
+
+PR #254 retains all 78 original workloads and adds six explicit inspection,
+capacity and device-failure cases. Focused verification is 83/84; 50 declared
+steady invoke cases pass global allocation checks. The remaining fault-8
+composition failure is independently reproduced with only a public CPU Runtime:
+saturated watchdog records contain an incorrect prior degradation level.
+Separate canonical M23-03R3 control PR #481 merged at
+`19eaf9eb45434584c3b5aecb1976a97d4e626dd8`; implement/verify/integrate that repair
+before reactivating the unchanged M23-03 benchmark contract. No Runtime file is
+edited in this checkpoint. See the continuation evidence for initial failures,
+Clang diagnostic compatibility repair and exact remaining verification.
+
 ## 2026-09-24: M23-03 benchmark completion activated
 
 Queue PR #257 and replay v2 PR #256 are integrated. Exact main is

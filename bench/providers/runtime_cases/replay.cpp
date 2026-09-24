@@ -7,10 +7,13 @@ struct Replay final:Fixture {
     std::array<std::byte,16> state{};
     std::vector<std::array<std::byte,8>> values;
     std::vector<rt::ReplayInputRecord> inputs;
+    std::vector<rt::ReplayInputRecord> overflow_inputs;
+    std::array<std::byte,16> foreign_state{};
     std::vector<std::byte> initial,log,artifact,corrupt;
     std::uint64_t calls{},applied{},expected{},control_reads{};
     bool valid{true};
     RuntimeOwner owner;
+    RuntimeOwner foreign;
     static rt::CallbackResult apply(void* opaque,const rt::ReplayInputView& input) {
         auto& s=*static_cast<Replay*>(opaque);
         const auto i=s.applied++;
@@ -37,6 +40,11 @@ struct Replay final:Fixture {
         okay(owner.rt.register_callback({"replay-application",work,this}));
         const bool live=std::string_view(c.mode)=="live";
         if(live) configure_controls(owner.rt,1,1,8,8,true,true);
+        okay(foreign.rt.configure(cfg));
+        okay(foreign.rt.register_state({"foreign-replay-state",1,foreign_state}));
+        okay(foreign.rt.register_callback({"replay-application",work,this}));
+        if(live) configure_controls(foreign.rt,1,1,8,8,true,true);
+        finalized(foreign);
         finalized(owner);initial=checkpoint(owner.rt);
         rt::LiveControlProducerHandle handle;
         if(live) okay(owner.rt.live_control_producer_handle(101,1001,handle));
@@ -60,11 +68,24 @@ struct Replay final:Fixture {
             okay(owner.rt.write_live_control_replay_artifact(initial,log,rt::LiveControlNestedArtifactKind::input_log,artifact,write));
         } else artifact=log;
         corrupt=artifact;corrupt.back()^=std::byte{1};
+        if(c.count==c.capacity) {
+            overflow_inputs=inputs;
+            overflow_inputs.push_back({frame(c.count+1,100,1000+c.count*100),23,values.back()});
+        }
     }
     Measures run(std::uint64_t) override {
         Measures m;calls=applied=control_reads=0;valid=true;
         put(state,99);const auto sentinel=digest(state);
         const bool live=std::string_view(c.mode)=="live";
+        put(foreign_state,88);const auto foreign_sentinel=digest(foreign_state);
+        const auto foreign_status=live?foreign.rt.replay_live_control(artifact,apply,this):foreign.rt.replay(initial,artifact,apply,this);
+        require(foreign_status==rt::Status::incompatible_artifact && digest(foreign_state)==foreign_sentinel &&
+                digest(state)==sentinel && applied==0 && calls==0);++m.rejected;
+        if(!overflow_inputs.empty()) {
+            rt::ArtifactWriteResult write;const auto prior=digest(log);
+            require(owner.rt.write_input_log(overflow_inputs,log,write)==rt::Status::invalid_argument);
+            require(write.bytes_written==0 && digest(log)==prior && digest(state)==sentinel);++m.rejected;
+        }
         for(auto bytes:{std::span<const std::byte>(corrupt),std::span<const std::byte>(artifact).first(artifact.size()-1)}) {
             const auto status=live?owner.rt.replay_live_control(bytes,apply,this):owner.rt.replay(initial,bytes,apply,this);
             require(status!=rt::Status::ok && digest(state)==sentinel && applied==0 && calls==0);++m.rejected;
@@ -84,7 +105,9 @@ struct Replay final:Fixture {
         m.correct=valid && calls==c.count && applied==c.count && load64(state)==expected;
         m.checksum=load64(state);return m;
     }
-    rt::Status finish() noexcept override{return owner.stop();}
+    rt::Status finish() noexcept override{
+        const auto first=owner.stop(),second=foreign.stop();return first==rt::Status::ok?second:first;
+    }
 };
 }
 std::unique_ptr<Fixture> make_replay(const Case& c) {

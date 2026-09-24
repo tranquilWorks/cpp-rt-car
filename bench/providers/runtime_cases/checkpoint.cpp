@@ -12,6 +12,7 @@ struct Checkpoint final:Fixture {
         for(std::size_t i=0;i<c.width;++i)
             okay(owner.rt.register_state({"canonical-state-"+std::to_string(i),1,
                 std::span<std::byte>(state).subspan(i*(c.bytes/c.width),c.bytes/c.width)}));
+        require(owner.rt.register_state({"reject-next-state",1,std::span<std::byte>(state).first(1)})==rt::Status::capacity_exceeded);
         finalized(owner);output=checkpoint(owner.rt);corrupt.resize(output.size());
         // A well-formed checkpoint with a different state schema is rejected by
         // restore, independently of the malformed-byte checks below.
