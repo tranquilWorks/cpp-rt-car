@@ -5,7 +5,8 @@ portable product is release 1.2.1 at RT0 with stable C ABI v8, SONAME 8, device
 ABI v1, and Apache-2.0. M14, M14.1, M15, M16, and the portable M17 software
 path through M17-06 are complete, while hardware/RT qualification remains
 incomplete. M20-PRE-01, M21-01 through M21-05, and M22-01 through M22-04 are
-merged. M23-01 is merged as PR #251; M23-02 is the active approved batch.
+merged. M23-01 and M23-02 are merged. CI-QUEUE-01 is the active approved repair;
+replay PR #256 and benchmark PR #254 remain unmerged.
 M16-01 supplies the exact reference timeline, M16-02 adds deterministic
 CPU-only cross-rate channel selection and bounded SPSC stores, and M16-03 adds
 opt-in mandatory admission, dispatch, transfer, and late actions. M16-04 adds
@@ -147,3 +148,15 @@ by `contracts/active-batch.yaml`. Do not confuse checked source publication with
 passed CI, human API/privacy review, milestone completion, or release promotion.
 Preserve a verified Git bundle and commit/PR identifiers before ending a session;
 an empty tree comparison must never be described as product delivery.
+
+## CI-QUEUE-01 continuation (2026-09-24)
+
+The owner requests completion of remaining cpp-rt-car development, integration
+and polish, excluding Unreal. Standing scoped publication/merge authorization
+applies. Control PR #476 is merged at
+`99ffd8b564e9510ea97490447d19f289ff0be470`; its exact blob is bound in the active
+batch. Repair the concrete existing queue ASan use-after-free independently of
+replay PR #256. Actual functional failures cannot be waived. Integrate this
+validated repair, reconcile and reactivate M23-03R2, then activate M23-03 under
+merged control amendment #475. Physical characterization requires an accessible
+bench; no portable tests establish hardware or RT qualification.
