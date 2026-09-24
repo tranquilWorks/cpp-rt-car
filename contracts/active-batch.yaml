@@ -1,43 +1,44 @@
 schema_version: 1
 batch:
-  id: M23-03R3
-  title: Correct saturated watchdog transitions in active replay
-  goal: Record the actual prior watchdog degradation level at saturation so unchanged public active and nested live-control replay consume the exact transcript and restore full state.
+  id: M23-03R4
+  title: Close device submission missed-wakeup window
+  goal: Observe the wake sequence before scanning queued slots so an enqueue between an empty scan and parking cannot be lost; preserve bounded device ownership and all benchmark workloads.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
   - products/cpp-rt-car/acceptance.yaml#CAP-M23
   milestone: products/cpp-rt-car/milestones/M23.md#M23-03--multi-rate-controls-replay-and-observability-benchmarks
-  baseline_commit: 52fbdd3b029f1531f8d5d40af85e3f8e11603571
+  baseline_commit: 8ba51b3effa6174eaeb5382aef3404eeb5c160d1
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M23-03R3.yaml
-  control_plane_revision: 85c062604e5dba94d97fd95d07b65a0949fc1d2a
-  owner_direction: Continue planned cpp-rt-car development, integration and polish under standing bounded software publication/merge authorization; finish PR 254 without cybersecurity, Daybreak or Unreal scope.
-  prerequisite: Queue PR 257 and replay PR 256 are merged; preserve their source and evidence.
-  retained_failure: PR 254 checkpoint 0a8bbe9d8b4c82e44b310773e5d83c1d2f6b938e; original 78-case continuation is 77/78, composition-fault-8 fails at frame 5, live-control settlement action 27. GCC and MSVC hosted run 36016148112 reproduce the failure.
-  reproducer: tests/benchmark_fixtures/runtime_consumer/watchdog_replay_regression.cpp in the retained PR 254 continuation uses only public Runtime APIs, an atomic logical clock and one CPU callback. Caps 1 and 3 both record cap-1 to cap after saturation, while replay requires the actual cap to cap transition.
-  diagnosis: Runtime step emits degradation_before as after minus one for every watchdog event, even when degradation is already at its maximum. Replay cannot consume that transition, then diverges on a later action. Restoring the borrowed fixture clock does not repair it.
-  canonical_revision: 19eaf9eb45434584c3b5aecb1976a97d4e626dd8
-  canonical_blob_sha: 8d63ada5ed44e457440c6736bf65c7cd40d718fb
-  reconciled_target_main: 52fbdd3b029f1531f8d5d40af85e3f8e11603571
-  integration_order: Integrate this validated canonical contract, activate an isolated repair from reconciled target main, verify and merge the repair, then reconcile PR 254 and reactivate its unchanged M23-03 scope. Do not mix benchmark feature edits into the repair.
+  control_plane_path: products/cpp-rt-car/batches/M23-03R4.yaml
+  control_plane_revision: 19eaf9eb45434584c3b5aecb1976a97d4e626dd8
+  canonical_revision: 5e447cd44bfd5935d5d0053d7872f85db7dceeb4
+  canonical_blob_sha: 6c27fb52b2d16c81b3c6515c6b6091be8fdae11e
+  reconciled_target_main: 8ba51b3effa6174eaeb5382aef3404eeb5c160d1
+  owner_direction: Finish PR 254 under standing bounded software planning, development, publication and merge authorization; no cybersecurity, Daybreak or Unreal scope.
+  prerequisite: Queue 257, lossless replay 256 and watchdog 258 are merged; preserve their sources and evidence.
+  retained_failure: PR 254 checkpoint e28a926aa115dcb19b46451f69bf16d806e91ac8, tree fbb8d51547500c61a30d808245df61cf94274b27. All 87 in-process cases, 51 allocation checks, ASan/UBSan, TSan and package chain pass; the CLI artifact sweep times out after 600 seconds on original device-loopback-8-flight1-8.
+  diagnosis: DeviceManager submission_loop scans queued slots, then loads wake_sequence and waits. A producer can publish and notify between the empty scan and this load, parking the worker with work queued. Source ordering establishes this window; attributing the original CLI stall to it remains an inference.
+  reproducer: A controlled empty-scan then producer-notify then worker-observe/wait model blocks until rescued by a second notification; observing before scanning returns immediately. A separate 1024-invocation public loopback diagnostic passes and does not erase the timeout.
+  integration_order: Integrate the validated canonical contract, activate the isolated repair from reconciled main, verify and merge it, then reconcile PR 254 and reactivate unchanged M23-03. Do not mix benchmark edits into this repair.
 dependencies:
-- M23-03R2
+- M23-03R3
 scope:
   allowed_paths:
   - contracts/active-batch.yaml
   - contracts/repo-profile.yaml
   - .portfolio-harness.json
   - AGENTS.md
-  - rt/src/host_runtime.cpp
-  - tests/test_mixed_rate_replay.cpp
-  - tests/test_live_control_mailbox.cpp
+  - rt/src/device_manager.cpp
+  - rt/src/device_manager.hpp
+  - tests/test_command_batch.cpp
   - release/rtfw-release-contract.json
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
-  - docs/evidence/M23-03R3-*.md
+  - docs/evidence/M23-03R4-*.md
   forbidden_paths:
   - rt/include/
+  - rt/src/host_runtime.cpp
   - rt/src/live_control_mailbox.cpp
   - rt/src/live_control_mailbox.hpp
   - abi/
@@ -52,6 +53,7 @@ scope:
   - .github/workflows/
   - tests/CMakeLists.txt
   - tests/benchmark_fixtures/
+  - tests/test_mixed_rate_replay.cpp
   - tools/
   - cmake/
   - release/keys/
@@ -65,48 +67,50 @@ scope:
   - SECURITY.md
   - docs/evidence/CI-QUEUE-01-*.md
   - docs/evidence/M23-03R2-*.md
+  - docs/evidence/M23-03R3-*.md
 acceptance:
-- Validate and integrate this canonical contract before target implementation. Retain the benchmark draft and all original 74/78, intermediate 76/78, 77/78 and newly exposed validation failures. Reconcile exact target main before activation.
-- Capture the actual degradation level immediately before the frame-owner watchdog transition and emit it as degradation_before. Below the cap, record current to current plus one; at the cap, record cap to cap. Preserve one watchdog event per expired frame, callback observation of the previously committed level, event order and existing saturation policy.
-- Replay must consume all valid watchdog records at caps 1 and 3 for at least eight frames, including repeated saturated frames, and reproduce final registered application state, frame/input/callback counts, compared action count and full Runtime state. Cover disabled and below-budget controls and nested live-control v2 composition with accepted and rejected synthetic admissions.
-- Add public-API regressions that fail on the original source and pass on the candidate, using bounded atomic injected logical clocks and independent transition/state oracles. No sleeps, elapsed-time pass thresholds, private test hooks or benchmark framework dependence.
-- Preserve exact comparison and malformed-artifact rejection. Do not skip saturated watchdog records, alter expected transcripts, change hash comparisons or rewrite historical artifacts to hide the defect. Previously malformed saturated transcripts remain rejected; schema layouts and versions are unchanged.
-- Preserve default live-control v1 bytes for unaffected fixtures, existing public C++ layouts, C ABI v8 with 70 exports and fingerprint 0xd0e7a5a14bf35f97, SONAME 8, device and extension ABIs, package inventory, memory accounting, allocation boundaries, release 1.2.1 and Apache-2.0.
-- Run original-source reproducer, focused active/live-control replay and watchdog tests, address/undefined/thread sanitizer coverage where supported, official full profile, ABI/package/contract checks and all existing exact-head hosted gates. Retain every initial failure and unperformed check; never waive functional failures.
-- Verify all 84 currently retained benchmark cases against the integrated repair without changing their original 78 workloads or assertions. Benchmark verification remains in PR 254 after separate repair integration; later feature additions must remain within its 96-row ceiling.
-- Record canonical/source/tree/CI identities, the causal change and acceptance evidence. No physical hardware, RT qualification, support promotion, signing, release, deployment, settings or credential action.
+- Validate and integrate this canonical contract before implementation. Retain every earlier failure, exact 87-case draft checkpoint and incomplete CLI sweep; reconcile actual target main before activation.
+- Load the wake sequence before scanning submission slots. Preserve oldest queued sequence selection, release/acquire publication, backend-local ownership, stop notification and accepted-work drain. Enqueue before, during or after scanning must either be selected or change the value used by atomic wait.
+- A small internal allocation-free selection/wait helper may be extracted into existing private device_manager.hpp solely to exercise production ordering. No public API, test-only Runtime hook, new thread, polling workaround, timeout change or allocation is permitted in Runtime lanes.
+- Add a deterministic regression against the production helper. First test a behavior-equivalent extraction of the old read-after-scan order; enqueue/notify after empty selection must fail its progress assertion, with a second notification used only to rescue and join the negative-control thread. Then verify read-before-scan completes, already queued work is selected, and stop returns without parking. A generous host liveness deadline may bound the regression, without a benchmark or performance-threshold claim.
+- Add bounded public Runtime command-batch repeated submission and lifecycle coverage, exact provider/backend/completion counts and independent owners where practical. Preserve all timeline, device failure/timeout/cancel, replay and cleanup tests.
+- Preserve C ABI v8, 70 exports, fingerprint 0xd0e7a5a14bf35f97, SONAME 8, public C++ layouts, device/HAL extension ABIs, MemoryPlan accounting, SDK inventories, watchdog/replay semantics, release 1.2.1 and Apache-2.0.
+- Run focused command/device/replay tests, GCC ASan/UBSan and TSan where supported, official full profile, ABI/package/contract checks and every existing exact-head hosted gate. Retain failures and unavailable checks; no gate weakening or retry-until-green.
+- After separate repair integration, reconcile PR 254 and reactivate unchanged M23-03. Freshly verify all 87 cases, original 51 CPU cases and legacy artifacts, allocation/concurrency/package and complete CLI sweep before benchmark merge. Preserve original workloads, deadlines, counter oracles and comparisons.
+- Record source/canonical/tree/CI identities, old-order negative control, ordering proof and actual results. Do not claim every prior timeout shares this cause. No hardware/RT qualification, support promotion, signing, release, deployment, cybersecurity, Daybreak or Unreal scope.
 validation:
   local:
   - git status --short --branch
   - ./scripts/agent-verify.sh contract
-  - Compile and run the retained public-only watchdog reproducer against baseline and candidate; retain outputs and exit codes.
-  - Focused existing and new MixedRateReplay, LiveControl and watchdog tests with exact commands retained in evidence.
-  - Focused GCC ASan/UBSan and TSan replay/watchdog tests; preserve unsupported execution evidence.
+  - Production-helper old-order negative control and corrected-order regression with exact rescue and join output.
+  - Focused CommandBatch, DeviceRuntime, MixedRateReplay and existing device/replay tests.
+  - GCC ASan/UBSan and TSan focused suites where supported.
   - ./scripts/agent-verify.sh full
-  - python3 tools/check_c_abi.py
+  - python3 tools/check_c_abi.py --library build/agent-full/librtfw.so
+  - Default relocated package consumers and release contract validation.
   - git diff --check
   focused_tests_to_add:
-  - Eight deterministic expiry frames at caps 1 and 3 with exact prior/next action levels, repeated saturation and successful complete active replay.
-  - Disabled and below-budget watchdog controls preserve action streams and final state.
-  - Nested live-control v2 replay retains accepted/rejected admission history through saturated watchdog frames.
+  - Notification after empty selection cannot be lost by the production helper; old order fails under the same controlled interleaving.
+  - Already queued work and stopping return without parking; all owners join after negative-control rescue.
+  - Repeated public command-batch submissions and isolated owners preserve exact work and terminal cleanup.
   required_ci:
   - Existing exact-head GCC/Clang sanitizer, Windows MSVC, GCC TSan, determinism, portable assurance, ABI/package and contract gates without removal or weakening.
   manual:
-  - Implementation-agent review of transition order, full-state comparison, compatibility and exact changed paths; independent human review status remains explicit.
+  - Review ordering against enqueue/stop publication, lane lifetime and exact changed paths; independent human review status stays explicit.
 risk:
   class: high
   hazards:
-  - Deriving the prior level from the post-transition level records a transition that never occurred at saturation.
-  - Skipping mismatched replay records could conceal actual divergence.
-  - A broad repair changes unrelated degradation policy, replay schemas or benchmark workload.
+  - Reading the sequence after scanning can park with accepted work already queued.
+  - Polling, changed timeouts or lucky reruns conceal a synchronization defect.
+  - An unjoined negative-control worker or broad helper changes ownership or compatibility.
   stop_conditions:
-  - The integrated canonical contract is absent or target main has moved without reconciliation.
-  - Repair requires public layout/schema/ABI changes, different degradation policy, disabled comparison or any forbidden path.
-  - Verification requires weakened assertions, a lucky rerun, unbounded resources, hardware or fabricated evidence.
+  - Canonical contract is absent or target main moves without reconciliation.
+  - Repair needs public layouts, extra Runtime resources, changed comparisons/timeouts, private test-only hooks or another forbidden path.
+  - Verification requires weakened gates, unbounded resources, hardware or fabricated evidence.
 rollback:
-  strategy: Revert the isolated watchdog action correction and its activation as one bounded change, retaining the original failure and leaving benchmark integration blocked until a verified replacement exists.
+  strategy: Revert the isolated ordering/helper/regressions and activation as one bounded change; retain the failed CLI sweep and keep benchmark integration blocked pending a verified replacement.
 evidence:
   output:
-  - docs/evidence/M23-03R3-2026-09-24.md
-  - Exact baseline/candidate public reproducer output, canonical/source/tree mapping, focused/sanitizer/full/hosted results and residual limits.
-  claim_boundary: Portable Runtime watchdog action and replay correctness only; no new public interface, physical characterization, RT qualification or release.
+  - docs/evidence/M23-03R4-2026-09-24.md
+  - Exact old/corrected ordering regression, source/canonical/tree mapping, focused/sanitizer/full/package/hosted results and limitations.
+  claim_boundary: Portable device submission progress and wake ordering only; no new public interface, physical characterization, RT qualification or release.

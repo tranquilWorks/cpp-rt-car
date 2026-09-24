@@ -1,5 +1,14 @@
 # Current state
 
+M23-03R4 is active under merged control #482. Target baseline is merged
+watchdog #258 at `8ba51b3effa6174eaeb5382aef3404eeb5c160d1`. Benchmark #254
+is retained at `e28a926aa115dcb19b46451f69bf16d806e91ac8`: all 87 in-process
+cases, sanitizers and package chain pass, but an original loopback CLI case
+timed out after 600 seconds. Repair the existing device-worker wake ordering
+under this separate scope, verify and integrate, then resume unchanged M23-03.
+Earlier dated checkpoints below remain historical.
+
+
 ## 2026-09-24: M23-03R3 watchdog saturation replay repair active
 
 Integrated queue #257 and replay #256 main is

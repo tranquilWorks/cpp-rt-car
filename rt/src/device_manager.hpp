@@ -20,6 +20,25 @@
 
 namespace rt::detail {
 
+// One submission-lane selection/park operation. The selector and returned
+// pointer borrow lane-owned fixed storage; this helper allocates nothing.
+template <typename Select>
+auto select_device_submission_or_wait(
+    std::atomic<std::uint64_t>& wake_sequence,
+    const std::atomic<bool>& stopping,
+    Select&& select) noexcept -> decltype(select()) {
+    // Capture before scanning: a publication after an empty scan changes the
+    // value passed to wait, so its notification cannot be consumed too early.
+    const auto observed = wake_sequence.load(std::memory_order_acquire);
+    auto* selected = select();
+    if (!selected) {
+        if (!stopping.load(std::memory_order_acquire)) {
+            wake_sequence.wait(observed, std::memory_order_relaxed);
+        }
+    }
+    return selected;
+}
+
 struct DeviceBackendSpec {
     std::string name;
     HalV2BackendApi api{};
