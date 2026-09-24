@@ -66,8 +66,8 @@ if (RTFW_TEST_BENCHMARK)
     endif()
     set(expected_benchmark_examples
         benchmark_device_consumer.cpp device_provider.hpp device_provider.cpp device_cases.json
-        device_cases/fake_cuda.hpp device_cases/fake_xdma.hpp device_cases/cuda_graph.inc device_cases/pipeline.inc
-        real_device/cuda.cpp real_device/xdma.cpp real_device/increment_ptx.hpp
+        device_cases/fake_cuda.hpp device_cases/fake_xdma.hpp device_cases/cuda_graph.inc device_cases/pipeline.inc device_cases/hal.inc
+        real_device/cuda.cpp real_device/xdma.cpp real_device/increment_ptx.hpp real_device/cuda_resources.hpp real_device/pipeline.cpp real_device/check_missing_xdma.py
         benchmark_consumer.cpp benchmark_cpu_consumer.cpp
         cpu_provider.hpp cpu_provider.cpp cpu_cases.json
         benchmark_runtime_consumer.cpp

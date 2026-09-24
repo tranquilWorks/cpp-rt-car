@@ -50,6 +50,12 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'bench/providers/device_cases/hal.inc',
+    'bench/real_device/cuda_resources.hpp',
+    'bench/real_device/pipeline.cpp',
+    'bench/real_device/check_missing_xdma.py',
+    'docs/device_benchmarking.md',
+
     'bench/fixtures/device_cases.json',
     'bench/providers/device_cases/cuda_graph.inc',
     'bench/providers/device_cases/fake_cuda.hpp',

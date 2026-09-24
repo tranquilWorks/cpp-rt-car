@@ -1,27 +1,19 @@
 # Handoff
 
-Latest M23-04 checkpoint: draft PR #260; 52 device cases, 8 focused GTests,
-independent CLI oracles and the steady allocation guard pass locally. Native
-CUDA graph and full Runtime kernel/graph pipelines are implemented. Linux XDMA
-host compiles; hardware and CUDA toolkit execution are unperformed. Package
-verification is running; full acceptance and hosted verification remain pending.
-See the appended checkpoint in `docs/evidence/M23-04-2026-09-24.md`.
+M23-04 software implementation is complete; final integration is tracked in PR #260 under merged
+control #488 (`49b134215e74b2d6f27ae1cab3801ac9dc8c139d`, canonical blob
+`479bbb95244b1ad7817158bf025dcc12568e8af3`). It preserves merged #254 at
+`03e4c36b24a7a4a6a2a6083aef26b6f45b1dcd9e` and all integrated Runtime repairs.
 
-
-M23-04 is active under merged control PR #488 at
-`49b134215e74b2d6f27ae1cab3801ac9dc8c139d`, canonical blob
-`479bbb95244b1ad7817158bf025dcc12568e8af3`. Baseline is merged benchmark
-PR #254, `03e4c36b24a7a4a6a2a6083aef26b6f45b1dcd9e`; all its 32 exact-head
-hosted checks passed. M23-03 is complete; its historical evidence is unchanged.
-
-The current M23-04 implementation is incomplete. The first CUDA transaction,
-queue/poll and failure/recovery segment passes 4 focused GTests and 24 normal
-CLI/artifact cases (16 portable executions, 8 absent real sessions reported
-NOT RUN). A supplied-session test executes injected drivers and checks actual
-kernel output and cleanup. An opt-in native CUDA host executable is written;
-it has not yet been compiled with a toolkit or run on hardware. CUDA Graph,
-XDMA, Runtime pipeline, complete package/sanitizer/CI and acceptance closure
-remain pending. See `docs/evidence/M23-04-2026-09-24.md`.
+The 68-case device provider includes actual HAL/CUDA/XDMA candidates, bounded
+protocol faults, explicit host staging, complete Runtime kernel/graph pipelines,
+functional supplied-session paths and optional native CUDA/XDMA/combined hosts.
+Eleven focused tests, all CLI oracles and steady allocation checks pass locally.
+The final installed/relocated/embedded package chain, ASan/UBSan device tests
+and allocation guard pass. Full-profile and exact-head hosted/merge outcomes are
+recorded in PR #260. See `docs/evidence/M23-04-acceptance-2026-09-24.md` and the retained
+implementation evidence for coverage and failures. Physical characterization is
+NOT RUN because no accessible bench is present. M23-05 remains separate.
 
 ## Historical M23-03 completion checkpoint
 

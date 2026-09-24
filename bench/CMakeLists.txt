@@ -72,6 +72,11 @@ if (RTFW_ENABLE_XDMA)
     target_link_libraries(rtfw-bench-xdma PRIVATE rtfw_benchmark_device rtfw_xdma_linux)
     rtfw_enable_project_warnings(rtfw-bench-xdma)
 endif()
+if (RTFW_ENABLE_CUDA AND RTFW_ENABLE_XDMA)
+    add_executable(rtfw-bench-pipeline real_device/pipeline.cpp)
+    target_link_libraries(rtfw-bench-pipeline PRIVATE rtfw_benchmark_device rtfw_cuda_driver rtfw_xdma_linux)
+    rtfw_enable_project_warnings(rtfw-bench-pipeline)
+endif()
 add_library(rtfw_benchmark_cpu STATIC providers/cpu_provider.cpp)
 target_link_libraries(rtfw_benchmark_cpu PUBLIC rtfw_benchmark rtfw_runtime)
 target_include_directories(rtfw_benchmark_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/providers)
@@ -100,7 +105,7 @@ install(FILES schemas/descriptor.schema.json schemas/result.schema.json
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench/schemas)
 install(FILES "${RTFW_PROJECT_SOURCE_DIR}/tools/check_benchmark_artifact.py"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/tools)
-install(FILES "${RTFW_PROJECT_SOURCE_DIR}/docs/benchmarking.md"
+install(FILES "${RTFW_PROJECT_SOURCE_DIR}/docs/benchmarking.md" "${RTFW_PROJECT_SOURCE_DIR}/docs/device_benchmarking.md"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/docs)
 install(FILES "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_consumer.cpp"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench/examples)

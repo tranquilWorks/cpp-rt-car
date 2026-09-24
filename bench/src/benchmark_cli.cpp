@@ -99,7 +99,13 @@ int main(int argc,char** argv) {
                 std::uint64_t counter=0;
                 auto clock=b::steady_clock();
                 if (kind==b::ClockKind::fake) { clock.kind=kind; clock.user=&counter; clock.read_ns=fake_clock; }
-                const auto result=runner.run(selected,d.case_id,clock,b::capture_identity());
+                auto identity=b::capture_identity();
+                if(selected=="rtfw.device") {
+                    const bool real=d.case_id.starts_with("real-");
+                    identity.backend=real ? "not_available" : "public-"+d.subsystem;
+                    identity.driver=real ? "not_available" : d.subsystem=="host-staging" ? "not_applicable" : "benchmark-owned-protocol-fixture";
+                }
+                const auto result=runner.run(selected,d.case_id,clock,identity);
                 // A failed checked stop must never publish a success bundle.
                 // The unchanged schema cannot encode a post-run cleanup error.
                 if (cpu.finish()!=b::Status::ok || runtime.finish()!=b::Status::ok || device.finish()!=b::Status::ok) {

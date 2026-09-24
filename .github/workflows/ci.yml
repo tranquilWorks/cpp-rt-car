@@ -370,7 +370,7 @@ jobs:
             -- -j2
       - name: Run executor ThreadSanitizer gate
         env:
-          GTEST_FILTER: BenchmarkContract.*:BenchmarkRunner.*:BenchmarkCpu.*:BenchmarkRuntime.*:MixedRateReplay.*:LiveControlSdk.*:LiveControlStress.*:LiveControlMailbox.*:LiveControlActions.*:ExtensionAbi.*:ExtensionRegistration.*:ExtensionLifecycle.*:UnifiedExecutor.*:CommandBatch.*:CrossRateData.*:RateTimeline.*:RateDispatch.*:RateShedding.*:RateTelemetry.*:CompiledGraph.*Rate*:HostRuntime.*Rate*:TraceNoAlloc.*:MemoryPolicy.*:ThreadPolicy.*:CpuMemoryPolicy.*:MemoryPlan.*:PeriodicRuntime.*:PlatformPreflight.*:Observability.*:DeterminismReplay.*:HeterogeneousMemory.*:HalV2.*:VendorHalV2.*:DeviceRuntime.*:DeviceMock.*:CudaBackend.*Graph*:CudaBackend.*HalV2*:XdmaBackend.*Control*:XdmaBackend.*Event*-ThreadPolicy.StrictFailuresRollbackWithoutCallbacksAndCanRecover:ThreadPolicy.LinuxAppliesAndReadsBackAvailableNativeFields
+          GTEST_FILTER: BenchmarkContract.*:BenchmarkRunner.*:BenchmarkCpu.*:BenchmarkRuntime.*:BenchmarkDevice.*:MixedRateReplay.*:LiveControlSdk.*:LiveControlStress.*:LiveControlMailbox.*:LiveControlActions.*:ExtensionAbi.*:ExtensionRegistration.*:ExtensionLifecycle.*:UnifiedExecutor.*:CommandBatch.*:CrossRateData.*:RateTimeline.*:RateDispatch.*:RateShedding.*:RateTelemetry.*:CompiledGraph.*Rate*:HostRuntime.*Rate*:TraceNoAlloc.*:MemoryPolicy.*:ThreadPolicy.*:CpuMemoryPolicy.*:MemoryPlan.*:PeriodicRuntime.*:PlatformPreflight.*:Observability.*:DeterminismReplay.*:HeterogeneousMemory.*:HalV2.*:VendorHalV2.*:DeviceRuntime.*:DeviceMock.*:CudaBackend.*Graph*:CudaBackend.*HalV2*:XdmaBackend.*Control*:XdmaBackend.*Event*-ThreadPolicy.StrictFailuresRollbackWithoutCallbacksAndCanRecover:ThreadPolicy.LinuxAppliesAndReadsBackAvailableNativeFields
           TSAN_OPTIONS: halt_on_error=1
         run: |
           ctest --test-dir build-tsan \
@@ -658,6 +658,8 @@ jobs:
         run: |
           cmake --build build-vendor-package --parallel 2
           cmake --install build-vendor-package --prefix "$RUNNER_TEMP/rtfw-vendor"
+      - name: Verify absent XDMA endpoints without device access
+        run: python3 bench/real_device/check_missing_xdma.py --host build-vendor-package/bench/rtfw-bench-xdma --validator tools/check_benchmark_artifact.py
       - name: Build compile-only consumers without device access
         run: |
           cmake -S tests/package_consumer -B build-vendor-consumer \

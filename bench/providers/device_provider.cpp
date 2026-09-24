@@ -14,6 +14,14 @@
 namespace rtfw::benchmark::device {
 namespace {
 constexpr std::array catalog{
+    Case{"hal-cuda-v1-depth-1", "hal-cuda-v1", 64, 1, false, true},
+    Case{"hal-cuda-v1-depth-4", "hal-cuda-v1", 64, 4, false, true},
+    Case{"hal-cuda-v2-depth-1", "hal-cuda-v2", 64, 1, false, true},
+    Case{"hal-cuda-v2-depth-4", "hal-cuda-v2", 64, 4, false, true},
+    Case{"hal-xdma-v1-depth-1", "hal-xdma-v1", 64, 1, false, true},
+    Case{"hal-xdma-v1-depth-4", "hal-xdma-v1", 64, 4, false, true},
+    Case{"hal-xdma-v2-depth-1", "hal-xdma-v2", 64, 1, false, true},
+    Case{"hal-xdma-v2-depth-4", "hal-xdma-v2", 64, 4, false, true},
     Case{"pipeline-kernel-64-frames-1", "pipeline-kernel", 64, 1, false, true},
     Case{"pipeline-kernel-64-frames-4", "pipeline-kernel", 64, 4, false, true},
     Case{"pipeline-kernel-4096-frames-1", "pipeline-kernel", 4096, 1, false, true},
@@ -22,6 +30,12 @@ constexpr std::array catalog{
     Case{"pipeline-graph-64-frames-4", "pipeline-graph", 64, 4, false, true},
     Case{"pipeline-graph-4096-frames-1", "pipeline-graph", 4096, 1, false, true},
     Case{"pipeline-graph-4096-frames-4", "pipeline-graph", 4096, 4, false, true},
+    Case{"real-pipeline-kernel-64", "pipeline-kernel", 64, 1, true, true},
+    Case{"real-pipeline-kernel-4096", "pipeline-kernel", 4096, 1, true, true},
+    Case{"real-pipeline-graph-64", "pipeline-graph", 64, 1, true, true},
+    Case{"real-pipeline-graph-4096", "pipeline-graph", 4096, 1, true, true},
+    Case{"host-staging-64", "host-staging", 64, 1, false, true},
+    Case{"host-staging-4096", "host-staging", 4096, 1, false, true},
     Case{"pipeline-graph-failure", "pipeline-graph", 64, 1, false, false},
     Case{"cuda-roundtrip-64", "roundtrip", 64, 1, false, true},
     Case{"cuda-roundtrip-4096", "roundtrip", 4096, 1, false, true},
@@ -37,6 +51,8 @@ constexpr std::array catalog{
     Case{"real-cuda-graph-4096", "graph", 4096, 1, true, true},
     Case{"cuda-depth-1", "depth", 64, 1, false, true},
     Case{"cuda-depth-4", "depth", 64, 4, false, true},
+    Case{"cuda-invalid-inputs", "invalid-inputs", 64, 1, false, false},
+    Case{"xdma-invalid-inputs", "xdma-invalid-inputs", 64, 1, false, false},
     Case{"cuda-empty-poll", "empty-poll", 64, 1, false, true},
     Case{"cuda-not-ready-poll", "not-ready-poll", 64, 1, false, true},
     Case{"cuda-timeout", "timeout", 64, 1, false, true},
@@ -198,6 +214,18 @@ struct CudaFixture {
 
     std::uint64_t invoke(std::uint64_t ordinal, Measures& m) {
         const std::string_view operation = spec.operation;
+        if(operation=="invalid-inputs") {
+            const auto before=values;
+            auto invalid=request(rt::cuda_device_opcode_copy_host_to_device,RTFW_DEVICE_ACCESS_READ);
+            invalid.buffers[0].bytes=spec.bytes+1;
+            require(api.submit(api.instance,&invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;
+            invalid.buffers[0].bytes=spec.bytes; invalid.buffers[0].access=RTFW_DEVICE_ACCESS_WRITE;
+            require(api.submit(api.instance,&invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;
+            require(api.unregister_buffer(api.instance,destination_token)==RTFW_DEVICE_STATUS_OK);
+            invalid.buffers[0].access=RTFW_DEVICE_ACCESS_READ; invalid.buffers[0].buffer_token=destination_token;
+            require(api.submit(api.instance,&invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;
+            require(values==before && fake.launches.load()==0 && fake.frees.load()==1);
+        }
         if (operation.starts_with("fault-")) {
             auto requested = request(rt::cuda_device_opcode_noop);
             fake.complete_on_record.store(false);
@@ -492,6 +520,21 @@ struct XdmaFixture {
             m.events=fake.event_waits.load()-events_before;
             return unsuccessful ? 0 : expected;
         }
+        if(op=="xdma-invalid-inputs") {
+            const auto before=storage->bytes;
+            auto invalid=request(rt::XdmaDirection::host_to_card);
+            rt::XdmaTransfer transfer{}; transfer.channel=1;
+            rt::set_xdma_transfer(invalid,rt::XdmaDirection::host_to_card,transfer);
+            require(api.submit(api.instance,&invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;
+            invalid=request(rt::XdmaDirection::host_to_card); transfer.channel=0; transfer.device_offset=UINT64_MAX;
+            rt::set_xdma_transfer(invalid,rt::XdmaDirection::host_to_card,transfer);
+            require(api.submit(api.instance,&invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;
+            invalid=request(rt::XdmaDirection::host_to_card); invalid.buffers[0].bytes=spec.bytes+1;
+            require(api.submit(api.instance,&invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;
+            invalid=request(rt::XdmaDirection::host_to_card); invalid.buffers[0].access=RTFW_DEVICE_ACCESS_WRITE;
+            require(api.submit(api.instance,&invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;
+            require(storage->bytes==before && fake.transfers.load()==0);
+        }
         if(op=="xdma-depth") {
             fake.blocked.store(true);
             std::array<std::uint64_t,4> ids{};
@@ -542,6 +585,12 @@ struct XdmaFixture {
             const auto value=static_cast<unsigned>(storage->bytes[i]);
             require(value==(ordinal*7+i*3)%251);checksum+=value;++m.checked_elements;
         }
+        if(op=="xdma-invalid-inputs") {
+            require(api.unregister_buffer(api.instance,token)==RTFW_DEVICE_STATUS_OK);
+            auto stale=request(rt::XdmaDirection::host_to_card);
+            require(api.submit(api.instance,&stale)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;
+            require(fake.transfers.load()==2);
+        }
         if(op=="xdma-fault-cleanup") {
             fake.fail_shutdown_once.store(true);
             require(finish()==Status::provider_error);++m.cleanup_retries;++m.failed;
@@ -551,9 +600,25 @@ struct XdmaFixture {
     }
 };
 #include "device_cases/pipeline.inc"
+#include "device_cases/hal.inc"
 } // namespace
 
 std::span<const Case> cases() noexcept { return catalog; }
+struct StagingFixture {
+    std::array<std::byte,4096> source{},destination{};
+    std::uint64_t invoke(const Case& c,std::uint64_t ordinal,Measures& m) {
+        for(std::size_t i=0;i<c.bytes;++i) source[i]=static_cast<std::byte>((ordinal*7+i*3)%251);
+        std::fill(destination.begin(),destination.end(),std::byte{0xff});
+        std::memcpy(destination.data(),source.data(),c.bytes);
+        std::uint64_t checksum=0;
+        for(std::size_t i=0;i<c.bytes;++i) {
+            const auto value=static_cast<unsigned>(destination[i]);
+            require(value==(ordinal*7+i*3)%251); checksum+=value; ++m.checked_elements;
+        }
+        require(std::all_of(destination.begin()+static_cast<std::ptrdiff_t>(c.bytes),destination.end(),[](std::byte v){return v==std::byte{0xff};}));
+        m.copied_bytes=c.bytes; return checksum;
+    }
+};
 struct Provider::State {
     const CudaSession* session{};
     const XdmaSession* xdma_session{};
@@ -561,6 +626,8 @@ struct Provider::State {
     std::unique_ptr<CudaFixture> fixture;
     std::unique_ptr<GraphFixture> graph;
     std::unique_ptr<PipelineFixture> pipeline;
+    std::unique_ptr<StagingFixture> staging;
+    std::unique_ptr<HalFixture> hal;
     std::unique_ptr<XdmaFixture> xdma;
     std::uint64_t ordinal{};
     bool unavailable{}, failed{};
@@ -581,12 +648,19 @@ Status Provider::describe(void*, std::size_t index, Descriptor& d) {
     d = {};
     d.case_id = c.id; d.subsystem = std::string_view(c.operation).starts_with("xdma-") ? "xdma" : "cuda";
     if(std::string_view(c.operation).starts_with("pipeline-")) d.subsystem="pipeline";
+    if(std::string_view(c.operation)=="host-staging") d.subsystem="host-staging";
+    if(std::string_view(c.operation).starts_with("hal-")) d.subsystem="hal";
     d.implementation = d.subsystem+(c.real ? "-supplied-session-v1" : "-fake-protocol-v1");
     d.configuration = "bytes-" + std::to_string(c.bytes) + "-depth-" + std::to_string(c.depth);
+    if(d.subsystem=="pipeline") d.configuration="bytes-"+std::to_string(c.bytes)+"-frames-"+
+        std::to_string(c.depth)+"-workers-"+std::to_string(c.depth)+"-queue-4";
     d.workload_kind = c.allocation_free ? "complete-transaction-with-output-validation" : "lifecycle-fault-recovery-with-cleanup";
-    d.workload_sha256 = sha256(std::string(c.id) + ";" + d.configuration + ";" + (d.subsystem=="xdma" ? "byte-pattern-v1" : "integer-increment-v1"));
+    if(d.subsystem=="hal") d.workload_kind="public-capability-and-topology-inspection";
+    d.workload_sha256 = sha256(std::string(c.id) + ";" + d.configuration + ";" + ((d.subsystem=="xdma" || d.subsystem=="host-staging") ? "byte-pattern-v1" : "integer-increment-v1"));
     d.parameters = {{"bytes",c.bytes,c.bytes,c.bytes},{"depth",c.depth,c.depth,c.depth}};
+    if(d.subsystem=="hal") d.parameters={{"depth",c.depth,c.depth,c.depth}};
     if(d.subsystem=="pipeline") {
+        d.parameters[1]={"queue_depth",4,4,4};
         d.parameters.push_back({"frames",c.depth,c.depth,c.depth});
         d.parameters.push_back({"cpu_workers",c.depth,c.depth,c.depth});
     }
@@ -600,11 +674,26 @@ Status Provider::prepare(std::string_view id) {
     auto it = std::find_if(catalog.begin(), catalog.end(), [id](const Case& c) { return id == c.id; });
     if (it == catalog.end()) return Status::not_found;
     state_->selected = &*it; state_->ordinal = 0;
+    if(std::string_view(it->operation).starts_with("hal-")) {
+        try { state_->hal=std::make_unique<HalFixture>(*it); return Status::ok; }
+        catch(...) { state_->failed=true; return Status::provider_error; }
+    }
+    if(std::string_view(it->operation)=="host-staging") {
+        try { state_->staging=std::make_unique<StagingFixture>(); return Status::ok; }
+        catch(...) { state_->failed=true; return Status::provider_error; }
+    }
     if(std::string_view(it->operation).starts_with("pipeline-")) {
+        const auto* cs=it->real ? state_->session : nullptr;
+        const auto* xs=it->real ? state_->xdma_session : nullptr;
+        const bool graph=std::string_view(it->operation)=="pipeline-graph";
+        if(it->real && (!cs || !xs || !xs->confirmed_window_bytes || !cs->context || !cs->stream ||
+            (graph ? !cs->increment_graph || !cs->graph_buffer : !cs->increment_kernel))) {
+            state_->unavailable=true; return Status::not_run;
+        }
         try {
             if(!it->allocation_free) return Status::ok;
             state_->pipeline=std::make_unique<PipelineFixture>(*it);
-            return state_->pipeline->setup(nullptr,nullptr);
+            return state_->pipeline->setup(cs,xs);
         } catch(...) { state_->failed=true; return Status::provider_error; }
     }
     if(std::string_view(it->operation).starts_with("xdma-")) {
@@ -634,6 +723,7 @@ Status Provider::prepare(std::string_view id) {
     } catch (...) { state_->failed=true; return Status::provider_error; }
 }
 Status Provider::finish() noexcept {
+    state_->staging.reset(); state_->hal.reset();
     if(state_->pipeline && state_->pipeline->finish()!=Status::ok) return Status::provider_error;
     state_->pipeline.reset();
     if(state_->graph && state_->graph->finish()!=Status::ok) return Status::provider_error;
@@ -651,7 +741,9 @@ Status Provider::invoke(void* user, std::string_view id, std::uint64_t ordinal, 
     if (s.unavailable) return Status::not_run;
     try {
         Measures measures;
-        if(std::string_view(s.selected->operation).starts_with("pipeline-")) {
+        if(s.hal) out.checksum=s.hal->invoke(measures);
+        else if(s.staging) out.checksum=s.staging->invoke(*s.selected,ordinal,measures);
+        else if(std::string_view(s.selected->operation).starts_with("pipeline-")) {
             if(s.pipeline) out.checksum=s.pipeline->invoke(ordinal,measures);
             else {
                 auto fixture=std::make_unique<PipelineFixture>(*s.selected);

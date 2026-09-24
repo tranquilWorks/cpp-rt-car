@@ -85,7 +85,7 @@ struct PipelineFixture {
         config.scratch_bytes=4096; config.task_scratch_bytes=256; config.task_scratch_slots=16;
         config.trace_capacity=256; config.device_backend_capacity=2; config.device_buffer_capacity=2;
         config.device_outstanding_capacity=4; config.device_completion_batch=4;
-        config.memory_budget_bytes=512U*1024U*1024U;
+        config.memory_budget_bytes=240U*1024U*1024U;
         require(runtime.configure(config)==rt::Status::ok);
         cuda_registration=cuda_backend->hal_v2_registration("pipeline.cuda");
         xdma_registration=xdma_backend->hal_v2_registration("pipeline.xdma");

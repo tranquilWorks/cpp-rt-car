@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('validator', ROOT/'tools/check_benchmark_artifact.py')
@@ -48,12 +49,12 @@ with tempfile.TemporaryDirectory(prefix='rtfw-device-') as directory:
             c = sample['counters']; mode = row['operation']; size = row['bytes']
             assert sample['invariants_passed']
             assert c['submissions'] == c['completions'] + int(mode=='fault-cleanup')
-            if mode in ('roundtrip','kernel','graph','device-copy','memset'):
-                assert c['submissions'] == (1 if mode=='graph' else 2 if mode=='roundtrip' else 3)
+            if mode in ('roundtrip','kernel','graph','device-copy','memset','invalid-inputs'):
+                assert c['submissions'] == (1 if mode=='graph' else 2 if mode in ('roundtrip','invalid-inputs') else 3)
                 assert c['copied_bytes'] == size*(3 if mode=='device-copy' else 2)
                 assert c['kernels'] == int(mode in ('kernel','graph'))
                 assert c['checked_elements'] == size//4
-                assert c['peak_outstanding'] == 1 and c['rejected'] == 0
+                assert c['peak_outstanding'] == 1 and c['rejected'] == (3 if mode=='invalid-inputs' else 0)
                 n = size//4
                 expected_checksum = n*0x2a2a2a2a if mode=='memset' else n*((index+2)*7+int(mode in ('kernel','graph')))+3*n*(n-1)//2
                 assert sample['checksum'] == expected_checksum
@@ -69,13 +70,22 @@ with tempfile.TemporaryDirectory(prefix='rtfw-device-') as directory:
                 assert c['resets'] == int(mode=='fault-submit')
                 assert c['cleanup_retries'] == c['rejected'] == int(mode=='fault-cleanup')
                 assert c['copied_bytes'] == c['checked_elements'] == c['kernels'] == 0
-            elif mode in ('xdma-roundtrip','xdma-fault-cleanup','xdma-fault-reset'):
+            elif mode in ('xdma-roundtrip','xdma-fault-cleanup','xdma-fault-reset','xdma-invalid-inputs'):
                 assert c['submissions'] == c['completions'] == 2+int(mode=='xdma-fault-reset')
                 assert c['copied_bytes'] == size*2 and c['checked_elements'] == size
                 assert sample['checksum'] == sum(((index+2)*7+i*3)%251 for i in range(size))
-                assert c['failed'] == int(mode!='xdma-roundtrip')
+                assert c['failed'] == int(mode in ('xdma-fault-cleanup','xdma-fault-reset'))
                 assert c['cleanup_retries'] == int(mode=='xdma-fault-cleanup')
                 assert c['resets'] == int(mode=='xdma-fault-reset')
+                assert c['rejected'] == (5 if mode=='xdma-invalid-inputs' else 0)
+            elif mode.startswith('hal-'):
+                assert c['submissions'] == c['completions'] == c['copied_bytes'] == 0
+                assert c['checked_elements'] == 8 and c['rejected'] == 1
+                assert sample['checksum'] == row['depth']+138
+            elif mode == 'host-staging':
+                assert c['submissions'] == c['completions'] == c['kernels'] == 0
+                assert c['copied_bytes'] == c['checked_elements'] == size
+                assert sample['checksum'] == sum(((index+2)*7+i*3)%251 for i in range(size))
             elif mode.startswith('pipeline-'):
                 if not row['allocation_free']:
                     assert c['failed'] == c['resets'] == 1
@@ -106,6 +116,22 @@ with tempfile.TemporaryDirectory(prefix='rtfw-device-') as directory:
         before = {f.name:f.read_bytes() for f in output.iterdir()}
         assert run(*args).returncode == 2
         assert before == {f.name:f.read_bytes() for f in output.iterdir()}
+    for id in ('cuda-graph-4096','xdma-roundtrip-4096','pipeline-kernel-4096-frames-4'):
+        output=root/('steady-'+id)
+        proc=run('run','--provider','rtfw.device','--case',id,'--clock','steady','--output',output)
+        assert proc.returncode==0,(id,proc.stderr)
+        assert validator.validate_bundle(output)['evidence_class']=='portable_characterization'
+    if sys.platform=='linux':
+        import resource
+        def bounded_stack():
+            _,hard=resource.getrlimit(resource.RLIMIT_STACK)
+            resource.setrlimit(resource.RLIMIT_STACK,(512*1024,hard))
+        for id in ('cuda-cleanup-retry','xdma-event-cancel','pipeline-graph-failure','pipeline-graph-4096-frames-4'):
+            output=root/('stack-'+id)
+            proc=subprocess.run([str(cli),'run','--provider','rtfw.device','--case',id,'--clock','fake','--output',str(output)],
+                capture_output=True,text=True,timeout=60,preexec_fn=bounded_stack)
+            assert proc.returncode==0,(id,'512 KiB stack',proc.stderr)
+            assert validator.validate_bundle(output)['status']=='ok'
     missing = root/'unknown'
     assert run('run','--provider','rtfw.device','--case','unknown','--output',missing).returncode == 2
     assert not missing.exists()

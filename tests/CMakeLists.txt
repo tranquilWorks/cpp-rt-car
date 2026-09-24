@@ -150,7 +150,7 @@ if (SIM_GTEST_AVAILABLE)
     if (RTFW_BUILD_BENCHMARKS)
         target_link_libraries(simcore_tests PRIVATE rtfw_benchmark rtfw_benchmark_cpu rtfw_benchmark_runtime rtfw_benchmark_device)
         add_test(NAME m23_benchmark COMMAND simcore_tests
-            --gtest_filter=BenchmarkContract.*:BenchmarkRunner.*:BenchmarkArtifacts.*:BenchmarkCpu.*:BenchmarkRuntime.*)
+            --gtest_filter=BenchmarkContract.*:BenchmarkRunner.*:BenchmarkArtifacts.*:BenchmarkCpu.*:BenchmarkRuntime.*:BenchmarkDevice.*)
         set_tests_properties(m23_benchmark PROPERTIES TIMEOUT 600)
     endif()
     add_library(test_extension_fixture SHARED extension_fixture.c)

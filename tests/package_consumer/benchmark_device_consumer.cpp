@@ -12,7 +12,7 @@ int main(int argc,char** argv) {
         constexpr auto id="cuda-graph-4096";
         if(provider.prepare(id)!=b::Status::ok) return 1;
         std::uint64_t time=0; auto clock=b::steady_clock(); clock.kind=b::ClockKind::fake; clock.read_ns=tick; clock.user=&time;
-        b::Identity identity; identity.host_label="device-fixture";
+        b::Identity identity; identity.host_label="device-fixture"; identity.backend="public-cuda"; identity.driver="benchmark-owned-protocol-fixture";
         const auto result=runner.run("rtfw.device",id,clock,identity);
         if(provider.finish()!=b::Status::ok || result.status!=b::Status::ok || result.samples.size()!=5) return 1;
         for(std::size_t i=0;i<result.samples.size();++i) {
