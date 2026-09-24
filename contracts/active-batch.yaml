@@ -1,23 +1,42 @@
 schema_version: 1
 batch:
-  id: CI-QUEUE-01
-  title: Repair hazard ownership in the existing experimental queue
-  goal: Repair the concrete queue heap-use-after-free that blocks the approved replay integration, preserving the queue algorithm and all supported Runtime boundaries.
+  id: M23-03R2
+  title: 'Proposal: opt-in lossless live-control replay format v2'
+  goal: Close the reproducible replacement-payload and rejected-admission history gaps without dropping canonical
+    state or transcript checks. Preserve default format v1 and stable interfaces; require an explicit reviewed
+    opt-in for the additional retained payload data.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
+  - products/cpp-rt-car/acceptance.yaml#CAP-M22
   - products/cpp-rt-car/acceptance.yaml#CAP-M23
-  milestone: products/cpp-rt-car/milestones/M23.md#exit-gates
+  milestone: products/cpp-rt-car/milestones/M23.md#M23-03--multi-rate-controls-replay-and-observability-benchmarks
   baseline_commit: 3df07d756c626fd5453c62a23920c6e521c867e5
+  original_reproducer_baseline: 795a56cabb78dd2c6ccf51796f54c4f6eff84f9f
+  baseline_reconciliation: Main added only execution guidance in PR 255; Runtime sources are unchanged.
+  owner_continuation: 2026-09-23; continue cpp-rt-car development/integration, exclude Unreal testing, and
+    use actual hardware for characterization when accessible.
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/CI-QUEUE-01.yaml
-  control_plane_revision: b489a1a32e1ddd84f7213bae053114a2f17e79d7
-  canonical_revision: 99ffd8b564e9510ea97490447d19f289ff0be470
-  canonical_blob_sha: e39df47415b992c3549102ac63b3ef297f96c56b
-  owner_direction: Continue all remaining cpp-rt-car development, integration and polish; exclude Unreal and preserve real hardware evidence boundaries.
-  failure: PR 256 head 76f6b8ed8a5a2aad4fd37c2e0d47d3d6406852ae; Actions run 35942659352, GCC Debug experimental-OFF job 107453765041; ASan heap-use-after-free in LockFreeQueue::pop at lockfree_queue.hpp line 61.
-  diagnosis: Queue loads a head separately from the hazard-protected value, reads an unprotected successor and enqueue tail, and simultaneous HazardGuards alias one thread-local hazard record. These files are unchanged from the target baseline.
-  integration_order: Integrate this isolated repair first; reconcile replay PR 256 onto that exact main, reactivate its existing M23-03R2 scope and rerun affected mandatory gates. Preserve the original hosted failure.
+  control_plane_path: products/cpp-rt-car/batches/M23-03R2.yaml
+  control_plane_revision: 9094bea6df8bace121f0c27e603d38cea795bed8
+  reproducer: 'M23-03 draft: tests/benchmark_fixtures/runtime_consumer/replay_regression.cpp'
+  observed_result: 'GCC 13.3 baseline Runtime: exit 1; status=-16 application_state=3 callbacks=2 generations=2
+    accepted_before=2 accepted_after=2. No benchmark framework or loopback backend is needed to reproduce.'
+  decision_status: PROPOSAL ONLY. Not activated. Owner decision required for artifact-version evolution and
+    additional trusted retained payloads.
+  predecessor_evidence: 'M23-03R public consumer --replaced and --rejected: both status -16 despite correct
+    application state. The rejected case records invalid 2 then reconstructs 0.'
+  integration_prerequisite: Reconcile the exact latest target main and separately reviewed M23-03R partial
+    repair head before activation; preserve the original M23-03 draft and all failed evidence.
+  canonical_revision: 092bab84f4228acc35a2eacf024ba0a61d1fe2e7
+  canonical_blob_sha: 571c2e6f6ad679262add047988dcdfe6a1eb5afc
+  activation_decision: Owner approved the opt-in and confirmed merge on 2026-09-23, then requested completion and integration of the remaining planned scope.
+  reconciled_target_main: da22fdaff9e7e5d3fbffa8013c0db7bd81f3697c
+  queue_repair_integration: PR 257; all 32 final-head hosted checks passed at f4ac9a06ad2a46293a41f33b620c02ed5b191500.
+  reconciliation_note: Merge the independently integrated queue repair without changing its source; reactivate approved R2 scope relative to the new main.
+  recovered_repair_tree: c75d0fce576354860401b29025d1b3fd37e2e664
+  recovery_note: Workspace maintenance removed unpublished candidate 554456d; reconstruct from the exact saved R1 tree and require fresh verification.
+
 dependencies:
 - M23-02
 scope:
@@ -26,81 +45,156 @@ scope:
   - contracts/repo-profile.yaml
   - .portfolio-harness.json
   - AGENTS.md
-  - include/simcore/hazard_ptr.hpp
-  - include/simcore/lockfree_queue.hpp
-  - tests/test_hazard_ptr.cpp
-  - tests/test_lockfree_queue.cpp
+  - rt/src/host_runtime.cpp
+  - rt/src/live_control_mailbox.cpp
+  - rt/src/live_control_mailbox.hpp
+  - tests/test_live_control_mailbox.cpp
+  - tests/test_mixed_rate_replay.cpp
+  - tests/test_live_control_stress.cpp
+  - tests/test_live_control_active_replay.cpp
+  - tests/CMakeLists.txt
+  - tests/package_consumer/CMakeLists.txt
+  - tests/package_consumer/live_control_replay_consumer.cpp
+  - tools/check_release_contract.py
+  - tools/static_analysis_sources.txt
   - release/rtfw-release-contract.json
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
-  - docs/evidence/CI-QUEUE-01-*.md
+  - docs/live_controls.md
+  - docs/determinism_replay.md
+  - docs/evidence/M23-03R-*.md
+  - rt/include/rt/runtime.hpp
+  - rt/src/live_control_replay.cpp
+  - rt/src/live_control_replay.hpp
+  - rt/src/live_control_actions.cpp
+  - rt/src/live_control_actions.hpp
+  - docs/evidence/M23-03R2-*.md
   forbidden_paths:
-  - rt/
   - abi/
-  - src/
+  - src/c_abi.cpp
   - core/
   - hal/
   - gpu/
+  - include/simcore/
   - bench/
+  - examples/
+  - samples/
   - integrations/
+  - configs/
+  - profiles/
   - qualification/
-  - .github/workflows/
-  - tests/CMakeLists.txt
-  - tools/
-  - cmake/
-  - release/keys/
-  - release/signatures/
-  - docs/portable_support_matrix.json
-  - docs/cuda_support_matrix.json
-  - docs/xdma_support_matrix.json
+  - tools/check_benchmark_artifact.py
+  - cmake/rtfwConfig.cmake.in
   - VERSION.txt
   - LICENSE
   - CHANGELOG.md
   - SECURITY.md
-  - docs/evidence/M23-*.md
+  - docs/portable_support_matrix.json
+  - docs/cuda_support_matrix.json
+  - docs/xdma_support_matrix.json
+  - .github/workflows/
+  - release/keys/
+  - release/signatures/
+  - docs/evidence/M23-01-*.md
+  - docs/evidence/M23-02-*.md
+  - docs/evidence/M23-03-*.md
+  - rt/include/rt/c_abi.h
+  - rt/include/rt/device_abi.h
+  - rt/include/rt/extension_abi.h
 acceptance:
-- Integrate and validate this canonical repair scope before target implementation. Use an isolated branch from the exact reconciled target main; preserve replay PR 256 and benchmark PR 254 unchanged until their own reactivation.
-- Every queue node dereference must use a validated hazard-protected pointer. Protect enqueue tail, dequeue head and successor for their actual access lifetimes; validate the owning queue cursor before successor access. Preserve Michael-Scott FIFO behavior, helping, empty semantics and concurrent producer/consumer support.
-- Simultaneous live HazardGuards must own independent hazard records, including guards in one thread; clearing or destroying one must not clear another. Prevent accidental copying of an owning guard and permit safe record reuse only after its pointer is cleared. Preserve the sequentially consistent publication/removal/scan protocol and existing protect return value.
-- Do not mask reclamation by disabling scans, deferring all nodes to queue destruction, leaking every retired node, adding a global blocking queue lock, or removing concurrent tests. Preserve the existing experimental allocation and reclamation boundary; do not promote this utility to a bounded Runtime or RT lane.
-- Add deterministic nested-guard and reclamation-lifetime regressions, exact FIFO/empty checks, and fixed-work concurrent enqueue/dequeue ownership tests with independent exact-once value accounting. Use bounded iteration counts and joined thread lifetimes; no timing sleeps or retry-until-green validation.
-- Preserve all existing queue/stack and full repository tests. Run focused GCC and Clang ASan/UBSan and TSan where supported, the official full profile, exact scope review and existing ABI/package/contracts. Retain the initial ASan failure and all unperformed checks; a hosted functional failure cannot be waived.
-- Preserve stable C ABI v8, SONAME 8, 70 exports/fingerprint, supported C++ Runtime/device/extension interfaces, package inventory, release version, schemas, benchmark sources and every support claim. These experimental header repairs must not introduce a supported Runtime dependency.
-- Record exact canonical/source/tree/CI identities, implementation reasoning, verification and residual limitations in evidence/current-state/handoff. Reconcile the separate replay PR only after integration. No Unreal, hardware, RT, signing, release, deployment, secret or settings action.
+- Activate only after owner approval of this exact format/privacy/compatibility decision and canonical integration.
+  Record exact repair/main baselines. This proposal alone does not authorize Runtime, public-header or serializer
+  edits.
+- Preserve existing C ABI v8, 70 exports/fingerprint/SONAME 8, device ABI v1, extension ABI v1, existing C++
+  structure layouts and format-v1 constants. Introduce a distinct additive opt-in C++ retention policy with
+  frozen capacities and identity; legacy default configuration and format-v1 bytes remain unchanged.
+- 'Define format v2 as a separate versioned trusted replay artifact. Retain a complete bounded admission journal:
+  canonical owner/sequence/target identity, admission outcome, whether an owner counter changed, assigned
+  slot identity when applicable, original record metadata/alignment and payload bytes needed by every accepted,
+  replaced, rolled-back, missed or stopped record. Capture input before overwrite; never derive bytes from
+  a digest.'
+- Record enough admission ordering and slot ownership to reconstruct future-target admissions, simultaneous
+  producer histories, slot reuse, terminal records and exact final mailbox/generation/producer counters. A
+  rejected or stale handle that did not affect a mailbox must not increment one in replay. No guessed association
+  or counter based on unrelated expected final hashes is permitted.
+- Bound retention at finalization and account for all Runtime-owned storage in MemoryPlan. Preserve callback
+  allocation/thread/blocking rules. Mark retention exhaustion or lost history explicitly replay-ineligible;
+  cannot silently emit a successful incomplete v2 artifact. Multiple runtimes and concurrent producer ownership
+  remain isolated.
+- Keep default telemetry payload-free. Additional non-survivor payloads appear only in the explicitly opted-in
+  trusted replay journal. Document this data-retention change and checked teardown, redaction/export responsibility
+  and exact size ceilings.
+- Parse and validate complete v2 topology, counts, offsets, arithmetic, checksums, ownership, ordered history,
+  nested checkpoint binding and payload digests before restore. Retain compatible v1 reading; do not claim
+  recovery of missing historical v1 information. Explicitly report unsupported incomplete histories instead
+  of inventing data.
+- Replay records through bounded private reconstruction and normal settlement so complete canonical state,
+  generations and action identities compare exactly. Retain final state and transcript validation. Never mask
+  application/backend side effects or qualify hardware from replay.
+- Convert both public --replaced/--rejected reproducers to successful v2 round trips. Cover two/eight frames,
+  host/compiled-rate targets, multiple mailboxes/producers, replacement with nonzero unequal payloads, invalid/full/stale/busy/missed/stopped
+  outcomes where recorded, admission-before-checkpoint, admissions for future boundaries, reclamation, rollback,
+  repeated/concurrent instances and malformed/foreign/truncated input nonmutation. Keep explicit tests for
+  incomplete old v1 histories.
+- Rerun all 78 unchanged M23-03 benchmark cases against integrated repairs, with the composition fixtures
+  explicitly selecting v2 only under a separately amended M23-03 contract. Preserve all failures; no family
+  may be dropped. Finish remaining benchmark acceptance before closing M23-03 or advancing dependent scopes.
+- Run local focused/full/package/no-allocation and available sanitizer gates, C ABI/SONAME/header-layout/default-artifact
+  compatibility and exact path review. Retain actual unperformed hosted/human/hardware results; the existing
+  utilization waiver does not waive local functional failures.
+- Update current state, handoff, format documentation, exact source/digest ledgers and evidence. No support
+  promotion, Unreal, physical-HIL/RT claim, signing, release, deployment, secrets or settings changes.
 validation:
   local:
   - git status --short --branch
   - git rev-parse HEAD
   - ./scripts/agent-verify.sh contract
-  - Focused existing and new HazardPointer/LockFreeQueue tests under GCC/Clang ASan+UBSan and GCC TSan, with the exact commands and fixed workloads retained in evidence.
+  - cmake -S . -B build/m23-replay-repair -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo
+    -DSIM_SANITIZERS= -DSIM_WERROR=ON
+  - cmake --build build/m23-replay-repair --parallel 2
+  - ctest --test-dir build/m23-replay-repair --output-on-failure
   - ./scripts/agent-verify.sh full
-  - python3 tools/check_c_abi.py
+  - python3 tools/check_c_abi.py --library build/m23-replay-repair/librtfw.so
   - git diff --check
   focused_tests_to_add:
-  - Independent simultaneous guard ownership and exact reclamation only after each protecting guard clears.
-  - Queue FIFO and empty behavior with repeated bounded reuse; joined simultaneous producers/consumers with exact-once independent integer accounting.
-  - Existing stack and queue regressions under address/undefined/thread sanitizers; no node access after reclaim.
+  - Both retained public failing histories become successful v2 round trips with independent full state/counter/payload/action
+    observations.
+  - Default format-v1 golden bytes and existing public structure sizes remain unchanged; compatible v1 replay
+    remains supported, incomplete v1 history is never invented.
+  - Malformed/v2 missing journal, slot collisions, counter attribution, concurrent producers, future-target
+    ordering, retention exhaustion and payload-loss tests reject before mutation.
+  - All existing regression/package/ABI gates plus v2 no-allocation and sanitizer isolation.
   required_ci:
-  - Existing exact-head GCC/Clang Debug/RelWithDebInfo sanitizer, MSVC, TSan, determinism, portable assurance, package/ABI and contract jobs without removal or weakening.
-  - The standing unavailable-hosted-CI exception applies only to jobs that cannot execute. Preserve actual functional failures as blockers and use available hosted validation.
+  - Existing GCC11/Clang14 Debug/RelWithDebInfo ASan+UBSan, Windows MSVC, GCC TSan, deterministic compiler/FMA,
+    package/ABI/export/SONAME and portable-assurance gates, plus the new regressions.
+  - Temporarily unavailable hosted runs remain failed/unperformed under the explicit 2026-09-08 owner waiver;
+    all local functional gates remain required.
   manual:
-  - Implementation-agent ownership and memory-order review; independent human review status remains explicit and is never manufactured.
+  - Owner approval of versioned trusted artifact evolution and non-survivor payload retention before activation.
+  - Independent format/privacy/compatibility review status must be explicit; implementation-agent checks are
+    not a human review.
 risk:
   class: high
   hazards:
-  - An independently loaded queue pointer differs from the protected pointer and is reclaimed before dereference.
-  - A second guard silently overwrites the first guard's protection or prematurely reuses its record.
-  - A successor is reclaimed after the head changes while the old head remains protected.
-  - A superficial fix hides the ASan report without preserving concurrent queue semantics or reclamation.
+  - Bypassing final semantic state comparison hides a replay divergence.
+  - Repairing only application state leaves admission, generation or action bookkeeping inconsistent.
+  - Nested restore retires handles or frees borrowed state while a replay/backend still owns it.
+  - A benchmark workaround or schema change conceals the public Runtime defect.
   stop_conditions:
-  - The integrated canonical repair scope is absent or target main has moved without reconciliation.
-  - Repair requires supported Runtime/ABI/package changes, a different queue algorithm, a global blocking lock, disabling reclamation or weakening mandatory tests.
-  - Credible sanitizer/ownership validation cannot be obtained; retain the blocker and do not merge based on repeated lucky passes.
+  - Owner format/privacy decision or exact canonical activation is absent.
+  - Default v1 bytes, stable C/device/extension ABI, existing C++ struct layouts, final-state/transcript checks
+    or unrelated scope would change.
+  - Faithful journal reconstruction cannot be bounded or v2 history is insufficient.
+  - Hardware access, production or release/signing authorization is required for the claimed result.
 rollback:
-  strategy: Revert this queue/hazard ownership repair as one scoped change, preserving all original failure evidence and leaving replay integration blocked until a validated replacement exists.
-  data_migration: None.
+  strategy: Revert opt-in v2 as one scoped change while retaining the independently verified M23-03R selection/bounds
+    repair and unchanged v1 support. Keep prior failures and no successful claim for incomplete histories.
+  data_migration: None. V1 remains readable where complete; never fabricate absent payload or owner attribution.
+    V2 consumers select v2 explicitly.
 evidence:
   output:
-  - docs/evidence/CI-QUEUE-01-2026-09-24.md
-  - Exact retained hosted failure, canonical/source/tree mapping, bounded regression commands, sanitizer/full/CI results and residual limitations.
-  claim_boundary: Experimental host-side queue reclamation correctness only; no supported Runtime feature, bounded real-time execution, hardware qualification or release claim.
+  - docs/evidence/M23-03R2-<date>.md
+  - Exact owner decision/canonical baseline, format specification, compatibility golden bytes/layouts, replay
+    regression matrix, commands/results, privacy boundaries and remaining gates.
+  claim_boundary: Portable Runtime replay correctness for explicitly retained v2 histories only; no hardware,
+    RT, release or production qualification.

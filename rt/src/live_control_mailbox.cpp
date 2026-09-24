@@ -242,8 +242,23 @@ struct LiveControlMailboxSet::Impl {
         std::array<std::byte, 3> reserved{};
     };
 
+    struct LosslessRetention {
+        LiveControlReplayRetentionPolicy policy{};
+        std::unique_ptr<LiveControlRetainedAdmission[]> admissions{};
+        std::unique_ptr<std::byte[]> payloads{};
+        std::unique_ptr<std::size_t[]> export_order{};
+        std::unique_ptr<std::byte[]> validation_state{};
+        std::atomic<std::size_t> active_admissions{0};
+        std::atomic<std::size_t> admission_count{0};
+        std::atomic<std::size_t> payload_count{0};
+        std::atomic<std::uint64_t> admission_close_sequence{kInvalidSequence};
+        std::size_t export_count = 0;
+        std::size_t replay_admission_index = 0;
+    };
+
     struct Closure {
         LiveControlClosurePolicy policy{};
+        std::unique_ptr<LosslessRetention> lossless{};
         std::unique_ptr<LiveControlActionRing> actions{};
         Generation rollback_generation{};
         std::unique_ptr<ProvisionalRecord[]> provisional_records{};
@@ -563,17 +578,14 @@ LiveControlMailboxSet::LiveControlMailboxSet(
 LiveControlMailboxSet::~LiveControlMailboxSet() = default;
 
 Status LiveControlMailboxSet::create(
-    const LiveControlPolicy& policy,
-    const LiveControlClosurePolicy& closure_policy,
-    bool closure_enabled,
-    std::uint64_t runtime_id,
-    std::uint64_t configuration_generation,
+    const LiveControlPolicy& policy, const LiveControlClosurePolicy& closure_policy,
+    bool closure_enabled, const LiveControlReplayRetentionPolicy& retention_policy,
+    std::uint64_t runtime_id, std::uint64_t configuration_generation,
     std::size_t memory_budget_bytes,
     std::span<const LiveControlMailboxRegistration> mailbox_declarations,
     std::span<const LiveControlProducerRegistration> producer_declarations,
     std::span<const ReferenceRelease> rate_releases,
-    std::unique_ptr<LiveControlMailboxSet>& output,
-    const char*& diagnostic) noexcept {
+    std::unique_ptr<LiveControlMailboxSet>& output, const char*& diagnostic) noexcept {
     output.reset();
     diagnostic = nullptr;
     if (policy.schema_version != live_control_schema_version ||
@@ -631,6 +643,19 @@ Status LiveControlMailboxSet::create(
         return Status::invalid_config;
     }
 
+    if (retention_policy.policy_identity != 0 &&
+        (!closure_enabled || !closure_policy.replay_enabled ||
+         retention_policy.schema_version !=
+             live_control_lossless_replay_schema_version ||
+         retention_policy.struct_size != sizeof(retention_policy) ||
+         retention_policy.admission_capacity == 0 ||
+         retention_policy.admission_capacity > live_control_action_capacity_limit ||
+         retention_policy.payload_capacity_bytes == 0 ||
+         retention_policy.payload_capacity_bytes > live_control_total_storage_limit ||
+         !all_zero(retention_policy.reserved))) {
+        diagnostic = "trusted replay retention policy is invalid";
+        return Status::invalid_config;
+    }
     std::size_t total_records = 0;
     std::size_t total_payload = 0;
     for (std::size_t index = 0; index < mailbox_declarations.size(); ++index) {
@@ -810,6 +835,20 @@ Status LiveControlMailboxSet::create(
             diagnostic = "live-control closure storage overflows";
             return Status::capacity_exceeded;
         }
+        if (retention_policy.policy_identity != 0) {
+            std::size_t extra = sizeof(Impl::LosslessRetention);
+            if (!checked_multiply(retention_policy.admission_capacity,
+                                  sizeof(LiveControlRetainedAdmission) +
+                                      sizeof(std::size_t),
+                                  bytes) ||
+                !checked_add(extra, bytes, extra) ||
+                !checked_add(extra, retention_policy.payload_capacity_bytes, extra) ||
+                !checked_add(extra, checkpoint_bytes, extra) ||
+                !checked_add(minimum_control_bytes, extra, minimum_control_bytes)) {
+                diagnostic = "trusted replay retention storage overflows";
+                return Status::capacity_exceeded;
+            }
+        }
     }
     if (minimum_control_bytes > memory_budget_bytes) {
         diagnostic = "live-control control storage exceeds Runtime memory budget";
@@ -909,6 +948,19 @@ Status LiveControlMailboxSet::create(
                 diagnostic = "live-control checkpoint layout overflows";
                 return Status::capacity_exceeded;
             }
+            if (retention_policy.policy_identity != 0) {
+                closure.lossless = std::make_unique<Impl::LosslessRetention>();
+                auto& journal = *closure.lossless;
+                journal.policy = retention_policy;
+                journal.admissions = std::make_unique<LiveControlRetainedAdmission[]>(
+                    retention_policy.admission_capacity);
+                journal.payloads = std::make_unique<std::byte[]>(
+                    retention_policy.payload_capacity_bytes);
+                journal.export_order = std::make_unique<std::size_t[]>(
+                    retention_policy.admission_capacity);
+                journal.validation_state =
+                    std::make_unique<std::byte[]>(layout.total_bytes);
+            }
             closure.checkpoint_state_bytes = layout.total_bytes;
             closure.checkpoint_state =
                 std::make_unique<std::byte[]>(layout.total_bytes);
@@ -958,28 +1010,57 @@ LiveControlAdmissionResult LiveControlMailboxSet::stage(
     LiveControlProducerHandle handle,
     const LiveControlUpdateRecord& update,
     std::span<const std::byte> payload) noexcept {
+    struct AdmissionGuard {
+        Impl::LosslessRetention* journal = nullptr;
+        ~AdmissionGuard() {
+            if (journal) {
+                journal->active_admissions.fetch_sub(1, std::memory_order_seq_cst);
+            }
+        }
+    } admission_guard;
+    if (impl_ && impl_->closure && impl_->closure->lossless) {
+        admission_guard.journal = impl_->closure->lossless.get();
+        admission_guard.journal->active_admissions.fetch_add(1,
+                                                             std::memory_order_seq_cst);
+        if (impl_->closure->host_claim.load(std::memory_order_seq_cst)) {
+            // Quiescent export/restore owns all state: this busy result has no effect.
+            return LiveControlAdmissionResult::busy;
+        }
+    }
+    std::size_t owner = impl_ ? impl_->mailboxes.size() : 0;
+    std::uint32_t assigned_slot = kInvalidIndex;
+    std::uint64_t action_sequence = kInvalidSequence;
+    const auto finish = [&](LiveControlAdmissionResult result) noexcept {
+        if (impl_ && impl_->closure && impl_->closure->lossless &&
+            !impl_->closure->replay_active.load(std::memory_order_acquire)) {
+            retain_admission(handle, update, payload, result, owner, assigned_slot,
+                             action_sequence);
+        }
+        return result;
+    };
     if (!impl_ || !handle.valid() ||
         handle.runtime_id != impl_->runtime_id ||
         handle.configuration_generation != impl_->configuration_generation ||
         handle.producer_index >= impl_->producer_count) {
-        return LiveControlAdmissionResult::stale;
+        return finish(LiveControlAdmissionResult::stale);
     }
     auto& producer = impl_->producers[handle.producer_index];
     if (producer.mailbox_identity != handle.mailbox_identity ||
         producer.producer_identity != handle.producer_identity ||
         producer.mailbox_index >= impl_->mailboxes.size()) {
-        return LiveControlAdmissionResult::stale;
+        return finish(LiveControlAdmissionResult::stale);
     }
-    auto& mailbox = *impl_->mailboxes[producer.mailbox_index];
+    owner = producer.mailbox_index;
+    auto& mailbox = *impl_->mailboxes[owner];
     if (!impl_->admission_open.load(std::memory_order_acquire)) {
         count_result(mailbox, LiveControlAdmissionResult::stopped);
-        return LiveControlAdmissionResult::stopped;
+        return finish(LiveControlAdmissionResult::stopped);
     }
     const auto observed_producer_sequence =
         producer.next_sequence.load(std::memory_order_acquire);
     if (observed_producer_sequence == kInvalidSequence) {
         count_result(mailbox, LiveControlAdmissionResult::exhausted);
-        return LiveControlAdmissionResult::exhausted;
+        return finish(LiveControlAdmissionResult::exhausted);
     }
     if (update.producer_sequence != observed_producer_sequence ||
         update.runtime_id != handle.runtime_id ||
@@ -987,26 +1068,26 @@ LiveControlAdmissionResult LiveControlMailboxSet::stage(
         update.mailbox_identity != handle.mailbox_identity ||
         update.producer_identity != handle.producer_identity) {
         count_result(mailbox, LiveControlAdmissionResult::stale);
-        return LiveControlAdmissionResult::stale;
+        return finish(LiveControlAdmissionResult::stale);
     }
     if (!structurally_valid(*impl_, mailbox, producer, update, payload)) {
         count_result(mailbox, LiveControlAdmissionResult::invalid);
-        return LiveControlAdmissionResult::invalid;
+        return finish(LiveControlAdmissionResult::invalid);
     }
     if (mailbox.reservation.test_and_set(std::memory_order_acquire)) {
         count_result(mailbox, LiveControlAdmissionResult::busy);
-        return LiveControlAdmissionResult::busy;
+        return finish(LiveControlAdmissionResult::busy);
     }
     FlagGuard guard(mailbox.reservation);
     if (!impl_->admission_open.load(std::memory_order_acquire)) {
         count_result(mailbox, LiveControlAdmissionResult::stopped);
-        return LiveControlAdmissionResult::stopped;
+        return finish(LiveControlAdmissionResult::stopped);
     }
     const auto expected_producer_sequence =
         producer.next_sequence.load(std::memory_order_relaxed);
     if (expected_producer_sequence == kInvalidSequence) {
         count_result(mailbox, LiveControlAdmissionResult::exhausted);
-        return LiveControlAdmissionResult::exhausted;
+        return finish(LiveControlAdmissionResult::exhausted);
     }
     if (update.producer_sequence != expected_producer_sequence ||
         update.runtime_id != handle.runtime_id ||
@@ -1014,13 +1095,13 @@ LiveControlAdmissionResult LiveControlMailboxSet::stage(
         update.mailbox_identity != handle.mailbox_identity ||
         update.producer_identity != handle.producer_identity) {
         count_result(mailbox, LiveControlAdmissionResult::stale);
-        return LiveControlAdmissionResult::stale;
+        return finish(LiveControlAdmissionResult::stale);
     }
     const auto mailbox_sequence =
         mailbox.next_sequence.load(std::memory_order_relaxed);
     if (mailbox_sequence == kInvalidSequence) {
         count_result(mailbox, LiveControlAdmissionResult::exhausted);
-        return LiveControlAdmissionResult::exhausted;
+        return finish(LiveControlAdmissionResult::exhausted);
     }
 
     using SlotState = Impl::SlotState;
@@ -1066,7 +1147,7 @@ LiveControlAdmissionResult LiveControlMailboxSet::stage(
     }
     if (slot_index == mailbox.registration.record_capacity) {
         count_result(mailbox, LiveControlAdmissionResult::full);
-        return LiveControlAdmissionResult::full;
+        return finish(LiveControlAdmissionResult::full);
     }
 
     const auto stride = static_cast<std::size_t>(
@@ -1082,6 +1163,11 @@ LiveControlAdmissionResult LiveControlMailboxSet::stage(
     mailbox.slots[slot_index].record = committed;
     mailbox.slots[slot_index].terminal_generation.store(
         0, std::memory_order_relaxed);
+    assigned_slot = static_cast<std::uint32_t>(slot_index);
+    if (impl_->closure && impl_->closure->lossless &&
+        !impl_->closure->actions->reserve_sequence(action_sequence)) {
+        impl_->closure->replay_eligible.store(false, std::memory_order_release);
+    }
     mailbox.occupancy.fetch_add(1, std::memory_order_relaxed);
     mailbox.slots[slot_index].state.store(
         SlotState::staged, std::memory_order_release);
@@ -1113,14 +1199,14 @@ LiveControlAdmissionResult LiveControlMailboxSet::stage(
     producer.next_sequence.store(
         expected_producer_sequence + 1, std::memory_order_release);
     count_result(mailbox, admission_result);
-    return admission_result;
+    return finish(admission_result);
 }
 
 void LiveControlMailboxSet::record_admission(
     LiveControlProducerHandle producer_handle,
     const LiveControlUpdateRecord& update,
     LiveControlAdmissionResult result) noexcept {
-    if (!impl_ || !impl_->closure ||
+    if (!impl_ || !impl_->closure || impl_->closure->lossless ||
         impl_->closure->replay_active.load(std::memory_order_acquire)) {
         return;
     }
@@ -1179,6 +1265,84 @@ void LiveControlMailboxSet::record_admission(
     }
 }
 
+void LiveControlMailboxSet::retain_admission(LiveControlProducerHandle handle,
+                                             const LiveControlUpdateRecord& update,
+                                             std::span<const std::byte> payload,
+                                             LiveControlAdmissionResult result,
+                                             std::size_t owner,
+                                             std::uint32_t slot_index,
+                                             std::uint64_t action_sequence) noexcept {
+    auto& closure = *impl_->closure;
+    auto& journal = *closure.lossless;
+    LiveControlRetainedAdmission retained;
+    retained.record = update;
+    retained.slot_index = slot_index;
+    retained.outcome = result;
+    retained.counter_changed = owner < impl_->mailboxes.size();
+    if (retained.counter_changed) {
+        retained.mailbox_identity =
+            impl_->mailboxes[owner]->registration.mailbox_identity;
+        retained.producer_identity = handle.producer_identity;
+    }
+    if (slot_index != kInvalidIndex) {
+        retained.record = impl_->mailboxes[owner]->slots[slot_index].record;
+    } else {
+        payload = {};
+        if (!closure.actions->reserve_sequence(action_sequence)) {
+            closure.replay_eligible.store(false, std::memory_order_release);
+        }
+    }
+    retained.action_sequence = action_sequence;
+    auto action = base_action(*impl_);
+    action.admission_result = result;
+    action.reason = reason_for_admission(result);
+    action.result = result == LiveControlAdmissionResult::accepted
+                        ? LiveControlActionResult::accepted
+                        : LiveControlActionResult::rejected;
+    // Schema-1 rejection telemetry stays payload-free and owner-free.
+    if (result == LiveControlAdmissionResult::accepted ||
+        result == LiveControlAdmissionResult::missed) {
+        const auto& record = retained.record;
+        action.target = target_from_record(record);
+        action.mailbox_identity = record.mailbox_identity;
+        action.producer_identity = record.producer_identity;
+        action.mailbox_sequence = record.mailbox_sequence;
+        action.producer_sequence = record.producer_sequence;
+        action.payload_digest = record.payload_digest;
+        action.payload_bytes = record.payload_bytes;
+        action.update_kind = record.update_kind;
+        action.record_status = result == LiveControlAdmissionResult::missed
+                                   ? LiveControlRecordStatus::missed
+                                   : LiveControlRecordStatus::staged;
+    }
+    const auto index = journal.admission_count.fetch_add(1, std::memory_order_relaxed);
+    if (index < journal.policy.admission_capacity) {
+        const auto offset =
+            journal.payload_count.fetch_add(payload.size(), std::memory_order_relaxed);
+        if (offset <= journal.policy.payload_capacity_bytes &&
+            payload.size() <= journal.policy.payload_capacity_bytes - offset) {
+            retained.payload_offset = offset;
+            std::copy(payload.begin(), payload.end(), journal.payloads.get() + offset);
+            journal.admissions[index] = retained;
+        } else {
+            closure.replay_eligible.store(false, std::memory_order_release);
+        }
+    } else {
+        closure.replay_eligible.store(false, std::memory_order_release);
+    }
+    action.replay_eligible = closure.replay_eligible.load(std::memory_order_acquire);
+    if (!closure.actions->publish_reserved(action, action_sequence)) {
+        closure.replay_eligible.store(false, std::memory_order_release);
+    }
+    if (result == LiveControlAdmissionResult::missed) {
+        action.action = LiveControlActionId::missed;
+        action.stage = LiveControlActionStage::terminal;
+        action.reason = LiveControlActionReason::missed;
+        action.result = LiveControlActionResult::settled;
+        emit_action(*impl_, action);
+    }
+}
+
 namespace {
 
 [[nodiscard]] const LiveControlGenerationView* active_view(
@@ -1222,25 +1386,133 @@ namespace {
         action == LiveControlActionId::replay_verified;
 }
 
-void consume_replay_history(
-    LiveControlMailboxSet::Impl::Closure& closure) noexcept {
+void consume_replay_history(LiveControlMailboxSet::Impl& impl) noexcept {
+    auto& closure = *impl.closure;
     if (!closure.replay_view) {
         return;
     }
-    while (closure.replay_action_index <
-           closure.replay_view->metadata.action_record_count) {
+    const auto& view = *closure.replay_view;
+    const bool lossless =
+        view.metadata.schema_version == live_control_lossless_replay_schema_version;
+    while (closure.replay_action_index < view.metadata.action_record_count) {
         LiveControlActionRecord expected;
-        if (!live_control_replay_action_at(
-                *closure.replay_view,
-                closure.replay_action_index,
-                expected)) {
+        if (!live_control_replay_action_at(view, closure.replay_action_index,
+                                           expected)) {
             closure.replay_mismatch = Status::invalid_artifact;
             return;
+        }
+        if (lossless && expected.sequence >= view.admission_close_sequence) {
+            impl.admission_open.store(false, std::memory_order_release);
         }
         if (!replay_historical_only(expected.action)) {
             return;
         }
+        if (lossless) {
+            if (!closure.lossless) {
+                closure.replay_mismatch = Status::incompatible_artifact;
+                return;
+            }
+            if (expected.action == LiveControlActionId::admission) {
+                LiveControlRetainedAdmission admission;
+                std::span<const std::byte> payload;
+                if (!live_control_replay_admission_at(
+                        view, closure.lossless->replay_admission_index++, admission,
+                        payload) ||
+                    admission.action_sequence != expected.sequence) {
+                    closure.replay_mismatch = Status::invalid_artifact;
+                    return;
+                }
+                if (admission.counter_changed) {
+                    const auto owner = find_mailbox(impl, admission.mailbox_identity);
+                    if (owner >= impl.mailboxes.size()) {
+                        closure.replay_mismatch = Status::incompatible_artifact;
+                        return;
+                    }
+                    auto& mailbox = *impl.mailboxes[owner];
+                    count_result(mailbox, admission.outcome);
+                    if (admission.slot_index != kInvalidIndex) {
+                        auto& slot = mailbox.slots[admission.slot_index];
+                        const auto previous =
+                            slot.state.load(std::memory_order_acquire);
+                        if (previous != LiveControlMailboxSet::Impl::SlotState::free &&
+                            !terminal_state(previous)) {
+                            closure.replay_mismatch = Status::incompatible_artifact;
+                            closure.replay_mismatch_action_sequence = expected.sequence;
+                            return;
+                        }
+                        slot.record = admission.record;
+                        slot.record.runtime_id = impl.runtime_id;
+                        slot.record.configuration_generation =
+                            impl.configuration_generation;
+                        const auto stride =
+                            mailbox.registration.payload_bytes_per_record;
+                        auto* destination = mailbox.payload_storage.get() +
+                                            admission.slot_index * stride;
+                        std::copy(payload.begin(), payload.end(), destination);
+                        std::fill(destination + payload.size(), destination + stride,
+                                  std::byte{0});
+                        slot.terminal_generation.store(0, std::memory_order_relaxed);
+                        auto state = LiveControlMailboxSet::Impl::SlotState::staged;
+                        if (admission.outcome == LiveControlAdmissionResult::missed) {
+                            state = LiveControlMailboxSet::Impl::SlotState::missed;
+                            increment(impl.missed);
+                        } else if (admission.outcome ==
+                                   LiveControlAdmissionResult::stopped) {
+                            state = LiveControlMailboxSet::Impl::SlotState::stopped;
+                            increment(impl.stopped);
+                        } else {
+                            mailbox.occupancy.fetch_add(1, std::memory_order_relaxed);
+                        }
+                        slot.state.store(state, std::memory_order_release);
+                        mailbox.next_sequence.store(admission.record.mailbox_sequence +
+                                                        1,
+                                                    std::memory_order_relaxed);
+                        for (std::size_t index = 0; index < impl.producer_count;
+                             ++index) {
+                            auto& producer = impl.producers[index];
+                            if (producer.mailbox_identity ==
+                                    admission.mailbox_identity &&
+                                producer.producer_identity ==
+                                    admission.producer_identity) {
+                                producer.next_sequence.store(
+                                    admission.record.producer_sequence + 1,
+                                    std::memory_order_relaxed);
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else if (expected.action == LiveControlActionId::missed ||
+                       expected.action == LiveControlActionId::stopped) {
+                const auto owner = find_mailbox(impl, expected.mailbox_identity);
+                if (owner >= impl.mailboxes.size()) {
+                    closure.replay_mismatch = Status::invalid_artifact;
+                    return;
+                }
+                auto& mailbox = *impl.mailboxes[owner];
+                for (std::size_t index = 0;
+                     index < mailbox.registration.record_capacity; ++index) {
+                    auto& slot = mailbox.slots[index];
+                    if (slot.record.mailbox_sequence == expected.mailbox_sequence &&
+                        slot.state.load(std::memory_order_acquire) ==
+                            LiveControlMailboxSet::Impl::SlotState::staged) {
+                        const bool missed =
+                            expected.action == LiveControlActionId::missed;
+                        slot.state.store(
+                            missed ? LiveControlMailboxSet::Impl::SlotState::missed
+                                   : LiveControlMailboxSet::Impl::SlotState::stopped,
+                            std::memory_order_release);
+                        mailbox.occupancy.fetch_sub(1, std::memory_order_relaxed);
+                        increment(missed ? impl.missed : impl.stopped);
+                        break;
+                    }
+                }
+            }
+        }
         ++closure.replay_action_index;
+    }
+    if (lossless && view.admission_close_sequence != kInvalidSequence) {
+        impl.admission_open.store(false, std::memory_order_release);
     }
 }
 
@@ -1250,7 +1522,7 @@ void emit_action(
     std::uint64_t* sequence) noexcept {
     if (impl.closure && impl.closure->replay_view) {
         auto& closure = *impl.closure;
-        consume_replay_history(closure);
+        consume_replay_history(impl);
         LiveControlActionRecord expected;
         if (closure.replay_mismatch != Status::ok ||
             closure.replay_action_index >=
@@ -1324,6 +1596,14 @@ void emit_action(
     LiveControlMailboxSet::Impl& impl,
     const LiveControlBoundaryTarget& target) noexcept {
     auto& closure = *impl.closure;
+    const bool lossless = closure.replay_view->metadata.schema_version ==
+                          live_control_lossless_replay_schema_version;
+    if (lossless) {
+        consume_replay_history(impl);
+        if (closure.replay_mismatch != Status::ok) {
+            return active_view(impl);
+        }
+    }
     const auto& view = *closure.replay_view;
     LiveControlRetainedGenerationView retained;
     const bool has_retained = closure.replay_generation_index <
@@ -1459,14 +1739,31 @@ void emit_action(
             slot_index = index;
             break;
         }
+        if (lossless && slot_index == mailbox.registration.record_capacity) {
+            closure.replay_mismatch = Status::incompatible_artifact;
+            return active_view(impl);
+        }
         if (slot_index == mailbox.registration.record_capacity) {
             for (std::size_t index = 0;
                  index < mailbox.registration.record_capacity;
                  ++index) {
                 const auto state = mailbox.slots[index].state.load(
                     std::memory_order_acquire);
-                if (state == LiveControlMailboxSet::Impl::SlotState::free ||
-                    terminal_state(state)) {
+                if (state == LiveControlMailboxSet::Impl::SlotState::free) {
+                    slot_index = index;
+                    break;
+                }
+            }
+        }
+        if (slot_index == mailbox.registration.record_capacity) {
+            // Match stage(): unused slots precede reclaimable terminal slots.
+            // Terminal records remain part of the canonical checkpoint state;
+            // reclaiming one early changes nested active replay's state hash.
+            for (std::size_t index = 0;
+                 index < mailbox.registration.record_capacity;
+                 ++index) {
+                if (terminal_state(mailbox.slots[index].state.load(
+                        std::memory_order_acquire))) {
                     slot_index = index;
                     break;
                 }
@@ -1770,7 +2067,6 @@ void copy_generation(
             }
             if (!current) {
                 slot.terminal_generation.store(0, std::memory_order_relaxed);
-                slot.state.store(SlotState::missed, std::memory_order_release);
                 mailbox.occupancy.fetch_sub(1, std::memory_order_relaxed);
                 increment(impl.missed);
                 if (impl.closure) {
@@ -1793,6 +2089,7 @@ void copy_generation(
                         std::memory_order_acquire);
                     emit_action(impl, action);
                 }
+                slot.state.store(SlotState::missed, std::memory_order_release);
                 continue;
             }
             impl.candidates[candidate_count++] = {
@@ -2164,6 +2461,12 @@ void LiveControlMailboxSet::settle_step_transaction(Status status) noexcept {
         action.terminal_status = static_cast<std::int32_t>(status);
         action.replay_eligible = closure.replay_eligible.load(
             std::memory_order_acquire);
+        std::uint64_t terminal_sequence = kInvalidSequence;
+        if (closure.lossless && !closure.replay_view &&
+            !closure.actions->reserve_sequence(terminal_sequence)) {
+            closure.replay_eligible.store(false, std::memory_order_release);
+            action.replay_eligible = false;
+        }
         if (success) {
             if (provisional.survivor) {
                 slot.state.store(
@@ -2193,7 +2496,13 @@ void LiveControlMailboxSet::settle_step_transaction(Status status) noexcept {
             action.result = LiveControlActionResult::rolled_back;
         }
         mailbox.occupancy.fetch_sub(1, std::memory_order_relaxed);
-        emit_action(*impl_, action);
+        if (closure.lossless && !closure.replay_view) {
+            if (!closure.actions->publish_reserved(action, terminal_sequence)) {
+                closure.replay_eligible.store(false, std::memory_order_release);
+            }
+        } else {
+            emit_action(*impl_, action);
+        }
     }
     for (std::size_t index = closure.transaction_retained_begin;
          index < closure.retained_generation_count;
@@ -2213,6 +2522,9 @@ void LiveControlMailboxSet::settle_step_transaction(Status status) noexcept {
                 break;
             }
         }
+    }
+    if (closure.replay_view && closure.lossless) {
+        consume_replay_history(*impl_);
     }
     closure.provisional_count = 0;
     closure.transaction_active.store(false, std::memory_order_release);
@@ -3238,6 +3550,15 @@ bool LiveControlMailboxSet::restore_checkpoint_state(
         impl_->closure->replay_view
             ? impl_->closure->replay_view->metadata.last_action_sequence + 1
             : next_action);
+    if (impl_->closure->lossless) {
+        auto& journal = *impl_->closure->lossless;
+        journal.admission_count.store(0, std::memory_order_relaxed);
+        journal.payload_count.store(0, std::memory_order_relaxed);
+        journal.admission_close_sequence.store(kInvalidSequence,
+                                               std::memory_order_relaxed);
+        journal.export_count = 0;
+        journal.replay_admission_index = 0;
+    }
     impl_->closure->retained_generation_count = 0;
     impl_->closure->retained_generation_published.store(
         0, std::memory_order_release);
@@ -3332,6 +3653,35 @@ Status LiveControlMailboxSet::write_replay_artifact(
             next_action - first_action_sequence)) {
         return Status::invalid_artifact;
     }
+    if (closure.lossless) {
+        auto& journal = *closure.lossless;
+        const auto count = journal.admission_count.load(std::memory_order_acquire);
+        const auto bytes = journal.payload_count.load(std::memory_order_acquire);
+        if (count > journal.policy.admission_capacity ||
+            bytes > journal.policy.payload_capacity_bytes) {
+            return Status::invalid_artifact;
+        }
+        journal.export_count = 0;
+        for (std::size_t index = 0; index < count; ++index) {
+            const auto& admission = journal.admissions[index];
+            if (admission.action_sequence >= first_action_sequence) {
+                if (admission.action_sequence >= next_action ||
+                    admission.payload_offset > bytes ||
+                    (admission.slot_index != kInvalidIndex &&
+                     admission.record.payload_bytes >
+                         bytes - admission.payload_offset)) {
+                    return Status::invalid_artifact;
+                }
+                journal.export_order[journal.export_count++] = index;
+            }
+        }
+        std::sort(journal.export_order.get(),
+                  journal.export_order.get() + journal.export_count,
+                  [&](std::size_t left, std::size_t right) {
+                      return journal.admissions[left].action_sequence <
+                             journal.admissions[right].action_sequence;
+                  });
+    }
     std::size_t first_generation = 0;
     while (first_generation < closure.retained_generation_count &&
            closure.retained_generations[first_generation]
@@ -3343,21 +3693,16 @@ Status LiveControlMailboxSet::write_replay_artifact(
         std::size_t first_generation = 0;
     } context{impl_.get(), first_generation};
     return encode_live_control_replay_artifact(
-        metadata,
-        checkpoint,
-        nested_artifact,
-        first_action_sequence,
+        metadata, checkpoint, nested_artifact, first_action_sequence,
         static_cast<std::size_t>(next_action - first_action_sequence),
-        [](void* opaque,
-           std::uint64_t sequence,
+        [](void* opaque, std::uint64_t sequence,
            LiveControlActionRecord& record) noexcept {
             auto& reader = *static_cast<ReaderContext*>(opaque);
             return reader.impl->closure->actions->read_sequence(
                 sequence, record);
         },
         closure.retained_generation_count - first_generation,
-        [](void* opaque,
-           std::size_t index,
+        [](void* opaque, std::size_t index,
            LiveControlRetainedGenerationView& descriptor) noexcept {
             auto& reader = *static_cast<ReaderContext*>(opaque);
             const auto resolved = reader.first_generation + index;
@@ -3378,9 +3723,7 @@ Status LiveControlMailboxSet::write_replay_artifact(
             descriptor.settled = generation.settled;
             return true;
         },
-        [](void* opaque,
-           std::size_t generation_index,
-           std::size_t record_index,
+        [](void* opaque, std::size_t generation_index, std::size_t record_index,
            LiveControlUpdateRecord& record,
            std::span<const std::byte>& payload) noexcept {
             auto& reader = *static_cast<ReaderContext*>(opaque);
@@ -3404,10 +3747,29 @@ Status LiveControlMailboxSet::write_replay_artifact(
                 retained.record.payload_bytes);
             return true;
         },
-        &context,
-        closure.policy.replay_max_bytes,
-        output,
-        result);
+        &context, closure.policy.replay_max_bytes, output, result,
+        closure.lossless ? closure.lossless->policy.policy_identity : 0,
+        closure.lossless ? closure.lossless->export_count : 0,
+        [](void* opaque, std::size_t index, LiveControlRetainedAdmission& admission,
+           std::span<const std::byte>& payload) noexcept {
+            auto& reader = *static_cast<ReaderContext*>(opaque);
+            if (!reader.impl->closure->lossless) {
+                return false;
+            }
+            const auto& journal = *reader.impl->closure->lossless;
+            if (index >= journal.export_count) {
+                return false;
+            }
+            admission = journal.admissions[journal.export_order[index]];
+            payload = std::span<const std::byte>(
+                journal.payloads.get() + admission.payload_offset,
+                admission.slot_index == kInvalidIndex ? 0
+                                                      : admission.record.payload_bytes);
+            return true;
+        },
+        closure.lossless
+            ? closure.lossless->admission_close_sequence.load(std::memory_order_acquire)
+            : kInvalidSequence);
 }
 
 bool LiveControlMailboxSet::validate_replay_artifact(
@@ -3481,13 +3843,12 @@ bool LiveControlMailboxSet::validate_replay_artifact(
         record.rate_substep_ordinal = action.target.rate_substep_ordinal;
         record.update_kind = action.update_kind;
         return action.mailbox_sequence != kInvalidSequence &&
-            action.producer_sequence != kInvalidSequence &&
-            action.producer_sequence >= producer->first_sequence &&
-            action.payload_bytes <=
-                mailbox.registration.payload_bytes_per_record &&
-            ((action.update_kind == LiveControlUpdateKind::clear_fault) ==
-             (action.payload_bytes == 0)) &&
-            target_valid(*impl_, record);
+               action.producer_sequence != kInvalidSequence &&
+               action.producer_sequence >= producer->first_sequence &&
+               action.payload_bytes <= mailbox.registration.payload_bytes_per_record &&
+               (action.payload_bytes != 0 ||
+                action.update_kind == LiveControlUpdateKind::clear_fault) &&
+               target_valid(*impl_, record);
     };
     const auto action_record_equal = [](const LiveControlActionRecord& action,
                                         const LiveControlUpdateRecord& record) {
@@ -3582,6 +3943,262 @@ bool LiveControlMailboxSet::validate_replay_artifact(
                     payload)) {
                 return false;
             }
+        }
+    }
+
+    if (view.metadata.schema_version == live_control_lossless_replay_schema_version) {
+        if (!impl_->closure->lossless ||
+            view.retention_policy_identity !=
+                impl_->closure->lossless->policy.policy_identity ||
+            view.admission_count >
+                impl_->closure->lossless->policy.admission_capacity ||
+            view.admission_payload_bytes >
+                impl_->closure->lossless->policy.payload_capacity_bytes) {
+            return false;
+        }
+        // Validate ownership on finalized private scratch before restoring any
+        // application or mailbox state. The caller holds the exclusive claim.
+        auto scratch = std::span<std::byte>(
+            impl_->closure->lossless->validation_state.get(), state.size());
+        std::copy(state.begin(), state.end(), scratch.begin());
+        const auto slot_offset = [&](std::size_t owner, std::size_t slot) {
+            for (std::size_t index = 0; index < owner; ++index) {
+                slot += impl_->mailboxes[index]->registration.record_capacity;
+            }
+            return layout.slot_offset + slot * kCheckpointSlotBytes;
+        };
+        const auto slot_state = [&](std::size_t offset) {
+            return static_cast<Impl::SlotState>(
+                std::to_integer<std::uint8_t>(scratch[offset + 136]));
+        };
+        const auto adjust_occupancy = [&](std::size_t owner, bool add) {
+            const auto offset =
+                layout.mailbox_offset + owner * kCheckpointMailboxBytes + 80;
+            std::uint32_t count = 0;
+            (void)load_u32(scratch, offset, count);
+            if (add ? count >= impl_->mailboxes[owner]->registration.record_capacity
+                    : count == 0) {
+                return false;
+            }
+            return store_u32(scratch, offset, add ? count + 1 : count - 1);
+        };
+        std::size_t next_admission = 0;
+        for (std::size_t index = 0; index < view.metadata.action_record_count;
+             ++index) {
+            LiveControlActionRecord action;
+            if (!live_control_replay_action_at(view, index, action) ||
+                !action.replay_eligible) {
+                return false;
+            }
+            if (action.action == LiveControlActionId::admission) {
+                LiveControlRetainedAdmission admission;
+                std::span<const std::byte> payload;
+                if (!live_control_replay_admission_at(view, next_admission++, admission,
+                                                      payload) ||
+                    admission.action_sequence != action.sequence ||
+                    admission.outcome != action.admission_result) {
+                    return false;
+                }
+                if (!admission.counter_changed) {
+                    if (admission.outcome != LiveControlAdmissionResult::stale) {
+                        return false;
+                    }
+                    continue;
+                }
+                const auto owner = find_mailbox(*impl_, admission.mailbox_identity);
+                const auto* producer = producer_for(admission.mailbox_identity,
+                                                    admission.producer_identity);
+                if (owner >= impl_->mailboxes.size() || !producer ||
+                    producer->mailbox_index != owner) {
+                    return false;
+                }
+                const auto& mailbox = *impl_->mailboxes[owner];
+                if (admission.slot_index == kInvalidIndex) {
+                    if (admission.outcome == LiveControlAdmissionResult::accepted ||
+                        admission.outcome == LiveControlAdmissionResult::missed) {
+                        return false;
+                    }
+                    continue;
+                }
+                if (admission.slot_index >= mailbox.registration.record_capacity ||
+                    (admission.outcome != LiveControlAdmissionResult::accepted &&
+                     admission.outcome != LiveControlAdmissionResult::missed &&
+                     admission.outcome != LiveControlAdmissionResult::stopped)) {
+                    return false;
+                }
+                const auto& record = admission.record;
+                auto candidate = record;
+                candidate.runtime_id = impl_->runtime_id;
+                candidate.configuration_generation = impl_->configuration_generation;
+                candidate.mailbox_sequence = 0;
+                if (record.mailbox_identity != admission.mailbox_identity ||
+                    record.producer_identity != admission.producer_identity ||
+                    !structurally_valid(*impl_, mailbox, *producer, candidate,
+                                        payload) ||
+                    (admission.outcome != LiveControlAdmissionResult::stopped &&
+                     !action_record_equal(action, record))) {
+                    return false;
+                }
+                const auto producer_index =
+                    static_cast<std::size_t>(producer - impl_->producers.get());
+                const auto mailbox_next =
+                    layout.mailbox_offset + owner * kCheckpointMailboxBytes + 8;
+                const auto producer_next = layout.producer_offset +
+                                           producer_index * kCheckpointProducerBytes +
+                                           24;
+                std::uint64_t next_mailbox = 0, next_producer = 0;
+                (void)load_u64(scratch, mailbox_next, next_mailbox);
+                (void)load_u64(scratch, producer_next, next_producer);
+                if (next_mailbox == kInvalidSequence ||
+                    next_producer == kInvalidSequence ||
+                    record.mailbox_sequence != next_mailbox ||
+                    record.producer_sequence != next_producer) {
+                    return false;
+                }
+                const auto offset = slot_offset(owner, admission.slot_index);
+                const auto previous = slot_state(offset);
+                if ((previous != Impl::SlotState::free && !terminal_state(previous)) ||
+                    (previous == Impl::SlotState::missed &&
+                     scratch[offset + 137] != std::byte{0})) {
+                    return false;
+                }
+                auto settled = Impl::SlotState::staged;
+                if (admission.outcome == LiveControlAdmissionResult::missed) {
+                    settled = Impl::SlotState::missed;
+                } else if (admission.outcome == LiveControlAdmissionResult::stopped) {
+                    settled = Impl::SlotState::stopped;
+                } else if (!adjust_occupancy(owner, true)) {
+                    return false;
+                }
+                std::memcpy(scratch.data() + offset, &record, sizeof(record));
+                scratch[offset + 136] = static_cast<std::byte>(settled);
+                scratch[offset + 137] =
+                    settled == Impl::SlotState::staged ? std::byte{0} : std::byte{1};
+                (void)store_u64(scratch, mailbox_next, next_mailbox + 1);
+                (void)store_u64(scratch, producer_next, next_producer + 1);
+            } else if (action.action == LiveControlActionId::provisional_publication) {
+                std::size_t matched = 0;
+                for (std::size_t owner = 0; owner < impl_->mailboxes.size(); ++owner) {
+                    for (std::size_t slot = 0;
+                         slot < impl_->mailboxes[owner]->registration.record_capacity;
+                         ++slot) {
+                        const auto offset = slot_offset(owner, slot);
+                        LiveControlUpdateRecord record;
+                        std::memcpy(&record, scratch.data() + offset, sizeof(record));
+                        if (slot_state(offset) == Impl::SlotState::staged &&
+                            targets_equal(target_from_record(record), action.target)) {
+                            scratch[offset + 136] =
+                                static_cast<std::byte>(Impl::SlotState::boundary_owned);
+                            ++matched;
+                        }
+                    }
+                }
+                if (matched != static_cast<std::size_t>(action.survivor_count) +
+                                   action.replaced_count) {
+                    return false;
+                }
+            } else if (action.action == LiveControlActionId::committed ||
+                       action.action == LiveControlActionId::replaced ||
+                       action.action == LiveControlActionId::rolled_back ||
+                       action.action == LiveControlActionId::missed ||
+                       action.action == LiveControlActionId::stopped) {
+                if (!action_topology_valid(action)) {
+                    return false;
+                }
+                const auto owner = find_mailbox(*impl_, action.mailbox_identity);
+                bool found = false;
+                const auto desired = action.action == LiveControlActionId::committed
+                                         ? Impl::SlotState::committed
+                                     : action.action == LiveControlActionId::replaced
+                                         ? Impl::SlotState::replaced
+                                     : action.action == LiveControlActionId::rolled_back
+                                         ? Impl::SlotState::rolled_back
+                                     : action.action == LiveControlActionId::missed
+                                         ? Impl::SlotState::missed
+                                         : Impl::SlotState::stopped;
+                for (std::size_t slot = 0;
+                     slot < impl_->mailboxes[owner]->registration.record_capacity;
+                     ++slot) {
+                    const auto offset = slot_offset(owner, slot);
+                    LiveControlUpdateRecord record;
+                    std::memcpy(&record, scratch.data() + offset, sizeof(record));
+                    if (!action_record_equal(action, record)) {
+                        continue;
+                    }
+                    const auto previous = slot_state(offset);
+                    if (previous == desired && scratch[offset + 137] == std::byte{1} &&
+                        (desired == Impl::SlotState::missed ||
+                         desired == Impl::SlotState::stopped)) {
+                        scratch[offset + 137] = std::byte{0};
+                    } else {
+                        const auto required =
+                            desired == Impl::SlotState::missed ||
+                                    desired == Impl::SlotState::stopped
+                                ? Impl::SlotState::staged
+                                : Impl::SlotState::boundary_owned;
+                        if (previous != required || !adjust_occupancy(owner, false)) {
+                            return false;
+                        }
+                        scratch[offset + 136] = static_cast<std::byte>(desired);
+                    }
+                    found = true;
+                    break;
+                }
+                if (!found) {
+                    return false;
+                }
+            }
+        }
+        for (std::size_t owner = 0; owner < impl_->mailboxes.size(); ++owner) {
+            for (std::size_t slot = 0;
+                 slot < impl_->mailboxes[owner]->registration.record_capacity; ++slot) {
+                const auto offset = slot_offset(owner, slot);
+                if (slot_state(offset) == Impl::SlotState::boundary_owned ||
+                    (slot_state(offset) == Impl::SlotState::missed &&
+                     scratch[offset + 137] != std::byte{0})) {
+                    return false;
+                }
+            }
+        }
+        return next_admission == view.admission_count;
+    }
+
+    // V1 never retained rejection ownership or non-survivor payloads. Reject
+    // incomplete histories before any restore instead of inventing bytes.
+    for (std::size_t index = 0; index < view.metadata.action_record_count; ++index) {
+        LiveControlActionRecord action;
+        if (!live_control_replay_action_at(view, index, action)) {
+            return false;
+        }
+        if (action.action == LiveControlActionId::admission &&
+            action.admission_result != LiveControlAdmissionResult::accepted) {
+            return false;
+        }
+        if (action.action != LiveControlActionId::replaced &&
+            action.action != LiveControlActionId::rolled_back) {
+            continue;
+        }
+        bool retained = checkpoint_has_staged(action);
+        for (std::size_t generation = 0;
+             !retained && generation < view.metadata.retained_generation_count;
+             ++generation) {
+            LiveControlRetainedGenerationView descriptor;
+            if (!live_control_replay_generation_at(view, generation, descriptor)) {
+                return false;
+            }
+            for (std::size_t record_index = 0; record_index < descriptor.record_count;
+                 ++record_index) {
+                LiveControlUpdateRecord record;
+                std::span<const std::byte> payload;
+                if (!live_control_replay_record_at(view, generation, record_index,
+                                                   record, payload)) {
+                    return false;
+                }
+                retained = retained || action_record_equal(action, record);
+            }
+        }
+        if (!retained) {
+            return false;
         }
     }
 
@@ -3706,15 +4323,19 @@ bool LiveControlMailboxSet::begin_replay(
     if (!impl_ || !impl_->closure || impl_->closure->replay_view ||
         impl_->closure->transaction_active.load(std::memory_order_acquire) ||
         view.metadata.policy_identity != impl_->closure->policy.policy_identity ||
-        view.metadata.retained_record_count > total_record_capacity(*impl_) ||
+        view.metadata.retained_record_count >
+            impl_->closure->policy.retained_record_capacity ||
         view.metadata.retained_payload_bytes >
-            impl_->total_payload_storage_bytes) {
+            impl_->closure->policy.retained_payload_bytes) {
         return false;
     }
     impl_->closure->replay_active.store(true, std::memory_order_release);
     impl_->closure->replay_view = &view;
     impl_->closure->replay_generation_index = 0;
     impl_->closure->replay_action_index = 0;
+    if (impl_->closure->lossless) {
+        impl_->closure->lossless->replay_admission_index = 0;
+    }
     impl_->closure->replay_history_applied = false;
     impl_->closure->replay_mismatch = Status::ok;
     impl_->closure->replay_mismatch_action_sequence = 0;
@@ -3730,6 +4351,11 @@ void LiveControlMailboxSet::apply_replay_history() noexcept {
     }
     auto& closure = *impl_->closure;
     const auto& view = *closure.replay_view;
+    if (view.metadata.schema_version == live_control_lossless_replay_schema_version) {
+        consume_replay_history(*impl_);
+        closure.replay_history_applied = true;
+        return;
+    }
     for (std::size_t action_index = 0;
          action_index < view.metadata.action_record_count;
          ++action_index) {
@@ -3778,7 +4404,7 @@ void LiveControlMailboxSet::apply_replay_history() noexcept {
 void LiveControlMailboxSet::end_replay() noexcept {
     if (impl_ && impl_->closure) {
         if (impl_->closure->replay_view) {
-            consume_replay_history(*impl_->closure);
+            consume_replay_history(*impl_);
             if (impl_->closure->replay_action_index !=
                     impl_->closure->replay_view->metadata
                         .action_record_count &&
@@ -3837,13 +4463,12 @@ bool LiveControlMailboxSet::claim_all() noexcept {
     }
     bool expected = false;
     if (!impl_->closure->host_claim.compare_exchange_strong(
-            expected,
-            true,
-            std::memory_order_acq_rel,
-            std::memory_order_relaxed) ||
+            expected, true, std::memory_order_seq_cst, std::memory_order_seq_cst) ||
+        (impl_->closure->lossless && impl_->closure->lossless->active_admissions.load(
+                                         std::memory_order_seq_cst) != 0) ||
         impl_->closure->transaction_active.load(std::memory_order_acquire)) {
         if (!expected) {
-            impl_->closure->host_claim.store(false, std::memory_order_release);
+            impl_->closure->host_claim.store(false, std::memory_order_seq_cst);
         }
         return false;
     }
@@ -3861,7 +4486,7 @@ bool LiveControlMailboxSet::claim_all() noexcept {
         impl_->mailboxes[--claimed]->reservation.clear(
             std::memory_order_release);
     }
-    impl_->closure->host_claim.store(false, std::memory_order_release);
+    impl_->closure->host_claim.store(false, std::memory_order_seq_cst);
     return false;
 }
 
@@ -3873,7 +4498,7 @@ void LiveControlMailboxSet::release_all() noexcept {
         mailbox->reservation.clear(std::memory_order_release);
     }
     if (impl_->closure) {
-        impl_->closure->host_claim.store(false, std::memory_order_release);
+        impl_->closure->host_claim.store(false, std::memory_order_seq_cst);
     }
 }
 
@@ -3884,6 +4509,13 @@ bool LiveControlMailboxSet::host_claimed() const noexcept {
 
 void LiveControlMailboxSet::close_admission() noexcept {
     if (impl_) {
+        if (impl_->closure && impl_->closure->lossless) {
+            auto expected = kInvalidSequence;
+            (void)impl_->closure->lossless->admission_close_sequence
+                .compare_exchange_strong(expected,
+                                         impl_->closure->actions->next_sequence(),
+                                         std::memory_order_acq_rel);
+        }
         impl_->admission_open.store(false, std::memory_order_release);
     }
 }
@@ -3897,10 +4529,8 @@ void LiveControlMailboxSet::terminalize_staged_on_stop() noexcept {
              index < mailbox->registration.record_capacity; ++index) {
             auto expected = Impl::SlotState::staged;
             if (mailbox->slots[index].state.compare_exchange_strong(
-                    expected,
-                    Impl::SlotState::stopped,
-                    std::memory_order_acq_rel,
-                    std::memory_order_relaxed)) {
+                    expected, Impl::SlotState::boundary_owned,
+                    std::memory_order_acq_rel, std::memory_order_relaxed)) {
                 mailbox->slots[index].terminal_generation.store(
                     0, std::memory_order_release);
                 mailbox->occupancy.fetch_sub(1, std::memory_order_relaxed);
@@ -3928,6 +4558,8 @@ void LiveControlMailboxSet::terminalize_staged_on_stop() noexcept {
                             std::memory_order_acquire);
                     emit_action(*impl_, action);
                 }
+                mailbox->slots[index].state.store(Impl::SlotState::stopped,
+                                                  std::memory_order_release);
             }
         }
     }
@@ -4055,6 +4687,12 @@ std::size_t LiveControlMailboxSet::closure_control_bytes() const noexcept {
         total);
     (void)checked_add(total, closure.policy.retained_payload_bytes, total);
     (void)checked_add(total, closure.checkpoint_state_bytes, total);
+    if (closure.lossless) {
+        total += sizeof(Impl::LosslessRetention) + closure.checkpoint_state_bytes +
+                 closure.lossless->policy.admission_capacity *
+                     (sizeof(LiveControlRetainedAdmission) + sizeof(std::size_t)) +
+                 closure.lossless->policy.payload_capacity_bytes;
+    }
     return total;
 }
 
@@ -4082,6 +4720,7 @@ std::size_t LiveControlMailboxSet::extent_count() const noexcept {
             ? 1u : 0u;
         count += impl_->closure->policy.retained_payload_bytes != 0 ? 1u : 0u;
         count += impl_->closure->checkpoint_state_bytes != 0 ? 1u : 0u;
+        count += impl_->closure->lossless ? 5u : 0u;
     }
     return count;
 }
@@ -4163,6 +4802,19 @@ bool LiveControlMailboxSet::extent_at(
             emit(closure.checkpoint_state.get(),
                  closure.checkpoint_state_bytes)) {
             return true;
+        }
+        if (closure.lossless) {
+            const auto& journal = *closure.lossless;
+            if (emit(&journal, sizeof(Impl::LosslessRetention)) ||
+                emit(journal.admissions.get(),
+                     journal.policy.admission_capacity *
+                         sizeof(LiveControlRetainedAdmission)) ||
+                emit(journal.payloads.get(), journal.policy.payload_capacity_bytes) ||
+                emit(journal.export_order.get(),
+                     journal.policy.admission_capacity * sizeof(std::size_t)) ||
+                emit(journal.validation_state.get(), closure.checkpoint_state_bytes)) {
+                return true;
+            }
         }
     }
     return false;

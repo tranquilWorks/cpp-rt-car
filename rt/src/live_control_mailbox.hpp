@@ -20,18 +20,18 @@ class LiveControlMailboxSet final {
 public:
     struct Impl;
 
-    static Status create(
-        const LiveControlPolicy& policy,
-        const LiveControlClosurePolicy& closure_policy,
-        bool closure_enabled,
-        std::uint64_t runtime_id,
-        std::uint64_t configuration_generation,
-        std::size_t memory_budget_bytes,
-        std::span<const LiveControlMailboxRegistration> mailboxes,
-        std::span<const LiveControlProducerRegistration> producers,
-        std::span<const ReferenceRelease> rate_releases,
-        std::unique_ptr<LiveControlMailboxSet>& output,
-        const char*& diagnostic) noexcept;
+    static Status create(const LiveControlPolicy& policy,
+                         const LiveControlClosurePolicy& closure_policy,
+                         bool closure_enabled,
+                         const LiveControlReplayRetentionPolicy& retention_policy,
+                         std::uint64_t runtime_id,
+                         std::uint64_t configuration_generation,
+                         std::size_t memory_budget_bytes,
+                         std::span<const LiveControlMailboxRegistration> mailboxes,
+                         std::span<const LiveControlProducerRegistration> producers,
+                         std::span<const ReferenceRelease> rate_releases,
+                         std::unique_ptr<LiveControlMailboxSet>& output,
+                         const char*& diagnostic) noexcept;
 
     ~LiveControlMailboxSet();
     LiveControlMailboxSet(const LiveControlMailboxSet&) = delete;
@@ -144,8 +144,14 @@ public:
     void release_for_test(std::uint64_t mailbox_identity) noexcept;
 
 private:
-    explicit LiveControlMailboxSet(std::unique_ptr<Impl> impl) noexcept;
-    std::unique_ptr<Impl> impl_;
+  void retain_admission(LiveControlProducerHandle handle,
+                        const LiveControlUpdateRecord& update,
+                        std::span<const std::byte> payload,
+                        LiveControlAdmissionResult result, std::size_t mailbox_index,
+                        std::uint32_t slot_index,
+                        std::uint64_t action_sequence) noexcept;
+  explicit LiveControlMailboxSet(std::unique_ptr<Impl> impl) noexcept;
+  std::unique_ptr<Impl> impl_;
 };
 
 struct RuntimeLiveControlTestAccess {

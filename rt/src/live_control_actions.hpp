@@ -29,6 +29,9 @@ public:
     LiveControlActionRing(const LiveControlActionRing&) = delete;
     LiveControlActionRing& operator=(const LiveControlActionRing&) = delete;
 
+    [[nodiscard]] bool reserve_sequence(std::uint64_t& sequence) noexcept;
+    [[nodiscard]] bool publish_reserved(LiveControlActionRecord record,
+                                        std::uint64_t sequence) noexcept;
     [[nodiscard]] bool emit(
         LiveControlActionRecord record,
         std::uint64_t* assigned_sequence = nullptr) noexcept;

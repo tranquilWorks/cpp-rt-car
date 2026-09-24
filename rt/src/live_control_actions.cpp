@@ -76,9 +76,9 @@ template <typename Range>
 [[nodiscard]] bool record_identity_present(
     const LiveControlActionRecord& record) noexcept {
     return record.mailbox_identity != 0 && record.producer_identity != 0 &&
-        record.mailbox_sequence != 0 && record.producer_sequence != 0 &&
-        ((record.update_kind == LiveControlUpdateKind::clear_fault) ==
-         (record.payload_bytes == 0));
+           record.mailbox_sequence != 0 && record.producer_sequence != 0 &&
+           (record.payload_bytes != 0 ||
+            record.update_kind == LiveControlUpdateKind::clear_fault);
 }
 
 [[nodiscard]] bool record_identity_absent(
@@ -326,27 +326,31 @@ LiveControlActionRing::~LiveControlActionRing() {
 bool LiveControlActionRing::emit(
     LiveControlActionRecord record,
     std::uint64_t* assigned_sequence) noexcept {
-    auto sequence = next_sequence_.load(std::memory_order_relaxed);
-    if (sequence == std::numeric_limits<std::uint64_t>::max()) {
-        if (assigned_sequence) {
-            *assigned_sequence = invalid_sequence;
-        }
-        dropped_.fetch_add(1, std::memory_order_relaxed);
-        return false;
-    }
-    if (!next_sequence_.compare_exchange_strong(
-            sequence,
-            sequence + 1,
-            std::memory_order_acq_rel,
-            std::memory_order_relaxed)) {
-        if (assigned_sequence) {
-            *assigned_sequence = invalid_sequence;
-        }
-        dropped_.fetch_add(1, std::memory_order_relaxed);
-        return false;
-    }
+    std::uint64_t sequence = invalid_sequence;
+    const bool reserved = reserve_sequence(sequence);
     if (assigned_sequence) {
         *assigned_sequence = sequence;
+    }
+    return reserved && publish_reserved(record, sequence);
+}
+
+bool LiveControlActionRing::reserve_sequence(std::uint64_t& sequence) noexcept {
+    sequence = next_sequence_.load(std::memory_order_relaxed);
+    if (sequence == invalid_sequence ||
+        !next_sequence_.compare_exchange_strong(sequence, sequence + 1,
+                                                std::memory_order_acq_rel,
+                                                std::memory_order_relaxed)) {
+        sequence = invalid_sequence;
+        dropped_.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+    return true;
+}
+
+bool LiveControlActionRing::publish_reserved(LiveControlActionRecord record,
+                                             std::uint64_t sequence) noexcept {
+    if (sequence == invalid_sequence) {
+        return false;
     }
     record.sequence = sequence;
     if (!live_control_action_valid(record) || capacity_ == 0) {

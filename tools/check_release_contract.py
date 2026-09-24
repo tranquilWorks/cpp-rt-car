@@ -245,6 +245,7 @@ HASHED_CONTRACT_PATHS = {
     "tests/package_consumer/cpp_consumer.cpp",
     "tests/package_consumer/loopback_consumer.cpp",
     "tests/package_consumer/live_control_consumer.cpp",
+    "tests/package_consumer/live_control_replay_consumer.cpp",
     "tests/package_consumer/live_control_sdk_consumer.cpp",
     "tests/package_consumer/mixed_rate_consumer.cpp",
     "tests/package_consumer/cuda_consumer.cpp",

@@ -295,3 +295,118 @@ artifact generation replay in addition to staging and exact publication. It is
 not evidence for arbitrary application/backend/physical side-effect rollback,
 physical control, HIL, controlled latency, RT1/RT2, executable or Unreal hot
 reload, support promotion, release, deployment, or production readiness.
+
+
+## Nested active replay continuation limitation (2026-09-23)
+
+M23-03R repairs free-before-terminal slot selection and distinguishes retained
+history capacity from simultaneous mailbox capacity. Canonical state and action
+comparison remain enabled. Version-1 replay history does not retain replaced
+payload bytes, and rejected-admission actions omit the mailbox association needed
+to restore its counters. Nested active replay can therefore still reject these
+histories with `incompatible_artifact` even when application bytes and surviving
+generations match. Do not treat matching application bytes as replay acceptance.
+See `tests/package_consumer/live_control_replay_consumer.cpp` and the retained
+M23-03R evidence. Format evolution is a separate scope; this repair changes no
+public header, ABI, serializer or artifact version.
+
+## Opt-in lossless trusted replay (format v2)
+
+`LiveControlReplayRetentionPolicy` is a distinct additive 48-byte C++ policy.
+Call `set_live_control_replay_retention_policy()` after enabling the closure's
+replay policy and before finalization. Set a nonzero `policy_identity`,
+`admission_capacity`, and `payload_capacity_bytes`; all reserved bytes must be
+zero. The setter copies the policy, rejects repeated/late configuration, and
+freezes identity and capacities into compatibility IDs. Existing policy layouts,
+format-v1 constants, C/device/extension ABIs and default v1 writing are unchanged.
+
+```cpp
+rt::LiveControlReplayRetentionPolicy retention;
+retention.policy_identity = 0x1002;
+retention.admission_capacity = 128;
+retention.payload_capacity_bytes = 4096;
+const auto status = runtime.set_live_control_replay_retention_policy(retention);
+```
+
+V2 retains each admission's canonical original record, action sequence, owner
+and producer identities, counter attribution, assigned slot when present, and
+outcome. It copies the original payload for every admission that acquired a slot,
+including records later replaced, rolled back, missed or stopped, and records
+still pending at export. Rejected input payloads are not copied. A foreign stale
+handle has no owner-counter effect. An attempt during an exclusive checkpoint,
+export or restore returns effect-free `busy`; it creates neither a mailbox change
+nor a transcript entry. Ordinary per-mailbox contention retains its owner and
+counter effect. Existing telemetry remains payload-free.
+
+This opt-in changes data retention: **non-survivor payloads are retained** in the
+trusted artifact. The application controls which canonical synthetic or sensitive
+values it supplies and who can receive exported artifacts. Default telemetry is
+not a substitute for this explicit trusted export. Redact at the application
+boundary by selecting safe input values; altering journal sections requires a
+new internally consistent artifact and is not a supported partial-history replay.
+Keep borrowed callback/backend state alive through checked stop and all accepted
+work. Retained storage lives with the Runtime and is released at teardown; replay
+restore resets journal cursors without freeing live borrowed state.
+
+All storage is preallocated at finalization and included in MemoryPlan and storage
+extents: admission descriptors, copied payloads, export order and checkpoint-sized
+validation scratch. No callback allocation, new thread or blocking wait is added.
+The ceilings are 262144 admissions and 1 GiB of admission payloads, further bounded
+by the Runtime memory budget and the existing 1 GiB complete-artifact limit.
+Exhaustion or a lost action makes the history explicitly replay-ineligible;
+normal execution continues, but export cannot report a successful partial bundle.
+
+### Binary layout
+
+All new numeric fields use little-endian encoding. V2 has magic `RTFWLCR2`, schema
+2 and a 448-byte header. Existing checkpoint, nested-artifact, 264-byte action,
+128-byte generation, 152-byte retained-record and survivor-payload sections keep
+their encodings; the header grows and appends admission descriptors and payloads.
+V1 remains `RTFWLCR1`, schema 1, with its exact 384-byte header.
+
+| Header byte | Width | V2 field |
+| --- | --- | --- |
+| 384 | 8 | Retention policy identity |
+| 392 | 8 | Admission descriptor offset |
+| 400 | 4 | Admission count |
+| 404 | 4 | Descriptor stride, 184 |
+| 408 | 8 | Admission payload offset |
+| 416 | 8 | Admission payload byte count |
+| 424 | 8 | FNV-1a checksum of both admission sections |
+| 432 | 8 | Admission-close action cursor, or UINT64_MAX if still open |
+| 440 | 8 | Reserved zero |
+
+| Admission byte | Width | Field |
+| --- | --- | --- |
+| 0 | 128 | Original record, with instance runtime/generation fields zeroed |
+| 128 | 8 | Corresponding admission action sequence |
+| 136 / 144 | 8 each | Counter-owner mailbox / producer identity |
+| 152 | 4 | Original slot, or UINT32_MAX for no acquired slot |
+| 156 / 157 | 1 each | Outcome / whether an owner counter changed |
+| 158 | 2 | Reserved zero |
+| 160 | 8 | Relative admission payload offset |
+| 168 | 4 | Copied payload bytes |
+| 172 | 4 | Reserved zero |
+| 176 | 8 | FNV-1a over descriptor bytes 0–175 and its copied payload |
+
+Sections are contiguous, extents and arithmetic are checked, and descriptors are
+ordered by action sequence. Zero padding, checksums, payload digests, action
+association, capacities, policy/topology identity and checkpoint binding are
+validated before restore. The existing whole-artifact checksum includes the new
+header and sections. Checksums detect corruption; they are not authentication.
+
+Ownership validation uses finalized scratch under the exclusive host claim. It
+rejects slot collisions, foreign owners, duplicate order and impossible terminal
+transitions before canonical state or callbacks can change. Replay reconstructs
+original slots, bytes and counters at action positions and uses normal boundary
+settlement. The existing `final_state_hash` field means the complete canonical
+Runtime state for v2, including mailbox/producer/generation state; v1 retains its
+legacy application-state meaning. V2 always checks that hash, even when it is zero,
+and preserves transcript and nested active-replay comparisons. Application or
+backend side effects are not rolled back by the control journal.
+
+Complete v1 histories remain readable. Missing replacement payloads or rejection
+ownership cannot be recovered from old v1 artifacts; unsupported incomplete
+histories are rejected before restore. V2 does not infer payload bytes from hashes
+or repair counters to match an expected final hash. No hardware or RT qualification
+follows from replay success.

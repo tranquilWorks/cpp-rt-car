@@ -1,20 +1,78 @@
 # Current state
 
-## 2026-09-24: queue safety repair before replay integration
+## 2026-09-24: replay integration after verified queue repair
 
-CI-QUEUE-01 is active, from merged control PR #476. Exact main baseline is
-`3df07d756c626fd5453c62a23920c6e521c867e5`. Replay draft #256 encountered a real
-ASan use-after-free in unchanged experimental LockFreeQueue code; the repair
-has a separate scope and may not change supported Runtime or benchmark sources.
-See [repair evidence](evidence/CI-QUEUE-01-2026-09-24.md). Draft PR #257
-preserves the repair. Focused GCC sanitizer checks and the official local
-profile pass (33/33 quick, 37/37 full); hosted final-head checks remain the
-merge gate. No independent human review or physical qualification is claimed.
+Queue PR #257 merged at `da22fdaff9e7e5d3fbffa8013c0db7bd81f3697c` after
+all 32 hosted checks passed on `f4ac9a06ad2a46293a41f33b620c02ed5b191500`.
+Local queue verification passed six focused tests under GCC ASan/UBSan/TSan
+and the official 33/33 quick plus 37/37 full profile. Original failure and
+artifact-relink evidence remain in [CI-QUEUE-01](evidence/CI-QUEUE-01-2026-09-24.md).
 
-Integrate the verified queue repair first, then reconcile replay #256 and resume
-benchmark #254 under merged contract amendment #475. Preserve all earlier
-failures. Unreal remains excluded and hardware characterization remains pending
-actual access. The older state below is historical.
+M23-03R2 is reactivated under its unchanged approved canonical scope. Replay
+PR #256 is reconciled onto that exact main; no replay Runtime source changed
+from its previously verified head `76f6b8ed8a5a2aad4fd37c2e0d47d3d6406852ae`.
+The combined head still requires local and hosted integration checks. The prior
+replay CI failure was the separately repaired experimental queue use-after-free.
+See [replay evidence](evidence/M23-03R2-2026-09-24.md).
+
+Next: integrate verified replay, then activate the already merged M23-03
+amendment (control #475), finish all 78 existing cases and remaining benchmark
+acceptance. No Unreal work or physical qualification is claimed. The execution
+host exposes no NVIDIA/XDMA device nodes; physical characterization remains
+unperformed. Earlier checkpoint text below is historical.
+
+## 2026-09-24: approved M23-03R2 reconstruction and verification
+
+The owner approved opt-in lossless trusted replay v2 and merged Portfolio Control
+PR #463 (`092bab84f4228acc35a2eacf024ba0a61d1fe2e7`). Draft target PR #256
+preserves the recovered R1 repair and active scope. The earlier unpublished v2
+candidate was removed by workspace maintenance; it is being reconstructed and
+freshly verified. See [recovery/evidence](evidence/M23-03R2-2026-09-24.md).
+
+The reconstructed public replacement and rejection reproducers pass, preserving
+original payloads and admission counters. The opt-in adds bounded admission
+retention, pre-restore ownership validation, complete canonical state comparison
+and unchanged payload-free telemetry. Default v1 remains unchanged and rejects
+incomplete old histories explicitly. Full, sanitizer, package and integration gates
+remain in progress; historical test results do not validate reconstructed source.
+
+After integrating the verified repair, separately amend the M23-03 contract for
+explicit v2 composition fixtures, reconcile draft #254 and run all 78 cases plus
+remaining benchmark acceptance. Continue dependency-ready planned software scope.
+Unreal remains excluded. Real hardware characterization, support promotion and
+release require their distinct actual evidence and authorization.
+
+### Historical R1 checkpoint (superseded by the active R2 scope)
+
+## 2026-09-23 continuation: M23-03R partial repair
+
+Target baseline: `3df07d756c626fd5453c62a23920c6e521c867e5` (PR #255).
+Control repair contract: PR #369, merge `9094bea6df8bace121f0c27e603d38cea795bed8`.
+The original PR #254 benchmark draft and September 8 evidence are preserved.
+
+The minimal nested replay reproducer now succeeds. Replay now selects free
+mailbox slots before reclaiming terminal records, matching admission, and checks
+aggregate retained history against the retention policy instead of simultaneous
+mailbox occupancy. New public-API coverage exercises two/eight frames, host/rate
+targets, two mailboxes, reclamation, repeated/concurrent instances, malformed
+inputs and final-state mismatch detection.
+
+This does not close M23-03R. Format v1 omits non-surviving replacement payloads
+and the mailbox attribution of rejected admissions. The separate public consumer
+`live_control_replay_consumer.cpp` preserves `--replaced` and `--rejected`
+reproductions; both still return `incompatible_artifact`. All 78 draft benchmark
+cases were diagnostically linked to this repaired Runtime: 76 pass and the two
+fault compositions still fail. No benchmark gate or state comparison is waived.
+A reviewed artifact-version decision is required before the next repair; see
+[evidence](evidence/M23-03R-2026-09-23.md). Do not merge this partial target repair
+as completed acceptance or advance M23-04/M24-M26 on a false closure.
+
+The owner requests non-Unreal development/integration and real hardware
+characterization. No device nodes or configured remote bench are available here.
+Portable checks do not characterize the owner's CPU/GPU/FPGA system. Release,
+support matrices, public headers/ABIs and format versions remain unchanged.
+
+### Retained earlier handoff
 
 Last audited: 2026-09-07
 Planning baseline: `b52b42a6c64066553ce55fb08c874061d78e036e`
