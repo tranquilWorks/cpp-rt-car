@@ -1,5 +1,18 @@
 # Current state
 
+## 2026-09-24: queue safety repair before replay integration
+
+CI-QUEUE-01 is active, from merged control PR #476. Exact main baseline is
+`3df07d756c626fd5453c62a23920c6e521c867e5`. Replay draft #256 encountered a real
+ASan use-after-free in unchanged experimental LockFreeQueue code; the repair
+has a separate scope and may not change supported Runtime or benchmark sources.
+See [repair evidence](evidence/CI-QUEUE-01-2026-09-24.md).
+
+Integrate the verified queue repair first, then reconcile replay #256 and resume
+benchmark #254 under merged contract amendment #475. Preserve all earlier
+failures. Unreal remains excluded and hardware characterization remains pending
+actual access. The older state below is historical.
+
 Last audited: 2026-09-07
 Planning baseline: `b52b42a6c64066553ce55fb08c874061d78e036e`
 Continuation baseline: `543af2b4728a171243e6d756554efa188c2e7d2f` (merged PR #252)

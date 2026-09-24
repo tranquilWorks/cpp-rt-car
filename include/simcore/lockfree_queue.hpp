@@ -35,11 +35,12 @@ public:
   }
 
   void push(const T &v) {
+    HazardGuard tail_guard;
     Node *n = new Node(v);
     while (true) {
-      Node *t = tail_.load(std::memory_order_acquire);
+      Node *t = tail_guard.protect(tail_);
       Node *next = t->next.load(std::memory_order_acquire);
-      if (t == tail_.load(std::memory_order_acquire)) {
+      if (t == tail_.load(std::memory_order_seq_cst)) {
         if (!next) {
           if (t->next.compare_exchange_weak(next, n)) {
             tail_.compare_exchange_weak(t, n);
@@ -53,13 +54,15 @@ public:
   }
 
   bool pop(T &out) {
-    HazardGuard guard;
+    HazardGuard head_guard;
+    HazardGuard next_guard;
     while (true) {
-      Node *h = head_.load(std::memory_order_acquire);
-      guard.protect(head_);
+      Node *h = head_guard.protect(head_);
       Node *t = tail_.load(std::memory_order_acquire);
-      Node *next = h->next.load(std::memory_order_acquire);
-      if (h == head_.load(std::memory_order_acquire)) {
+      Node *next = next_guard.protect(h->next);
+      // A removed head retains its next link. Validate the queue head again
+      // before accessing the separately protected successor.
+      if (h == head_.load(std::memory_order_seq_cst)) {
         if (h == t) {
           if (!next)
             return false;
@@ -67,6 +70,7 @@ public:
         } else {
           out = next->value;
           if (head_.compare_exchange_weak(h, next)) {
+            head_guard.clear();
             retire(h, [](void *p) { delete static_cast<Node *>(p); });
             return true;
           }
