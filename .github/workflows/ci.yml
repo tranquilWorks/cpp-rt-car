@@ -53,7 +53,7 @@ jobs:
       - name: Build determinism tests
         run: |
           cmake --build build --config ${BUILD_TYPE} \
-            --target simcore_tests rtfw_determinism_artifact rtfw_benchmark_consumer rtfw_benchmark_cpu_consumer rtfw_benchmark_runtime_consumer \
+            --target simcore_tests rtfw_determinism_artifact rtfw_benchmark_consumer rtfw_benchmark_cpu_consumer rtfw_benchmark_runtime_consumer rtfw_benchmark_device_consumer \
                      rtfw_cpu_gpu_fpga_cpu_sample_tests \
                      sample_cpu_gpu_fpga_cpu -- -j2
       - name: Run determinism tests
@@ -84,6 +84,8 @@ jobs:
           python3 tools/check_benchmark_artifact.py --artifact-root m23-cpu-canonical
           build/bench/rtfw_benchmark_runtime_consumer m23-runtime-canonical
           python3 tools/check_benchmark_artifact.py --artifact-root m23-runtime-canonical
+          build/bench/rtfw_benchmark_device_consumer m23-device-canonical
+          python3 tools/check_benchmark_artifact.py --artifact-root m23-device-canonical
       - name: Upload M23 canonical fixture
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -103,6 +105,13 @@ jobs:
         with:
           name: m23-runtime-canonical-${{ matrix.compiler }}-${{ matrix.fma }}
           path: m23-runtime-canonical/*.json
+          if-no-files-found: error
+
+      - name: Upload M23 canonical device fixture
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: m23-device-canonical-${{ matrix.compiler }}-${{ matrix.fma }}
+          path: m23-device-canonical/*.json
           if-no-files-found: error
 
   determinism-artifact-exchange:
@@ -173,6 +182,21 @@ jobs:
               values=[(p/name).read_bytes() for p in bundles]
               assert all(v==values[0] for v in values), name
 
+      - name: Download M23 device fixtures
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: m23-device-canonical-*
+          path: device-benchmark-artifacts
+      - name: Compare deterministic public device artifacts
+        shell: python
+        run: |
+          from pathlib import Path
+          bundles=sorted(Path("device-benchmark-artifacts").iterdir())
+          assert len(bundles)==7, len(bundles)
+          for name in ("descriptor.json","raw.json","result.json"):
+              values=[(p/name).read_bytes() for p in bundles]
+              assert all(v==values[0] for v in values), name
+
   dependency-review:
     name: Blocking dependency review
     if: github.event_name == 'pull_request'
@@ -225,7 +249,7 @@ jobs:
             -artifact_prefix="$RUNNER_TEMP/rtfw-portable-assurance/fuzz-artifacts/"
       - name: Analyze optional host-side benchmark sources
         run: |
-          clang++-14 --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Ibench/include -Ibench/providers -Irt/include -Icore/include -Iinclude -Iexternal/googletest/googletest/include bench/src/benchmark.cpp bench/src/benchmark_cli.cpp bench/providers/cpu_provider.cpp bench/providers/runtime_cases/capacity.cpp bench/providers/runtime_cases/checkpoint.cpp bench/providers/runtime_cases/controls.cpp bench/providers/runtime_cases/device.cpp bench/providers/runtime_cases/observability.cpp bench/providers/runtime_cases/rates.cpp bench/providers/runtime_cases/replay.cpp bench/providers/runtime_provider.cpp tests/package_consumer/benchmark_runtime_consumer.cpp tests/test_benchmark_runtime.cpp
+          clang++-14 --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Ibench/include -Ibench/providers -Irt/include -Icore/include -Iinclude -Iexternal/googletest/googletest/include bench/src/benchmark.cpp bench/src/benchmark_cli.cpp bench/providers/cpu_provider.cpp bench/providers/runtime_cases/capacity.cpp bench/providers/runtime_cases/checkpoint.cpp bench/providers/runtime_cases/controls.cpp bench/providers/runtime_cases/device.cpp bench/providers/runtime_cases/observability.cpp bench/providers/runtime_cases/rates.cpp bench/providers/runtime_cases/replay.cpp bench/providers/runtime_provider.cpp tests/package_consumer/benchmark_runtime_consumer.cpp tests/test_benchmark_runtime.cpp bench/providers/device_provider.cpp tests/package_consumer/benchmark_device_consumer.cpp tests/test_benchmark_device.cpp
       - name: Retain candidate verification evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -346,7 +370,7 @@ jobs:
             -- -j2
       - name: Run executor ThreadSanitizer gate
         env:
-          GTEST_FILTER: BenchmarkContract.*:BenchmarkRunner.*:BenchmarkCpu.*:BenchmarkRuntime.*:MixedRateReplay.*:LiveControlSdk.*:LiveControlStress.*:LiveControlMailbox.*:LiveControlActions.*:ExtensionAbi.*:ExtensionRegistration.*:ExtensionLifecycle.*:UnifiedExecutor.*:CommandBatch.*:CrossRateData.*:RateTimeline.*:RateDispatch.*:RateShedding.*:RateTelemetry.*:CompiledGraph.*Rate*:HostRuntime.*Rate*:TraceNoAlloc.*:MemoryPolicy.*:ThreadPolicy.*:CpuMemoryPolicy.*:MemoryPlan.*:PeriodicRuntime.*:PlatformPreflight.*:Observability.*:DeterminismReplay.*:HeterogeneousMemory.*:HalV2.*:VendorHalV2.*:DeviceRuntime.*:DeviceMock.*:CudaBackend.*Graph*:CudaBackend.*HalV2*:XdmaBackend.*Control*:XdmaBackend.*Event*-ThreadPolicy.StrictFailuresRollbackWithoutCallbacksAndCanRecover:ThreadPolicy.LinuxAppliesAndReadsBackAvailableNativeFields
+          GTEST_FILTER: BenchmarkContract.*:BenchmarkRunner.*:BenchmarkCpu.*:BenchmarkRuntime.*:BenchmarkDevice.*:MixedRateReplay.*:LiveControlSdk.*:LiveControlStress.*:LiveControlMailbox.*:LiveControlActions.*:ExtensionAbi.*:ExtensionRegistration.*:ExtensionLifecycle.*:UnifiedExecutor.*:CommandBatch.*:CrossRateData.*:RateTimeline.*:RateDispatch.*:RateShedding.*:RateTelemetry.*:CompiledGraph.*Rate*:HostRuntime.*Rate*:TraceNoAlloc.*:MemoryPolicy.*:ThreadPolicy.*:CpuMemoryPolicy.*:MemoryPlan.*:PeriodicRuntime.*:PlatformPreflight.*:Observability.*:DeterminismReplay.*:HeterogeneousMemory.*:HalV2.*:VendorHalV2.*:DeviceRuntime.*:DeviceMock.*:CudaBackend.*Graph*:CudaBackend.*HalV2*:XdmaBackend.*Control*:XdmaBackend.*Event*-ThreadPolicy.StrictFailuresRollbackWithoutCallbacksAndCanRecover:ThreadPolicy.LinuxAppliesAndReadsBackAvailableNativeFields
           TSAN_OPTIONS: halt_on_error=1
         run: |
           ctest --test-dir build-tsan \
@@ -626,6 +650,7 @@ jobs:
             -DRTFW_BUILD_EXPERIMENTAL=OFF \
             -DRTFW_BUILD_EXAMPLES=OFF \
             -DRTFW_BUILD_RUNTIME_DEMO=OFF \
+            -DRTFW_BUILD_BENCHMARKS=ON \
             -DRTFW_ENABLE_CUDA=ON \
             -DRTFW_ENABLE_XDMA=ON \
             -DSIM_WERROR=ON
@@ -633,6 +658,8 @@ jobs:
         run: |
           cmake --build build-vendor-package --parallel 2
           cmake --install build-vendor-package --prefix "$RUNNER_TEMP/rtfw-vendor"
+      - name: Verify absent XDMA endpoints without device access
+        run: python3 bench/real_device/check_missing_xdma.py --host build-vendor-package/bench/rtfw-bench-xdma --validator tools/check_benchmark_artifact.py
       - name: Build compile-only consumers without device access
         run: |
           cmake -S tests/package_consumer -B build-vendor-consumer \
@@ -665,7 +692,7 @@ jobs:
           echo "CC=${{ matrix.cc }}" >> "$GITHUB_ENV"
           echo "CXX=${{ matrix.cxx }}" >> "$GITHUB_ENV"
       - name: Verify optional package relocation isolation and embedding
-        run: python tests/benchmark_fixtures/runtime_consumer/verify_package.py --work-directory m23-package-work --artifact-output m23-canonical --cpu-artifact-output m23-cpu-canonical --runtime-artifact-output m23-runtime-canonical
+        run: python tests/benchmark_fixtures/device_consumer/verify_package.py --work-directory m23-package-work --artifact-output m23-canonical --cpu-artifact-output m23-cpu-canonical --runtime-artifact-output m23-runtime-canonical --device-artifact-output m23-device-canonical
       - name: Upload canonical package-provider fixture
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -683,4 +710,11 @@ jobs:
         with:
           name: m23-runtime-canonical-sdk-${{ matrix.name }}
           path: m23-runtime-canonical/*.json
+          if-no-files-found: error
+
+      - name: Upload canonical device package-provider fixture
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: m23-device-canonical-sdk-${{ matrix.name }}
+          path: m23-device-canonical/*.json
           if-no-files-found: error

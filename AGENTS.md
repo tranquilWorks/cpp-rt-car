@@ -203,3 +203,16 @@ including the previously timed-out loopback CLI and no-allocation checks.
 Keep the separate prior Windows experimental determinism timeout explicit.
 Finish #254 under standing scoped publication/merge authorization. No
 cybersecurity, Daybreak, Unreal or physical qualification scope is added.
+
+## M23-04 activation after PR #254
+
+PR #254 merged at `03e4c36b24a7a4a6a2a6083aef26b6f45b1dcd9e`; all 32
+exact-head checks passed at `f9796335a7e706bb76f97a79dbe76939a86b8247`.
+M23-04 is now active under canonical control PR #488, merge
+`49b134215e74b2d6f27ae1cab3801ac9dc8c139d`. Implement the separately bounded
+HAL/CUDA/XDMA/pipeline benchmark and optional real-session paths. Preserve
+Runtime, drivers, framework/schema/validator and prior providers/repair evidence.
+The dependency queue already authorizes scoped software publication/integration.
+No cybersecurity, Daybreak or Unreal work. Missing real devices report NOT RUN.
+M23-05 and physical characterization remain separate; no completed work is
+reopened by the historical checkpoint text above.

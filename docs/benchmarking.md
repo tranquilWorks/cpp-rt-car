@@ -390,3 +390,10 @@ inside their declared lifecycle measurement; these cases are not allocation-free
 invoke cases. Runtime/backend/callback storage stays alive through checked stop.
 Linux CLI regression coverage also executes both cases with a 512 KiB caller
 stack. It does not change Runtime-owned stack policy or any ordinary workload.
+
+## Device source-example provider
+
+The optional `rtfw.device` catalog covers public HAL, CUDA, XDMA, explicit host
+staging and complete Runtime pipelines. See [device benchmarking](device_benchmarking.md)
+for timing boundaries, protocol versus real-driver identity, optional native
+hosts, caller-owned session lifetimes and missing-hardware NOT RUN behavior.

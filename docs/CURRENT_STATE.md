@@ -1,5 +1,22 @@
 # Current state
 
+M23-04 software implementation is complete; final integration is tracked in PR #260 under merged
+control #488 (`49b134215e74b2d6f27ae1cab3801ac9dc8c139d`, canonical blob
+`479bbb95244b1ad7817158bf025dcc12568e8af3`). It preserves merged #254 at
+`03e4c36b24a7a4a6a2a6083aef26b6f45b1dcd9e` and all integrated Runtime repairs.
+
+The 68-case device provider includes actual HAL/CUDA/XDMA candidates, bounded
+protocol faults, explicit host staging, complete Runtime kernel/graph pipelines,
+functional supplied-session paths and optional native CUDA/XDMA/combined hosts.
+Eleven focused tests, all CLI oracles and steady allocation checks pass locally.
+The final installed/relocated/embedded package chain, ASan/UBSan device tests
+and allocation guard pass. Full-profile and exact-head hosted/merge outcomes are
+recorded in PR #260. See `docs/evidence/M23-04-acceptance-2026-09-24.md` and the retained
+implementation evidence for coverage and failures. Physical characterization is
+NOT RUN because no accessible bench is present. M23-05 remains separate.
+
+## Historical M23-03 completion checkpoint
+
 M23-03 implementation and portable local verification are complete: 87 public
 Runtime benchmark cases, all 51 allocation-tracked cases, original 51 CPU cases,
 legacy artifacts, independent owners, sanitizer suites and SDK integration pass.

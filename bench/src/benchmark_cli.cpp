@@ -1,6 +1,7 @@
 #include <rtfw/benchmark.hpp>
 #include "cpu_provider.hpp"
 #include "runtime_provider.hpp"
+#include "device_provider.hpp"
 #include <iostream>
 #include <map>
 
@@ -56,6 +57,7 @@ int main(int argc,char** argv) {
         Self self;
         b::cpu::Provider cpu;
         b::runtime::Provider runtime;
+        b::device::Provider device;
         b::ProviderV1 provider;
         provider.id="rtfw.self"; provider.case_count=1; provider.user=&self;
         provider.describe=describe; provider.invoke=invoke;
@@ -65,6 +67,8 @@ int main(int argc,char** argv) {
         if (runner.register_provider(cpu.table(),cpu_handle)!=b::Status::ok) return 1;
         b::ProviderHandle runtime_handle;
         if (runner.register_provider(runtime.table(),runtime_handle)!=b::Status::ok) return 1;
+        b::ProviderHandle device_handle;
+        if (runner.register_provider(device.table(),device_handle)!=b::Status::ok) return 1;
         if (command=="list") {
             for (const auto& id:runner.list()) std::cout << id << '\n';
         } else {
@@ -85,13 +89,26 @@ int main(int argc,char** argv) {
                     std::cerr << "Runtime fixture preparation failed\n";
                     return 1;
                 }
+                if (selected=="rtfw.device") {
+                    const auto prepared=device.prepare(d.case_id);
+                    if (prepared!=b::Status::ok && prepared!=b::Status::not_run) {
+                        std::cerr << "Device fixture preparation failed\n";
+                        return 1;
+                    }
+                }
                 std::uint64_t counter=0;
                 auto clock=b::steady_clock();
                 if (kind==b::ClockKind::fake) { clock.kind=kind; clock.user=&counter; clock.read_ns=fake_clock; }
-                const auto result=runner.run(selected,d.case_id,clock,b::capture_identity());
+                auto identity=b::capture_identity();
+                if(selected=="rtfw.device") {
+                    const bool real=d.case_id.starts_with("real-");
+                    identity.backend=real ? "not_available" : "public-"+d.subsystem;
+                    identity.driver=real ? "not_available" : d.subsystem=="host-staging" ? "not_applicable" : "benchmark-owned-protocol-fixture";
+                }
+                const auto result=runner.run(selected,d.case_id,clock,identity);
                 // A failed checked stop must never publish a success bundle.
                 // The unchanged schema cannot encode a post-run cleanup error.
-                if (cpu.finish()!=b::Status::ok || runtime.finish()!=b::Status::ok) {
+                if (cpu.finish()!=b::Status::ok || runtime.finish()!=b::Status::ok || device.finish()!=b::Status::ok) {
                     std::cerr << "fixture cleanup failed\n";
                     return 1;
                 }
@@ -103,7 +120,8 @@ int main(int argc,char** argv) {
                 if (result.status!=b::Status::ok) return result.status==b::Status::not_run ? 3 : 1;
             }
         }
-        return runner.unregister_provider(runtime_handle)==b::Status::ok &&
+        return runner.unregister_provider(device_handle)==b::Status::ok &&
+               runner.unregister_provider(runtime_handle)==b::Status::ok &&
                runner.unregister_provider(cpu_handle)==b::Status::ok &&
                runner.unregister_provider(handle)==b::Status::ok ? 0 : 1;
     } catch (...) {
