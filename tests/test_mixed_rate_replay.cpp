@@ -202,7 +202,9 @@ void verify_watchdog_replay(std::uint32_t cap, unsigned mode, bool live) {
     rt::ArtifactWriteResult write;
     ASSERT_EQ(runtime.write_checkpoint(0, checkpoint, write), rt::Status::ok);
     rt::LiveControlProducerHandle producer;
-    if (live) ASSERT_EQ(runtime.live_control_producer_handle(101, 1001, producer), rt::Status::ok);
+    if (live) {
+        ASSERT_EQ(runtime.live_control_producer_handle(101, 1001, producer), rt::Status::ok);
+    }
     std::array<rt::ReplayInputRecord, 8> inputs{};
     std::uint64_t expected_state = 0;
     for (std::size_t i = 0; i < inputs.size(); ++i) {
