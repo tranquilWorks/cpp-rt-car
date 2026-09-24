@@ -1465,8 +1465,21 @@ void emit_action(
                  ++index) {
                 const auto state = mailbox.slots[index].state.load(
                     std::memory_order_acquire);
-                if (state == LiveControlMailboxSet::Impl::SlotState::free ||
-                    terminal_state(state)) {
+                if (state == LiveControlMailboxSet::Impl::SlotState::free) {
+                    slot_index = index;
+                    break;
+                }
+            }
+        }
+        if (slot_index == mailbox.registration.record_capacity) {
+            // Match stage(): unused slots precede reclaimable terminal slots.
+            // Terminal records remain part of the canonical checkpoint state;
+            // reclaiming one early changes nested active replay's state hash.
+            for (std::size_t index = 0;
+                 index < mailbox.registration.record_capacity;
+                 ++index) {
+                if (terminal_state(mailbox.slots[index].state.load(
+                        std::memory_order_acquire))) {
                     slot_index = index;
                     break;
                 }
@@ -3706,9 +3719,10 @@ bool LiveControlMailboxSet::begin_replay(
     if (!impl_ || !impl_->closure || impl_->closure->replay_view ||
         impl_->closure->transaction_active.load(std::memory_order_acquire) ||
         view.metadata.policy_identity != impl_->closure->policy.policy_identity ||
-        view.metadata.retained_record_count > total_record_capacity(*impl_) ||
+        view.metadata.retained_record_count >
+            impl_->closure->policy.retained_record_capacity ||
         view.metadata.retained_payload_bytes >
-            impl_->total_payload_storage_bytes) {
+            impl_->closure->policy.retained_payload_bytes) {
         return false;
     }
     impl_->closure->replay_active.store(true, std::memory_order_release);

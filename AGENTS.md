@@ -5,7 +5,8 @@ portable product is release 1.2.1 at RT0 with stable C ABI v8, SONAME 8, device
 ABI v1, and Apache-2.0. M14, M14.1, M15, M16, and the portable M17 software
 path through M17-06 are complete, while hardware/RT qualification remains
 incomplete. M20-PRE-01, M21-01 through M21-05, and M22-01 through M22-04 are
-merged. M23-01 is merged as PR #251; M23-02 is the active approved batch.
+merged. M23-01 and M23-02 are merged. M23-03R is the active approved repair batch;
+M23-03 remains an unmerged benchmark draft.
 M16-01 supplies the exact reference timeline, M16-02 adds deterministic
 CPU-only cross-rate channel selection and bounded SPSC stores, and M16-03 adds
 opt-in mandatory admission, dispatch, transfer, and late actions. M16-04 adds
@@ -139,11 +140,17 @@ mandatory hardware/RT evidence, signing, release, or deployment gate. See
   not actually produced.
 <!-- END PORTFOLIO-CONTROL MANAGED -->
 
-## M23-02 delivery frontier
+## M23-03R continuation (2026-09-23)
 
-The CPU graph/executor/memory provider is the current implementation batch.
-The optional M23-01 host-side C++20 benchmark runner is the merged foundation. Read `docs/benchmarking.md` and the complete canonical contract referenced
-by `contracts/active-batch.yaml`. Do not confuse checked source publication with
-passed CI, human API/privacy review, milestone completion, or release promotion.
-Preserve a verified Git bundle and commit/PR identifiers before ending a session;
-an empty tree comparison must never be described as product delivery.
+Canonical repair scope is integrated in portfolio-control PR #369 at
+`9094bea6df8bace121f0c27e603d38cea795bed8`. Target baseline is `3df07d756c626fd5453c62a23920c6e521c867e5`;
+Runtime is unchanged from the original reproducer baseline `795a56c`.
+The current repair corrects replay slot preference and retained-history bounds.
+Replacement payloads and rejected-admission mailbox attribution are missing from
+format-v1 history, so M23-03R and M23-03 acceptance remain incomplete. Preserve
+final state/transcript comparison and the failing public consumer modes. A
+separate reviewed format-evolution contract is required before changing schemas.
+Continue non-Unreal software development under the standing scoped publication
+and integration authorization; the prior owner hosted-utilization waiver does
+not waive functional failures. Real hardware characterization is requested, but
+this workspace exposes no CUDA/XDMA/serial device or configured remote bench.

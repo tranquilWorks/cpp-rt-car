@@ -1,5 +1,35 @@
 # Current state
 
+## 2026-09-23 continuation: M23-03R partial repair
+
+Target baseline: `3df07d756c626fd5453c62a23920c6e521c867e5` (PR #255).
+Control repair contract: PR #369, merge `9094bea6df8bace121f0c27e603d38cea795bed8`.
+The original PR #254 benchmark draft and September 8 evidence are preserved.
+
+The minimal nested replay reproducer now succeeds. Replay now selects free
+mailbox slots before reclaiming terminal records, matching admission, and checks
+aggregate retained history against the retention policy instead of simultaneous
+mailbox occupancy. New public-API coverage exercises two/eight frames, host/rate
+targets, two mailboxes, reclamation, repeated/concurrent instances, malformed
+inputs and final-state mismatch detection.
+
+This does not close M23-03R. Format v1 omits non-surviving replacement payloads
+and the mailbox attribution of rejected admissions. The separate public consumer
+`live_control_replay_consumer.cpp` preserves `--replaced` and `--rejected`
+reproductions; both still return `incompatible_artifact`. All 78 draft benchmark
+cases were diagnostically linked to this repaired Runtime: 76 pass and the two
+fault compositions still fail. No benchmark gate or state comparison is waived.
+A reviewed artifact-version decision is required before the next repair; see
+[evidence](evidence/M23-03R-2026-09-23.md). Do not merge this partial target repair
+as completed acceptance or advance M23-04/M24-M26 on a false closure.
+
+The owner requests non-Unreal development/integration and real hardware
+characterization. No device nodes or configured remote bench are available here.
+Portable checks do not characterize the owner's CPU/GPU/FPGA system. Release,
+support matrices, public headers/ABIs and format versions remain unchanged.
+
+### Retained earlier handoff
+
 Last audited: 2026-09-07
 Planning baseline: `b52b42a6c64066553ce55fb08c874061d78e036e`
 Continuation baseline: `543af2b4728a171243e6d756554efa188c2e7d2f` (merged PR #252)

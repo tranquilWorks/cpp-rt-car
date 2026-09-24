@@ -295,3 +295,17 @@ artifact generation replay in addition to staging and exact publication. It is
 not evidence for arbitrary application/backend/physical side-effect rollback,
 physical control, HIL, controlled latency, RT1/RT2, executable or Unreal hot
 reload, support promotion, release, deployment, or production readiness.
+
+
+## Nested active replay continuation limitation (2026-09-23)
+
+M23-03R repairs free-before-terminal slot selection and distinguishes retained
+history capacity from simultaneous mailbox capacity. Canonical state and action
+comparison remain enabled. Version-1 replay history does not retain replaced
+payload bytes, and rejected-admission actions omit the mailbox association needed
+to restore its counters. Nested active replay can therefore still reject these
+histories with `incompatible_artifact` even when application bytes and surviving
+generations match. Do not treat matching application bytes as replay acceptance.
+See `tests/package_consumer/live_control_replay_consumer.cpp` and the retained
+M23-03R evidence. Format evolution is a separate scope; this repair changes no
+public header, ABI, serializer or artifact version.
