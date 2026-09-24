@@ -3,8 +3,10 @@
 M23-03 implementation and portable local verification are complete: 87 public
 Runtime benchmark cases, all 51 allocation-tracked cases, original 51 CPU cases,
 legacy artifacts, independent owners, sanitizer suites and SDK integration pass.
-The source includes verified replay, watchdog and device wake repairs. Hosted Windows Debug reports a native crash during the all-case benchmark test;
-case/stage diagnostics are being added and PR #254 remains draft. Final
+The source includes verified replay, watchdog and device wake repairs. The Windows Debug crash was narrowed to a large automatic loopback fixture.
+A bounded-stack negative control reproduces it; invocation-owned heap storage
+passes the same 512 KiB caller-stack regression. Final hosted verification and
+integration of that correction are tracked in PR #254. Final
 exact-head hosted CI and merge identity are recorded in PR #254; the acceptance
 map and retained failures are in the completion/integration evidence. M23 and
 CAP-M23 remain open for separate M23-04/M23-05 scopes. Physical characterization

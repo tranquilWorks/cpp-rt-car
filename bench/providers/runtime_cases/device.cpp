@@ -460,7 +460,10 @@ struct DeviceFailure final:Fixture {
     Case c;
     explicit DeviceFailure(const Case& value):c(value){}
     Measures run(std::uint64_t) override {
-        Loopback fixture(c);Measures m;
+        // The fixed telemetry buffers are too large for a bounded caller stack.
+        // This lifecycle scope includes allocation and retains the entire owner
+        // until the checked stop below has drained accepted work.
+        auto owned=std::make_unique<Loopback>(c);auto& fixture=*owned;Measures m;
         const bool timeout=std::string_view(c.mode)=="timeout";
         const auto expected=timeout?rt::Status::device_timeout:rt::Status::device_error;
         const auto fault=timeout?rt::SampledIoLoopbackFault::completion_timeout:rt::SampledIoLoopbackFault::completion_error;

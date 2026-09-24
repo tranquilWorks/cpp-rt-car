@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -61,4 +62,21 @@ with tempfile.TemporaryDirectory(prefix='m23-runtime-') as tmp:
     assert not missing.exists()
     steady=root/'steady';ran=command('run','--provider','rtfw.runtime','--case','rate-dispatch-8-d1-s1','--clock','steady','--output',steady)
     assert ran.returncode==0 and validator.validate_bundle(steady)['evidence_class']=='portable_characterization'
+    if sys.platform=='linux':
+        import resource
+        def bounded_caller_stack():
+            _,hard=resource.getrlimit(resource.RLIMIT_STACK)
+            resource.setrlimit(resource.RLIMIT_STACK,(512*1024,hard))
+        # These lifecycle cases create large fixed telemetry buffers. Exercise
+        # their real CLI entry point with a bounded caller stack; Runtime-owned
+        # resource budgets, workloads and the normal catalog sweep are unchanged.
+        for id in ('device-failure-nonpublication','device-timeout-nonpublication'):
+            output=root/('bounded-stack-'+id)
+            ran=subprocess.run([str(cli),'run','--provider','rtfw.runtime','--case',id,
+                '--clock','fake','--output',str(output)],capture_output=True,text=True,
+                timeout=600,preexec_fn=bounded_caller_stack)
+            assert ran.returncode==0,(id,'512 KiB caller stack',ran.returncode,ran.stderr)
+            result=validator.validate_bundle(output)
+            assert result['status']=='ok' and result['warmup_completed']==2 and result['measured_completed']==5
+        print('Runtime lifecycle caller-stack checks: 2 cases at 512 KiB validated')
 print(f'Runtime inventory: {len(rows)} cases validated')

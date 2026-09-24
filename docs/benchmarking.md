@@ -381,3 +381,12 @@ The replay prerequisites are integrated as PR #256 (lossless opt-in v2) and
 PR #258 (actual prior watchdog level at saturation). Original failed evidence
 remains in `docs/evidence/M23-03-2026-09-08.md` and the continuation ledger.
 Final verification is tracked in PR #254; M23-04 and M23-05 remain separate work.
+
+
+The two device failure/timeout lifecycle cases allocate their large fixed
+loopback fixture on an invocation-owned heap allocation. Construction, allocation,
+public fault injection, complete frame, checked stop and deallocation all remain
+inside their declared lifecycle measurement; these cases are not allocation-free
+invoke cases. Runtime/backend/callback storage stays alive through checked stop.
+Linux CLI regression coverage also executes both cases with a 512 KiB caller
+stack. It does not change Runtime-owned stack policy or any ordinary workload.
