@@ -68,8 +68,9 @@ struct Scenario {
 };
 
 void check_round_trip(std::uint32_t frames, std::uint32_t capacity,
-                     std::uint32_t mailboxes, bool rate_target,
-                     bool corrupt_application = false) {
+                      std::uint32_t mailboxes, bool rate_target,
+                      bool corrupt_application = false, bool lossless = false,
+                      bool replaced = false, bool rejected = false) {
     Scenario scenario;
     auto& runtime = scenario.runtime;
     auto& work = scenario.work;
@@ -116,6 +117,14 @@ void check_round_trip(std::uint32_t frames, std::uint32_t capacity,
     closure.replay_max_bytes = 131072;
     closure.replay_enabled = true;
     ASSERT_EQ(runtime.set_live_control_closure_policy(closure), rt::Status::ok);
+    if (lossless) {
+        rt::LiveControlReplayRetentionPolicy retention;
+        retention.policy_identity = 77;
+        retention.admission_capacity = 128;
+        retention.payload_capacity_bytes = 1024;
+        ASSERT_EQ(runtime.set_live_control_replay_retention_policy(retention),
+                  rt::Status::ok);
+    }
     rt::PhaseHandle phase;
     rt::RateDomainHandle domain;
     ASSERT_EQ(runtime.register_callback({"work", ReplayWork::callback, &work},
@@ -177,6 +186,26 @@ void check_round_trip(std::uint32_t frames, std::uint32_t capacity,
                 update.rate_release_sequence = release.domain_release_sequence;
             }
             rt::LiveControlAdmissionResult admission;
+            if (replaced) {
+                payload[0] = static_cast<std::byte>(frame + 100);
+                update.producer_sequence = 2 * frame - 1;
+                update.payload_digest = rt::live_control_payload_digest(payload);
+                ASSERT_EQ(runtime.stage_live_control_update(handle, update, payload,
+                                                            admission),
+                          rt::Status::ok);
+                ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);
+                payload[0] = static_cast<std::byte>(frame);
+                update.producer_sequence = 2 * frame;
+                update.payload_digest = rt::live_control_payload_digest(payload);
+            }
+            if (rejected) {
+                update.payload_digest ^= 1;
+                ASSERT_EQ(runtime.stage_live_control_update(handle, update, payload,
+                                                            admission),
+                          rt::Status::ok);
+                ASSERT_EQ(admission, rt::LiveControlAdmissionResult::invalid);
+                update.payload_digest ^= 1;
+            }
             ASSERT_EQ(runtime.stage_live_control_update(handle, update, payload,
                                                          admission), rt::Status::ok);
             ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);
@@ -208,6 +237,14 @@ void check_round_trip(std::uint32_t frames, std::uint32_t capacity,
         EXPECT_EQ(work.state[0], expected_state);
         EXPECT_EQ(work.calls, frames);
     }
+    if (!lossless && (replaced || rejected)) {
+        EXPECT_EQ(runtime.replay_live_control(artifact, no_input, nullptr),
+                  rt::Status::incompatible_artifact);
+        EXPECT_EQ(work.state[0], expected_state);
+        EXPECT_EQ(work.calls, frames);
+        return;
+    }
+    EXPECT_EQ(metadata.schema_version, lossless ? 2u : 1u);
     for (unsigned repeat = 0; repeat < 2; ++repeat) {
         work.calls = 0;
         work.generations = {};
@@ -233,15 +270,18 @@ void check_round_trip(std::uint32_t frames, std::uint32_t capacity,
         for (std::uint32_t index = 0; index < mailboxes; ++index) {
             rt::LiveControlMailboxInfo info;
             ASSERT_TRUE(runtime.live_control_mailbox_info(index + 1, info));
-            EXPECT_EQ(info.accepted, frames);
-            EXPECT_EQ(info.next_mailbox_sequence, frames + 1);
+            const auto admissions = frames * (replaced ? 2u : 1u);
+            EXPECT_EQ(info.accepted, admissions);
+            EXPECT_EQ(info.invalid, rejected ? frames : 0u);
+            EXPECT_EQ(info.next_mailbox_sequence, admissions + 1);
             EXPECT_EQ(info.occupancy, 0u);
             // Latest records retain their status and copied bytes after replay.
             rt::LiveControlRecordStatusInfo record;
-            ASSERT_TRUE(runtime.live_control_record_status(index + 1, frames, record));
+            ASSERT_TRUE(
+                runtime.live_control_record_status(index + 1, admissions, record));
             EXPECT_EQ(record.status, rt::LiveControlRecordStatus::committed);
             std::array<std::byte, 8> payload{};
-            ASSERT_EQ(runtime.copy_live_control_payload(index + 1, frames, payload),
+            ASSERT_EQ(runtime.copy_live_control_payload(index + 1, admissions, payload),
                       rt::Status::ok);
             EXPECT_EQ(payload[0], static_cast<std::byte>(frames));
         }
@@ -272,6 +312,32 @@ TEST(LiveControlActiveReplay, FinalApplicationStateDivergenceStillFails) {
 TEST(LiveControlActiveReplay, ConcurrentRuntimeInstancesAreIsolated) {
     std::thread first([] { check_round_trip(8, 8, 1, false); });
     std::thread second([] { check_round_trip(8, 2, 2, true); });
+    first.join();
+    second.join();
+}
+
+TEST(LiveControlActiveReplay, LosslessReplacementsAndRejectionsPreserveAllState) {
+    for (auto frames : {2u, 8u}) {
+        for (bool rate : {false, true}) {
+            check_round_trip(frames, 2, 2, rate, false, true, true, true);
+        }
+    }
+}
+
+TEST(LiveControlActiveReplay, LosslessApplicationDivergenceStillFails) {
+    check_round_trip(2, 4, 2, false, true, true, true, true);
+}
+
+TEST(LiveControlActiveReplay, IncompleteV1HistoriesRejectBeforeRestore) {
+    check_round_trip(2, 4, 1, false, false, false, true, false);
+    check_round_trip(2, 4, 1, true, false, false, false, true);
+}
+
+TEST(LiveControlActiveReplay, ConcurrentLosslessInstancesRemainIsolated) {
+    std::thread first(
+        [] { check_round_trip(8, 2, 2, false, false, true, true, true); });
+    std::thread second(
+        [] { check_round_trip(8, 4, 1, true, false, true, true, true); });
     first.join();
     second.join();
 }

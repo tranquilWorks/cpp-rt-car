@@ -1,5 +1,28 @@
 # Handoff
 
+## 2026-09-24: approved M23-03R2 reconstruction and verification
+
+The owner approved opt-in lossless trusted replay v2 and merged Portfolio Control
+PR #463 (`092bab84f4228acc35a2eacf024ba0a61d1fe2e7`). Draft target PR #256
+preserves the recovered R1 repair and active scope. The earlier unpublished v2
+candidate was removed by workspace maintenance; it is being reconstructed and
+freshly verified. See [recovery/evidence](evidence/M23-03R2-2026-09-24.md).
+
+The reconstructed public replacement and rejection reproducers pass, preserving
+original payloads and admission counters. The opt-in adds bounded admission
+retention, pre-restore ownership validation, complete canonical state comparison
+and unchanged payload-free telemetry. Default v1 remains unchanged and rejects
+incomplete old histories explicitly. Full, sanitizer, package and integration gates
+remain in progress; historical test results do not validate reconstructed source.
+
+After integrating the verified repair, separately amend the M23-03 contract for
+explicit v2 composition fixtures, reconcile draft #254 and run all 78 cases plus
+remaining benchmark acceptance. Continue dependency-ready planned software scope.
+Unreal remains excluded. Real hardware characterization, support promotion and
+release require their distinct actual evidence and authorization.
+
+### Historical R1 checkpoint (superseded by the active R2 scope)
+
 ## 2026-09-23 continuation: M23-03R partial repair
 
 Target baseline: `3df07d756c626fd5453c62a23920c6e521c867e5` (PR #255).

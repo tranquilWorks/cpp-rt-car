@@ -1632,6 +1632,14 @@ struct Runtime::Impl {
                         live_control_closure_policy.replay_record_capacity);
                     hash_u64(hash,
                         live_control_closure_policy.replay_max_bytes);
+                    if (live_control_retention_policy.policy_identity != 0) {
+                        hash_u64(hash, live_control_lossless_replay_schema_version);
+                        hash_u64(hash, live_control_retention_policy.policy_identity);
+                        hash_u64(hash,
+                                 live_control_retention_policy.admission_capacity);
+                        hash_u64(hash,
+                                 live_control_retention_policy.payload_capacity_bytes);
+                    }
                 }
             }
         }
@@ -6030,6 +6038,7 @@ struct Runtime::Impl {
     bool live_control_policy_set = false;
     bool live_control_policy_configured = false;
     LiveControlClosurePolicy live_control_closure_policy{};
+    LiveControlReplayRetentionPolicy live_control_retention_policy{};
     bool live_control_closure_policy_set = false;
     bool live_control_closure_policy_configured = false;
     CpuMemoryPolicy cpu_memory_policy{};
@@ -6467,6 +6476,35 @@ Status Runtime::set_live_control_closure_policy(
     impl_->live_control_closure_policy = policy;
     impl_->live_control_closure_policy_set = enabled;
     impl_->live_control_closure_policy_configured = true;
+    impl_->clear_error();
+    return Status::ok;
+}
+
+Status Runtime::set_live_control_replay_retention_policy(
+    const LiveControlReplayRetentionPolicy& policy) noexcept {
+    if (!impl_) {
+        return Status::internal_error;
+    }
+    if (impl_->provider_callback_active() ||
+        impl_->state != RuntimeState::configuring ||
+        impl_->live_control_retention_policy.policy_identity != 0 ||
+        !impl_->live_control_closure_policy_set ||
+        !impl_->live_control_closure_policy.replay_enabled) {
+        return impl_->fail(Status::invalid_state,
+                           "trusted retention requires an unfrozen replay closure");
+    }
+    if (policy.schema_version != live_control_lossless_replay_schema_version ||
+        policy.struct_size != sizeof(policy) || policy.policy_identity == 0 ||
+        policy.admission_capacity == 0 ||
+        policy.admission_capacity > live_control_action_capacity_limit ||
+        policy.payload_capacity_bytes == 0 ||
+        policy.payload_capacity_bytes > live_control_total_storage_limit ||
+        !std::all_of(policy.reserved.begin(), policy.reserved.end(),
+                     [](std::byte b) { return b == std::byte{0}; })) {
+        return impl_->fail(Status::invalid_argument,
+                           "trusted retention fields or capacities are invalid");
+    }
+    impl_->live_control_retention_policy = policy;
     impl_->clear_error();
     return Status::ok;
 }
@@ -8910,17 +8948,12 @@ Status Runtime::finalize() noexcept {
         }
         const char* live_control_diagnostic = nullptr;
         const auto live_control_status = detail::LiveControlMailboxSet::create(
-            impl_->live_control_policy,
-            impl_->live_control_closure_policy,
+            impl_->live_control_policy, impl_->live_control_closure_policy,
             impl_->live_control_closure_policy_set,
-            live_control_runtime_id,
-            1,
-            impl_->config.memory_budget_bytes,
-            impl_->live_control_mailbox_declarations,
-            impl_->live_control_producer_declarations,
-            compiled_rate_plan.releases,
-            live_control_mailboxes,
-            live_control_diagnostic);
+            impl_->live_control_retention_policy, live_control_runtime_id, 1,
+            impl_->config.memory_budget_bytes, impl_->live_control_mailbox_declarations,
+            impl_->live_control_producer_declarations, compiled_rate_plan.releases,
+            live_control_mailboxes, live_control_diagnostic);
         if (live_control_status != Status::ok) {
             return impl_->fail(
                 live_control_status,
@@ -14710,7 +14743,13 @@ Status Runtime::write_live_control_replay_artifact(
     metadata.state_schema_id = impl_->state_schema_id;
     metadata.policy_identity =
         impl_->live_control_closure_policy.policy_identity;
-    metadata.final_state_hash = impl_->registered_application_state_hash();
+    metadata.schema_version = impl_->live_control_retention_policy.policy_identity != 0
+                                  ? live_control_lossless_replay_schema_version
+                                  : live_control_replay_schema_version;
+    metadata.final_state_hash =
+        metadata.schema_version == live_control_lossless_replay_schema_version
+            ? impl_->state_hash()
+            : impl_->registered_application_state_hash();
     metadata.nested_kind = nested_kind;
     metadata.determinism_tier = impl_->config.determinism_tier;
     metadata.build_id = impl_->observability.build_id;
@@ -14800,11 +14839,6 @@ Status Runtime::replay_live_control(
                 "live-control replay artifact cannot overlap registered state");
         }
     }
-    if (!impl_->live_control_mailboxes->validate_replay_artifact(view)) {
-        return impl_->fail(
-            Status::incompatible_artifact,
-            "live-control replay topology or checkpoint state is incompatible");
-    }
     if (!impl_->live_control_mailboxes->claim_all()) {
         return impl_->fail(
             Status::invalid_state,
@@ -14821,6 +14855,11 @@ Status Runtime::replay_live_control(
         }
     } mailbox_guard{*impl_->live_control_mailboxes};
 
+    if (!impl_->live_control_mailboxes->validate_replay_artifact(view)) {
+        return impl_->fail(
+            Status::incompatible_artifact,
+            "live-control replay topology or checkpoint state is incompatible");
+    }
     Status nested_status = Status::ok;
     if (view.metadata.nested_kind ==
         LiveControlNestedArtifactKind::input_log) {
@@ -14840,6 +14879,18 @@ Status Runtime::replay_live_control(
             return impl_->fail(
                 Status::invalid_artifact,
                 "nested ordinary replay artifacts are incompatible");
+        }
+        if (input_metadata.runtime_version_major != version_major ||
+            input_metadata.determinism_tier != impl_->config.determinism_tier ||
+            input_metadata.replay_id != impl_->replay_id ||
+            input_metadata.state_schema_id != impl_->state_schema_id ||
+            input_metadata.workload_id != impl_->observability.workload_id ||
+            (input_metadata.record_count != 0 &&
+             input_metadata.first_frame_index <=
+                 checkpoint_metadata.checkpoint_frame_index)) {
+            return impl_->fail(
+                Status::incompatible_artifact,
+                "nested input identity or checkpoint ordering is incompatible");
         }
         const auto restore_status = restore_checkpoint(view.checkpoint, nullptr);
         if (restore_status != Status::ok) {
@@ -14979,9 +15030,13 @@ Status Runtime::replay_live_control(
     if (live_mismatch != Status::ok) {
         nested_status = live_mismatch;
     }
-    output.final_state_hash = impl_->registered_application_state_hash();
+    output.final_state_hash =
+        view.metadata.schema_version == live_control_lossless_replay_schema_version
+            ? impl_->state_hash()
+            : impl_->registered_application_state_hash();
     if (live_mismatch == Status::ok &&
-        view.metadata.final_state_hash != 0 &&
+        (view.metadata.schema_version == live_control_lossless_replay_schema_version ||
+         view.metadata.final_state_hash != 0) &&
         output.final_state_hash != view.metadata.final_state_hash) {
         nested_status = Status::invalid_artifact;
     }

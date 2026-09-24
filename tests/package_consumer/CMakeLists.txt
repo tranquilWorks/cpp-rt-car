@@ -150,6 +150,9 @@ add_test(NAME installed_loopback COMMAND rtfw_consumer_loopback)
 add_test(NAME installed_mixed_rate COMMAND rtfw_consumer_mixed_rate)
 add_test(NAME installed_live_control COMMAND rtfw_consumer_live_control)
 add_test(NAME installed_live_control_replay COMMAND rtfw_consumer_live_control_replay)
+add_test(NAME installed_live_control_replay_replaced COMMAND rtfw_consumer_live_control_replay --replaced)
+add_test(NAME installed_live_control_replay_rejected COMMAND rtfw_consumer_live_control_replay --rejected)
+
 add_test(
     NAME installed_live_control_sdk
     COMMAND rtfw_consumer_live_control_sdk)

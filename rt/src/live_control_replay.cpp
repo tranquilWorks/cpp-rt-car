@@ -12,6 +12,7 @@ namespace rt::detail {
 namespace {
 
 constexpr std::uint64_t kMagic = 0x3152434c57465452ull; // RTFWLCR1
+constexpr std::uint64_t kMagicV2 = 0x3252434c57465452ull; // RTFWLCR2
 constexpr std::uint64_t kFnvOffset = 14695981039346656037ull;
 constexpr std::uint64_t kFnvPrime = 1099511628211ull;
 
@@ -232,20 +233,46 @@ template <std::size_t Size>
 } // namespace
 
 Status encode_live_control_replay_artifact(
-    LiveControlReplayMetadata metadata,
-    std::span<const std::byte> checkpoint,
-    std::span<const std::byte> nested_artifact,
-    std::uint64_t first_action_sequence,
-    std::size_t action_count,
-    LiveControlActionReader action_reader,
-    std::size_t generation_count,
-    LiveControlGenerationReader generation_reader,
-    LiveControlRetainedRecordReader record_reader,
-    void* reader_context,
-    std::size_t maximum_bytes,
-    std::span<std::byte> output,
-    ArtifactWriteResult& result) noexcept {
+    LiveControlReplayMetadata metadata, std::span<const std::byte> checkpoint,
+    std::span<const std::byte> nested_artifact, std::uint64_t first_action_sequence,
+    std::size_t action_count, LiveControlActionReader action_reader,
+    std::size_t generation_count, LiveControlGenerationReader generation_reader,
+    LiveControlRetainedRecordReader record_reader, void* reader_context,
+    std::size_t maximum_bytes, std::span<std::byte> output, ArtifactWriteResult& result,
+    std::uint64_t retention_policy_identity, std::size_t admission_count,
+    LiveControlAdmissionReader admission_reader,
+    std::uint64_t admission_close_sequence) noexcept {
     result = {};
+    const bool lossless =
+        metadata.schema_version == live_control_lossless_replay_schema_version;
+    const auto header_size = lossless ? live_control_lossless_replay_header_size
+                                      : live_control_replay_header_size;
+    std::size_t admission_payload_bytes = 0;
+    std::size_t admission_bytes = 0;
+    if ((!lossless && metadata.schema_version != live_control_replay_schema_version) ||
+        (lossless && (retention_policy_identity == 0 || !admission_reader ||
+                      admission_count > live_control_action_capacity_limit)) ||
+        (!lossless && (retention_policy_identity != 0 || admission_count != 0))) {
+        return Status::invalid_argument;
+    }
+    if (lossless) {
+        std::uint64_t previous = 0;
+        for (std::size_t index = 0; index < admission_count; ++index) {
+            LiveControlRetainedAdmission admission;
+            std::span<const std::byte> payload;
+            if (!admission_reader(reader_context, index, admission, payload) ||
+                (index != 0 && admission.action_sequence <= previous) ||
+                !add_size(admission_payload_bytes, payload.size(),
+                          admission_payload_bytes)) {
+                return Status::invalid_artifact;
+            }
+            previous = admission.action_sequence;
+        }
+        if (!multiply_size(admission_count, live_control_replay_admission_bytes,
+                           admission_bytes)) {
+            return Status::capacity_exceeded;
+        }
+    }
     CheckpointMetadata checkpoint_metadata;
     if (maximum_bytes == 0 ||
         maximum_bytes > live_control_replay_absolute_max_bytes ||
@@ -303,19 +330,19 @@ Status encode_live_control_replay_artifact(
     std::size_t action_bytes = 0;
     std::size_t generation_bytes = 0;
     std::size_t record_bytes = 0;
-    std::size_t total = live_control_replay_header_size;
-    if (!multiply_size(action_count, live_control_replay_action_bytes,
-                       action_bytes) ||
+    std::size_t total = header_size;
+    if (!multiply_size(action_count, live_control_replay_action_bytes, action_bytes) ||
         !multiply_size(generation_count, live_control_replay_generation_bytes,
                        generation_bytes) ||
-        !multiply_size(record_count, live_control_replay_record_bytes,
-                       record_bytes) ||
+        !multiply_size(record_count, live_control_replay_record_bytes, record_bytes) ||
         !add_size(total, checkpoint.size(), total) ||
         !add_size(total, nested_artifact.size(), total) ||
         !add_size(total, action_bytes, total) ||
         !add_size(total, generation_bytes, total) ||
         !add_size(total, record_bytes, total) ||
-        !add_size(total, payload_bytes, total) || total > maximum_bytes) {
+        !add_size(total, payload_bytes, total) ||
+        !add_size(total, admission_bytes, total) ||
+        !add_size(total, admission_payload_bytes, total) || total > maximum_bytes) {
         return Status::capacity_exceeded;
     }
     result.required_bytes = total;
@@ -324,19 +351,20 @@ Status encode_live_control_replay_artifact(
     }
     auto bytes = output.first(total);
     std::fill(bytes.begin(), bytes.end(), std::byte{0});
-    const auto checkpoint_offset = live_control_replay_header_size;
+    const auto checkpoint_offset = header_size;
     const auto nested_offset = checkpoint_offset + checkpoint.size();
     const auto action_offset = nested_offset + nested_artifact.size();
     const auto generation_offset = action_offset + action_bytes;
     const auto record_offset = generation_offset + generation_bytes;
     const auto payload_offset = record_offset + record_bytes;
+    const auto admission_offset = payload_offset + payload_bytes;
+    const auto admission_payload_offset = admission_offset + admission_bytes;
     const auto last_action_sequence = first_action_sequence + action_count - 1;
     if (last_action_sequence < first_action_sequence ||
-        !store_u64(bytes, 0, kMagic) ||
-        !store_u32(bytes, 8, live_control_replay_schema_version) ||
-        !store_u32(bytes, 12, live_control_replay_header_size) ||
-        !store_u64(bytes, 16, total) ||
-        !store_u64(bytes, 32, metadata.runtime_id) ||
+        !store_u64(bytes, 0, lossless ? kMagicV2 : kMagic) ||
+        !store_u32(bytes, 8, metadata.schema_version) ||
+        !store_u32(bytes, 12, static_cast<std::uint32_t>(header_size)) ||
+        !store_u64(bytes, 16, total) || !store_u64(bytes, 32, metadata.runtime_id) ||
         !store_u64(bytes, 40, metadata.configuration_generation) ||
         !store_u64(bytes, 48, metadata.config_id) ||
         !store_u64(bytes, 56, metadata.replay_id) ||
@@ -456,6 +484,46 @@ Status encode_live_control_replay_artifact(
     (void)store_u64(
         bytes, 376,
         checksum(bytes.subspan(record_offset, record_bytes + payload_bytes)));
+    if (lossless) {
+        (void)store_u64(bytes, 384, retention_policy_identity);
+        (void)store_u64(bytes, 392, admission_offset);
+        (void)store_u32(bytes, 400, static_cast<std::uint32_t>(admission_count));
+        (void)store_u32(bytes, 404, live_control_replay_admission_bytes);
+        (void)store_u64(bytes, 408, admission_payload_offset);
+        (void)store_u64(bytes, 416, admission_payload_bytes);
+        (void)store_u64(bytes, 432, admission_close_sequence);
+        std::size_t payload_cursor = 0;
+        for (std::size_t index = 0; index < admission_count; ++index) {
+            LiveControlRetainedAdmission admission;
+            std::span<const std::byte> payload;
+            if (!admission_reader(reader_context, index, admission, payload)) {
+                return Status::invalid_artifact;
+            }
+            admission.record.runtime_id = 0;
+            admission.record.configuration_generation = 0;
+            const auto offset =
+                admission_offset + index * live_control_replay_admission_bytes;
+            std::memcpy(bytes.data() + offset, &admission.record,
+                        sizeof(admission.record));
+            (void)store_u64(bytes, offset + 128, admission.action_sequence);
+            (void)store_u64(bytes, offset + 136, admission.mailbox_identity);
+            (void)store_u64(bytes, offset + 144, admission.producer_identity);
+            (void)store_u32(bytes, offset + 152, admission.slot_index);
+            bytes[offset + 156] = static_cast<std::byte>(admission.outcome);
+            bytes[offset + 157] = static_cast<std::byte>(admission.counter_changed);
+            (void)store_u64(bytes, offset + 160, payload_cursor);
+            (void)store_u32(bytes, offset + 168,
+                            static_cast<std::uint32_t>(payload.size()));
+            std::copy(payload.begin(), payload.end(),
+                      bytes.data() + admission_payload_offset + payload_cursor);
+            auto hash = kFnvOffset;
+            hash_bytes(hash, bytes.subspan(offset, 176));
+            hash_bytes(hash, payload);
+            (void)store_u64(bytes, offset + 176, hash);
+            payload_cursor += payload.size();
+        }
+        (void)store_u64(bytes, 424, checksum(bytes.subspan(admission_offset)));
+    }
     const auto whole = replay_artifact_checksum(bytes);
     (void)store_u64(bytes, 24, whole);
     result.bytes_written = total;
@@ -500,14 +568,12 @@ Status parse_live_control_replay_artifact(
     std::uint64_t record_payload_hash = 0;
     if (!load_u64(artifact, 0, magic) || !load_u32(artifact, 8, schema) ||
         !load_u32(artifact, 12, header) || !load_u64(artifact, 16, total) ||
-        !load_u64(artifact, 24, whole) ||
-        !load_u64(artifact, 96, offsets[0]) ||
+        !load_u64(artifact, 24, whole) || !load_u64(artifact, 96, offsets[0]) ||
         !load_u64(artifact, 104, checkpoint_bytes) ||
         !load_u64(artifact, 112, checkpoint_hash) ||
         !load_u64(artifact, 120, offsets[1]) ||
         !load_u64(artifact, 128, nested_bytes) ||
-        !load_u64(artifact, 136, nested_hash) ||
-        !load_u64(artifact, 144, offsets[2]) ||
+        !load_u64(artifact, 136, nested_hash) || !load_u64(artifact, 144, offsets[2]) ||
         !load_u64(artifact, 152, first_action) ||
         !load_u64(artifact, 160, last_action) ||
         !load_u32(artifact, 168, action_count) ||
@@ -525,17 +591,20 @@ Status parse_live_control_replay_artifact(
         !load_u64(artifact, 360, action_hash) ||
         !load_u64(artifact, 368, generation_hash) ||
         !load_u64(artifact, 376, record_payload_hash) ||
-        magic != kMagic || schema != live_control_replay_schema_version ||
-        header != live_control_replay_header_size || total != artifact.size() ||
-        whole != replay_artifact_checksum(artifact) || action_count == 0 ||
-        action_stride != live_control_replay_action_bytes ||
+        !((magic == kMagic && schema == live_control_replay_schema_version &&
+           header == live_control_replay_header_size) ||
+          (magic == kMagicV2 && schema == live_control_lossless_replay_schema_version &&
+           header == live_control_lossless_replay_header_size &&
+           artifact.size() >= header)) ||
+        total != artifact.size() || whole != replay_artifact_checksum(artifact) ||
+        action_count == 0 || action_stride != live_control_replay_action_bytes ||
         generation_stride != live_control_replay_generation_bytes ||
         record_stride != live_control_replay_record_bytes ||
         last_action < first_action ||
         last_action == std::numeric_limits<std::uint64_t>::max() ||
         last_action - first_action + 1 != action_count ||
-        determinism > static_cast<std::uint32_t>(
-            DeterminismTier::portable_deterministic)) {
+        determinism >
+            static_cast<std::uint32_t>(DeterminismTier::portable_deterministic)) {
         return Status::invalid_artifact;
     }
     std::size_t checkpoint_end = 0;
@@ -547,22 +616,21 @@ Status parse_live_control_replay_artifact(
     std::size_t record_bytes = 0;
     std::size_t record_end = 0;
     std::size_t payload_end = 0;
-    if (offsets[0] != live_control_replay_header_size ||
+    const bool lossless = schema == live_control_lossless_replay_schema_version;
+    if (offsets[0] != header ||
         !add_size(offsets[0], checkpoint_bytes, checkpoint_end) ||
         checkpoint_end != offsets[1] ||
-        !add_size(offsets[1], nested_bytes, nested_end) ||
-        nested_end != offsets[2] ||
+        !add_size(offsets[1], nested_bytes, nested_end) || nested_end != offsets[2] ||
         !multiply_size(action_count, action_stride, action_bytes) ||
-        !add_size(offsets[2], action_bytes, action_end) ||
-        action_end != offsets[3] ||
+        !add_size(offsets[2], action_bytes, action_end) || action_end != offsets[3] ||
         !multiply_size(generation_count, generation_stride, generation_bytes) ||
         !add_size(offsets[3], generation_bytes, generation_end) ||
         generation_end != offsets[4] ||
         !multiply_size(record_count, record_stride, record_bytes) ||
-        !add_size(offsets[4], record_bytes, record_end) ||
-        record_end != offsets[5] ||
+        !add_size(offsets[4], record_bytes, record_end) || record_end != offsets[5] ||
         !add_size(offsets[5], payload_bytes, payload_end) ||
-        payload_end != artifact.size()) {
+        payload_end > artifact.size() ||
+        (!lossless && payload_end != artifact.size())) {
         return Status::invalid_artifact;
     }
     const auto checkpoint = artifact.subspan(offsets[0], checkpoint_bytes);
@@ -644,6 +712,7 @@ Status parse_live_control_replay_artifact(
         !identifier_valid(metadata.workload_id)) {
         return Status::invalid_artifact;
     }
+    metadata.schema_version = schema;
     metadata.retained_payload_bytes = static_cast<std::uint32_t>(payload_bytes);
     view = {
         metadata,
@@ -655,6 +724,70 @@ Status parse_live_control_replay_artifact(
         static_cast<std::size_t>(offsets[4]),
         static_cast<std::size_t>(offsets[5]),
     };
+    if (lossless) {
+        std::uint64_t identity = 0, admission_offset = 0, payload_offset = 0;
+        std::uint64_t bytes = 0, journal_hash = 0, closed = 0;
+        std::uint32_t count = 0, stride = 0;
+        std::size_t descriptors = 0, journal_end = 0, end = 0;
+        if (!load_u64(artifact, 384, identity) || identity == 0 ||
+            !load_u64(artifact, 392, admission_offset) ||
+            admission_offset != payload_end || !load_u32(artifact, 400, count) ||
+            count > action_count || !load_u32(artifact, 404, stride) ||
+            stride != live_control_replay_admission_bytes ||
+            !load_u64(artifact, 408, payload_offset) ||
+            !load_u64(artifact, 416, bytes) || !load_u64(artifact, 424, journal_hash) ||
+            !load_u64(artifact, 432, closed) || !zero_range(artifact, 440, 448) ||
+            (closed != std::numeric_limits<std::uint64_t>::max() &&
+             closed > last_action + 1) ||
+            !multiply_size(count, stride, descriptors) ||
+            !add_size(admission_offset, descriptors, journal_end) ||
+            journal_end != payload_offset || !add_size(payload_offset, bytes, end) ||
+            end != artifact.size() ||
+            checksum(artifact.subspan(admission_offset)) != journal_hash) {
+            view = {};
+            return Status::invalid_artifact;
+        }
+        view.retention_policy_identity = identity;
+        view.admission_offset = static_cast<std::size_t>(admission_offset);
+        view.admission_count = count;
+        view.admission_payload_offset = static_cast<std::size_t>(payload_offset);
+        view.admission_payload_bytes = static_cast<std::size_t>(bytes);
+        view.admission_close_sequence = closed;
+        std::size_t next_admission = 0, next_payload_offset = 0;
+        for (std::size_t index = 0; index < action_count; ++index) {
+            LiveControlActionRecord action;
+            if (!live_control_replay_action_at(view, index, action)) {
+                view = {};
+                return Status::invalid_artifact;
+            }
+            if (action.action != LiveControlActionId::admission) {
+                continue;
+            }
+            LiveControlRetainedAdmission admission;
+            std::span<const std::byte> payload;
+            if (!live_control_replay_admission_at(view, next_admission++, admission,
+                                                  payload) ||
+                admission.action_sequence != action.sequence ||
+                admission.outcome != action.admission_result ||
+                admission.payload_offset != next_payload_offset ||
+                ((admission.outcome == LiveControlAdmissionResult::accepted ||
+                  admission.outcome == LiveControlAdmissionResult::missed) &&
+                 (admission.record.mailbox_identity != action.mailbox_identity ||
+                  admission.record.producer_identity != action.producer_identity ||
+                  admission.record.mailbox_sequence != action.mailbox_sequence ||
+                  admission.record.producer_sequence != action.producer_sequence ||
+                  admission.record.payload_digest != action.payload_digest ||
+                  admission.record.payload_bytes != action.payload_bytes))) {
+                view = {};
+                return Status::invalid_artifact;
+            }
+            next_payload_offset += payload.size();
+        }
+        if (next_admission != count || next_payload_offset != bytes) {
+            view = {};
+            return Status::invalid_artifact;
+        }
+    }
     std::uint64_t current_generation = checkpoint_generation;
     std::size_t next_record = 0;
     std::size_t next_payload = 0;
@@ -774,42 +907,33 @@ Status parse_live_control_replay_artifact(
              ++record_index, ++next_record) {
             LiveControlUpdateRecord record;
             std::span<const std::byte> payload;
-            if (!live_control_replay_record_at(
-                    view,
-                    generation_index,
-                    record_index,
-                    record,
-                    payload) ||
-                record.runtime_id != 0 ||
-                record.configuration_generation != 0 ||
+            if (!live_control_replay_record_at(view, generation_index, record_index,
+                                               record, payload) ||
+                record.runtime_id != 0 || record.configuration_generation != 0 ||
                 record.schema_version != live_control_schema_version ||
                 record.record_size != sizeof(LiveControlUpdateRecord) ||
-                record.mailbox_sequence == 0 ||
-                record.mailbox_identity == 0 || record.producer_identity == 0 ||
-                record.producer_sequence == 0 ||
+                record.mailbox_sequence == 0 || record.mailbox_identity == 0 ||
+                record.producer_identity == 0 || record.producer_sequence == 0 ||
                 record.payload_bytes != payload.size() ||
                 record.payload_alignment == 0 ||
                 record.payload_alignment > live_control_payload_alignment_limit ||
                 (record.payload_alignment & (record.payload_alignment - 1u)) != 0 ||
                 payload.size() % record.payload_alignment != 0 ||
-                record.policy_flags !=
-                    live_control_payload_canonical_little_endian ||
+                record.policy_flags != live_control_payload_canonical_little_endian ||
                 record.update_kind < LiveControlUpdateKind::scenario_parameters ||
                 record.update_kind > LiveControlUpdateKind::clear_fault ||
-                ((record.update_kind == LiveControlUpdateKind::clear_fault) !=
-                 payload.empty()) ||
-                !std::all_of(
-                    record.reserved.begin(),
-                    record.reserved.end(),
-                    [](std::byte value) { return value == std::byte{0}; }) ||
+                (record.payload_bytes == 0 &&
+                 record.update_kind != LiveControlUpdateKind::clear_fault) ||
+                !std::all_of(record.reserved.begin(), record.reserved.end(),
+                             [](std::byte value) { return value == std::byte{0}; }) ||
                 live_control_payload_digest(payload) != record.payload_digest ||
                 (record.target_kind != generation.target.kind) ||
                 (record.target_kind == LiveControlTargetKind::host_frame
-                    ? record.target_frame_index != generation.target.frame_index
-                    : record.reference_release_index !=
-                          generation.target.reference_release_index ||
-                      record.rate_release_sequence !=
-                          generation.target.rate_release_sequence) ||
+                     ? record.target_frame_index != generation.target.frame_index
+                     : record.reference_release_index !=
+                               generation.target.reference_release_index ||
+                           record.rate_release_sequence !=
+                               generation.target.rate_release_sequence) ||
                 (record_index != 0 &&
                  (record.mailbox_identity < previous_mailbox ||
                   (record.mailbox_identity == previous_mailbox &&
@@ -882,9 +1006,8 @@ Status parse_live_control_replay_artifact(
             view = {};
             return Status::invalid_artifact;
         }
-        if (admission.action == LiveControlActionId::admission &&
-            admission.admission_result ==
-                LiveControlAdmissionResult::accepted) {
+        if (!lossless && admission.action == LiveControlActionId::admission &&
+            admission.admission_result == LiveControlAdmissionResult::accepted) {
             std::size_t matching_terminal = 0;
             for (std::size_t terminal_index = 0;
                  terminal_index < action_count;
@@ -914,7 +1037,7 @@ Status parse_live_control_replay_artifact(
                 return Status::invalid_artifact;
             }
         }
-        if (admission.action == LiveControlActionId::admission &&
+        if (!lossless && admission.action == LiveControlActionId::admission &&
             admission.admission_result == LiveControlAdmissionResult::missed) {
             LiveControlActionRecord missed;
             if (index + 1 >= action_count ||
@@ -938,6 +1061,66 @@ Status parse_live_control_replay_artifact(
         return Status::invalid_artifact;
     }
     return Status::ok;
+}
+
+bool live_control_replay_admission_at(const LiveControlReplayArtifactView& view,
+                                      std::size_t index,
+                                      LiveControlRetainedAdmission& admission,
+                                      std::span<const std::byte>& payload) noexcept {
+    admission = {};
+    payload = {};
+    if (view.metadata.schema_version != live_control_lossless_replay_schema_version ||
+        index >= view.admission_count) {
+        return false;
+    }
+    const auto offset =
+        view.admission_offset + index * live_control_replay_admission_bytes;
+    std::uint32_t bytes = 0;
+    std::uint64_t stored = 0;
+    std::memcpy(&admission.record, view.artifact.data() + offset,
+                sizeof(admission.record));
+    if (!load_u64(view.artifact, offset + 128, admission.action_sequence) ||
+        !load_u64(view.artifact, offset + 136, admission.mailbox_identity) ||
+        !load_u64(view.artifact, offset + 144, admission.producer_identity) ||
+        !load_u32(view.artifact, offset + 152, admission.slot_index) ||
+        !load_u64(view.artifact, offset + 160, admission.payload_offset) ||
+        !load_u32(view.artifact, offset + 168, bytes) ||
+        !load_u64(view.artifact, offset + 176, stored) ||
+        !zero_range(view.artifact, offset + 158, offset + 160) ||
+        !zero_range(view.artifact, offset + 172, offset + 176) ||
+        admission.record.runtime_id != 0 ||
+        admission.record.configuration_generation != 0 ||
+        admission.payload_offset > view.admission_payload_bytes ||
+        bytes > view.admission_payload_bytes - admission.payload_offset) {
+        return false;
+    }
+    const auto outcome = std::to_integer<unsigned>(view.artifact[offset + 156]);
+    const auto changed = std::to_integer<unsigned>(view.artifact[offset + 157]);
+    if (outcome < 1 || outcome > 8 || changed > 1) {
+        return false;
+    }
+    admission.outcome = static_cast<LiveControlAdmissionResult>(outcome);
+    admission.counter_changed = changed != 0;
+    const bool assigned =
+        admission.slot_index != std::numeric_limits<std::uint32_t>::max();
+    if (admission.counter_changed
+            ? (admission.mailbox_identity == 0 || admission.producer_identity == 0)
+            : (admission.mailbox_identity != 0 || admission.producer_identity != 0 ||
+               assigned)) {
+        return false;
+    }
+    payload = view.artifact.subspan(
+        view.admission_payload_offset + admission.payload_offset, bytes);
+    if (assigned
+            ? (bytes != admission.record.payload_bytes ||
+               live_control_payload_digest(payload) != admission.record.payload_digest)
+            : bytes != 0) {
+        return false;
+    }
+    auto hash = kFnvOffset;
+    hash_bytes(hash, view.artifact.subspan(offset, 176));
+    hash_bytes(hash, payload);
+    return hash == stored;
 }
 
 bool live_control_replay_action_at(
