@@ -1,5 +1,38 @@
 # Handoff
 
+M23-03 implementation and portable local verification are complete: 87 public
+Runtime benchmark cases, all 51 allocation-tracked cases, original 51 CPU cases,
+legacy artifacts, independent owners, sanitizer suites and SDK integration pass.
+The source includes verified replay, watchdog and device wake repairs. The Windows Debug crash was narrowed to a large automatic loopback fixture.
+A bounded-stack negative control reproduces it; invocation-owned heap storage
+passes the same 512 KiB caller-stack regression. Final hosted verification and
+integration of that correction are tracked in PR #254. Final
+exact-head hosted CI and merge identity are recorded in PR #254; the acceptance
+map and retained failures are in the completion/integration evidence. M23 and
+CAP-M23 remain open for separate M23-04/M23-05 scopes. Physical characterization
+and controlled performance thresholds remain unperformed.
+
+## Historical R4 integration checkpoint
+
+M23-03 is active on integrated device wake repair #259, main
+`49443ff1cee0966c228300530a93917cc95b81e0`. The repair passed all 32 hosted
+checks, quick/full profiles, both sanitizer suites and relocated SDK/ABI checks.
+The existing 87-case benchmark implementation is unchanged. PR #254 is being
+freshly verified against this Runtime, including the previously timed-out CLI
+and allocation gates. See `docs/evidence/M23-03-integration-2026-09-24.md`.
+Earlier activation and verification checkpoints below remain historical.
+
+## Historical benchmark checkpoint before R4
+
+M23-03 continuation: replay/watchdog prerequisite PR #258 is merged at
+`8ba51b3effa6174eaeb5382aef3404eeb5c160d1`, with all 32 hosted checks passed.
+Its public regression, sanitizer, full-profile and relocated SDK results are
+recorded in PR #258. M23-03 is active again on this integrated baseline.
+Finish the remaining benchmark acceptance audit and verification in #254;
+M23-04/M23-05 and physical characterization remain separate.
+
+## Historical R4 activation
+
 M23-03R4 is active under merged control #482. Target baseline is merged
 watchdog #258 at `8ba51b3effa6174eaeb5382aef3404eeb5c160d1`. Benchmark #254
 is retained at `e28a926aa115dcb19b46451f69bf16d806e91ac8`: all 87 in-process
@@ -24,88 +57,86 @@ After merging the verified repair, reactivate unchanged M23-03 and finish #254.
 Earlier sections below are historical.
 
 
-## 2026-09-24: replay integration after verified queue repair
+## 2026-09-24: benchmark acceptance completion
 
-Queue PR #257 merged at `da22fdaff9e7e5d3fbffa8013c0db7bd81f3697c` after
-all 32 hosted checks passed on `f4ac9a06ad2a46293a41f33b620c02ed5b191500`.
-Local queue verification passed six focused tests under GCC ASan/UBSan/TSan
-and the official 33/33 quick plus 37/37 full profile. Original failure and
-artifact-relink evidence remain in [CI-QUEUE-01](evidence/CI-QUEUE-01-2026-09-24.md).
+The catalog now contains 87 cases, retaining every original workload. Three final
+additions cover explicit optional shedding during composition/replay and actual
+four-batch loopback occupancy. Callbacks include replay, accepted admissions have
+a separate column, and two-instance budgets total 512 MiB. The optional static
+analysis source routing is corrected; existing TSan includes Runtime provider
+and mixed-rate replay tests. Final all-case/artifact, allocation, sanitizer,
+package, full-profile and exact-head hosted results are tracked in PR #254 and
+`docs/evidence/M23-03-completion-2026-09-24.md`.
 
-M23-03R2 is reactivated under its unchanged approved canonical scope. Replay
-PR #256 is reconciled onto that exact main; no replay Runtime source changed
-from its previously verified head `76f6b8ed8a5a2aad4fd37c2e0d47d3d6406852ae`.
-The combined head still requires local and hosted integration checks. The prior
-replay CI failure was the separately repaired experimental queue use-after-free.
-See [replay evidence](evidence/M23-03R2-2026-09-24.md).
+The following dated checkpoints retain the original failures and decisions;
+the current source includes the separately merged repairs.
 
-Next: integrate verified replay, then activate the already merged M23-03
-amendment (control #475), finish all 78 existing cases and remaining benchmark
-acceptance. No Unreal work or physical qualification is claimed. The execution
-host exposes no NVIDIA/XDMA device nodes; physical characterization remains
-unperformed. Earlier checkpoint text below is historical.
+## 2026-09-24: 84-case checkpoint and watchdog repair prerequisite
 
-## 2026-09-24: approved M23-03R2 reconstruction and verification
+PR #254 retains all 78 original workloads and adds six explicit inspection,
+capacity and device-failure cases. Focused verification is 83/84; 50 declared
+steady invoke cases pass global allocation checks. The remaining fault-8
+composition failure is independently reproduced with only a public CPU Runtime:
+saturated watchdog records contain an incorrect prior degradation level.
+Separate canonical M23-03R3 control PR #481 merged at
+`19eaf9eb45434584c3b5aecb1976a97d4e626dd8`; implement/verify/integrate that repair
+before reactivating the unchanged M23-03 benchmark contract. No Runtime file is
+edited in this checkpoint. See the continuation evidence for initial failures,
+Clang diagnostic compatibility repair and exact remaining verification.
 
-The owner approved opt-in lossless trusted replay v2 and merged Portfolio Control
-PR #463 (`092bab84f4228acc35a2eacf024ba0a61d1fe2e7`). Draft target PR #256
-preserves the recovered R1 repair and active scope. The earlier unpublished v2
-candidate was removed by workspace maintenance; it is being reconstructed and
-freshly verified. See [recovery/evidence](evidence/M23-03R2-2026-09-24.md).
+## 2026-09-24: M23-03 benchmark completion activated
 
-The reconstructed public replacement and rejection reproducers pass, preserving
-original payloads and admission counters. The opt-in adds bounded admission
-retention, pre-restore ownership validation, complete canonical state comparison
-and unchanged payload-free telemetry. Default v1 remains unchanged and rejects
-incomplete old histories explicitly. Full, sanitizer, package and integration gates
-remain in progress; historical test results do not validate reconstructed source.
+Queue PR #257 and replay v2 PR #256 are integrated. Exact main is
+`52fbdd3b029f1531f8d5d40af85e3f8e11603571`; replay final head
+`c9a86254a25ffecbe97536a2f422bf470c083bec` passed all 32 hosted checks,
+51 focused tests, quick 33/33/full 37/37 and 20 relocated consumers. Default-v1
+bytes/public layouts/ABIs remain unchanged and all three public replay consumers
+report zero measured run/replay allocations. Original failures remain retained.
 
-After integrating the verified repair, separately amend the M23-03 contract for
-explicit v2 composition fixtures, reconcile draft #254 and run all 78 cases plus
-remaining benchmark acceptance. Continue dependency-ready planned software scope.
-Unreal remains excluded. Real hardware characterization, support promotion and
-release require their distinct actual evidence and authorization.
+M23-03 now binds merged control amendment #475 at
+`b489a1a32e1ddd84f7213bae053114a2f17e79d7`, blob
+`a6e1ea91b9e2b93833ea8992b46fdbe347797ecf`. Draft #254 is reconciled onto main.
+Retain all 78 cases and original 74/78/intermediate 76/78 failures; integrate
+explicit v2 retention into composition fixtures, then complete every partial
+acceptance item before merging. M23/CAP-M23 remain open for M23-04/M23-05.
+No Runtime or prior-provider/framework/validator changes are authorized here.
+Unreal remains excluded. Hardware characterization is unperformed because this
+host exposes no NVIDIA/XDMA device nodes. Earlier text below is historical.
 
-### Historical R1 checkpoint (superseded by the active R2 scope)
+## M23-03 Runtime benchmark work in progress
 
-## 2026-09-23 continuation: M23-03R partial repair
+M23-02 discovery closure merged as PR #253 at
+`795a56cabb78dd2c6ccf51796f54c4f6eff84f9f`. The active M23-03 contract
+is bound to portfolio-control PR #367, revision
+`38a7c91d8c3fe7a663a57d0353a3e60773ded20d`.
 
-Target baseline: `3df07d756c626fd5453c62a23920c6e521c867e5` (PR #255).
-Control repair contract: PR #369, merge `9094bea6df8bace121f0c27e603d38cea795bed8`.
-The original PR #254 benchmark draft and September 8 evidence are preserved.
+The draft adds 78 public Runtime benchmark descriptors, implementation, CLI
+registration and source-example consumers. Standalone fixture checks cover
+CPU/device rates, cross-rate payloads, controls, checkpoints, replay, watchdog
+and telemetry. Four combined live-control/active-replay cases remain failing.
+A small public-only reproducer returns `incompatible_artifact` with application
+state, callback count, generation count and accepted-admission count all correct.
+The complete Runtime replay-state comparison requires a separately scoped repair;
+no Runtime implementation or schema has been changed in this benchmark batch.
+The proposed repair scope is [portfolio-control PR #369](https://github.com/tranquilWorks/portfolio-control/pull/369); it remains a draft requiring approval.
 
-The minimal nested replay reproducer now succeeds. Replay now selects free
-mailbox slots before reclaiming terminal records, matching admission, and checks
-aggregate retained history against the retention policy instead of simultaneous
-mailbox occupancy. New public-API coverage exercises two/eight frames, host/rate
-targets, two mailboxes, reclamation, repeated/concurrent instances, malformed
-inputs and final-state mismatch detection.
+Local package, ABI and contract checks pass. Quick CTest is 33/33; strict full
+CTest is 36/37, with an additional unresolved failure in unchanged
+`PredictiveAdaptive.PrestepsReduceReactiveCatchup`. No full-profile pass is claimed.
 
-This does not close M23-03R. Format v1 omits non-surviving replacement payloads
-and the mailbox attribution of rejected admissions. The separate public consumer
-`live_control_replay_consumer.cpp` preserves `--replaced` and `--rejected`
-reproductions; both still return `incompatible_artifact`. All 78 draft benchmark
-cases were diagnostically linked to this repaired Runtime: 76 pass and the two
-fault compositions still fail. No benchmark gate or state comparison is waived.
-A reviewed artifact-version decision is required before the next repair; see
-[evidence](evidence/M23-03R-2026-09-23.md). Do not merge this partial target repair
-as completed acceptance or advance M23-04/M24-M26 on a false closure.
+The owner temporarily waived unavailable hosted CI/CD on 2026-09-08 because of
+utilization limits. This does not waive functional verification. M23-03 and
+M23/CAP-M23 remain incomplete. Follow the exact failed/unperformed results and
+remaining acceptance work in [M23-03 evidence](evidence/M23-03-2026-09-08.md).
 
-The owner requests non-Unreal development/integration and real hardware
-characterization. No device nodes or configured remote bench are available here.
-Portable checks do not characterize the owner's CPU/GPU/FPGA system. Release,
-support matrices, public headers/ABIs and format versions remain unchanged.
-
-### Retained earlier handoff
-
-## Active batch: M23-02
+## Historical M23-02 closure
 
 M23-02 source merged as PR #252 at
 `543af2b4728a171243e6d756554efa188c2e7d2f`. The original planning baseline
 remains merged PR #251 at `b52b42a6c64066553ce55fb08c874061d78e036e`.
 Control PR #366 merged at `7549d5d647fada8fad7637779301226c3ad87296`, adding
 `tests/benchmark_fixtures/test_artifacts.py` to the approved scope. The local
-active contract binds that canonical revision/blob without rewriting its
+then-active contract bound that canonical revision/blob without rewriting its
 original planning baseline.
 
 Read [benchmarking](benchmarking.md), the preserved
@@ -118,9 +149,8 @@ cross-platform artifact exchange but failed the obsolete list assertion in
 nine matrix jobs. Keep those historical failures; follow-up CI is authoritative
 for the correction.
 
-M23-03 multi-rate/control/replay/observability is the next software batch after
-this closure passes its gates. A validated, integrated canonical M23-03 contract
-is required before implementation. M23-04/M23-05, M24 CUDA maturity, M25 SDK and
+PR #253 closed that correction after all 32 hosted checks passed. M23-03 is now
+activated and bound to the integrated canonical contract described above. M23-04/M23-05, M24 CUDA maturity, M25 SDK and
 M26 golden system remain future work. M18 hardware/RT, M19 Unreal and
 signing/release/deployment remain separate gates.
 

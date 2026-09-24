@@ -23,7 +23,8 @@ assert {r['family'] for r in rows}==expected_families
 def command(*args):
     return subprocess.run([str(cli),*map(str,args)],capture_output=True,text=True,timeout=30)
 listing=command('list');assert listing.returncode==0,listing.stderr
-assert listing.stdout.splitlines()==sorted(['rtfw.cpu:'+i for i in ids]+['rtfw.self:structural'])
+runtime_ids=[r['id'] for r in json.loads((ROOT/'bench/fixtures/runtime_cases.json').read_text())['cases']]
+assert listing.stdout.splitlines()==sorted(['rtfw.cpu:'+i for i in ids]+['rtfw.runtime:'+i for i in runtime_ids]+['rtfw.self:structural'])
 for row in rows:
     if 'native_counterpart' in row:
         native=next(c for c in rows if c['id']==row['native_counterpart'])

@@ -62,7 +62,19 @@ add_library(rtfw_benchmark_cpu STATIC providers/cpu_provider.cpp)
 target_link_libraries(rtfw_benchmark_cpu PUBLIC rtfw_benchmark rtfw_runtime)
 target_include_directories(rtfw_benchmark_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/providers)
 rtfw_enable_project_warnings(rtfw_benchmark_cpu)
-target_link_libraries(rtfw-bench PRIVATE rtfw_benchmark_cpu)
+add_library(rtfw_benchmark_runtime STATIC
+    providers/runtime_provider.cpp
+    providers/runtime_cases/rates.cpp
+    providers/runtime_cases/controls.cpp
+    providers/runtime_cases/checkpoint.cpp
+    providers/runtime_cases/replay.cpp
+    providers/runtime_cases/observability.cpp
+    providers/runtime_cases/capacity.cpp
+    providers/runtime_cases/device.cpp)
+target_link_libraries(rtfw_benchmark_runtime PUBLIC rtfw_benchmark rtfw_runtime)
+target_include_directories(rtfw_benchmark_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/providers)
+rtfw_enable_project_warnings(rtfw_benchmark_runtime)
+target_link_libraries(rtfw-bench PRIVATE rtfw_benchmark_cpu rtfw_benchmark_runtime)
 rtfw_enable_project_warnings(rtfw-bench)
 install(TARGETS rtfw_benchmark EXPORT rtfwBenchmarkTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -81,8 +93,21 @@ install(FILES "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_consu
 install(FILES providers/cpu_provider.hpp providers/cpu_provider.cpp fixtures/cpu_cases.json
     "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_cpu_consumer.cpp"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench/examples)
+install(FILES providers/runtime_provider.hpp providers/runtime_provider.cpp fixtures/runtime_cases.json
+    "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_runtime_consumer.cpp"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench/examples)
+install(DIRECTORY providers/runtime_cases
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench/examples)
 
 if (RTFW_BUILD_TESTS)
+    add_executable(rtfw_benchmark_runtime_consumer "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_runtime_consumer.cpp")
+    target_link_libraries(rtfw_benchmark_runtime_consumer PRIVATE rtfw_benchmark_runtime)
+    rtfw_enable_project_warnings(rtfw_benchmark_runtime_consumer)
+    add_test(NAME benchmark_runtime_package_consumer COMMAND rtfw_benchmark_runtime_consumer)
+    add_executable(rtfw_benchmark_runtime_noalloc "${RTFW_PROJECT_SOURCE_DIR}/tests/benchmark_fixtures/runtime_consumer/noalloc.cpp")
+    target_link_libraries(rtfw_benchmark_runtime_noalloc PRIVATE rtfw_benchmark_runtime)
+    rtfw_enable_project_warnings(rtfw_benchmark_runtime_noalloc)
+    add_test(NAME m23_benchmark_runtime_noalloc COMMAND rtfw_benchmark_runtime_noalloc)
     add_executable(rtfw_benchmark_cpu_consumer "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_cpu_consumer.cpp")
     target_link_libraries(rtfw_benchmark_cpu_consumer PRIVATE rtfw_benchmark_cpu)
     rtfw_enable_project_warnings(rtfw_benchmark_cpu_consumer)
@@ -96,6 +121,10 @@ if (RTFW_BUILD_TESTS)
     rtfw_enable_project_warnings(rtfw_benchmark_consumer)
     add_test(NAME benchmark_package_consumer COMMAND rtfw_benchmark_consumer)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME m23_benchmark_runtime_inventory
+        COMMAND "${Python3_EXECUTABLE}" "${RTFW_PROJECT_SOURCE_DIR}/tests/benchmark_fixtures/test_runtime_cases.py"
+            --cli $<TARGET_FILE:rtfw-bench> --inventory "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/runtime_cases.json")
+    set_tests_properties(m23_benchmark_runtime_inventory m23_benchmark_runtime_noalloc PROPERTIES TIMEOUT 600)
     add_test(NAME m23_benchmark_cpu_inventory
         COMMAND "${Python3_EXECUTABLE}" "${RTFW_PROJECT_SOURCE_DIR}/tests/benchmark_fixtures/test_cpu_cases.py"
             --cli $<TARGET_FILE:rtfw-bench> --inventory "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/cpu_cases.json")

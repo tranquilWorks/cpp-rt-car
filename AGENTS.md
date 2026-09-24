@@ -5,8 +5,10 @@ portable product is release 1.2.1 at RT0 with stable C ABI v8, SONAME 8, device
 ABI v1, and Apache-2.0. M14, M14.1, M15, M16, and the portable M17 software
 path through M17-06 are complete, while hardware/RT qualification remains
 incomplete. M20-PRE-01, M21-01 through M21-05, and M22-01 through M22-04 are
-merged. M23-01 and M23-02 are merged. M23-03R2 is merged; M23-03R3 is merged; M23-03R4 is the active approved repair batch;
-CI-QUEUE-01 is merged as PR #257. M23-03 remains an unmerged benchmark draft.
+merged. M23-01 and M23-02 are merged. M23-03R2, M23-03R3 and M23-03R4 are merged;
+M23-03 is the active approved benchmark batch, with implementation and local
+verification complete. CI-QUEUE-01 is merged as PR #257. PR #254 records final
+exact-head hosted verification and integration; M23-04/M23-05 remain separate.
 M16-01 supplies the exact reference timeline, M16-02 adds deterministic
 CPU-only cross-rate channel selection and bounded SPSC stores, and M16-03 adds
 opt-in mandatory admission, dispatch, transfer, and late actions. M16-04 adds
@@ -164,35 +166,40 @@ verify the combined source and integrate before editing benchmark draft #254.
 M23-03's v2 fixture amendment is already merged in control PR #475 at
 `b489a1a32e1ddd84f7213bae053114a2f17e79d7`; activate it only after R2 integration.
 
-## M23-03R3 activation (2026-09-24)
+## M23-03 completion after replay integration
 
-Canonical control PR #481 merged at
-`19eaf9eb45434584c3b5aecb1976a97d4e626dd8`, blob
-`8d63ada5ed44e457440c6736bf65c7cd40d718fb`. Its schema/scope checks pass;
-hosted control validation could not run any steps and is retained as unperformed
-under the standing owner exception for unavailable hosted jobs. Target functional
-gates remain mandatory. Activate only this bounded repair from integrated main
-`52fbdd3b029f1531f8d5d40af85e3f8e11603571`. Benchmark PR #254 is durably retained
-at head `0bd116eeb167d585108f4079d4f22a81ad9ff32f`, tree
-`ff03b1b0f5596ae5af49acd5bcb7fe772073a5b1`, with 83/84 cases passing and the
-public-only saturated-watchdog reproducer failing. Preserve every workload,
-comparison and failure record. Correct the actual prior degradation level,
-verify and integrate separately, then reconcile PR #254 and reactivate M23-03.
-Standing bounded software continuation/publication/merge authorization applies.
-No cybersecurity, Daybreak, Unreal, physical qualification or release scope.
+PR #256 merged at `52fbdd3b029f1531f8d5d40af85e3f8e11603571` after all 32
+exact-head hosted checks, focused/full/default-v1/ABI/no-allocation and relocated
+consumer checks passed. Activate merged control amendment #475 and complete
+the retained Runtime benchmark draft #254. Preserve all 78 original cases and
+logical workloads, explicitly opt in to v2 only in fixtures needing admission
+history, and close all partial acceptance without changing Runtime or prior
+providers/framework/validators. M23-04 and M23-05 remain separate later scopes.
+Standing scoped publication/merge authorization continues; no functional gate
+waiver, Unreal work or invented physical qualification is permitted.
 
-## M23-03R4 activation (2026-09-24)
+## Benchmark continuation after M23-03R3
 
-Canonical control #482 merged at `5e447cd44bfd5935d5d0053d7872f85db7dceeb4`,
-blob `6c27fb52b2d16c81b3c6515c6b6091be8fdae11e`. Its local schema/scope pass;
-hosted run 36029151743 / job 107733182257 had no steps and BlobNotFound logs,
-retained as unavailable under the standing owner exception. No target functional
-gate is waived. Activate this bounded device submission ordering repair from
-main `8ba51b3effa6174eaeb5382aef3404eeb5c160d1`. Preserve benchmark #254 at
-`e28a926aa115dcb19b46451f69bf16d806e91ac8`, tree
-`fbb8d51547500c61a30d808245df61cf94274b27`, and its retained 600-second CLI
-timeout. All 87 in-process cases, 51 allocation cases, ASan/UBSan, TSan,
-51 CPU/9 legacy artifacts and the complete package chain passed. Fix and verify
-R4 separately, then reconcile #254 and reactivate M23-03. Standing scoped
-planning/development/publication/merge authorization applies; no cybersecurity,
-Daybreak, Unreal, hardware qualification, release or deployment scope.
+Watchdog repair PR #258 merged at `8ba51b3effa6174eaeb5382aef3404eeb5c160d1`
+after all 32 exact-head hosted gates passed at `a520626bd0fa024afb54f3fe2270669acf1db562`.
+Its full local profiles, ASan/UBSan, TSan, 20 relocated package consumers, ABI,
+default-v1 golden and unchanged 84 benchmark cases passed. The original timeout
+and all earlier failures remain retained in PR #258 and its evidence. Preserve
+this integrated Runtime source and reactivate the existing M23-03 amendment
+(control #475). Finish benchmark PR #254 under standing scoped publication/merge
+authorization. No cybersecurity, Daybreak or Unreal scope is authorized.
+
+## Benchmark continuation after M23-03R4
+
+Device wake ordering repair #259 merged at
+`49443ff1cee0966c228300530a93917cc95b81e0` after all 32 exact-head checks
+passed at `ea97f91968b9661d83c8b10ba733ef036fb22e8b`, workflow 36030838286.
+Local quick 33/33, full 37/37, ASan/UBSan 41/41, TSan 41/41, relocated SDK
+20/20 and compiled ABI checks passed. Retained execution-permission failures
+and their ordinary relinks are in #259. Preserve all integrated Runtime and
+repair evidence unchanged. Reactivate canonical M23-03 control #475; benchmark
+implementation remains the same 87 cases. Freshly run every benchmark gate,
+including the previously timed-out loopback CLI and no-allocation checks.
+Keep the separate prior Windows experimental determinism timeout explicit.
+Finish #254 under standing scoped publication/merge authorization. No
+cybersecurity, Daybreak, Unreal or physical qualification scope is added.

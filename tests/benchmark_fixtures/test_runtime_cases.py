@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""Runtime metadata, every fixture, truthful artifacts and unchanged validator."""
+import argparse
+import importlib.util
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+ROOT=Path(__file__).resolve().parents[2]
+p=argparse.ArgumentParser();p.add_argument('--cli',type=Path,required=True);p.add_argument('--inventory',type=Path,required=True)
+a=p.parse_args();cli=a.cli.resolve()
+spec=importlib.util.spec_from_file_location('validator',ROOT/'tools/check_benchmark_artifact.py')
+validator=importlib.util.module_from_spec(spec);spec.loader.exec_module(validator)
+rows=json.loads(a.inventory.read_text())['cases']
+ids=[r['id'] for r in rows];assert 1<=len(ids)<=96 and ids==sorted(set(ids))
+assert {r['family'] for r in rows}=={'rates','channels','shedding','controls','checkpoint','replay','watchdog','telemetry','capacity','device','composition'}
+cpu=json.loads((ROOT/'bench/fixtures/cpu_cases.json').read_text())['cases']
+def command(*args):
+    return subprocess.run([str(cli),*map(str,args)],capture_output=True,text=True,timeout=600)
+listing=command('list');assert listing.returncode==0
+assert listing.stdout.splitlines()==sorted(['rtfw.runtime:'+i for i in ids]+['rtfw.cpu:'+r['id'] for r in cpu]+['rtfw.self:structural'])
+with tempfile.TemporaryDirectory(prefix='m23-runtime-') as tmp:
+    root=Path(tmp)
+    for row in rows:
+        id=row['id'];description=command('describe','--provider','rtfw.runtime','--case',id,'--clock','fake')
+        assert description.returncode==0,(id,description.stderr)
+        d=json.loads(description.stdout)
+        assert d['configuration']==row['measurement_scope'] and d['warmup']==2 and d['repetitions']==5
+        assert [x['name'] for x in d['counters']]==row['counter_names'] and d['counters'][0]['unit']==row['operation_unit']
+        assert {x['name']:x['value'] for x in d['parameters']}=={k:row[k] for k in ('count','width','bytes','capacity','variant')}
+        assert all(row[k] for k in ('oracle','clock_semantics','counter_semantics','evidence_boundary','configured_limits'))
+        output=root/id;ran=command('run','--provider','rtfw.runtime','--case',id,'--clock','fake','--output',output)
+        assert ran.returncode==0,(id,ran.stdout,ran.stderr)
+        result=validator.validate_bundle(output)
+        assert result['status']=='ok' and result['warmup_completed']==2 and result['measured_completed']==5
+        assert result['statistics']['total_ns']==500 and result['evidence_class']=='structural_fixture'
+        samples=json.loads((output/'raw.json').read_text())['samples']
+        for sample in samples:
+            assert sample['invariants_passed'];c=sample['counters']
+            if row['family']=='rates' and row['mode']=='dispatch':
+                assert c['operations']==row['count']*row['width']*row['variant']==c['callbacks']==c['records']
+            if row['family']=='controls':
+                assert c['operations']==c['admissions']==row['count'] and c['callbacks']==1 and c['records']==row['width']
+            if row['family']=='composition' or row['family']=='replay' and row['mode']=='active':
+                frames=row['count'];fault=row['family']=='composition' and row['variant']!=0
+                shedding=row['family']=='composition' and row['variant']==2
+                assert c['operations']==2*frames and c['records']==4*frames
+                assert c['callbacks']==frames*(10+4*int(fault)+2*int(shedding))
+                assert c['admissions']==(frames if row['family']=='composition' else 0)
+                assert c['transitions']==(2*frames if shedding else 0)
+            if row['mode']=='inflight':
+                assert c['operations']==1 and c['callbacks']==c['records']==c['peak_outstanding']==4
+                assert c['bytes']==32 and c['rejected']==0
+            if row['family']=='watchdog':
+                assert c['operations']==4 and c['callbacks']==4 and c['records']==(4 if row['variant']==2 else 0)
+        before={p.name:p.read_bytes() for p in output.iterdir()}
+        assert command('run','--provider','rtfw.runtime','--case',id,'--output',output).returncode==2
+        assert before=={p.name:p.read_bytes() for p in output.iterdir()}
+    missing=root/'missing';assert command('run','--provider','rtfw.runtime','--case','missing','--output',missing).returncode==2
+    assert not missing.exists()
+    steady=root/'steady';ran=command('run','--provider','rtfw.runtime','--case','rate-dispatch-8-d1-s1','--clock','steady','--output',steady)
+    assert ran.returncode==0 and validator.validate_bundle(steady)['evidence_class']=='portable_characterization'
+    if sys.platform=='linux':
+        import resource
+        def bounded_caller_stack():
+            _,hard=resource.getrlimit(resource.RLIMIT_STACK)
+            resource.setrlimit(resource.RLIMIT_STACK,(512*1024,hard))
+        # These lifecycle cases create large fixed telemetry buffers. Exercise
+        # their real CLI entry point with a bounded caller stack; Runtime-owned
+        # resource budgets, workloads and the normal catalog sweep are unchanged.
+        for id in ('device-failure-nonpublication','device-timeout-nonpublication'):
+            output=root/('bounded-stack-'+id)
+            ran=subprocess.run([str(cli),'run','--provider','rtfw.runtime','--case',id,
+                '--clock','fake','--output',str(output)],capture_output=True,text=True,
+                timeout=600,preexec_fn=bounded_caller_stack)
+            assert ran.returncode==0,(id,'512 KiB caller stack',ran.returncode,ran.stderr)
+            result=validator.validate_bundle(output)
+            assert result['status']=='ok' and result['warmup_completed']==2 and result['measured_completed']==5
+        print('Runtime lifecycle caller-stack checks: 2 cases at 512 KiB validated')
+print(f'Runtime inventory: {len(rows)} cases validated')
