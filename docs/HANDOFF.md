@@ -1,5 +1,20 @@
 # Handoff
 
+## 2026-09-24: M23-03R3 watchdog saturation replay repair active
+
+Integrated queue #257 and replay #256 main is
+`52fbdd3b029f1531f8d5d40af85e3f8e11603571`. Separate control PR #481 merged at
+`19eaf9eb45434584c3b5aecb1976a97d4e626dd8`; canonical blob is
+`8d63ada5ed44e457440c6736bf65c7cd40d718fb`. Repair only the watchdog transition's
+actual prior degradation level, with public active/nested replay regressions.
+Benchmark draft #254 is retained at 0bd116eeb167d585108f4079d4f22a81ad9ff32f:
+83/84 cases pass, with composition-fault-8 blocked by this independently
+reproduced defect. All original 78 logical workloads and failures remain.
+Validation and integration are pending; no Runtime repair pass is claimed yet.
+After merging the verified repair, reactivate unchanged M23-03 and finish #254.
+Earlier sections below are historical.
+
+
 ## 2026-09-24: replay integration after verified queue repair
 
 Queue PR #257 merged at `da22fdaff9e7e5d3fbffa8013c0db7bd81f3697c` after
