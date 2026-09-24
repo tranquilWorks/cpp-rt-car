@@ -1768,23 +1768,22 @@ void DeviceManager::submission_loop(std::size_t backend_index) noexcept {
     auto& control = batch_backends_[backend_index];
     auto& extension = backends_[backend_index].command_state->extension;
     while (!batch_stopping_.load(std::memory_order_acquire)) {
-        BatchSlot* selected = nullptr;
-        std::uint64_t selected_sequence =
-            std::numeric_limits<std::uint64_t>::max();
-        for (std::size_t offset = 0; offset < control.slot_count; ++offset) {
-            auto& slot = batch_slots_[control.slot_offset + offset];
-            if (slot.state.load(std::memory_order_acquire) == kBatchQueued &&
-                slot.sequence < selected_sequence) {
-                selected = &slot;
-                selected_sequence = slot.sequence;
-            }
-        }
+        auto* selected = select_device_submission_or_wait(
+            control.wake_sequence, batch_stopping_, [&]() noexcept {
+                BatchSlot* candidate = nullptr;
+                std::uint64_t selected_sequence =
+                    std::numeric_limits<std::uint64_t>::max();
+                for (std::size_t offset = 0; offset < control.slot_count; ++offset) {
+                    auto& slot = batch_slots_[control.slot_offset + offset];
+                    if (slot.state.load(std::memory_order_acquire) == kBatchQueued &&
+                        slot.sequence < selected_sequence) {
+                        candidate = &slot;
+                        selected_sequence = slot.sequence;
+                    }
+                }
+                return candidate;
+            });
         if (!selected) {
-            const auto observed =
-                control.wake_sequence.load(std::memory_order_acquire);
-            if (!batch_stopping_.load(std::memory_order_acquire)) {
-                control.wake_sequence.wait(observed, std::memory_order_relaxed);
-            }
             continue;
         }
         bool waits_ready = true;

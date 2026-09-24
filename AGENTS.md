@@ -5,7 +5,7 @@ portable product is release 1.2.1 at RT0 with stable C ABI v8, SONAME 8, device
 ABI v1, and Apache-2.0. M14, M14.1, M15, M16, and the portable M17 software
 path through M17-06 are complete, while hardware/RT qualification remains
 incomplete. M20-PRE-01, M21-01 through M21-05, and M22-01 through M22-04 are
-merged. M23-01 and M23-02 are merged. M23-03R2 is merged; M23-03R3 is the active approved repair batch;
+merged. M23-01 and M23-02 are merged. M23-03R2 is merged; M23-03R3 is merged; M23-03R4 is the active approved repair batch;
 CI-QUEUE-01 is merged as PR #257. M23-03 remains an unmerged benchmark draft.
 M16-01 supplies the exact reference timeline, M16-02 adds deterministic
 CPU-only cross-rate channel selection and bounded SPSC stores, and M16-03 adds
@@ -180,3 +180,19 @@ comparison and failure record. Correct the actual prior degradation level,
 verify and integrate separately, then reconcile PR #254 and reactivate M23-03.
 Standing bounded software continuation/publication/merge authorization applies.
 No cybersecurity, Daybreak, Unreal, physical qualification or release scope.
+
+## M23-03R4 activation (2026-09-24)
+
+Canonical control #482 merged at `5e447cd44bfd5935d5d0053d7872f85db7dceeb4`,
+blob `6c27fb52b2d16c81b3c6515c6b6091be8fdae11e`. Its local schema/scope pass;
+hosted run 36029151743 / job 107733182257 had no steps and BlobNotFound logs,
+retained as unavailable under the standing owner exception. No target functional
+gate is waived. Activate this bounded device submission ordering repair from
+main `8ba51b3effa6174eaeb5382aef3404eeb5c160d1`. Preserve benchmark #254 at
+`e28a926aa115dcb19b46451f69bf16d806e91ac8`, tree
+`fbb8d51547500c61a30d808245df61cf94274b27`, and its retained 600-second CLI
+timeout. All 87 in-process cases, 51 allocation cases, ASan/UBSan, TSan,
+51 CPU/9 legacy artifacts and the complete package chain passed. Fix and verify
+R4 separately, then reconcile #254 and reactivate M23-03. Standing scoped
+planning/development/publication/merge authorization applies; no cybersecurity,
+Daybreak, Unreal, hardware qualification, release or deployment scope.
