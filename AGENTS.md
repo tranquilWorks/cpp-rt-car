@@ -5,7 +5,8 @@ portable product is release 1.2.1 at RT0 with stable C ABI v8, SONAME 8, device
 ABI v1, and Apache-2.0. M14, M14.1, M15, M16, and the portable M17 software
 path through M17-06 are complete, while hardware/RT qualification remains
 incomplete. M20-PRE-01, M21-01 through M21-05, and M22-01 through M22-04 are
-merged. M23-01 and M23-02 are merged. M23-03R2 is merged; M23-03 is the active approved benchmark batch;
+merged. M23-01 and M23-02 are merged. M23-03R2, M23-03R3 and M23-03R4 are merged;
+M23-03 is the active approved benchmark batch;
 CI-QUEUE-01 is merged as PR #257. M23-03 remains an unmerged benchmark draft.
 M16-01 supplies the exact reference timeline, M16-02 adds deterministic
 CPU-only cross-rate channel selection and bounded SPSC stores, and M16-03 adds
@@ -186,3 +187,18 @@ and all earlier failures remain retained in PR #258 and its evidence. Preserve
 this integrated Runtime source and reactivate the existing M23-03 amendment
 (control #475). Finish benchmark PR #254 under standing scoped publication/merge
 authorization. No cybersecurity, Daybreak or Unreal scope is authorized.
+
+## Benchmark continuation after M23-03R4
+
+Device wake ordering repair #259 merged at
+`49443ff1cee0966c228300530a93917cc95b81e0` after all 32 exact-head checks
+passed at `ea97f91968b9661d83c8b10ba733ef036fb22e8b`, workflow 36030838286.
+Local quick 33/33, full 37/37, ASan/UBSan 41/41, TSan 41/41, relocated SDK
+20/20 and compiled ABI checks passed. Retained execution-permission failures
+and their ordinary relinks are in #259. Preserve all integrated Runtime and
+repair evidence unchanged. Reactivate canonical M23-03 control #475; benchmark
+implementation remains the same 87 cases. Freshly run every benchmark gate,
+including the previously timed-out loopback CLI and no-allocation checks.
+Keep the separate prior Windows experimental determinism timeout explicit.
+Finish #254 under standing scoped publication/merge authorization. No
+cybersecurity, Daybreak, Unreal or physical qualification scope is added.

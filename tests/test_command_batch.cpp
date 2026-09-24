@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <future>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -14,6 +15,51 @@
 #include <type_traits>
 
 #include <rt/runtime.hpp>
+#include "rt/src/device_manager.hpp"
+
+TEST(CommandBatch, NotificationAfterEmptySelectionDoesNotParkWithQueuedWork) {
+  std::atomic<std::uint64_t> wake{0};
+  std::atomic<bool> stopping{false};
+  std::promise<void> finished;
+  auto completion = finished.get_future();
+  bool queued = false;
+  int* selected = nullptr;
+  std::thread worker([&] {
+    selected = rt::detail::select_device_submission_or_wait(
+        wake, stopping, [&]() noexcept -> int* {
+          // The scan saw empty. Force publication and notification into the
+          // exact interval before the helper can decide to park.
+          queued = true;
+          wake.fetch_add(1, std::memory_order_release);
+          wake.notify_one();
+          return nullptr;
+        });
+    finished.set_value();
+  });
+  // This bounds liveness of the negative control, not Runtime performance.
+  const bool completed = completion.wait_for(std::chrono::seconds(5)) ==
+                         std::future_status::ready;
+  if (!completed) {
+    // Rescue the old ordering before joining: never leave a blocked owner.
+    wake.fetch_add(1, std::memory_order_release);
+    wake.notify_one();
+  }
+  worker.join();
+  EXPECT_TRUE(completed) << "submission notification was lost before parking";
+  EXPECT_TRUE(queued);
+  EXPECT_EQ(selected, nullptr);
+}
+
+TEST(CommandBatch, SubmissionSelectionAndStopDoNotPark) {
+  std::atomic<std::uint64_t> wake{7};
+  std::atomic<bool> stopping{false};
+  int slot = 1;
+  EXPECT_EQ(rt::detail::select_device_submission_or_wait(
+                wake, stopping, [&]() noexcept { return &slot; }), &slot);
+  stopping.store(true, std::memory_order_release);
+  EXPECT_EQ(rt::detail::select_device_submission_or_wait(
+                wake, stopping, []() noexcept -> int* { return nullptr; }), nullptr);
+}
 
 namespace {
 
@@ -1718,6 +1764,58 @@ TEST(CommandBatch, DispatchCompletesOnSubmissionAndServiceLanes) {
   EXPECT_EQ(fixture.runtime.reset_device(fixture.backend_handle),
             rt::Status::ok);
   EXPECT_EQ(fixture.runtime.stop(), rt::Status::ok);
+}
+
+TEST(CommandBatch, RepeatedSubmissionLifecyclesKeepIndependentOwnersDrained) {
+  const auto run = [] {
+    for (unsigned lifecycle = 0; lifecycle < 8; ++lifecycle) {
+      ConfiguredBatchRuntime fixture;
+      fixture.configure(1);
+      std::atomic<std::size_t> calls{0};
+      BatchProvider provider;
+      provider.declaration = dispatch_declaration(fixture.buffer, fixture.timeline);
+      provider.callback_count = &calls;
+      provider.timeout_ns = 60'000'000'000;
+      rt::PhaseHandle phase;
+      ASSERT_EQ(fixture.runtime.register_device_batch_phase(
+                    {"repeated.dispatch", fixture.backend_handle, &provide_batch,
+                     &provider, provider.declaration}, phase), rt::Status::ok);
+      ASSERT_EQ(fixture.runtime.finalize(), rt::Status::ok);
+      ASSERT_EQ(fixture.runtime.start(), rt::Status::ok);
+      std::size_t completed = 0;
+      for (std::uint64_t frame = 1; frame <= 128; ++frame) {
+        provider.signal_value = frame;
+        const auto status = fixture.runtime.step(
+            {frame, std::chrono::nanoseconds(100), std::nullopt});
+        EXPECT_EQ(status, rt::Status::ok);
+        if (status != rt::Status::ok) break;
+        ++completed;
+        rt::DeviceTimelineInfo info;
+        const bool present = fixture.runtime.device_timeline_at(
+            fixture.backend_handle, 0, info);
+        EXPECT_TRUE(present);
+        EXPECT_EQ(info.completed_value, frame);
+        EXPECT_EQ(info.last_accepted_value, frame);
+      }
+      const auto stopped = fixture.runtime.stop();
+      EXPECT_EQ(stopped, rt::Status::ok);
+      if (stopped != rt::Status::ok) std::terminate();
+      EXPECT_EQ(completed, 128u);
+      EXPECT_EQ(calls.load(), completed);
+      EXPECT_EQ(fixture.backend.batch_submit_calls.load(), completed);
+      EXPECT_EQ(fixture.backend.single_submit_calls.load(), 0u);
+      EXPECT_EQ(fixture.backend.batch_cancel_calls.load(), 0u);
+      rt::RuntimeMetricSnapshot snapshot;
+      EXPECT_EQ(fixture.runtime.metrics_snapshot(
+                    rt::RuntimeMetricWindow::cumulative, nullptr, snapshot), rt::Status::ok);
+      EXPECT_EQ(snapshot.samples[static_cast<std::size_t>(rt::RuntimeMetricId::device_submissions)].value, completed);
+      EXPECT_EQ(snapshot.samples[static_cast<std::size_t>(rt::RuntimeMetricId::device_completions)].value, completed);
+      EXPECT_EQ(snapshot.samples[static_cast<std::size_t>(rt::RuntimeMetricId::device_outstanding)].value, 0u);
+    }
+  };
+  std::thread first(run), second(run);
+  first.join();
+  second.join();
 }
 
 TEST(CommandBatch, PriorAcceptedWaitMayAdvanceTheSameTimeline) {

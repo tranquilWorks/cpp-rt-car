@@ -1,11 +1,46 @@
 # Current state
 
+M23-03 is active on integrated device wake repair #259, main
+`49443ff1cee0966c228300530a93917cc95b81e0`. The repair passed all 32 hosted
+checks, quick/full profiles, both sanitizer suites and relocated SDK/ABI checks.
+The existing 87-case benchmark implementation is unchanged. PR #254 is being
+freshly verified against this Runtime, including the previously timed-out CLI
+and allocation gates. See `docs/evidence/M23-03-integration-2026-09-24.md`.
+Earlier activation and verification checkpoints below remain historical.
+
+## Historical benchmark checkpoint before R4
+
 M23-03 continuation: replay/watchdog prerequisite PR #258 is merged at
 `8ba51b3effa6174eaeb5382aef3404eeb5c160d1`, with all 32 hosted checks passed.
 Its public regression, sanitizer, full-profile and relocated SDK results are
 recorded in PR #258. M23-03 is active again on this integrated baseline.
 Finish the remaining benchmark acceptance audit and verification in #254;
 M23-04/M23-05 and physical characterization remain separate.
+
+## Historical R4 activation
+
+M23-03R4 is active under merged control #482. Target baseline is merged
+watchdog #258 at `8ba51b3effa6174eaeb5382aef3404eeb5c160d1`. Benchmark #254
+is retained at `e28a926aa115dcb19b46451f69bf16d806e91ac8`: all 87 in-process
+cases, sanitizers and package chain pass, but an original loopback CLI case
+timed out after 600 seconds. Repair the existing device-worker wake ordering
+under this separate scope, verify and integrate, then resume unchanged M23-03.
+Earlier dated checkpoints below remain historical.
+
+
+## 2026-09-24: M23-03R3 watchdog saturation replay repair active
+
+Integrated queue #257 and replay #256 main is
+`52fbdd3b029f1531f8d5d40af85e3f8e11603571`. Separate control PR #481 merged at
+`19eaf9eb45434584c3b5aecb1976a97d4e626dd8`; canonical blob is
+`8d63ada5ed44e457440c6736bf65c7cd40d718fb`. Repair only the watchdog transition's
+actual prior degradation level, with public active/nested replay regressions.
+Benchmark draft #254 is retained at 0bd116eeb167d585108f4079d4f22a81ad9ff32f:
+83/84 cases pass, with composition-fault-8 blocked by this independently
+reproduced defect. All original 78 logical workloads and failures remain.
+Validation and integration are pending; no Runtime repair pass is claimed yet.
+After merging the verified repair, reactivate unchanged M23-03 and finish #254.
+Earlier sections below are historical.
 
 
 ## 2026-09-24: benchmark acceptance completion
