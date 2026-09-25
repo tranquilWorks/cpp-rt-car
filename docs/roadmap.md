@@ -1,8 +1,10 @@
 # RTFW Completion Roadmap
 
-M21 and M22 are portable-software complete through merged PR #250. M23-01 merged as PR #251 and M23-02 source merged as PR #252.
-The M23-02 CLI discovery correction and CI closure are active. Software feature completion remains
-M26-06, not M22 or the presence of a benchmark framework.
+M21 and M22 are portable-software complete. M23-01 through M23-04 are merged,
+including PR #260 after all 32 exact-head checks. M23-05 is active under control
+PR #494: offline regression analysis and an installed third-party provider kit.
+Software feature completion remains M26-06. Physical and controlled-host evidence
+remain separate and unperformed here.
 
 The roadmap converts the [product contract](product_contract.md) into
 dependency-ordered milestones. A milestone is complete only when its exit gates
@@ -45,7 +47,7 @@ pass; file presence or a passing smoke test is not sufficient.
 | M20 | In progress | M20-PRE-01 is merged with deterministic host-independent fuzz, static, dependency, candidate-SBOM/provenance, strict-manifest, offline-fixture, and relocated-package assurance without signing or release; CAP-M20 remains open |
 | M21 | Complete | M21-01 through M21-05 are merged with fixed logical actions, conditional checkpoint state, deterministic active replay, and reusable public-surface conformance; physical/RT qualification remains separate |
 | M22 | Complete | M22-01 through M22-04 merged; typed controls, replay and stress closure at portable RT0 |
-| M23 | In progress | M23-01/M23-02 merged; M23-03 implementation and portable local verification complete, final integration ledger in PR #254; M23-04/M23-05 remain separate |
+| M23 | In progress | M23-01 through M23-04 merged; M23-05 analysis/extension implementation complete in PR #261, which records final verification/integration; physical/controlled evidence remains separate |
 | M24 | Planned | Runtime-integrated CUDA physics, CPU oracle, bounded failure/lifetime and capability coverage |
 | M25 | Planned | Consumer SDK, backend kit, external CIL, independent host adapter and installed docs |
 | M26 | Planned | Golden full-system scenario, fault/benchmark/replay/documentation and final software audit |
@@ -819,15 +821,18 @@ deployment, or production readiness.
 M22-04 closes only CAP-M22 portable software after every hosted and human gate
 passes and the candidate merges.
 
-M23-03 provides 87 public Runtime benchmark cases in PR #254. Repairs #256,
-#258 and #259 are integrated. Complete CLI/allocation, sanitizer and package
-verification passes; final exact-head CI and merge identities are in the PR
-and its completion/integration evidence. M23/CAP-M23 remain incomplete pending M23-04 and
-M23-05. Physical characterization requires a named accessible bench.
+## M23 — Benchmark analysis and extension completion
 
-M23-03 is merged as PR #254 at `03e4c36b24a7a4a6a2a6083aef26b6f45b1dcd9e`.
-M23-04 implements 68 HAL/CUDA/XDMA/staging/pipeline cases under control PR #488.
-Optional real-session hosts, installed consumers and portable verification are
-integrated; final exact-head CI and merge disposition are in PR #260. M23-05
-remains the next separate software batch. Physical characterization is NOT RUN
-until an accessible named bench is available.
+M23-03 merged as PR #254 with 87 public Runtime benchmark cases. M23-04
+merged as PR #260 with 68 HAL/CUDA/XDMA/staging/pipeline cases, optional
+real-session hosts and installed consumers. Repairs #256, #258, #259 and #262
+are integrated; #262's completed-batch retirement ordering passed all 32
+hosted checks before merging at `b39ac9f281862a5a0aff051880671218e117db47`.
+
+M23-05 in PR #261 provides the offline comparison/reporting tool and complete
+third-party provider source kit while preserving all 207 prior cases. Canonical
+reactivation #500 binds it to the integrated repair. Combined local/hosted
+verification and exact merge disposition are retained in that PR and
+`evidence/M23-05-2026-09-25.md`; software closure requires their successful
+completion. Physical characterization, controlled thresholds and actual
+profiler captures remain NOT RUN. M24-M26 are separate software scopes.

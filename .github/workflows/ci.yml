@@ -249,7 +249,7 @@ jobs:
             -artifact_prefix="$RUNNER_TEMP/rtfw-portable-assurance/fuzz-artifacts/"
       - name: Analyze optional host-side benchmark sources
         run: |
-          clang++-14 --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Ibench/include -Ibench/providers -Irt/include -Icore/include -Iinclude -Iexternal/googletest/googletest/include bench/src/benchmark.cpp bench/src/benchmark_cli.cpp bench/providers/cpu_provider.cpp bench/providers/runtime_cases/capacity.cpp bench/providers/runtime_cases/checkpoint.cpp bench/providers/runtime_cases/controls.cpp bench/providers/runtime_cases/device.cpp bench/providers/runtime_cases/observability.cpp bench/providers/runtime_cases/rates.cpp bench/providers/runtime_cases/replay.cpp bench/providers/runtime_provider.cpp tests/package_consumer/benchmark_runtime_consumer.cpp tests/test_benchmark_runtime.cpp bench/providers/device_provider.cpp tests/package_consumer/benchmark_device_consumer.cpp tests/test_benchmark_device.cpp
+          clang++-14 --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Ibench/include -Ibench/providers -Irt/include -Icore/include -Iinclude -Iexternal/googletest/googletest/include bench/src/benchmark.cpp bench/src/benchmark_cli.cpp bench/providers/cpu_provider.cpp bench/providers/runtime_cases/capacity.cpp bench/providers/runtime_cases/checkpoint.cpp bench/providers/runtime_cases/controls.cpp bench/providers/runtime_cases/device.cpp bench/providers/runtime_cases/observability.cpp bench/providers/runtime_cases/rates.cpp bench/providers/runtime_cases/replay.cpp bench/providers/runtime_provider.cpp tests/package_consumer/benchmark_runtime_consumer.cpp tests/test_benchmark_runtime.cpp bench/providers/device_provider.cpp tests/package_consumer/benchmark_device_consumer.cpp tests/test_benchmark_device.cpp bench/extension/provider.cpp bench/extension/main.cpp
       - name: Retain candidate verification evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -366,7 +366,7 @@ jobs:
                      rtfw_host_adapter_tests \
                      rtfw_xdma_backend_tests \
                      rtfw_cpu_gpu_fpga_cpu_sample_tests \
-                     sample_cpu_gpu_fpga_cpu sample_live_control_typed \
+                     sample_cpu_gpu_fpga_cpu sample_live_control_typed rtfw_benchmark_extension_tests \
             -- -j2
       - name: Run executor ThreadSanitizer gate
         env:
@@ -375,7 +375,7 @@ jobs:
         run: |
           ctest --test-dir build-tsan \
             --output-on-failure \
-            -R 'simcore_all|m15_accounting_closure|m15_stack_lifecycle|m15_cross_category_rollback|m16_rate_timeline|m16_rate_dispatch|m16_shedding_telemetry|m16_cross_rate_data|m17_command_batch_timeline|m17_hal_v2_compatibility|m17_heterogeneous_memory_topology|m17_cuda_graph|m17_xdma_control|m17_cpu_gpu_fpga_cpu_sample|sample_cpu_gpu_fpga_cpu|sample_live_control_typed|m19_extension_registration|m22_live_control_mailbox|m22_live_control_sdk|m22_live_control_stress|thread_policy_rollback|thread_policy_recovery|host_adapter|xdma_backend'
+            -R 'm23_benchmark_extension_lifecycle|simcore_all|m15_accounting_closure|m15_stack_lifecycle|m15_cross_category_rollback|m16_rate_timeline|m16_rate_dispatch|m16_shedding_telemetry|m16_cross_rate_data|m17_command_batch_timeline|m17_hal_v2_compatibility|m17_heterogeneous_memory_topology|m17_cuda_graph|m17_xdma_control|m17_cpu_gpu_fpga_cpu_sample|sample_cpu_gpu_fpga_cpu|sample_live_control_typed|m19_extension_registration|m22_live_control_mailbox|m22_live_control_sdk|m22_live_control_stress|thread_policy_rollback|thread_policy_recovery|host_adapter|xdma_backend'
 
   build-windows:
     runs-on: windows-2022
@@ -692,7 +692,7 @@ jobs:
           echo "CC=${{ matrix.cc }}" >> "$GITHUB_ENV"
           echo "CXX=${{ matrix.cxx }}" >> "$GITHUB_ENV"
       - name: Verify optional package relocation isolation and embedding
-        run: python tests/benchmark_fixtures/device_consumer/verify_package.py --work-directory m23-package-work --artifact-output m23-canonical --cpu-artifact-output m23-cpu-canonical --runtime-artifact-output m23-runtime-canonical --device-artifact-output m23-device-canonical
+        run: python tests/benchmark_fixtures/extension_consumer/verify_package.py --work-directory m23-package-work --artifact-output m23-canonical --cpu-artifact-output m23-cpu-canonical --runtime-artifact-output m23-runtime-canonical --device-artifact-output m23-device-canonical
       - name: Upload canonical package-provider fixture
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

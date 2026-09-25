@@ -124,6 +124,17 @@ install(FILES providers/device_provider.hpp providers/device_provider.cpp fixtur
 install(DIRECTORY providers/device_cases real_device
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench/examples)
 
+# M23-05 remains optional host-side tooling and source-owned examples.
+add_executable(rtfw-bench-template extension/main.cpp extension/provider.cpp)
+target_link_libraries(rtfw-bench-template PRIVATE rtfw_benchmark)
+rtfw_enable_project_warnings(rtfw-bench-template)
+install(FILES "${RTFW_PROJECT_SOURCE_DIR}/tools/compare_benchmarks.py"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/tools)
+install(DIRECTORY analysis DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench)
+install(DIRECTORY extension DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/bench/examples)
+install(FILES "${RTFW_PROJECT_SOURCE_DIR}/docs/benchmark_analysis.md"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/docs)
+
 if (RTFW_BUILD_TESTS)
     add_executable(rtfw_benchmark_device_consumer "${RTFW_PROJECT_SOURCE_DIR}/tests/package_consumer/benchmark_device_consumer.cpp")
     target_link_libraries(rtfw_benchmark_device_consumer PRIVATE rtfw_benchmark_device)
@@ -155,6 +166,18 @@ if (RTFW_BUILD_TESTS)
     rtfw_enable_project_warnings(rtfw_benchmark_consumer)
     add_test(NAME benchmark_package_consumer COMMAND rtfw_benchmark_consumer)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    find_package(Threads REQUIRED)
+    add_executable(rtfw_benchmark_extension_tests
+        "${RTFW_PROJECT_SOURCE_DIR}/tests/benchmark_fixtures/extension_consumer/lifecycle.cpp"
+        extension/provider.cpp)
+    target_include_directories(rtfw_benchmark_extension_tests PRIVATE extension)
+    target_link_libraries(rtfw_benchmark_extension_tests PRIVATE rtfw_benchmark Threads::Threads)
+    rtfw_enable_project_warnings(rtfw_benchmark_extension_tests)
+    add_test(NAME m23_benchmark_extension_lifecycle COMMAND rtfw_benchmark_extension_tests)
+    add_test(NAME m23_benchmark_analysis
+        COMMAND "${Python3_EXECUTABLE}" "${RTFW_PROJECT_SOURCE_DIR}/tests/benchmark_fixtures/analysis/test_analysis.py"
+            --template $<TARGET_FILE:rtfw-bench-template>)
+    set_tests_properties(m23_benchmark_extension_lifecycle m23_benchmark_analysis PROPERTIES TIMEOUT 120)
     add_test(NAME m23_benchmark_device_inventory
         COMMAND "${Python3_EXECUTABLE}" "${RTFW_PROJECT_SOURCE_DIR}/tests/benchmark_fixtures/test_device_cases.py"
             --cli $<TARGET_FILE:rtfw-bench> --inventory "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/device_cases.json")

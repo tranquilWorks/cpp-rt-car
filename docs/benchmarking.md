@@ -1,4 +1,4 @@
-# Optional host-side benchmarks (M23-01 and M23-02)
+# Optional host-side benchmarks
 
 The C++20 `<rtfw/benchmark.hpp>` API and `rtfw-bench` CLI are an optional,
 instance-local host-control component. `RTFW_BUILD_BENCHMARKS=OFF` preserves
@@ -17,7 +17,7 @@ build/bench/bench/rtfw-bench run --provider rtfw.self --case structural --clock 
 python3 tools/check_benchmark_artifact.py --artifact-root build/bench-evidence
 ```
 
-`list` prints the sorted 51 `rtfw.cpu` cases and `rtfw.self:structural`. The fake-clock self case performs two
+`list` prints 207 cases: 51 `rtfw.cpu`, 87 `rtfw.runtime`, 68 `rtfw.device`, and `rtfw.self:structural`. The fake-clock self case performs two
 warm-up and five measured calls, each with 16 operations and correctness token
 120. Its 100 ns fake increments produce 100 ns per sample and 500 ns total.
 These are **structural_fixture** values, not performance measurements. The
@@ -397,3 +397,12 @@ The optional `rtfw.device` catalog covers public HAL, CUDA, XDMA, explicit host
 staging and complete Runtime pipelines. See [device benchmarking](device_benchmarking.md)
 for timing boundaries, protocol versus real-driver identity, optional native
 hosts, caller-owned session lifetimes and missing-hardware NOT RUN behavior.
+
+## Offline comparisons and third-party extension kit
+
+M23-05 adds separately versioned baseline/review/profiler sidecars, conservative
+run-level comparisons, deterministic JSON/Markdown reports and a complete public
+ProviderV1 source template. See [benchmark analysis](benchmark_analysis.md) for
+runnable commands, exact statistical rules, controlled review requirements and
+installed consumption. The four-provider runner and every v1 artifact remain
+unchanged; source-template cases are registered only by their separate host.

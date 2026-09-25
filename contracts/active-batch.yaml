@@ -1,184 +1,216 @@
 schema_version: 1
 batch:
-  id: M23-05R
-  title: Retire completed command batches before graph release
-  goal: Close the completed-batch cancellation window by retiring ordinary batch ownership before graph
-    completion can return control to the host; preserve bounded ownership and all existing test oracles.
+  id: M23-05
+  title: Regression analysis and benchmark extension kit
+  goal: Complete the M23 software analysis and extension surfaces with bounded offline baseline/comparison/report
+    tooling and a usable installed third-party provider template, preserving all prior benchmark providers,
+    artifacts, Runtime and ABI behavior.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
+  - products/cpp-rt-car/PRD.md#cap-m23--extensible-subsystem-benchmarking
   - products/cpp-rt-car/acceptance.yaml#CAP-M23
   milestone: products/cpp-rt-car/milestones/M23.md#M23-05--regression-analysis-and-extension-kit
-  baseline_commit: 37c3b155894133789621d41b4233c8edde79d023
+  baseline_commit: b39ac9f281862a5a0aff051880671218e117db47
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M23-05R.yaml
-  control_plane_revision: 5b258a4dc302a2ccf2c92162fe550144c8c694dc
-  owner_direction: Finish feature PR 261 under standing scoped development, publication and exact-head
-    integration authorization. No cybersecurity, Daybreak or Unreal.
-  prerequisite: M23-04 PR 260 is merged; retain all prior Runtime repairs and benchmark implementations.
-  retained_failure: 'PR 261 head 4f780cf23096155da50ff61a1c5fe4970c004a88, tree 5612a378978a00c5afe06cab3db4c9ed87143236.
-    Extra full optional CTest run failed RepeatedSubmissionLifecyclesKeepIndependentOwnersDrained at line
-    1807: expected zero cancellations, observed one. Test completed in 84 ms with unchanged 60-second
-    device timeout. A later 50-repeat pass does not erase the failure.'
-  diagnosis: finish_batch_slot releases the executor graph before decrementing outstanding work and publishing
-    Free. Host step may return and stop may cancel an Owned slot whose successful completion already released
-    the graph. Source establishes this window; the original interleaving was not instrumented.
-  reproducer: A deterministic regression must exercise the production retirement helper with host-stop
-    observation and immediate slot reuse at the graph-publication boundary; the original release-before-retirement
-    ordering must fail the same assertions.
-  integration_order: Integrate this canonical contract, activate the isolated repair from target main,
-    verify and merge, then reconcile PR 261 and separately reactivate M23-05. Preserve the original functional
-    failure and all feature implementation.
-  hosted_failure: 'Repair head bbeb05a5aecc6fdb2f185228c7319b904081d0ce, workflow 36092659651: Windows
-    Debug job 107938159419 failed two existing MixedRateConformance tests at startup stage 4 with device_timeout
-    and zero callbacks/actions. Ordinary CommandBatch tests passed. Windows RelWithDebInfo job 107938159362
-    passed all 49 CTest entries then matrix fail-fast cancelled the artifact step. The rate-owned startup
-    path is unchanged by this repair; its 80-ms fixture safe-transition timeout remains binding.'
-  withdrawn_attempt: Head cc898379261a32168ccc4fda5dd912349d42740b Windows Debug job 107942676941 passes
-    original conformance outputs but fails all new parked-worker assertions. NativeThreadPolicyProvider
-    explicitly reports nondefault policy unsupported on non-Linux, so the attempted park change cannot
-    solve the Windows setup-budget assumption and must be removed completely, not skipped or relabeled
-    as supported.
-  canonical_revision: 09ed06bebf21ece833ffa1626826eaf99e042521
-  canonical_blob_sha: 95def2eaf6bb45783bbc698ac195474ef0fe995a
+  control_plane_path: products/cpp-rt-car/batches/M23-05.yaml
+  predecessor: Repair PR 262 merged at b39ac9f281862a5a0aff051880671218e117db47, tree dbfc45df441bcad0696b34b7e92fc34827f60b34,
+    after all 32 exact-head checks passed at 9166bd9390df36359041480671f569fa136236da; preserve M23-04
+    PR 260 and all prior evidence.
+  owner_scope: Standing M23-05 dependency queue software publication and exact-head integration authorization.
+    No cybersecurity, Daybreak or Unreal; physical evidence requires accessible named hardware.
+  control_plane_revision: 8306551de3f32f9cb15c38efb3f5ab1e886756f0
+  retained_feature_failures: Feature PR 261 head 4f780cf23096155da50ff61a1c5fe4970c004a88 observed one
+    completed-batch cancellation locally, repaired separately by M23-05R. Its Windows release analysis
+    suite hit the 120-second bound; Windows Debug took 118.39 seconds. Independently construct synthetic
+    fixture manifests, compare them with actual capture and preserve all existing assertions, sample/trial
+    counts, v1 validation and the 120-second CTest bound. Reconcile the full feature branch onto integrated
+    repair before final local/hosted verification.
+  canonical_revision: 76fb4a2261c4bdc401051172641f4148a11ec76d
+  canonical_blob_sha: a6adf86ec1944c6d8126ded6d77aa8c402c231e2
 dependencies:
 - M23-04
+- M23-05R
 scope:
   allowed_paths:
-  - contracts/active-batch.yaml
-  - contracts/repo-profile.yaml
   - .portfolio-harness.json
   - AGENTS.md
-  - rt/src/device_manager.cpp
-  - rt/src/device_manager.hpp
-  - tests/test_command_batch.cpp
+  - contracts/active-batch.yaml
+  - bench/CMakeLists.txt
+  - bench/analysis/**
+  - bench/extension/**
+  - tools/compare_benchmarks.py
+  - tests/benchmark_fixtures/analysis/**
+  - tests/benchmark_fixtures/extension_consumer/**
+  - tests/package_consumer/package_contract.cmake
+  - tools/check_release_contract.py
+  - tools/static_analysis_sources.txt
   - release/rtfw-release-contract.json
+  - .github/workflows/ci.yml
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
-  - docs/evidence/M23-05R-*.md
-  - tests/mixed_rate_conformance.hpp
-  - tests/test_mixed_rate_conformance.cpp
+  - docs/roadmap.md
+  - docs/benchmarking.md
+  - docs/benchmark_analysis.md
+  - docs/evidence/M23-05-*.md
   forbidden_paths:
-  - rt/include/
-  - rt/src/host_runtime.cpp
-  - rt/src/live_control_mailbox.cpp
-  - rt/src/live_control_mailbox.hpp
+  - rt/
   - abi/
   - core/
   - hal/
   - gpu/
-  - include/simcore/
+  - include/
   - src/
-  - bench/
+  - samples/
+  - examples/
   - integrations/
+  - configs/
+  - profiles/
   - qualification/
-  - .github/workflows/
-  - tests/CMakeLists.txt
-  - tests/benchmark_fixtures/
-  - tests/test_mixed_rate_replay.cpp
-  - tools/
-  - cmake/
+  - bench/include/
+  - bench/src/
+  - bench/providers/
+  - bench/fixtures/
+  - bench/real_device/
+  - bench/schemas/
+  - tests/benchmark_fixtures/consumer/
+  - tests/benchmark_fixtures/cpu_consumer/
+  - tests/benchmark_fixtures/runtime_consumer/
+  - tests/benchmark_fixtures/device_consumer/
+  - tests/benchmark_fixtures/verify_package.py
+  - tests/benchmark_fixtures/test_artifacts.py
+  - tests/benchmark_fixtures/test_cpu_cases.py
+  - tests/benchmark_fixtures/test_runtime_cases.py
+  - tests/benchmark_fixtures/test_device_cases.py
+  - tests/test_benchmark*.cpp
+  - tests/package_consumer/benchmark*consumer.cpp
+  - tools/check_benchmark_artifact.py
+  - cmake/rtfwConfig.cmake.in
+  - docs/*support_matrix.json
+  - docs/evidence/M23-0[1-4]*.md
   - release/keys/
   - release/signatures/
-  - docs/portable_support_matrix.json
-  - docs/cuda_support_matrix.json
-  - docs/xdma_support_matrix.json
+  - .github/workflows/cuda-qualification.yml
+  - .github/workflows/xdma-qualification.yml
+  - .github/workflows/release.yml
   - VERSION.txt
   - LICENSE
   - CHANGELOG.md
   - SECURITY.md
-  - docs/evidence/CI-QUEUE-01-*.md
-  - docs/evidence/M23-03R2-*.md
-  - docs/evidence/M23-03R3-*.md
-  - docs/evidence/M23-03R4-*.md
-  - docs/evidence/M23-04-*.md
-  - docs/evidence/M23-05-*.md
 acceptance:
-- Validate and integrate this canonical contract before implementation. Retain the original cancellation
-  failure and later 50-repeat pass as distinct evidence; keep feature PR 261 draft until repaired integration
-  is verified.
-- For ordinary command-batch terminal completion, snapshot required metadata and claim graph release before
-  publishing the slot Free, decrement outstanding work and retire ownership before notifying graph completion.
-  Never access mutable slot fields after Free publication. Keep backend wake notification, exact completion/timeline
-  accounting and single graph release.
-- A small allocation-free template helper in existing private device_manager.hpp may expose the production
-  retirement/publication ordering for deterministic regression. No installed/public API, test-only Runtime
-  hook, new lane, allocation, blocking lock, polling workaround or timeout change.
-- Run the deterministic test first with a behavior-equivalent extraction of original release-before-retirement
-  ordering and retain its failing assertions. At the graph-publication boundary, observe no outstanding
-  owned batch and permit immediate reuse; subsequent old-owner actions must neither reclaim nor mutate
-  the new occupant. Cover graph already released by stop without duplicate graph completion, and preserve
-  existing public repeated-lifecycle test unchanged.
-- Preserve active-rate terminal/quarantine ownership, pending-work stop/cancel behavior, early completion,
-  failure/timeout paths, multiple-owner isolation and admission/drain semantics. Do not suppress cancellation
-  broadly or weaken any assertion.
-- Replace the withdrawn parked-worker attempt with a private fixture-only separation of portable setup
-  liveness from active 80-ms device semantics. Give successful sampled safe transitions a finite five-second
-  fixture setup budget, preserving all active provider/completion budgets, logical periods, workload sizes,
-  fault injections, output/replay oracles and CTest bounds. Add an explicit missing-startup-acknowledgement
-  regression that selects the original 80-ms safe-transition timeout and injects the existing public loopback
-  completion_timeout fault before start; assert device_timeout at startup, zero scenario callbacks, a
-  retained logical submission and checked cleanup. Every configured Runtime deadline remains enforced;
-  no production timeout/default, RuntimeClock, policy capability or benchmark provider changes. This fixture
-  budget is a portable liveness guard, not a performance assertion or physical qualification.
-- Preserve ABI v8/70 exports/fingerprint 0xd0e7a5a14bf35f97/SONAME 8, all public layouts and device/HAL
-  ABIs, MemoryPlan accounting, default/optional SDK inventories, all 207 prior benchmark cases, schemas/validators,
-  release 1.2.1 and Apache-2.0.
-- Pass focused command/device/rate/replay suites, unchanged repeated public lifecycle coverage, supported
-  ASan/UBSan and TSan, official full profile, compiled ABI, relocated package and every existing exact-head
-  hosted gate. Retain unavailable or failing validation; no retry-until-green or functional waiver.
-- After repair integration, reconcile and reactivate canonical M23-05 for feature PR 261, preserve its
-  source and contracts and freshly verify combined local/hosted gates before merging.
-- Record exact canonical/source/tree/CI identities, ordering proof, negative-control output, actual results
-  and limitations. No physical characterization, controlled thresholds, human review, hardware/RT qualification,
-  support promotion, signing, release, deployment, cybersecurity, Daybreak or Unreal scope.
+- Preserve the exact 207-case four-provider CLI inventory and all original workloads, schemas, validator,
+  core/provider implementation, default SDK and ABI v8/70 exports/SONAME8. Implement analysis as a separate
+  standard-library Python host tool and third-party source template; no Runtime or runner fork.
+- Define strict versioned sidecar contracts for baseline manifests, candidate run manifests, predeclared
+  comparison policy, threshold review and profiler correlations. Bind exact artifact file digests, source
+  and complete identity, descriptor/workload, commands represented by bounded public tokens, declared
+  independent trial IDs and run ordering. Bound cases, trials, files and input size; reject missing/duplicate/unknown/malformed
+  fields and retain zero-sample NOT RUN distinctly.
+- Use the unchanged offline v1 validator for every input. Compare exact descriptor, counter inventory/units
+  and complete host/compiler/build/backend/thread/memory identities; only source commit/tree may intentionally
+  differ between baseline and candidate. Reject dirty/unknown source and missing required host facts for
+  steady performance comparisons, missing required counters, altered workload, cross-host/toolchain/configuration
+  or fake/steady mixing. Structural fixtures never produce performance conclusions.
+- Use independent run-level medians, not within-run repeated invocations as independent statistical trials.
+  Retain every raw sample without trimming. Document exact distribution-free binomial order-statistic
+  confidence bounds with conservative family-wide adjustment, integer/rational arithmetic, minimum trial/sample
+  counts, zero-denominator and insufficient-confidence handling. Predeclare noise and outlier rules and
+  report inconclusive instead of a misleading pass when noise, outliers or sample insufficiency invalidates
+  comparison.
+- Generate deterministic machine-readable reports and readable Markdown with per-case status/reasons,
+  retained source/identity/hash references, raw counts, p50/p95/p99/max summaries, exact counter totals,
+  median differences and confidence bounds only when admissible. Missing, failed, incompatible and noisy
+  cases cannot disappear or become successful deltas; multi-case aggregate reflects worst disposition.
+- Portable mode performs structural validation and descriptive portable characterization only; it never
+  applies release-regression thresholds or promotes an evidence class. Controlled threshold evaluation
+  requires an explicit external review binding the exact baseline/policy/host declaration and predating
+  every candidate trial. The tool creates proposal-only review templates, never approves thresholds, signs
+  evidence, updates baselines, promotes support or changes controlled-runner settings. Threshold changes
+  invalidate the old review.
+- Profiler correlation sidecars bind exact run/context digest, case, named tool/version and retained trace
+  digest plus explicit sample index ranges and clock-domain relationship or uncorrelated state. Do not
+  infer causality, ingest private trace contents, execute profiler commands or alter the existing result
+  schema. Reports preserve missing/uncorrelated facts explicitly and show an actionable profiling-to-reproduction-to-remediation
+  workflow.
+- Provide a complete third-party ProviderV1 template with meaningful bounded integer transform, independent
+  elementwise oracle/counters, metadata-only discovery, explicit prepare/invoke/checked-finish ownership,
+  repeated ordinals/runs, missing prerequisite and fault nonpublication behavior. The example uses only
+  installed benchmark headers/target, supports fake and steady clocks, multiple independent owners and
+  emits ordinary valid v1 bundles without editing the runner.
+- Install analysis scripts/contracts/docs and template sources only with the optional benchmark component.
+  Exercise installed, archive-relocated, non-default-prefix and add-subdirectory consumers; append a wrapper
+  above all unchanged device/Runtime/CPU/original wrappers. Preserve existing optional source ledgers
+  and exact default package inventory.
+- Add deterministic golden statistical/identity/noise/malformed/NOT RUN/review chronology/profiler tests
+  and end-to-end CLI success/failure/output preservation tests. Verify exact known confidence bounds and
+  threshold edges independently. Test the actual template with failure recovery, repeated and concurrent
+  independent owners, sanitizers and optional static analysis. No elapsed-time assertion from uncontrolled
+  CI is a release threshold.
+- Retain all existing required compiler/FMA/MSVC, sanitizer/TSan, seven-way artifact exchange, package/default
+  SDK, ABI, no-allocation, docs and release gates. Add analysis/template coverage within those gates without
+  deleting earlier assertions or weakening checks.
+- Record each acceptance result and exact source/control/head/tree identities, failures and unperformed
+  validation. Software completion does not claim controlled timing, actual profiler capture, hardware/RT
+  qualification or independent human review. M24-M26, Unreal, cybersecurity, Daybreak, signing, release
+  and deployment remain outside this batch.
 validation:
   local:
   - git status --short --branch
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh quick
-  - Production-helper original-order negative control and repaired retirement/graph-publication regression.
-  - Focused CommandBatch, DeviceRuntime, MixedRateReplay and existing device/replay tests.
-  - GCC ASan/UBSan and TSan focused suites where supported.
+  - cmake -S . -B build/m23-analysis -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF
+    -DRTFW_BUILD_BENCHMARKS=ON -DSIM_SANITIZERS= -DSIM_WERROR=ON
+  - cmake --build build/m23-analysis --parallel 2
+  - ctest --test-dir build/m23-analysis --output-on-failure
+  - python3 tests/benchmark_fixtures/analysis/test_analysis.py
+  - python3 tests/benchmark_fixtures/extension_consumer/verify_package.py --help
   - ./scripts/agent-verify.sh full
-  - python3 tools/check_c_abi.py --library build/agent-full/librtfw.so
-  - Default relocated package consumers and release contract validation.
+  - python3 tools/check_c_abi.py --library build/m23-analysis/librtfw.so
   - git diff --check
   focused_tests_to_add:
-  - Graph publication observes retired ownership and zero outstanding completed work.
-  - Immediate slot reuse at publication is not reclaimed or altered by the previous owner; captured phase/backend
-    metadata stays correct.
-  - Prior stop release drains once without duplicate graph completion; all existing public lifecycle,
-    stop/cancel/failure and active-rate cases remain unchanged.
-  - Full normal/two-owner/active-fault/replay conformance plus explicit startup missing-acknowledgement
-    timeout at the original 80-ms setting and checked cleanup; no parked-worker claim.
+  - Exact confidence arithmetic, noise/outlier and threshold boundary fixtures; complete identity mismatch
+    and malformed/partial artifact rejection.
+  - Review-policy-baseline binding and chronology; profiler run/context/sample binding; no performance
+    decisions from structural fixtures or unreviewed portable evidence.
+  - End-to-end comparison/report generation, unchanged destinations, extension CLI/oracles/faults/recovery/independent
+    owners and optional package consumers.
   required_ci:
-  - Existing exact-head GCC/Clang sanitizer, Windows MSVC, GCC TSan, determinism, portable assurance,
-    ABI/package and contract gates without removal or weakening.
+  - All unchanged 32-check predecessor surface, with additive offline analysis and template tests.
+  - GCC/Clang/MSVC optional installed/relocated/embedded source consumers and existing seven-way canonical
+    exchanges.
+  - Supported sanitizer and TSan template lifecycle/concurrency; Clang14 optional static; exact default
+    SDK/ABI/release digests.
   manual:
-  - Review graph-publication ordering, slot lifetime/reuse and stop ownership. Independent human review
-    remains explicit.
+  - Threshold approval and actual controlled measurements remain external owner actions; no software test
+    supplies that review.
+  - Physical measurements and actual profiler captures require accessible named hardware and retained
+    source/host/tool identities.
 risk:
   class: high
   hazards:
-  - Graph completion before slot retirement permits stop to cancel already-completed work.
-  - Slot reads or writes after Free publication can affect a reused occupant.
-  - Broadly skipping cancellation, test weakening or lucky reruns conceal the defect.
-  - Uncontrolled shared-host scheduling can exhaust finite fixture deadlines; keep actual failures and
-    every timeout assertion, do not label these runs timing qualification.
+  - Pseudoreplication, outlier removal, post-selected thresholds or incomplete identity creating false
+    performance conclusions.
+  - Optional Python/template artifacts leaking into default SDK or changing prior provider workloads and
+    release digests.
+  - Mislabeling portable/synthetic/declared-review evidence as physical, controlled-runner qualification
+    or authenticated approval.
   stop_conditions:
-  - Canonical contract absent or target main moved without reconciliation.
-  - Repair needs public layouts, extra Runtime resources, weakened output/fault assertions, changed active
-    device budgets or CTest bounds, private Runtime hooks or forbidden paths. Only the explicit private
-    fixture safe-transition setup-budget separation described above is authorized.
-  - Verification requires waived functional gates or fabricated evidence.
+  - A forbidden core/provider/schema/validator path or ABI change is needed; retain reproducer and create
+    a separate repair scope.
+  - Unresolved product decision, inaccessible hardware or controlled threshold approval is needed for
+    a claimed result.
+  - Main moves without reconciliation, local functional gate fails, or successful integration needs weakened
+    checks.
 rollback:
-  strategy: Revert the isolated retirement/helper/regression and activation together; retain the failure
-    and keep PR 261 blocked pending a verified replacement.
+  strategy: Revert isolated offline analysis, extension source kit and additive packaging/test/documentation
+    wiring as one batch, preserving all M23-01 through M23-04 source and evidence.
 evidence:
   output:
-  - docs/evidence/M23-05R-2026-09-25.md
-  - Exact old/corrected ordering tests, canonical/source/tree identities, focused/sanitizer/full/package/hosted
-    results and limitations.
-  claim_boundary: Portable ordinary command-batch completion ordering only; no public interface, physical
-    characterization, controlled timing, RT qualification or release.
+  - docs/evidence/M23-05-<date>.md
+  - Acceptance-to-code/test matrix, actual commands and failed/passed/unperformed results, exact target/control
+    commits/trees/CI and PR identities.
+  - Versioned baseline/review/profiler fixtures labeled synthetic; no claimed hardware or controlled timing
+    evidence.
+  claim_boundary: M23 portable software analysis and extension implementation only. No physical characterization,
+    real controlled threshold approval, support/RT qualification, independent human review, M24-M26, cybersecurity,
+    Daybreak, Unreal, signing, release or deployment.

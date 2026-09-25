@@ -1,21 +1,42 @@
 # Handoff
 
-M23-05R is active under merged control #496 and corrective amendment #498,
-`09ed06bebf21ece833ffa1626826eaf99e042521`, canonical blob
-`95def2eaf6bb45783bbc698ac195474ef0fe995a`. Baseline is merged M23-04
-#260 at `37c3b155894133789621d41b4233c8edde79d023`. Feature PR #261
-remains draft at `4f780cf23096155da50ff61a1c5fe4970c004a88`; its extra
-normal CTest run observed one unexpected cancellation after completed batches.
-Retire ordinary batch ownership before graph completion, preserve every test
-assertion and prior failure, verify and integrate separately, then reconcile
-M23-05 and freshly verify the combined feature tree.
+M23-05 is active on merged repair #262 at
+`b39ac9f281862a5a0aff051880671218e117db47`, tree
+`dbfc45df441bcad0696b34b7e92fc34827f60b34`, under canonical #500,
+`76fb4a2261c4bdc401051172641f4148a11ec76d` (blob
+`a6adf86ec1944c6d8126ded6d77aa8c402c231e2`). The repair passed all 32
+hosted checks and its full local/sanitizer/relocated-SDK/ABI gates.
 
-See [repair evidence](evidence/M23-05R-2026-09-25.md). Current verification
-and exact-head integration disposition are retained there and in the repair PR.
-Physical characterization and controlled timing remain NOT RUN.
+Feature PR #261 retains the complete offline analysis and third-party kit.
+Synthetic manifests now avoid repeated production capture during test setup;
+an explicit regression compares both manifests to actual capture. All original
+trials, assertions, v1 validation and the 120-second CTest limit remain.
+Fresh verification of this combined source is pending; final source/tree/CI
+and merge outcomes are recorded in [PR #261](https://github.com/tranquilWorks/cpp-rt-car/pull/261)
+and [evidence](evidence/M23-05-2026-09-25.md). Earlier Windows analysis,
+completed-batch cancellation and failed repair attempts remain retained.
 
-## Historical checkpoint before M23-05R
+Physical characterization, controlled timing, threshold approval and profiler
+capture remain NOT RUN. M24-M26 remain separate.
 
+## Historical feature checkpoint before repair integration
+
+M23-05 software implementation is complete in PR #261 under canonical control PR #494, merged at
+`b61ab1396168647ab8309eb7015b25edfae9ecf1` (blob
+`a043c31df4244e073a12229c9dcb907a22ba7d12`). The baseline is merged
+M23-04 PR #260 at `37c3b155894133789621d41b4233c8edde79d023`, tree
+`20435c387117ae06a971d974e7f7da03105c2447`; all 32 exact-head checks passed.
+
+The new offline comparison and third-party source kit preserve every prior
+provider, runner, v1 bundle/validator, Runtime, driver and ABI. Focused and normal software verification, ASan/UBSan and ABI checks pass.
+Final full-profile/package, exact-head hosted checks and merge disposition are
+retained in [PR #261](https://github.com/tranquilWorks/cpp-rt-car/pull/261). See [benchmark analysis](benchmark_analysis.md) and
+[evidence](evidence/M23-05-2026-09-25.md). Actual controlled-host timing,
+threshold approval, physical characterization and profiler capture are NOT RUN.
+M24-M26 remain separate software scopes. Historical checkpoints below do not
+reopen completed batches.
+
+## Historical M23-04 implementation checkpoint
 
 M23-04 software implementation is complete; final integration is tracked in PR #260 under merged
 control #488 (`49b134215e74b2d6f27ae1cab3801ac9dc8c139d`, canonical blob
@@ -486,3 +507,19 @@ promotion; a later approved qualification-policy batch owns any revision.
 After local verification, mandatory GitHub CI and human schema, security,
 qualification, compatibility, and claim-boundary review remain external merge
 gates. No physical campaign or support promotion belongs to M18-01.
+
+## Historical M23-05R activation checkpoint
+
+M23-05R is active under merged control #496 and corrective amendment #498,
+`09ed06bebf21ece833ffa1626826eaf99e042521`, canonical blob
+`95def2eaf6bb45783bbc698ac195474ef0fe995a`. Baseline is merged M23-04
+#260 at `37c3b155894133789621d41b4233c8edde79d023`. Feature PR #261
+remains draft at `4f780cf23096155da50ff61a1c5fe4970c004a88`; its extra
+normal CTest run observed one unexpected cancellation after completed batches.
+Retire ordinary batch ownership before graph completion, preserve every test
+assertion and prior failure, verify and integrate separately, then reconcile
+M23-05 and freshly verify the combined feature tree.
+
+See [repair evidence](evidence/M23-05R-2026-09-25.md). Current verification
+and exact-head integration disposition are retained there and in the repair PR.
+Physical characterization and controlled timing remain NOT RUN.

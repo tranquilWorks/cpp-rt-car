@@ -65,6 +65,7 @@ if (RTFW_TEST_BENCHMARK)
         message(FATAL_ERROR "CPU example leaked as an installed target")
     endif()
     set(expected_benchmark_examples
+        extension/CMakeLists.txt extension/main.cpp extension/provider.cpp extension/provider.hpp
         benchmark_device_consumer.cpp device_provider.hpp device_provider.cpp device_cases.json
         device_cases/fake_cuda.hpp device_cases/fake_xdma.hpp device_cases/cuda_graph.inc device_cases/pipeline.inc device_cases/hal.inc
         real_device/cuda.cpp real_device/xdma.cpp real_device/increment_ptx.hpp real_device/cuda_resources.hpp real_device/pipeline.cpp real_device/check_missing_xdma.py

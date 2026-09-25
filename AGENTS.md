@@ -242,3 +242,26 @@ active 80-ms provider/completion budgets and all logical/fault/output oracles
 remain unchanged. A new startup missing-ack regression explicitly uses the
 original 80-ms setting and verifies device_timeout, no scenario work and
 checked cleanup. Runtime deadline enforcement/defaults are unchanged.
+
+## M23-05 activation after PR #260
+
+M23-04 is merged at `37c3b155894133789621d41b4233c8edde79d023` after all
+32 exact-head checks passed. Canonical control PR #494, merge
+`b61ab1396168647ab8309eb7015b25edfae9ecf1`, activates the already-authorized
+M23-05 offline comparison/reporting and third-party source kit. Preserve every
+prior benchmark/provider/validator, Runtime, driver, ABI and qualification boundary.
+Standing scoped publication/merge authorization continues; no cybersecurity,
+Daybreak, Unreal or fabricated physical/controlled evidence is authorized.
+Historical checkpoint text above does not reopen completed batches.
+
+## M23-05 reactivation after PR #262
+
+Repair #262 merged at `b39ac9f281862a5a0aff051880671218e117db47`, tree
+`dbfc45df441bcad0696b34b7e92fc34827f60b34`, after all 32 exact-head checks
+passed. Canonical reactivation #500 merged at
+`76fb4a2261c4bdc401051172641f4148a11ec76d`. Reconcile feature #261 with
+this Runtime, construct synthetic analysis manifests independently and compare
+them with actual capture. Keep all original samples/assertions, v1 validation
+and the 120-second CTest bound. Freshly verify combined local and hosted gates
+before scoped integration. Preserve all failed evidence. Earlier activation
+paragraphs are historical; standing scope and publication authorization remain.
