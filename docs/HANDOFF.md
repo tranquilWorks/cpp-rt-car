@@ -1,8 +1,8 @@
 # Handoff
 
-M23-05R is active under merged control #496 and amendment #497,
-`5b258a4dc302a2ccf2c92162fe550144c8c694dc`, canonical blob
-`c2cb16353638bfef020fd32981602cd85b9a9840`. Baseline is merged M23-04
+M23-05R is active under merged control #496 and corrective amendment #498,
+`09ed06bebf21ece833ffa1626826eaf99e042521`, canonical blob
+`95def2eaf6bb45783bbc698ac195474ef0fe995a`. Baseline is merged M23-04
 #260 at `37c3b155894133789621d41b4233c8edde79d023`. Feature PR #261
 remains draft at `4f780cf23096155da50ff61a1c5fe4970c004a88`; its extra
 normal CTest run observed one unexpected cancellation after completed batches.

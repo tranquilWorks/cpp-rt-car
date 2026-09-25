@@ -12,7 +12,7 @@ sources:
   baseline_commit: 37c3b155894133789621d41b4233c8edde79d023
   control_plane_repository: tranquilWorks/portfolio-control
   control_plane_path: products/cpp-rt-car/batches/M23-05R.yaml
-  control_plane_revision: 7890ad076ce0a53a624bcf02e4c937ea9768aa3b
+  control_plane_revision: 5b258a4dc302a2ccf2c92162fe550144c8c694dc
   owner_direction: Finish feature PR 261 under standing scoped development, publication and exact-head
     integration authorization. No cybersecurity, Daybreak or Unreal.
   prerequisite: M23-04 PR 260 is merged; retain all prior Runtime repairs and benchmark implementations.
@@ -34,8 +34,13 @@ sources:
     and zero callbacks/actions. Ordinary CommandBatch tests passed. Windows RelWithDebInfo job 107938159362
     passed all 49 CTest entries then matrix fail-fast cancelled the artifact step. The rate-owned startup
     path is unchanged by this repair; its 80-ms fixture safe-transition timeout remains binding.'
-  canonical_revision: 5b258a4dc302a2ccf2c92162fe550144c8c694dc
-  canonical_blob_sha: c2cb16353638bfef020fd32981602cd85b9a9840
+  withdrawn_attempt: Head cc898379261a32168ccc4fda5dd912349d42740b Windows Debug job 107942676941 passes
+    original conformance outputs but fails all new parked-worker assertions. NativeThreadPolicyProvider
+    explicitly reports nondefault policy unsupported on non-Linux, so the attempted park change cannot
+    solve the Windows setup-budget assumption and must be removed completely, not skipped or relabeled
+    as supported.
+  canonical_revision: 09ed06bebf21ece833ffa1626826eaf99e042521
+  canonical_blob_sha: 95def2eaf6bb45783bbc698ac195474ef0fe995a
 dependencies:
 - M23-04
 scope:
@@ -107,13 +112,15 @@ acceptance:
 - Preserve active-rate terminal/quarantine ownership, pending-work stop/cancel behavior, early completion,
   failure/timeout paths, multiple-owner isolation and admission/drain semantics. Do not suppress cancellation
   broadly or weaken any assertion.
-- Configure only the portable mixed-rate conformance fixture CPU executor workers with the existing explicit
-  park policy, avoiding repeatedly runnable idle yield loops during sampled-I/O startup. Assert the configured/resolved
-  park policy through public inspection and retain complete normal/two-owner/fault/replay/package coverage.
-  Preserve every 80-ms provider, completion and safe-transition timeout, all logical periods, workload
-  sizes, fault injections, CTest bounds and existing assertions. Change no Runtime policy default, rate-owned
-  production path or benchmark provider. This reduces avoidable fixture host contention; do not claim
-  proof that every historical timeout has this cause.
+- Replace the withdrawn parked-worker attempt with a private fixture-only separation of portable setup
+  liveness from active 80-ms device semantics. Give successful sampled safe transitions a finite five-second
+  fixture setup budget, preserving all active provider/completion budgets, logical periods, workload sizes,
+  fault injections, output/replay oracles and CTest bounds. Add an explicit missing-startup-acknowledgement
+  regression that selects the original 80-ms safe-transition timeout and injects the existing public loopback
+  completion_timeout fault before start; assert device_timeout at startup, zero scenario callbacks, a
+  retained logical submission and checked cleanup. Every configured Runtime deadline remains enforced;
+  no production timeout/default, RuntimeClock, policy capability or benchmark provider changes. This fixture
+  budget is a portable liveness guard, not a performance assertion or physical qualification.
 - Preserve ABI v8/70 exports/fingerprint 0xd0e7a5a14bf35f97/SONAME 8, all public layouts and device/HAL
   ABIs, MemoryPlan accounting, default/optional SDK inventories, all 207 prior benchmark cases, schemas/validators,
   release 1.2.1 and Apache-2.0.
@@ -143,8 +150,8 @@ validation:
     metadata stays correct.
   - Prior stop release drains once without duplicate graph completion; all existing public lifecycle,
     stop/cancel/failure and active-rate cases remain unchanged.
-  - Existing complete mixed-rate conformance normal, independent-owner and injected-fault scenarios with
-    explicit inspected parked workers and unchanged deadlines/oracles.
+  - Full normal/two-owner/active-fault/replay conformance plus explicit startup missing-acknowledgement
+    timeout at the original 80-ms setting and checked cleanup; no parked-worker claim.
   required_ci:
   - Existing exact-head GCC/Clang sanitizer, Windows MSVC, GCC TSan, determinism, portable assurance,
     ABI/package and contract gates without removal or weakening.
@@ -161,8 +168,9 @@ risk:
     every timeout assertion, do not label these runs timing qualification.
   stop_conditions:
   - Canonical contract absent or target main moved without reconciliation.
-  - Repair needs public layouts, extra Runtime resources, weakened comparisons/timeouts, test-only hooks
-    or forbidden paths.
+  - Repair needs public layouts, extra Runtime resources, weakened output/fault assertions, changed active
+    device budgets or CTest bounds, private Runtime hooks or forbidden paths. Only the explicit private
+    fixture safe-transition setup-budget separation described above is authorized.
   - Verification requires waived functional gates or fabricated evidence.
 rollback:
   strategy: Revert the isolated retirement/helper/regression and activation together; retain the failure

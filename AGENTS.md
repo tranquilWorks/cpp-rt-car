@@ -234,3 +234,11 @@ allows the two private mixed-rate conformance fixture/test files to park idle
 CPU workers and inspect that policy. Retain the Windows startup failure; all
 80-ms deadlines, logical periods, fault injections and existing oracles remain
 unchanged. No Runtime default or rate-owned production path is modified.
+
+Canonical correction #498 (`09ed06bebf21ece833ffa1626826eaf99e042521`)
+withdraws the unsupported Windows park-policy attempt. Only the private
+conformance fixture's safe-transition setup guard becomes five seconds;
+active 80-ms provider/completion budgets and all logical/fault/output oracles
+remain unchanged. A new startup missing-ack regression explicitly uses the
+original 80-ms setting and verifies device_timeout, no scenario work and
+checked cleanup. Runtime deadline enforcement/defaults are unchanged.

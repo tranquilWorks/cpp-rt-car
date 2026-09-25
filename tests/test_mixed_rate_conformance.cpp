@@ -39,7 +39,6 @@ TEST(MixedRateConformance, ThreeRatePublicFixtureIsOrderedAndExact) {
     EXPECT_GT(result.replay_actions_compared, 0u);
     EXPECT_GE(result.loopback_logical_actions, 12u);
     EXPECT_TRUE(result.memory_accounting_exact);
-    EXPECT_TRUE(result.idle_workers_parked);
 }
 
 TEST(MixedRateConformance, TwoInstancesShareNoMutableState) {
@@ -47,8 +46,6 @@ TEST(MixedRateConformance, TwoInstancesShareNoMutableState) {
     const auto second = rtfw_test::run_mixed_rate_conformance();
     EXPECT_EQ(first.status, rt::Status::ok);
     EXPECT_EQ(second.status, rt::Status::ok);
-    EXPECT_TRUE(first.idle_workers_parked);
-    EXPECT_TRUE(second.idle_workers_parked);
     EXPECT_EQ(first.callback_counts, second.callback_counts);
     EXPECT_EQ(first.action_count, second.action_count);
 }
@@ -111,6 +108,19 @@ TEST(MixedRateConformance, FaultMatrixReplaysTerminalClosureAndSafeFailure) {
         EXPECT_TRUE(result.active_replay_exact);
         EXPECT_GT(result.replay_actions_compared, 0u);
         EXPECT_GE(result.loopback_logical_actions, 6u);
-        EXPECT_TRUE(result.idle_workers_parked);
     }
+}
+
+TEST(MixedRateConformance, MissingStartupAcknowledgementHonorsOriginalTimeout) {
+    const auto result = rtfw_test::run_mixed_rate_conformance(
+        rt::SampledIoLoopbackFault::none,
+        80'000'000,
+        rt::SampledIoLoopbackFault::completion_timeout);
+    EXPECT_EQ(result.status, rt::Status::device_timeout);
+    EXPECT_EQ(result.failure_stage, 4u);
+    for (const auto count : result.callback_counts) EXPECT_EQ(count, 0u);
+    EXPECT_EQ(result.action_count, 0u);
+    EXPECT_EQ(result.loopback_logical_actions, 1u);
+    EXPECT_FALSE(result.startup_safe_acknowledged);
+    EXPECT_EQ(result.startup_cleanup_status, rt::Status::ok);
 }
