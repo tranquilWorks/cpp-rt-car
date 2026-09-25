@@ -114,20 +114,39 @@ class Analysis(unittest.TestCase):
         for candidate in (False,True):
             role = "candidate" if candidate else "baseline"
             entries=[]
+            runs=[]
             for i in range(n):
                 name=f"{role}-{i}"
                 write_bundle(self.root/name,left if not candidate else right,i,candidate,clock,
                              status if candidate else "ok",changes if candidate else None)
-                entries.append(dict(trial_id=name,bundle=name,command=["synthetic-fixture",name]))
+                entry=dict(trial_id=name,bundle=name,command=["synthetic-fixture",name])
+                entries.append(entry)
+                runs.append({**entry,"files":{
+                    filename:analysis.digest((self.root/name/filename).read_bytes())
+                    for filename in ("descriptor.json","raw.json","result.json")}})
             plan=dict(schema_version=1,kind="run_plan",collection=self.controls,runs=entries)
             save(self.root/f"{role}-plan.json",plan)
-            manifest=analysis.capture(self.root/f"{role}-plan.json",self.root/"policy.json",self.root,role)
-            manifest["created_utc"]=f"2026-01-0{3 if candidate else 1}T01:00:00Z"
+            # Construct synthetic inputs independently; comparison still validates
+            # every bundle through the unchanged v1 validator. Capture itself is
+            # checked against this fixture below and through the actual CLI.
+            manifest=dict(schema_version=1,kind=role,
+                          created_utc=f"2026-01-0{3 if candidate else 1}T01:00:00Z",
+                          policy_sha256=analysis.digest((self.root/"policy.json").read_bytes()),
+                          collection=self.controls,runs=runs)
             save(self.root/f"{role}.json",manifest)
         review=analysis.review_proposal(self.root/"baseline.json",self.root/"policy.json") if self.policy["mode"]=="controlled" else None
         if review:
             review.update(decision="approved",reviewer="synthetic-test-reviewer",approved_utc="2026-01-02T00:00:00Z")
             save(self.root/"review.json",review)
+
+    def test_independent_manifests_match_actual_capture(self):
+        for role in ("baseline","candidate"):
+            with self.subTest(role=role):
+                expected=json.loads((self.root/f"{role}.json").read_bytes())
+                actual=analysis.capture(self.root/f"{role}-plan.json",
+                                        self.root/"policy.json",self.root,role)
+                actual["created_utc"]=expected["created_utc"]
+                self.assertEqual(actual,expected)
 
     def options(self, review=True, profiler=False):
         return argparse.Namespace(policy=self.root/"policy.json",baseline=self.root/"baseline.json",candidate=self.root/"candidate.json",
@@ -353,4 +372,4 @@ class TemplateCli(unittest.TestCase):
 
 
 if __name__=="__main__":
-    unittest.main(argv=[sys.argv[0],*remaining])
+    unittest.main(argv=[sys.argv[0],*remaining],verbosity=2)

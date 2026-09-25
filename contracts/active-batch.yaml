@@ -11,17 +11,26 @@ sources:
   - products/cpp-rt-car/PRD.md#cap-m23--extensible-subsystem-benchmarking
   - products/cpp-rt-car/acceptance.yaml#CAP-M23
   milestone: products/cpp-rt-car/milestones/M23.md#M23-05--regression-analysis-and-extension-kit
-  baseline_commit: 37c3b155894133789621d41b4233c8edde79d023
+  baseline_commit: b39ac9f281862a5a0aff051880671218e117db47
   control_plane_repository: tranquilWorks/portfolio-control
   control_plane_path: products/cpp-rt-car/batches/M23-05.yaml
-  predecessor: 'PR #260 merged at 37c3b155894133789621d41b4233c8edde79d023; tree 20435c387117ae06a971d974e7f7da03105c2447;
-    all 32 checks passed at bca5849b31acd4d67038351930c4bcbc35920e4e, main CI 36064569567.'
+  predecessor: Repair PR 262 merged at b39ac9f281862a5a0aff051880671218e117db47, tree dbfc45df441bcad0696b34b7e92fc34827f60b34,
+    after all 32 exact-head checks passed at 9166bd9390df36359041480671f569fa136236da; preserve M23-04
+    PR 260 and all prior evidence.
   owner_scope: Standing M23-05 dependency queue software publication and exact-head integration authorization.
     No cybersecurity, Daybreak or Unreal; physical evidence requires accessible named hardware.
-  canonical_revision: b61ab1396168647ab8309eb7015b25edfae9ecf1
-  canonical_blob_sha: a043c31df4244e073a12229c9dcb907a22ba7d12
+  control_plane_revision: 8306551de3f32f9cb15c38efb3f5ab1e886756f0
+  retained_feature_failures: Feature PR 261 head 4f780cf23096155da50ff61a1c5fe4970c004a88 observed one
+    completed-batch cancellation locally, repaired separately by M23-05R. Its Windows release analysis
+    suite hit the 120-second bound; Windows Debug took 118.39 seconds. Independently construct synthetic
+    fixture manifests, compare them with actual capture and preserve all existing assertions, sample/trial
+    counts, v1 validation and the 120-second CTest bound. Reconcile the full feature branch onto integrated
+    repair before final local/hosted verification.
+  canonical_revision: 76fb4a2261c4bdc401051172641f4148a11ec76d
+  canonical_blob_sha: a6adf86ec1944c6d8126ded6d77aa8c402c231e2
 dependencies:
 - M23-04
+- M23-05R
 scope:
   allowed_paths:
   - .portfolio-harness.json
@@ -89,59 +98,61 @@ scope:
   - CHANGELOG.md
   - SECURITY.md
 acceptance:
-- Preserve the exact 207-case four-provider CLI inventory and all original workloads, schemas, validator, core/provider
-  implementation, default SDK and ABI v8/70 exports/SONAME8. Implement analysis as a separate standard-library
-  Python host tool and third-party source template; no Runtime or runner fork.
-- Define strict versioned sidecar contracts for baseline manifests, candidate run manifests, predeclared comparison
-  policy, threshold review and profiler correlations. Bind exact artifact file digests, source and complete
-  identity, descriptor/workload, commands represented by bounded public tokens, declared independent trial
-  IDs and run ordering. Bound cases, trials, files and input size; reject missing/duplicate/unknown/malformed
+- Preserve the exact 207-case four-provider CLI inventory and all original workloads, schemas, validator,
+  core/provider implementation, default SDK and ABI v8/70 exports/SONAME8. Implement analysis as a separate
+  standard-library Python host tool and third-party source template; no Runtime or runner fork.
+- Define strict versioned sidecar contracts for baseline manifests, candidate run manifests, predeclared
+  comparison policy, threshold review and profiler correlations. Bind exact artifact file digests, source
+  and complete identity, descriptor/workload, commands represented by bounded public tokens, declared
+  independent trial IDs and run ordering. Bound cases, trials, files and input size; reject missing/duplicate/unknown/malformed
   fields and retain zero-sample NOT RUN distinctly.
 - Use the unchanged offline v1 validator for every input. Compare exact descriptor, counter inventory/units
   and complete host/compiler/build/backend/thread/memory identities; only source commit/tree may intentionally
-  differ between baseline and candidate. Reject dirty/unknown source and missing required host facts for steady
-  performance comparisons, missing required counters, altered workload, cross-host/toolchain/configuration
+  differ between baseline and candidate. Reject dirty/unknown source and missing required host facts for
+  steady performance comparisons, missing required counters, altered workload, cross-host/toolchain/configuration
   or fake/steady mixing. Structural fixtures never produce performance conclusions.
 - Use independent run-level medians, not within-run repeated invocations as independent statistical trials.
-  Retain every raw sample without trimming. Document exact distribution-free binomial order-statistic confidence
-  bounds with conservative family-wide adjustment, integer/rational arithmetic, minimum trial/sample counts,
-  zero-denominator and insufficient-confidence handling. Predeclare noise and outlier rules and report inconclusive
-  instead of a misleading pass when noise, outliers or sample insufficiency invalidates comparison.
-- Generate deterministic machine-readable reports and readable Markdown with per-case status/reasons, retained
-  source/identity/hash references, raw counts, p50/p95/p99/max summaries, exact counter totals, median differences
-  and confidence bounds only when admissible. Missing, failed, incompatible and noisy cases cannot disappear
-  or become successful deltas; multi-case aggregate reflects worst disposition.
-- Portable mode performs structural validation and descriptive portable characterization only; it never applies
-  release-regression thresholds or promotes an evidence class. Controlled threshold evaluation requires an
-  explicit external review binding the exact baseline/policy/host declaration and predating every candidate
-  trial. The tool creates proposal-only review templates, never approves thresholds, signs evidence, updates
-  baselines, promotes support or changes controlled-runner settings. Threshold changes invalidate the old review.
+  Retain every raw sample without trimming. Document exact distribution-free binomial order-statistic
+  confidence bounds with conservative family-wide adjustment, integer/rational arithmetic, minimum trial/sample
+  counts, zero-denominator and insufficient-confidence handling. Predeclare noise and outlier rules and
+  report inconclusive instead of a misleading pass when noise, outliers or sample insufficiency invalidates
+  comparison.
+- Generate deterministic machine-readable reports and readable Markdown with per-case status/reasons,
+  retained source/identity/hash references, raw counts, p50/p95/p99/max summaries, exact counter totals,
+  median differences and confidence bounds only when admissible. Missing, failed, incompatible and noisy
+  cases cannot disappear or become successful deltas; multi-case aggregate reflects worst disposition.
+- Portable mode performs structural validation and descriptive portable characterization only; it never
+  applies release-regression thresholds or promotes an evidence class. Controlled threshold evaluation
+  requires an explicit external review binding the exact baseline/policy/host declaration and predating
+  every candidate trial. The tool creates proposal-only review templates, never approves thresholds, signs
+  evidence, updates baselines, promotes support or changes controlled-runner settings. Threshold changes
+  invalidate the old review.
 - Profiler correlation sidecars bind exact run/context digest, case, named tool/version and retained trace
-  digest plus explicit sample index ranges and clock-domain relationship or uncorrelated state. Do not infer
-  causality, ingest private trace contents, execute profiler commands or alter the existing result schema.
-  Reports preserve missing/uncorrelated facts explicitly and show an actionable profiling-to-reproduction-to-remediation
+  digest plus explicit sample index ranges and clock-domain relationship or uncorrelated state. Do not
+  infer causality, ingest private trace contents, execute profiler commands or alter the existing result
+  schema. Reports preserve missing/uncorrelated facts explicitly and show an actionable profiling-to-reproduction-to-remediation
   workflow.
 - Provide a complete third-party ProviderV1 template with meaningful bounded integer transform, independent
-  elementwise oracle/counters, metadata-only discovery, explicit prepare/invoke/checked-finish ownership, repeated
-  ordinals/runs, missing prerequisite and fault nonpublication behavior. The example uses only installed benchmark
-  headers/target, supports fake and steady clocks, multiple independent owners and emits ordinary valid v1
-  bundles without editing the runner.
+  elementwise oracle/counters, metadata-only discovery, explicit prepare/invoke/checked-finish ownership,
+  repeated ordinals/runs, missing prerequisite and fault nonpublication behavior. The example uses only
+  installed benchmark headers/target, supports fake and steady clocks, multiple independent owners and
+  emits ordinary valid v1 bundles without editing the runner.
 - Install analysis scripts/contracts/docs and template sources only with the optional benchmark component.
   Exercise installed, archive-relocated, non-default-prefix and add-subdirectory consumers; append a wrapper
-  above all unchanged device/Runtime/CPU/original wrappers. Preserve existing optional source ledgers and exact
-  default package inventory.
-- Add deterministic golden statistical/identity/noise/malformed/NOT RUN/review chronology/profiler tests and
-  end-to-end CLI success/failure/output preservation tests. Verify exact known confidence bounds and threshold
-  edges independently. Test the actual template with failure recovery, repeated and concurrent independent
-  owners, sanitizers and optional static analysis. No elapsed-time assertion from uncontrolled CI is a release
-  threshold.
+  above all unchanged device/Runtime/CPU/original wrappers. Preserve existing optional source ledgers
+  and exact default package inventory.
+- Add deterministic golden statistical/identity/noise/malformed/NOT RUN/review chronology/profiler tests
+  and end-to-end CLI success/failure/output preservation tests. Verify exact known confidence bounds and
+  threshold edges independently. Test the actual template with failure recovery, repeated and concurrent
+  independent owners, sanitizers and optional static analysis. No elapsed-time assertion from uncontrolled
+  CI is a release threshold.
 - Retain all existing required compiler/FMA/MSVC, sanitizer/TSan, seven-way artifact exchange, package/default
   SDK, ABI, no-allocation, docs and release gates. Add analysis/template coverage within those gates without
   deleting earlier assertions or weakening checks.
-- Record each acceptance result and exact source/control/head/tree identities, failures and unperformed validation.
-  Software completion does not claim controlled timing, actual profiler capture, hardware/RT qualification
-  or independent human review. M24-M26, Unreal, cybersecurity, Daybreak, signing, release and deployment remain
-  outside this batch.
+- Record each acceptance result and exact source/control/head/tree identities, failures and unperformed
+  validation. Software completion does not claim controlled timing, actual profiler capture, hardware/RT
+  qualification or independent human review. M24-M26, Unreal, cybersecurity, Daybreak, signing, release
+  and deployment remain outside this batch.
 validation:
   local:
   - git status --short --branch
@@ -159,35 +170,35 @@ validation:
   focused_tests_to_add:
   - Exact confidence arithmetic, noise/outlier and threshold boundary fixtures; complete identity mismatch
     and malformed/partial artifact rejection.
-  - Review-policy-baseline binding and chronology; profiler run/context/sample binding; no performance decisions
-    from structural fixtures or unreviewed portable evidence.
+  - Review-policy-baseline binding and chronology; profiler run/context/sample binding; no performance
+    decisions from structural fixtures or unreviewed portable evidence.
   - End-to-end comparison/report generation, unchanged destinations, extension CLI/oracles/faults/recovery/independent
     owners and optional package consumers.
   required_ci:
   - All unchanged 32-check predecessor surface, with additive offline analysis and template tests.
   - GCC/Clang/MSVC optional installed/relocated/embedded source consumers and existing seven-way canonical
     exchanges.
-  - Supported sanitizer and TSan template lifecycle/concurrency; Clang14 optional static; exact default SDK/ABI/release
-    digests.
+  - Supported sanitizer and TSan template lifecycle/concurrency; Clang14 optional static; exact default
+    SDK/ABI/release digests.
   manual:
-  - Threshold approval and actual controlled measurements remain external owner actions; no software test supplies
-    that review.
-  - Physical measurements and actual profiler captures require accessible named hardware and retained source/host/tool
-    identities.
+  - Threshold approval and actual controlled measurements remain external owner actions; no software test
+    supplies that review.
+  - Physical measurements and actual profiler captures require accessible named hardware and retained
+    source/host/tool identities.
 risk:
   class: high
   hazards:
-  - Pseudoreplication, outlier removal, post-selected thresholds or incomplete identity creating false performance
-    conclusions.
-  - Optional Python/template artifacts leaking into default SDK or changing prior provider workloads and release
-    digests.
-  - Mislabeling portable/synthetic/declared-review evidence as physical, controlled-runner qualification or
-    authenticated approval.
+  - Pseudoreplication, outlier removal, post-selected thresholds or incomplete identity creating false
+    performance conclusions.
+  - Optional Python/template artifacts leaking into default SDK or changing prior provider workloads and
+    release digests.
+  - Mislabeling portable/synthetic/declared-review evidence as physical, controlled-runner qualification
+    or authenticated approval.
   stop_conditions:
-  - A forbidden core/provider/schema/validator path or ABI change is needed; retain reproducer and create a
-    separate repair scope.
-  - Unresolved product decision, inaccessible hardware or controlled threshold approval is needed for a claimed
-    result.
+  - A forbidden core/provider/schema/validator path or ABI change is needed; retain reproducer and create
+    a separate repair scope.
+  - Unresolved product decision, inaccessible hardware or controlled threshold approval is needed for
+    a claimed result.
   - Main moves without reconciliation, local functional gate fails, or successful integration needs weakened
     checks.
 rollback:

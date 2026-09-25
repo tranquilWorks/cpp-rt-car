@@ -821,15 +821,18 @@ deployment, or production readiness.
 M22-04 closes only CAP-M22 portable software after every hosted and human gate
 passes and the candidate merges.
 
-M23-03 provides 87 public Runtime benchmark cases in PR #254. Repairs #256,
-#258 and #259 are integrated. Complete CLI/allocation, sanitizer and package
-verification passes; final exact-head CI and merge identities are in the PR
-and its completion/integration evidence. M23/CAP-M23 remain incomplete pending M23-04 and
-M23-05. Physical characterization requires a named accessible bench.
+## M23 — Benchmark analysis and extension completion
 
-M23-03 is merged as PR #254 at `03e4c36b24a7a4a6a2a6083aef26b6f45b1dcd9e`.
-M23-04 implements 68 HAL/CUDA/XDMA/staging/pipeline cases under control PR #488.
-Optional real-session hosts, installed consumers and portable verification are
-integrated; final exact-head CI and merge disposition are in PR #260. M23-05
-remains the next separate software batch. Physical characterization is NOT RUN
-until an accessible named bench is available.
+M23-03 merged as PR #254 with 87 public Runtime benchmark cases. M23-04
+merged as PR #260 with 68 HAL/CUDA/XDMA/staging/pipeline cases, optional
+real-session hosts and installed consumers. Repairs #256, #258, #259 and #262
+are integrated; #262's completed-batch retirement ordering passed all 32
+hosted checks before merging at `b39ac9f281862a5a0aff051880671218e117db47`.
+
+M23-05 in PR #261 provides the offline comparison/reporting tool and complete
+third-party provider source kit while preserving all 207 prior cases. Canonical
+reactivation #500 binds it to the integrated repair. Combined local/hosted
+verification and exact merge disposition are retained in that PR and
+`evidence/M23-05-2026-09-25.md`; software closure requires their successful
+completion. Physical characterization, controlled thresholds and actual
+profiler captures remain NOT RUN. M24-M26 are separate software scopes.
