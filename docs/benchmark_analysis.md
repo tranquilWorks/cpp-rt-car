@@ -200,6 +200,7 @@ Replace the callback with your workload and retain an independent oracle.
 The optional install places the source under `share/rtfw/bench/examples/extension`:
 
 ```sh
+cmake --build build/analysis --parallel 2
 cmake --install build/analysis --prefix build/analysis-install
 cmake -S build/analysis-install/share/rtfw/bench/examples/extension -B build/my-extension -DCMAKE_PREFIX_PATH="$PWD/build/analysis-install"
 cmake --build build/my-extension --config Release --parallel 2

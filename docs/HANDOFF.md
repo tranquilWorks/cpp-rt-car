@@ -1,15 +1,15 @@
 # Handoff
 
-M23-05 is active under canonical control PR #494, merged at
+M23-05 software implementation is complete in PR #261 under canonical control PR #494, merged at
 `b61ab1396168647ab8309eb7015b25edfae9ecf1` (blob
 `a043c31df4244e073a12229c9dcb907a22ba7d12`). The baseline is merged
 M23-04 PR #260 at `37c3b155894133789621d41b4233c8edde79d023`, tree
 `20435c387117ae06a971d974e7f7da03105c2447`; all 32 exact-head checks passed.
 
 The new offline comparison and third-party source kit preserve every prior
-provider, runner, v1 bundle/validator, Runtime, driver and ABI. Focused software
-verification is in progress; full acceptance and hosted integration remain
-required. See [benchmark analysis](benchmark_analysis.md) and
+provider, runner, v1 bundle/validator, Runtime, driver and ABI. Focused and normal software verification, ASan/UBSan and ABI checks pass.
+Final full-profile/package, exact-head hosted checks and merge disposition are
+retained in [PR #261](https://github.com/tranquilWorks/cpp-rt-car/pull/261). See [benchmark analysis](benchmark_analysis.md) and
 [evidence](evidence/M23-05-2026-09-25.md). Actual controlled-host timing,
 threshold approval, physical characterization and profiler capture are NOT RUN.
 M24-M26 remain separate software scopes. Historical checkpoints below do not
