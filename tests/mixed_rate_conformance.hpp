@@ -51,6 +51,7 @@ struct MixedRateConformanceResult {
     bool active_replay_exact = false;
     std::size_t replay_actions_compared = 0;
     bool memory_accounting_exact = false;
+    rt::Status startup_cleanup_status = rt::Status::invalid_state;
 };
 
 namespace detail {
@@ -244,6 +245,9 @@ inline rt::CallbackResult run_observer(
 // CPU-to-device ordering after the sampled plant->sensor->controller path.
 inline MixedRateConformanceResult run_mixed_rate_conformance(
     rt::SampledIoLoopbackFault active_fault =
+        rt::SampledIoLoopbackFault::none,
+    std::uint64_t safe_transition_timeout_ns = 5'000'000'000,
+    rt::SampledIoLoopbackFault startup_fault =
         rt::SampledIoLoopbackFault::none) {
     MixedRateConformanceResult result;
     detail::ManualClock clock;
@@ -596,7 +600,11 @@ inline MixedRateConformanceResult run_mixed_rate_conformance(
     plant_sampled.maximum_age_ns = detail::sensor_period_ns;
     plant_sampled.underrun_policy =
         rt::SampledIoUnderrunPolicy::substitute_safe;
-    plant_sampled.safe_transition_timeout_ns = 80'000'000;
+    // Safe transitions are setup/cleanup handshakes on shared portable hosts.
+    // Their finite liveness guard is separate from the unchanged 80-ms active
+    // provider/completion budgets. The startup fault test explicitly selects
+    // the original 80-ms value to verify missing acknowledgement still expires.
+    plant_sampled.safe_transition_timeout_ns = safe_transition_timeout_ns;
     plant_sampled.initial_frame = plant_initial;
     plant_sampled.startup_safe_frame = plant_safe;
     plant_sampled.failure_safe_frame = plant_safe;
@@ -665,10 +673,18 @@ inline MixedRateConformanceResult run_mixed_rate_conformance(
             result.diagnostic.begin());
         return result;
     }
+    if (startup_fault != rt::SampledIoLoopbackFault::none &&
+        backend.inject_next(startup_fault) != rt::Status::ok) {
+        result.status = rt::Status::invalid_config;
+        result.failure_stage = 33;
+        return result;
+    }
     setup_status = runtime.start();
     if (setup_status != rt::Status::ok) {
         result.status = setup_status;
         result.failure_stage = 4;
+        result.startup_cleanup_status = runtime.stop();
+        result.loopback_logical_actions = backend.stats().logical_actions;
         return result;
     }
     rt::SampledIoChannelStatus plant_status;

@@ -216,3 +216,29 @@ The dependency queue already authorizes scoped software publication/integration.
 No cybersecurity, Daybreak or Unreal work. Missing real devices report NOT RUN.
 M23-05 and physical characterization remain separate; no completed work is
 reopened by the historical checkpoint text above.
+
+## M23-05R completion ordering repair (2026-09-25)
+
+Canonical control #496 merged at `7890ad076ce0a53a624bcf02e4c937ea9768aa3b`.
+M23-05R is active from target main `37c3b155894133789621d41b4233c8edde79d023`.
+Feature draft #261 is preserved at `4f780cf23096155da50ff61a1c5fe4970c004a88`.
+An extra full local suite found one unexpected cancellation after completed
+ordinary command batches; a later 50-repeat pass does not erase the failure.
+Repair retirement before graph publication separately, retain old-order
+negative control and all existing assertions, then verify and integrate under
+standing scoped publication/merge authorization. Reconcile and reactivate
+M23-05 afterward. No cybersecurity, Daybreak, Unreal or physical qualification.
+
+Canonical amendment #497 (`5b258a4dc302a2ccf2c92162fe550144c8c694dc`) also
+allows the two private mixed-rate conformance fixture/test files to park idle
+CPU workers and inspect that policy. Retain the Windows startup failure; all
+80-ms deadlines, logical periods, fault injections and existing oracles remain
+unchanged. No Runtime default or rate-owned production path is modified.
+
+Canonical correction #498 (`09ed06bebf21ece833ffa1626826eaf99e042521`)
+withdraws the unsupported Windows park-policy attempt. Only the private
+conformance fixture's safe-transition setup guard becomes five seconds;
+active 80-ms provider/completion budgets and all logical/fault/output oracles
+remain unchanged. A new startup missing-ack regression explicitly uses the
+original 80-ms setting and verifies device_timeout, no scenario work and
+checked cleanup. Runtime deadline enforcement/defaults are unchanged.

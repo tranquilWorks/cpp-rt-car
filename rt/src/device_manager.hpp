@@ -20,6 +20,27 @@
 
 namespace rt::detail {
 
+// Terminal ordinary-batch ownership. Both callbacks borrow manager-owned
+// storage and allocate nothing; rate-owned slots use their separate protocol.
+template <typename Slot, typename Wake, typename Complete>
+void retire_device_batch_slot(
+    Slot& slot, std::atomic<std::uint64_t>& outstanding,
+    std::uint32_t free_state, Wake&& wake, Complete&& complete) noexcept {
+    const auto phase_index = slot.phase_index;
+    const auto backend_index = slot.backend_index;
+    const bool release_graph =
+        !slot.graph_released.exchange(true, std::memory_order_acq_rel);
+    // Completing the graph can return step() to its caller immediately. Retire
+    // first so a following stop cannot cancel this already-completed batch.
+    // Free also permits reuse: access only captured metadata from this point.
+    outstanding.fetch_sub(1, std::memory_order_release);
+    slot.state.store(free_state, std::memory_order_release);
+    wake(backend_index);
+    if (release_graph) {
+        complete(phase_index);
+    }
+}
+
 // One submission-lane selection/park operation. The selector and returned
 // pointer borrow lane-owned fixed storage; this helper allocates nothing.
 template <typename Select>

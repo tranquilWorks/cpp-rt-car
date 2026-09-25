@@ -17,6 +17,105 @@
 #include <rt/runtime.hpp>
 #include "rt/src/device_manager.hpp"
 
+namespace {
+struct RetirementSlot {
+  std::atomic<std::uint32_t> state{6};
+  std::atomic<bool> graph_released{false};
+  std::uint32_t phase_index = 7;
+  std::uint32_t backend_index = 3;
+};
+} // namespace
+
+TEST(CommandBatch, GraphPublicationObservesRetiredBatch) {
+  RetirementSlot slot;
+  std::atomic<std::uint64_t> outstanding{1};
+  unsigned completions = 0, cancellations = 0, wakes = 0;
+  rt::detail::retire_device_batch_slot(
+      slot, outstanding, 0,
+      [&](std::uint32_t backend) noexcept {
+        EXPECT_EQ(backend, 3u);
+        ++wakes;
+      },
+      [&](std::uint32_t phase) noexcept {
+        // Force the host's stop observation at the exact graph-publication
+        // boundary. No scheduler timing is needed to expose the old window.
+        EXPECT_EQ(phase, 7u);
+        if (slot.state.load(std::memory_order_acquire) != 0) ++cancellations;
+        EXPECT_EQ(outstanding.load(std::memory_order_acquire), 0u);
+        EXPECT_TRUE(slot.graph_released.load(std::memory_order_acquire));
+        ++completions;
+      });
+  EXPECT_EQ(completions, 1u);
+  EXPECT_EQ(cancellations, 0u);
+  EXPECT_EQ(wakes, 1u);
+  EXPECT_EQ(slot.state.load(), 0u);
+  EXPECT_EQ(outstanding.load(), 0u);
+}
+
+TEST(CommandBatch, GraphPublicationCannotRetireTheNextOccupant) {
+  RetirementSlot slot;
+  std::atomic<std::uint64_t> outstanding{1};
+  rt::detail::retire_device_batch_slot(
+      slot, outstanding, 0,
+      [](std::uint32_t backend) noexcept { EXPECT_EQ(backend, 3u); },
+      [&](std::uint32_t phase) noexcept {
+        EXPECT_EQ(phase, 7u);
+        EXPECT_EQ(slot.state.load(std::memory_order_acquire), 0u);
+        // The graph can immediately admit its successor or the next frame.
+        slot.phase_index = 19;
+        slot.backend_index = 11;
+        slot.graph_released.store(false, std::memory_order_relaxed);
+        outstanding.fetch_add(1, std::memory_order_release);
+        slot.state.store(6, std::memory_order_release);
+      });
+  EXPECT_EQ(slot.state.load(), 6u);
+  EXPECT_EQ(outstanding.load(), 1u);
+  EXPECT_FALSE(slot.graph_released.load());
+  EXPECT_EQ(slot.phase_index, 19u);
+  EXPECT_EQ(slot.backend_index, 11u);
+}
+
+TEST(CommandBatch, RetirementCapturesMetadataBeforeSlotReuse) {
+  RetirementSlot slot;
+  std::atomic<std::uint64_t> outstanding{1};
+  rt::detail::retire_device_batch_slot(
+      slot, outstanding, 0,
+      [&](std::uint32_t backend) noexcept {
+        EXPECT_EQ(backend, 3u);
+        EXPECT_EQ(slot.state.load(std::memory_order_acquire), 0u);
+        // Another admitted phase may reuse Free even before graph publication.
+        slot.phase_index = 19;
+        slot.backend_index = 11;
+        slot.graph_released.store(false, std::memory_order_relaxed);
+        outstanding.fetch_add(1, std::memory_order_release);
+        slot.state.store(6, std::memory_order_release);
+      },
+      [](std::uint32_t phase) noexcept { EXPECT_EQ(phase, 7u); });
+  EXPECT_EQ(slot.state.load(), 6u);
+  EXPECT_EQ(outstanding.load(), 1u);
+  EXPECT_FALSE(slot.graph_released.load());
+}
+
+TEST(CommandBatch, PreviouslyReleasedGraphStillRetiresOnce) {
+  RetirementSlot slot;
+  slot.graph_released.store(true);
+  std::atomic<std::uint64_t> outstanding{1};
+  unsigned completions = 0, wakes = 0;
+  rt::detail::retire_device_batch_slot(
+      slot, outstanding, 0,
+      [&](std::uint32_t backend) noexcept {
+        EXPECT_EQ(backend, 3u);
+        EXPECT_EQ(outstanding.load(), 0u);
+        EXPECT_EQ(slot.state.load(), 0u);
+        ++wakes;
+      },
+      [&](std::uint32_t) noexcept { ++completions; });
+  EXPECT_EQ(completions, 0u);
+  EXPECT_EQ(wakes, 1u);
+  EXPECT_EQ(outstanding.load(), 0u);
+  EXPECT_EQ(slot.state.load(), 0u);
+}
+
 TEST(CommandBatch, NotificationAfterEmptySelectionDoesNotParkWithQueuedWork) {
   std::atomic<std::uint64_t> wake{0};
   std::atomic<bool> stopping{false};

@@ -1,269 +1,184 @@
 schema_version: 1
 batch:
-  id: M23-04
-  title: HAL, CUDA, XDMA and pipeline benchmark providers
-  goal: Add correctness-bound portable driver-protocol and optional real-device benchmark providers through
-    existing public HAL/backend/Runtime APIs. Preserve completed providers, framework, schemas, Runtime,
-    drivers and stable ABIs; report unavailable physical prerequisites as NOT RUN.
+  id: M23-05R
+  title: Retire completed command batches before graph release
+  goal: Close the completed-batch cancellation window by retiring ordinary batch ownership before graph
+    completion can return control to the host; preserve bounded ownership and all existing test oracles.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
-  - products/cpp-rt-car/PRD.md#cap-m23--extensible-subsystem-benchmarking
   - products/cpp-rt-car/acceptance.yaml#CAP-M23
-  milestone: products/cpp-rt-car/milestones/M23.md#M23-04--hal-cuda-xdma-and-pipeline-providers
-  baseline_commit: 03e4c36b24a7a4a6a2a6083aef26b6f45b1dcd9e
+  milestone: products/cpp-rt-car/milestones/M23.md#M23-05--regression-analysis-and-extension-kit
+  baseline_commit: 37c3b155894133789621d41b4233c8edde79d023
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M23-04.yaml
-  predecessor: 'PR #254 merged at 03e4c36b24a7a4a6a2a6083aef26b6f45b1dcd9e; exact tree 6b611cd07bcf862142c8b18c821832a4ac9a42ac;
-    all 32 checks passed at f9796335a7e706bb76f97a79dbe76939a86b8247, main CI 36037346344.'
-  owner_scope: Continue dependency-ready software under existing automation authorization; exclude cybersecurity,
-    Daybreak and Unreal. Real hardware characterization requires an accessible named bench.
-  canonical_revision: 49b134215e74b2d6f27ae1cab3801ac9dc8c139d
-  canonical_blob_sha: 479bbb95244b1ad7817158bf025dcc12568e8af3
+  control_plane_path: products/cpp-rt-car/batches/M23-05R.yaml
+  control_plane_revision: 5b258a4dc302a2ccf2c92162fe550144c8c694dc
+  owner_direction: Finish feature PR 261 under standing scoped development, publication and exact-head
+    integration authorization. No cybersecurity, Daybreak or Unreal.
+  prerequisite: M23-04 PR 260 is merged; retain all prior Runtime repairs and benchmark implementations.
+  retained_failure: 'PR 261 head 4f780cf23096155da50ff61a1c5fe4970c004a88, tree 5612a378978a00c5afe06cab3db4c9ed87143236.
+    Extra full optional CTest run failed RepeatedSubmissionLifecyclesKeepIndependentOwnersDrained at line
+    1807: expected zero cancellations, observed one. Test completed in 84 ms with unchanged 60-second
+    device timeout. A later 50-repeat pass does not erase the failure.'
+  diagnosis: finish_batch_slot releases the executor graph before decrementing outstanding work and publishing
+    Free. Host step may return and stop may cancel an Owned slot whose successful completion already released
+    the graph. Source establishes this window; the original interleaving was not instrumented.
+  reproducer: A deterministic regression must exercise the production retirement helper with host-stop
+    observation and immediate slot reuse at the graph-publication boundary; the original release-before-retirement
+    ordering must fail the same assertions.
+  integration_order: Integrate this canonical contract, activate the isolated repair from target main,
+    verify and merge, then reconcile PR 261 and separately reactivate M23-05. Preserve the original functional
+    failure and all feature implementation.
+  hosted_failure: 'Repair head bbeb05a5aecc6fdb2f185228c7319b904081d0ce, workflow 36092659651: Windows
+    Debug job 107938159419 failed two existing MixedRateConformance tests at startup stage 4 with device_timeout
+    and zero callbacks/actions. Ordinary CommandBatch tests passed. Windows RelWithDebInfo job 107938159362
+    passed all 49 CTest entries then matrix fail-fast cancelled the artifact step. The rate-owned startup
+    path is unchanged by this repair; its 80-ms fixture safe-transition timeout remains binding.'
+  withdrawn_attempt: Head cc898379261a32168ccc4fda5dd912349d42740b Windows Debug job 107942676941 passes
+    original conformance outputs but fails all new parked-worker assertions. NativeThreadPolicyProvider
+    explicitly reports nondefault policy unsupported on non-Linux, so the attempted park change cannot
+    solve the Windows setup-budget assumption and must be removed completely, not skipped or relabeled
+    as supported.
+  canonical_revision: 09ed06bebf21ece833ffa1626826eaf99e042521
+  canonical_blob_sha: 95def2eaf6bb45783bbc698ac195474ef0fe995a
 dependencies:
-- M23-03
+- M23-04
 scope:
   allowed_paths:
+  - contracts/active-batch.yaml
+  - contracts/repo-profile.yaml
   - .portfolio-harness.json
   - AGENTS.md
-  - contracts/active-batch.yaml
-  - CMakeLists.txt
-  - bench/CMakeLists.txt
-  - bench/src/benchmark_cli.cpp
-  - bench/providers/device_provider.hpp
-  - bench/providers/device_provider.cpp
-  - bench/providers/device_cases/**
-  - bench/fixtures/device_cases.json
-  - bench/real_device/**
-  - tests/CMakeLists.txt
-  - tests/test_benchmark_device.cpp
-  - tests/benchmark_fixtures/device_consumer/**
-  - tests/benchmark_fixtures/test_device_cases.py
-  - tests/benchmark_fixtures/test_artifacts.py
-  - tests/benchmark_fixtures/test_cpu_cases.py
-  - tests/benchmark_fixtures/test_runtime_cases.py
-  - tests/package_consumer/CMakeLists.txt
-  - tests/package_consumer/benchmark_device_consumer.cpp
-  - tests/package_consumer/package_contract.cmake
-  - tools/check_release_contract.py
-  - tools/static_analysis_sources.txt
+  - rt/src/device_manager.cpp
+  - rt/src/device_manager.hpp
+  - tests/test_command_batch.cpp
   - release/rtfw-release-contract.json
-  - .github/workflows/ci.yml
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
-  - docs/roadmap.md
-  - docs/benchmarking.md
-  - docs/device_benchmarking.md
-  - docs/evidence/M23-04-*.md
+  - docs/evidence/M23-05R-*.md
+  - tests/mixed_rate_conformance.hpp
+  - tests/test_mixed_rate_conformance.cpp
   forbidden_paths:
-  - rt/
+  - rt/include/
+  - rt/src/host_runtime.cpp
+  - rt/src/live_control_mailbox.cpp
+  - rt/src/live_control_mailbox.hpp
   - abi/
   - core/
   - hal/
   - gpu/
-  - include/
+  - include/simcore/
   - src/
-  - samples/
-  - examples/
+  - bench/
   - integrations/
-  - configs/
-  - profiles/
   - qualification/
-  - bench/include/rtfw/benchmark.hpp
-  - bench/src/benchmark.cpp
-  - bench/schemas/
-  - bench/providers/cpu_provider.hpp
-  - bench/providers/cpu_provider.cpp
-  - bench/providers/runtime_provider.hpp
-  - bench/providers/runtime_provider.cpp
-  - bench/providers/runtime_cases/
-  - bench/fixtures/cpu_cases.json
-  - bench/fixtures/runtime_cases.json
-  - tests/benchmark_fixtures/cpu_consumer/
-  - tests/benchmark_fixtures/runtime_consumer/
-  - tests/benchmark_fixtures/verify_package.py
-  - tests/test_benchmark_cpu.cpp
-  - tests/test_benchmark_runtime.cpp
-  - tests/test_cuda_backend.cpp
-  - tests/test_xdma_backend.cpp
-  - tests/test_vendor_hal_v2.cpp
-  - tests/package_consumer/benchmark_cpu_consumer.cpp
-  - tests/package_consumer/benchmark_runtime_consumer.cpp
-  - tools/check_benchmark_artifact.py
-  - cmake/rtfwConfig.cmake.in
-  - docs/cuda_support_matrix.json
-  - docs/xdma_support_matrix.json
-  - docs/portable_support_matrix.json
-  - docs/evidence/M23-03*.md
+  - .github/workflows/
+  - tests/CMakeLists.txt
+  - tests/benchmark_fixtures/
+  - tests/test_mixed_rate_replay.cpp
+  - tools/
+  - cmake/
   - release/keys/
   - release/signatures/
-  - .github/workflows/cuda-qualification.yml
-  - .github/workflows/xdma-qualification.yml
-  - .github/workflows/release.yml
+  - docs/portable_support_matrix.json
+  - docs/cuda_support_matrix.json
+  - docs/xdma_support_matrix.json
   - VERSION.txt
   - LICENSE
   - CHANGELOG.md
   - SECURITY.md
+  - docs/evidence/CI-QUEUE-01-*.md
+  - docs/evidence/M23-03R2-*.md
+  - docs/evidence/M23-03R3-*.md
+  - docs/evidence/M23-03R4-*.md
+  - docs/evidence/M23-04-*.md
+  - docs/evidence/M23-05-*.md
 acceptance:
-- Preserve the exact 87 Runtime cases, 51 CPU cases, framework self case, original workloads/counters/assertions
-  and all merged replay/watchdog/wakeup repairs. Add one separately owned rtfw.device provider with at
-  most 96 finite descriptors, at most 8 parameters and 16 independently meaningful counters per descriptor,
-  within the unchanged 256-case registry bound. Discovery/describe perform no device access, allocation
-  of device resources, hidden benchmark execution or hardware enumeration.
-- Use only installed public Runtime, device ABI v1, HAL v2, CudaDeviceBackend and XdmaDeviceBackend surfaces.
-  Injectable fake driver tables must exercise the actual existing candidates and real buffer bytes, not
-  replacement toy schedulers or fabricated completion counters. Preserve native v2 and legacy v1 paths.
-  Reusable benchmark fixtures are optional installed source examples, not additional default SDK targets/headers.
-- 'Separate prepare, measured invoke and checked finish. State exact timing scope: submit-only excludes
-  completion drain from its timer only if actually outside invoke; submit-plus-poll-plus-validation is
-  labeled complete transaction. Lifecycle/fault/recovery descriptors include all reconstruction and allocation
-  occurring in invoke. Warmup and measured ordinals remain legal, disjoint and independently counted.
-  No unmeasured work is subtracted from wall-clock samples.'
-- Cover HAL metadata/capability inspection and native/adapted registration, submission, empty/not-ready
-  poll, completed poll, exact ticket/timeline retirement and configured queue depth 1 and 4. Prove actual
-  full configured occupancy before reject-next and recovery, rather than labeling sequential submissions
-  as depth four. Validate malformed/stale/foreign inputs without changing retained payload or ownership.
-- CUDA portable cases cover H2D, D2H, D2D, memset, kernel launch and caller-instantiated Graph dispatch
-  at 64-byte and 4096-byte payload points, single and multiple commands/transactions. Check exact driver
-  calls, transferred bytes, independent elementwise output oracle, event/timeline identity, no premature
-  host consumption, and configured queue saturation. Kernel/Graph callbacks implement the same bounded
-  integer transform and must agree on output; native graph commands use stable graph IDs and retained
-  declared buffer bindings.
-- CUDA failure cases cover not-ready completion, submission/launch failure, timeout, lost context and
-  cleanup retry under deterministic scripted fake-driver outcomes. Confirm completed/failed/rejected are
-  distinct, failed work cannot count as successful copy/transform, and all possibly live resources remain
-  owned until checked shutdown. Do not inject destructive failures into real hardware.
-- XDMA portable cases cover H2C/C2H at 64-byte and 4096-byte payload points, channel and offset range
-  checks, fixed I/O worker ownership, control write/read round trips and user-event success/timeout/cancellation.
-  Use declared bounded local fake card memory and independently checked transfer/control/event payloads.
-  Observe real asynchronous worker completions, not assumed acceptance counts; use bounded waits and retain
-  buffers until joined cleanup.
-- XDMA capacity/fault cases cover queue depths 1 and 4, reject-next with full occupancy, short transfer,
-  I/O failure, device loss/reset-required, event timeout, stop cancellation and retryable shutdown. Fake
-  drivers coordinate deterministically without sleep-dependent correctness, unbounded spin or deadlocking
-  cleanup. Optional event/control cases require the exact v2 callbacks and declared aperture; never guess
-  a physical FPGA register map.
-- Host staging cases copy between disjoint CUDA-facing and XDMA-facing host spans at the two payload sizes,
-  observe actual bytes/copies and enforce ordering. Add full CPU -> actual CUDA candidate -> explicit
-  host staging -> actual XDMA candidate -> CPU Runtime pipelines, with exact independent end-to-end integer
-  oracle, kernel and graph variants, multiple frame/repetition points, plus failure/nonpublication and
-  concurrent independent owners. Preserve backend-local timeline identities and never imply direct peer
-  DMA.
-- Keep callbacks, submission/poll and declared steady Runtime invokes bounded and allocation-free after
-  preparation. Bound fixtures to at most 4 Runtime CPU workers, 2 XDMA I/O workers per backend, one CUDA
-  and one XDMA backend per pipeline, 512 MiB total declared Runtime budget, 16 MiB retained fixture storage
-  and 65536 operations per invoke. Verify maximum configured occupancy separately from absolute constant/configuration
-  rejection. Avoid large caller-stack fixture objects and retain the 512 KiB stack regressions from M23-03.
-- Provide functional optional real-device paths through the existing CUDA Driver API and Linux XDMA adapters,
-  with explicit caller-owned context/stream/module/kernel/graph and confirmed endpoint/aperture/event
-  configuration. Real benchmark mode cannot silently use fake tables or fall back to another host. Real
-  resources are created and destroyed on the host path outside steady timing and remain alive through
-  checked drain/shutdown. Add compiled host examples for CUDA, XDMA and composed use.
-- Default CLI hardware descriptors return unchanged Status::not_run before any warmup or measured samples
-  when a real session is absent. Missing build adapters, device/context, confirmed memory aperture, event
-  source or declared graph/kernel resources are prerequisites, not a success or empty timing measurement.
-  Invalid supplied configuration and runtime/device failures are errors, not NOT RUN. No probing/opening/writing
-  device nodes in list/describe or portable mode; real execution is explicitly opted in.
-- Use unchanged version-1 artifact schemas and validator. Fake clocks yield structural_fixture; steady
-  clocks retain portable_characterization and cannot claim controlled or physical qualification. Distinguish
-  fake-protocol from real backend implementation in descriptor/configuration and actual backend/driver
-  Identity fields. Never invent CPU/device counters or disclose pointers, resource handles, absolute paths,
-  environment values or device serial identifiers. Retain measured raw samples and actual not-run artifacts;
-  no successful summary without successful checked cleanup.
-- Exercise a genuine real-session provider with injected deterministic driver tables in tests to prove
-  it invokes supplied resources, validates outputs and settles ownership; label that result simulated,
-  not physical. Compile real adapter examples in existing optional toolkit/node-free package CI. Actual
-  bench runs, if available, require exact named host/driver/device/bitstream and retained commands/results;
-  absent hardware does not block software implementation, but does block physical characterization.
-- Installed-source, archive-relocated, non-default-prefix and add-subdirectory consumers use only public
-  targets and the new optional source ledger. Add a device wrapper that invokes the unchanged Runtime
-  wrapper, which preserves CPU and original wrappers. Keep default install target/header inventory unchanged.
-  Update exact optional release digests for every installed new source without relaxing prior ledgers.
-- Extend CLI discovery assertions to the exact four-provider inventory without deleting any prior cases
-  or validation. Run every portable descriptor through normal CLI plus unchanged offline validator; every
-  unavailable real descriptor must produce a valid zero-sample NOT RUN artifact and exit 3. Test warmup/measured
-  conservation, invalid preparation, repeated runs, concurrent owner isolation, missing resources, failure
-  output suppression and cleanup error handling.
-- Retain all existing GCC/Clang Debug/RelWithDebInfo/FMA, MSVC, ASan/UBSan, TSan, portable static, package,
-  ABI/no-allocation and deterministic exchange gates. Add all new provider TUs to optional static analysis,
-  device tests to focused sanitizer filters, and one deterministic fake-driver canonical bundle to the
-  existing GCC/Clang/FMA/MSVC artifact exchange. Never compare nondeterministic polling/worker scheduling
-  counts for byte identity or normalize them to fabricated constants.
-- Record acceptance-to-case/test coverage, source/control identities, actual local/hosted results and
-  independent review status. Preserve all prior failures. M23-04 software completion requires working
-  optional real-session paths, not placeholder-only NOT RUN methods. M23/CAP-M23 remain incomplete until
-  M23-05; no M24/M25/M26 implementation, Unreal, cybersecurity, Daybreak, support promotion, signing,
-  release, deployment or threshold policy belongs to this batch.
+- Validate and integrate this canonical contract before implementation. Retain the original cancellation
+  failure and later 50-repeat pass as distinct evidence; keep feature PR 261 draft until repaired integration
+  is verified.
+- For ordinary command-batch terminal completion, snapshot required metadata and claim graph release before
+  publishing the slot Free, decrement outstanding work and retire ownership before notifying graph completion.
+  Never access mutable slot fields after Free publication. Keep backend wake notification, exact completion/timeline
+  accounting and single graph release.
+- A small allocation-free template helper in existing private device_manager.hpp may expose the production
+  retirement/publication ordering for deterministic regression. No installed/public API, test-only Runtime
+  hook, new lane, allocation, blocking lock, polling workaround or timeout change.
+- Run the deterministic test first with a behavior-equivalent extraction of original release-before-retirement
+  ordering and retain its failing assertions. At the graph-publication boundary, observe no outstanding
+  owned batch and permit immediate reuse; subsequent old-owner actions must neither reclaim nor mutate
+  the new occupant. Cover graph already released by stop without duplicate graph completion, and preserve
+  existing public repeated-lifecycle test unchanged.
+- Preserve active-rate terminal/quarantine ownership, pending-work stop/cancel behavior, early completion,
+  failure/timeout paths, multiple-owner isolation and admission/drain semantics. Do not suppress cancellation
+  broadly or weaken any assertion.
+- Replace the withdrawn parked-worker attempt with a private fixture-only separation of portable setup
+  liveness from active 80-ms device semantics. Give successful sampled safe transitions a finite five-second
+  fixture setup budget, preserving all active provider/completion budgets, logical periods, workload sizes,
+  fault injections, output/replay oracles and CTest bounds. Add an explicit missing-startup-acknowledgement
+  regression that selects the original 80-ms safe-transition timeout and injects the existing public loopback
+  completion_timeout fault before start; assert device_timeout at startup, zero scenario callbacks, a
+  retained logical submission and checked cleanup. Every configured Runtime deadline remains enforced;
+  no production timeout/default, RuntimeClock, policy capability or benchmark provider changes. This fixture
+  budget is a portable liveness guard, not a performance assertion or physical qualification.
+- Preserve ABI v8/70 exports/fingerprint 0xd0e7a5a14bf35f97/SONAME 8, all public layouts and device/HAL
+  ABIs, MemoryPlan accounting, default/optional SDK inventories, all 207 prior benchmark cases, schemas/validators,
+  release 1.2.1 and Apache-2.0.
+- Pass focused command/device/rate/replay suites, unchanged repeated public lifecycle coverage, supported
+  ASan/UBSan and TSan, official full profile, compiled ABI, relocated package and every existing exact-head
+  hosted gate. Retain unavailable or failing validation; no retry-until-green or functional waiver.
+- After repair integration, reconcile and reactivate canonical M23-05 for feature PR 261, preserve its
+  source and contracts and freshly verify combined local/hosted gates before merging.
+- Record exact canonical/source/tree/CI identities, ordering proof, negative-control output, actual results
+  and limitations. No physical characterization, controlled thresholds, human review, hardware/RT qualification,
+  support promotion, signing, release, deployment, cybersecurity, Daybreak or Unreal scope.
 validation:
   local:
   - git status --short --branch
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh quick
-  - cmake -S . -B build/m23-device -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF
-    -DRTFW_BUILD_BENCHMARKS=ON -DSIM_SANITIZERS= -DSIM_WERROR=ON
-  - cmake --build build/m23-device --parallel 2
-  - ctest --test-dir build/m23-device --output-on-failure
-  - python3 tests/benchmark_fixtures/test_device_cases.py --cli build/m23-device/bench/rtfw-bench --inventory
-    bench/fixtures/device_cases.json
-  - python3 tests/benchmark_fixtures/device_consumer/verify_package.py --work-directory build/m23-device-package
+  - Production-helper original-order negative control and repaired retirement/graph-publication regression.
+  - Focused CommandBatch, DeviceRuntime, MixedRateReplay and existing device/replay tests.
+  - GCC ASan/UBSan and TSan focused suites where supported.
   - ./scripts/agent-verify.sh full
-  - python3 tools/check_c_abi.py --library build/m23-device/librtfw.so
+  - python3 tools/check_c_abi.py --library build/agent-full/librtfw.so
+  - Default relocated package consumers and release contract validation.
   - git diff --check
   focused_tests_to_add:
-  - Actual CUDA/XDMA candidates with independent payload/event/timeline oracles, full occupancy/reject/recovery
-    and bounded fault/lifetime handling.
-  - Real-session supplied-driver execution and explicit missing-prerequisite NOT RUN versus invalid/runtime
-    error distinction.
-  - All finite CLI/artifact cases; unchanged self/CPU/Runtime cases; warmup/measured conservation; repeated
-    independent instances and TSan.
-  - Allocation-free declared steady invokes, 512 KiB caller-stack coverage, optional installed/embedded
-    source and exact digest/package checks.
-  - Backend implementation identity, canonical fake-driver artifacts, no private imports or hardware probing
-    in metadata-only discovery.
+  - Graph publication observes retired ownership and zero outstanding completed work.
+  - Immediate slot reuse at publication is not reclaimed or altered by the previous owner; captured phase/backend
+    metadata stays correct.
+  - Prior stop release drains once without duplicate graph completion; all existing public lifecycle,
+    stop/cancel/failure and active-rate cases remain unchanged.
+  - Full normal/two-owner/active-fault/replay conformance plus explicit startup missing-acknowledgement
+    timeout at the original 80-ms setting and checked cleanup; no parked-worker claim.
   required_ci:
-  - All unchanged required 32-check predecessor surface, with additive device cases in compiler/FMA/MSVC,
-    ASan/UBSan, TSan and optional static gates.
-  - Optional toolkit and node-free XDMA compile/link checks include real-device host examples; missing
-    physical devices remain NOT RUN, not a waived functional test.
-  - Seven-way GCC/Clang/FMA and installed MSVC deterministic device artifact comparison, plus retained
-    prior exchanges.
-  - Default/optional package isolation and relocated consumers, exact C ABI v8/70 exports/fingerprint/SONAME8
-    and release ledgers.
+  - Existing exact-head GCC/Clang sanitizer, Windows MSVC, GCC TSan, determinism, portable assurance,
+    ABI/package and contract gates without removal or weakening.
   manual:
-  - Review ownership, timing scopes, observed counters and physical claim boundaries. Agent review is
-    not independent human review.
-  - Physical characterization requires actual accessible named hardware; retain NOT RUN without claiming
-    completion of M18 or controlled timing.
+  - Review graph-publication ordering, slot lifetime/reuse and stop ownership. Independent human review
+    remains explicit.
 risk:
   class: high
   hazards:
-  - Fake-driver results mislabeled physical throughput or accepted work mislabeled successful transfers.
-  - Asynchronous resources freed before completion/drain, mutable borrowed buffers or retryable cleanup
-    discarded.
-  - Queue depth inferred from sequential operations; polling/scheduling nondeterminism hidden to obtain
-    canonical bytes.
-  - Real XDMA operation performed against an unknown bitstream/aperture or device probing during discovery.
-  - Optional toolkit/backend dependencies leak into default Runtime/SDK; original gates or failed evidence
-    erased.
+  - Graph completion before slot retirement permits stop to cancel already-completed work.
+  - Slot reads or writes after Free publication can affect a reused occupant.
+  - Broadly skipping cancellation, test weakening or lucky reruns conceal the defect.
+  - Uncontrolled shared-host scheduling can exhaust finite fixture deadlines; keep actual failures and
+    every timeout assertion, do not label these runs timing qualification.
   stop_conditions:
-  - A public Runtime, backend, driver, ABI, framework/schema/validator or other forbidden-path change
-    is needed; retain reproducer and open a separate repair contract.
-  - Physical execution lacks explicit device ownership, known safe memory/control aperture or confirmed
-    hardware/driver identity; do not execute it.
-  - A required success needs weakened assertions/timeouts, fabricated observations, privileged host changes,
-    unbounded waiting or unsafe teardown.
-  - Target main moves without reconciliation, or canonical contract is not integrated before target activation.
+  - Canonical contract absent or target main moved without reconciliation.
+  - Repair needs public layouts, extra Runtime resources, weakened output/fault assertions, changed active
+    device budgets or CTest bounds, private Runtime hooks or forbidden paths. Only the explicit private
+    fixture safe-transition setup-budget separation described above is authorized.
+  - Verification requires waived functional gates or fabricated evidence.
 rollback:
-  strategy: Revert the isolated device provider, optional real-device host examples and their CLI/package/test/documentation
-    integration as one batch. Preserve all prior providers, merged Runtime repairs, ABIs and schemas.
+  strategy: Revert the isolated retirement/helper/regression and activation together; retain the failure
+    and keep PR 261 blocked pending a verified replacement.
 evidence:
   output:
-  - docs/evidence/M23-04-<date>.md
-  - Finite catalog and acceptance mapping, independently observed counters and configured/executed capacities.
-  - Exact target/control baseline/head/tree/PR identities; passed/failed/blocked/unperformed commands
-    and check IDs; package and canonical artifacts.
-  - Verified recovery Git bundle and baseline-relative patch; actual accessible-hardware prerequisites
-    and NOT RUN records.
-  claim_boundary: Portable fake-driver and supplied-session software evidence only unless a named accessible
-    bench actually runs. No physical/RT qualification, support promotion, thresholds, M23/CAP-M23 completion,
-    cybersecurity, Daybreak, Unreal, signing, release or deployment.
+  - docs/evidence/M23-05R-2026-09-25.md
+  - Exact old/corrected ordering tests, canonical/source/tree identities, focused/sanitizer/full/package/hosted
+    results and limitations.
+  claim_boundary: Portable ordinary command-batch completion ordering only; no public interface, physical
+    characterization, controlled timing, RT qualification or release.

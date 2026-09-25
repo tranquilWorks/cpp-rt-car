@@ -1,5 +1,22 @@
 # Handoff
 
+M23-05R is active under merged control #496 and corrective amendment #498,
+`09ed06bebf21ece833ffa1626826eaf99e042521`, canonical blob
+`95def2eaf6bb45783bbc698ac195474ef0fe995a`. Baseline is merged M23-04
+#260 at `37c3b155894133789621d41b4233c8edde79d023`. Feature PR #261
+remains draft at `4f780cf23096155da50ff61a1c5fe4970c004a88`; its extra
+normal CTest run observed one unexpected cancellation after completed batches.
+Retire ordinary batch ownership before graph completion, preserve every test
+assertion and prior failure, verify and integrate separately, then reconcile
+M23-05 and freshly verify the combined feature tree.
+
+See [repair evidence](evidence/M23-05R-2026-09-25.md). Current verification
+and exact-head integration disposition are retained there and in the repair PR.
+Physical characterization and controlled timing remain NOT RUN.
+
+## Historical checkpoint before M23-05R
+
+
 M23-04 software implementation is complete; final integration is tracked in PR #260 under merged
 control #488 (`49b134215e74b2d6f27ae1cab3801ac9dc8c139d`, canonical blob
 `479bbb95244b1ad7817158bf025dcc12568e8af3`). It preserves merged #254 at
