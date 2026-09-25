@@ -39,6 +39,7 @@ TEST(MixedRateConformance, ThreeRatePublicFixtureIsOrderedAndExact) {
     EXPECT_GT(result.replay_actions_compared, 0u);
     EXPECT_GE(result.loopback_logical_actions, 12u);
     EXPECT_TRUE(result.memory_accounting_exact);
+    EXPECT_TRUE(result.idle_workers_parked);
 }
 
 TEST(MixedRateConformance, TwoInstancesShareNoMutableState) {
@@ -46,6 +47,8 @@ TEST(MixedRateConformance, TwoInstancesShareNoMutableState) {
     const auto second = rtfw_test::run_mixed_rate_conformance();
     EXPECT_EQ(first.status, rt::Status::ok);
     EXPECT_EQ(second.status, rt::Status::ok);
+    EXPECT_TRUE(first.idle_workers_parked);
+    EXPECT_TRUE(second.idle_workers_parked);
     EXPECT_EQ(first.callback_counts, second.callback_counts);
     EXPECT_EQ(first.action_count, second.action_count);
 }
@@ -108,5 +111,6 @@ TEST(MixedRateConformance, FaultMatrixReplaysTerminalClosureAndSafeFailure) {
         EXPECT_TRUE(result.active_replay_exact);
         EXPECT_GT(result.replay_actions_compared, 0u);
         EXPECT_GE(result.loopback_logical_actions, 6u);
+        EXPECT_TRUE(result.idle_workers_parked);
     }
 }

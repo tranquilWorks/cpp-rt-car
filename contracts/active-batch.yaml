@@ -12,7 +12,7 @@ sources:
   baseline_commit: 37c3b155894133789621d41b4233c8edde79d023
   control_plane_repository: tranquilWorks/portfolio-control
   control_plane_path: products/cpp-rt-car/batches/M23-05R.yaml
-  control_plane_revision: 0cb45fc2c4c2586d172b05d8b9a70a0957af3cd8
+  control_plane_revision: 7890ad076ce0a53a624bcf02e4c937ea9768aa3b
   owner_direction: Finish feature PR 261 under standing scoped development, publication and exact-head
     integration authorization. No cybersecurity, Daybreak or Unreal.
   prerequisite: M23-04 PR 260 is merged; retain all prior Runtime repairs and benchmark implementations.
@@ -29,8 +29,13 @@ sources:
   integration_order: Integrate this canonical contract, activate the isolated repair from target main,
     verify and merge, then reconcile PR 261 and separately reactivate M23-05. Preserve the original functional
     failure and all feature implementation.
-  canonical_revision: 7890ad076ce0a53a624bcf02e4c937ea9768aa3b
-  canonical_blob_sha: 8828efee53054d4afee6ed48261e4b2ad44729c8
+  hosted_failure: 'Repair head bbeb05a5aecc6fdb2f185228c7319b904081d0ce, workflow 36092659651: Windows
+    Debug job 107938159419 failed two existing MixedRateConformance tests at startup stage 4 with device_timeout
+    and zero callbacks/actions. Ordinary CommandBatch tests passed. Windows RelWithDebInfo job 107938159362
+    passed all 49 CTest entries then matrix fail-fast cancelled the artifact step. The rate-owned startup
+    path is unchanged by this repair; its 80-ms fixture safe-transition timeout remains binding.'
+  canonical_revision: 5b258a4dc302a2ccf2c92162fe550144c8c694dc
+  canonical_blob_sha: c2cb16353638bfef020fd32981602cd85b9a9840
 dependencies:
 - M23-04
 scope:
@@ -46,6 +51,8 @@ scope:
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
   - docs/evidence/M23-05R-*.md
+  - tests/mixed_rate_conformance.hpp
+  - tests/test_mixed_rate_conformance.cpp
   forbidden_paths:
   - rt/include/
   - rt/src/host_runtime.cpp
@@ -100,6 +107,13 @@ acceptance:
 - Preserve active-rate terminal/quarantine ownership, pending-work stop/cancel behavior, early completion,
   failure/timeout paths, multiple-owner isolation and admission/drain semantics. Do not suppress cancellation
   broadly or weaken any assertion.
+- Configure only the portable mixed-rate conformance fixture CPU executor workers with the existing explicit
+  park policy, avoiding repeatedly runnable idle yield loops during sampled-I/O startup. Assert the configured/resolved
+  park policy through public inspection and retain complete normal/two-owner/fault/replay/package coverage.
+  Preserve every 80-ms provider, completion and safe-transition timeout, all logical periods, workload
+  sizes, fault injections, CTest bounds and existing assertions. Change no Runtime policy default, rate-owned
+  production path or benchmark provider. This reduces avoidable fixture host contention; do not claim
+  proof that every historical timeout has this cause.
 - Preserve ABI v8/70 exports/fingerprint 0xd0e7a5a14bf35f97/SONAME 8, all public layouts and device/HAL
   ABIs, MemoryPlan accounting, default/optional SDK inventories, all 207 prior benchmark cases, schemas/validators,
   release 1.2.1 and Apache-2.0.
@@ -129,6 +143,8 @@ validation:
     metadata stays correct.
   - Prior stop release drains once without duplicate graph completion; all existing public lifecycle,
     stop/cancel/failure and active-rate cases remain unchanged.
+  - Existing complete mixed-rate conformance normal, independent-owner and injected-fault scenarios with
+    explicit inspected parked workers and unchanged deadlines/oracles.
   required_ci:
   - Existing exact-head GCC/Clang sanitizer, Windows MSVC, GCC TSan, determinism, portable assurance,
     ABI/package and contract gates without removal or weakening.
@@ -141,6 +157,8 @@ risk:
   - Graph completion before slot retirement permits stop to cancel already-completed work.
   - Slot reads or writes after Free publication can affect a reused occupant.
   - Broadly skipping cancellation, test weakening or lucky reruns conceal the defect.
+  - Uncontrolled shared-host scheduling can exhaust finite fixture deadlines; keep actual failures and
+    every timeout assertion, do not label these runs timing qualification.
   stop_conditions:
   - Canonical contract absent or target main moved without reconciliation.
   - Repair needs public layouts, extra Runtime resources, weakened comparisons/timeouts, test-only hooks

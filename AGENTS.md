@@ -228,3 +228,9 @@ Repair retirement before graph publication separately, retain old-order
 negative control and all existing assertions, then verify and integrate under
 standing scoped publication/merge authorization. Reconcile and reactivate
 M23-05 afterward. No cybersecurity, Daybreak, Unreal or physical qualification.
+
+Canonical amendment #497 (`5b258a4dc302a2ccf2c92162fe550144c8c694dc`) also
+allows the two private mixed-rate conformance fixture/test files to park idle
+CPU workers and inspect that policy. Retain the Windows startup failure; all
+80-ms deadlines, logical periods, fault injections and existing oracles remain
+unchanged. No Runtime default or rate-owned production path is modified.
