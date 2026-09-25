@@ -50,6 +50,20 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'bench/analysis/contracts.schema.json',
+    'bench/analysis/example-plan.json',
+    'bench/analysis/portable-policy.json',
+    'bench/extension/CMakeLists.txt',
+    'bench/extension/main.cpp',
+    'bench/extension/provider.cpp',
+    'bench/extension/provider.hpp',
+    'docs/benchmark_analysis.md',
+    'tests/benchmark_fixtures/analysis/test_analysis.py',
+    'tests/benchmark_fixtures/extension_consumer/CMakeLists.txt',
+    'tests/benchmark_fixtures/extension_consumer/lifecycle.cpp',
+    'tests/benchmark_fixtures/extension_consumer/verify_package.py',
+    'tools/compare_benchmarks.py',
+
     'bench/providers/device_cases/hal.inc',
     'bench/real_device/cuda_resources.hpp',
     'bench/real_device/pipeline.cpp',
@@ -2124,6 +2138,17 @@ def validate_repository(root: pathlib.Path) -> list[str]:
     for token in ("RTFW_BUILD_BENCHMARKS=ON", "m23-canonical", "verify_package.py", "BenchmarkRunner.*"):
         if token not in ci:
             errors.append(f"M23 benchmark CI: missing {token!r}")
+
+    for token, text in (
+        ("m23_benchmark_analysis", benchmark_cmake),
+        ("m23_benchmark_extension_lifecycle", benchmark_cmake),
+        ("extension_consumer/verify_package.py", ci),
+        ("rtfw_benchmark_extension_tests", ci),
+        ("bench/extension/provider.cpp", ci),
+        ("extension/provider.hpp", package_contract),
+    ):
+        if token not in text:
+            errors.append(f"M23-05 integration: missing {token!r}")
 
     return errors
 

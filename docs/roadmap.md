@@ -1,8 +1,10 @@
 # RTFW Completion Roadmap
 
-M21 and M22 are portable-software complete through merged PR #250. M23-01 merged as PR #251 and M23-02 source merged as PR #252.
-The M23-02 CLI discovery correction and CI closure are active. Software feature completion remains
-M26-06, not M22 or the presence of a benchmark framework.
+M21 and M22 are portable-software complete. M23-01 through M23-04 are merged,
+including PR #260 after all 32 exact-head checks. M23-05 is active under control
+PR #494: offline regression analysis and an installed third-party provider kit.
+Software feature completion remains M26-06. Physical and controlled-host evidence
+remain separate and unperformed here.
 
 The roadmap converts the [product contract](product_contract.md) into
 dependency-ordered milestones. A milestone is complete only when its exit gates
@@ -45,7 +47,7 @@ pass; file presence or a passing smoke test is not sufficient.
 | M20 | In progress | M20-PRE-01 is merged with deterministic host-independent fuzz, static, dependency, candidate-SBOM/provenance, strict-manifest, offline-fixture, and relocated-package assurance without signing or release; CAP-M20 remains open |
 | M21 | Complete | M21-01 through M21-05 are merged with fixed logical actions, conditional checkpoint state, deterministic active replay, and reusable public-surface conformance; physical/RT qualification remains separate |
 | M22 | Complete | M22-01 through M22-04 merged; typed controls, replay and stress closure at portable RT0 |
-| M23 | In progress | M23-01/M23-02 merged; M23-03 implementation and portable local verification complete, final integration ledger in PR #254; M23-04/M23-05 remain separate |
+| M23 | In progress | M23-01 through M23-04 merged; M23-05 analysis/extension implementation and verification active; physical/controlled evidence remains separate |
 | M24 | Planned | Runtime-integrated CUDA physics, CPU oracle, bounded failure/lifetime and capability coverage |
 | M25 | Planned | Consumer SDK, backend kit, external CIL, independent host adapter and installed docs |
 | M26 | Planned | Golden full-system scenario, fault/benchmark/replay/documentation and final software audit |

@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.20)
+project(rtfw_benchmark_extension LANGUAGES CXX)
+find_package(rtfw CONFIG REQUIRED COMPONENTS benchmark)
+add_executable(rtfw-bench-template main.cpp provider.cpp)
+target_link_libraries(rtfw-bench-template PRIVATE rtfw::benchmark)

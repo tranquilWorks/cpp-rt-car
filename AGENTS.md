@@ -216,3 +216,14 @@ The dependency queue already authorizes scoped software publication/integration.
 No cybersecurity, Daybreak or Unreal work. Missing real devices report NOT RUN.
 M23-05 and physical characterization remain separate; no completed work is
 reopened by the historical checkpoint text above.
+
+## M23-05 activation after PR #260
+
+M23-04 is merged at `37c3b155894133789621d41b4233c8edde79d023` after all
+32 exact-head checks passed. Canonical control PR #494, merge
+`b61ab1396168647ab8309eb7015b25edfae9ecf1`, activates the already-authorized
+M23-05 offline comparison/reporting and third-party source kit. Preserve every
+prior benchmark/provider/validator, Runtime, driver, ABI and qualification boundary.
+Standing scoped publication/merge authorization continues; no cybersecurity,
+Daybreak, Unreal or fabricated physical/controlled evidence is authorized.
+Historical checkpoint text above does not reopen completed batches.
