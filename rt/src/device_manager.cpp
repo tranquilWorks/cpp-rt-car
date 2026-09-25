@@ -1572,18 +1572,20 @@ void DeviceManager::finish_batch_slot(
         slot.state.notify_all();
         return;
     }
-    if (!slot.graph_released.exchange(true, std::memory_order_acq_rel) &&
-        executor_) {
-        (void)executor_->complete_external(slot.phase_index, status);
-    }
-    outstanding_count_.fetch_sub(1, std::memory_order_release);
-    const auto backend_index = static_cast<std::size_t>(slot.backend_index);
-    slot.state.store(kBatchFree, std::memory_order_release);
-    if (backend_index < backends_.size()) {
-        batch_backends_[backend_index].wake_sequence.fetch_add(
-            1, std::memory_order_release);
-        batch_backends_[backend_index].wake_sequence.notify_all();
-    }
+    retire_device_batch_slot(
+        slot, outstanding_count_, kBatchFree,
+        [this](std::uint32_t backend_index) noexcept {
+            if (backend_index < backends_.size()) {
+                batch_backends_[backend_index].wake_sequence.fetch_add(
+                    1, std::memory_order_release);
+                batch_backends_[backend_index].wake_sequence.notify_all();
+            }
+        },
+        [this, status](std::uint32_t phase_index) noexcept {
+            if (executor_) {
+                (void)executor_->complete_external(phase_index, status);
+            }
+        });
 }
 
 void DeviceManager::finish_rate_quarantine(
