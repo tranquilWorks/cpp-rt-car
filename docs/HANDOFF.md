@@ -6,8 +6,11 @@ M24-01 is implemented under merged control #502
 reference has an independent CPU oracle, actual injected-driver transfers,
 bounded failure/cleanup, optional compiled real CUDA kernel/host and installed
 source consumers. Portable quick 36/36, focused ASan/UBSan and TSan, package
-and ABI checks pass. The required experimental full suite and hosted integration
-are pending at this checkpoint; exact final results belong in the batch evidence.
+and ABI checks pass. The experimental suite finished 39/40 with the unchanged
+300-second `simcore_all` timeout in its eight-thread determinism case; all new
+M24 tests passed. The owner requested continuation around test timeouts.
+[PR #263](https://github.com/tranquilWorks/cpp-rt-car/pull/263) retains the
+checkpoint; hosted verification and integration remain pending.
 
 See [model and usage](cuda_physics.md) and
 [retained verification](evidence/M24-01-2026-09-27.md), including the separate
