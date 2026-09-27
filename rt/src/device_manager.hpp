@@ -299,7 +299,10 @@ private:
         DeviceCommandBatch batch{};
         HalV2BatchCompletion early_completion{};
         bool early_completion_valid = false;
-        bool rate_owned = false;
+        // The service timeout scan may retain a submitting-state snapshot
+        // while the submit lane fails and the host retires the terminal slot.
+        // State acquire alone does not pin this discriminator through release.
+        std::atomic<bool> rate_owned{false};
         Status terminal_status = Status::ok;
         DeviceRateReleaseIdentity rate_identity{};
     };

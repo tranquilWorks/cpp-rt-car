@@ -1,3 +1,21 @@
+# M24-03 final conformance verification
+
+M24-03 is active under merged control #514
+`360bbc308989efe30bb2a6f51a455e7cf99aeeef`, blob
+`c0e71268a7b8725342400fb7ae7b89cf2ffcdca8`, on Runtime repair #267
+`27fcb90b49773196f8773c2edcf97ba746fa7f94`. Both prerequisite repairs
+(#266 CUDA cleanup and #267 private ownership race) passed all 32 hosted checks
+and are integrated unchanged. The installed four-mode failure/lifetime suite
+is implemented; final combined verification is running for feature #265.
+
+See [usage](cuda_lifetime.md) and [evidence](evidence/M24-03-2026-09-27.md).
+M24-04 owns benchmark/profiler integration and the 90% overall / 100% critical
+capability coverage gate. M25 SDK/usability, M26 full-system reference, physical
+CUDA, controlled performance, independent human review and RT qualification
+remain separate. Earlier failure checkpoints below are historical.
+
+## Historical pre-R2 feature checkpoint
+
 # M24-03 conformance verification
 
 M24-03 is active under canonical control #512, revision

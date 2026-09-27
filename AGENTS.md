@@ -316,3 +316,16 @@ retain ownership to their existing finite budget and return timeout. Keep all
 publication/resource/timeout oracles. Complete local and exact-head hosted gates,
 then integrate and report remaining M24-04 and wider/manual work as requested.
 Standing scoped publication/integration authority continues. No physical claims.
+
+## M24-03 reactivation after Runtime repair #267
+
+R2 merged at `27fcb90b49773196f8773c2edcf97ba746fa7f94`, exact tested tree
+`59442fa32a4b76ad403f6d5d9937b5947278fcf1`, after all 32 checks passed at
+c14a742 in CI36351132581. Canonical reactivation #514 merged at
+`360bbc308989efe30bb2a6f51a455e7cf99aeeef`. Preserve the private atomic ownership
+flag, its independent command-batch regression and all earlier CUDA repairs.
+Finish feature #265 with fresh combined local and exact-head hosted gates.
+Concurrent fixture setup stays on the control thread; accepted execution/fault
+isolation and the actual 512 KiB CLI gate remain. Retain all earlier TSan,
+stack and timeout failures. Then report remaining M24-04 and broader/manual
+work. Standing scoped publication/integration authority continues.

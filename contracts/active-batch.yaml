@@ -11,23 +11,24 @@ sources:
   - products/cpp-rt-car/PRD.md#cap-m24--cuda-physics-maturity
   - products/cpp-rt-car/acceptance.yaml#CAP-M24
   milestone: products/cpp-rt-car/milestones/M24.md#m24-03--correctness-determinism-failure-and-lifetime
-  baseline_commit: ff47a64883e73cd9c2984616249b302e413566dc
+  baseline_commit: 27fcb90b49773196f8773c2edcf97ba746fa7f94
   control_plane_repository: tranquilWorks/portfolio-control
   control_plane_path: products/cpp-rt-car/batches/M24-03.yaml
-  predecessor: 'Combined M24-03R target #266 merged at ff47a64883e73cd9c2984616249b302e413566dc, tree
-    a39e10cd27e95075641afd9ef27b17a26183d023. All32 exact-head checks passed at b290fa55415ce92f7a7844c869d389813883183a
-    in CI36348539120. Fresh local focused63/63, quick39/full43, portable39, sanitizer/leak63+6 each, relocated/embedded5+5,
-    SDK20 and ABI/static pass. Feature #265 at dede9ea preserves original failures; rebase/reconcile onto
-    this repair without weakening prior oracles.'
+  predecessor: 'M24-03R2 #267 merged at27fcb90b49773196f8773c2edcf97ba746fa7f94, tree59442fa32a4b76ad403f6d5d9937b5947278fcf1.
+    All32 exact-head records passed atc14a7420627cb8f0ef251ab8ba2381abd9ee5686 in CI36351132581. Local
+    quick39/full43, portable39, sanitizer91+6 each, source5+5, SDK20, ABI/static pass. Preserved feature0fb7cb1
+    full TSan512KiB and ASan/leak/zero-allocation pass against repaired Runtime. Reconcile feature265
+    without weakening original assertions; all prior failures remain retained.'
   owner_scope: Continue the existing dependency-ordered portable software scope in automation.json. No
     cybersecurity, Daybreak, Unreal, physical qualification, signing, release or deployment. Integrate
     the canonical planning contract before target activation.
-  control_plane_revision: f168122ed236002fe54af2cea0515d24cb9c81c1
-  canonical_revision: f168122ed236002fe54af2cea0515d24cb9c81c1
-  canonical_blob_sha: 531af791c31aa5ccb3088bbc2fba095b8d767802
+  control_plane_revision: 360bbc308989efe30bb2a6f51a455e7cf99aeeef
+  canonical_revision: 360bbc308989efe30bb2a6f51a455e7cf99aeeef
+  canonical_blob_sha: c0e71268a7b8725342400fb7ae7b89cf2ffcdca8
 dependencies:
 - M24-02
 - M24-03R
+- M24-03R2
 scope:
   allowed_paths:
   - .portfolio-harness.json
@@ -100,6 +101,8 @@ scope:
   - docs/evidence/M24-02-*.md
   - tests/test_cuda_backend.cpp
   - docs/evidence/M24-03R-*.md
+  - tests/test_command_batch.cpp
+  - docs/evidence/M24-03R2-*.md
 acceptance:
 - Preserve M24-01 model, original entry points/tests and all M24-02 tests. Keep integer exact equality
   (zero tolerance) across all nine fields, seeds, count-one/odd/maximum counts, steps, workers and four
@@ -151,7 +154,9 @@ acceptance:
   signing/release/deployment remain separate. Production defects require separately scoped repair; no
   forbidden production changes or weakened assertions. Preserve merged M24-03R stopped-retirement/uncertain-registration
   repair source and regressions unchanged. Retain initial conformance expectation failures and both old-source
-  negative controls.
+  negative controls. Preserve M24-03R2 private Runtime ownership synchronization and its independent actual
+  Runtime/old-source TSan regression unchanged. Concurrent fixtures configure on the control thread, prove
+  simultaneous accepted work, and inject isolated loss without relaxing the actual512KiB process limit.
 validation:
   local:
   - git status --short --branch
