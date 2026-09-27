@@ -836,3 +836,14 @@ verification and exact merge disposition are retained in that PR and
 `evidence/M23-05-2026-09-25.md`; software closure requires their successful
 completion. Physical characterization, controlled thresholds and actual
 profiler captures remain NOT RUN. M24-M26 are separate software scopes.
+
+## M24-01 — Runtime CUDA particle reference
+
+The bounded integer particle reference is implemented on merged M23-05 under
+control #502. It uses the supported Runtime and actual CUDA backend, with
+independent per-frame CPU validation, fake-driver fault/lifetime tests, optional
+real CUDA source and installed consumers. See [model](cuda_physics.md) and
+[evidence](evidence/M24-01-2026-09-27.md) for exact local/hosted/integration status.
+M24-02 Graph/pipeline/active-rate work, M24-03 broader fault/determinism coverage
+and M24-04 benchmark/maturity closure remain separate. Physical CUDA and
+controlled timing remain NOT RUN. CAP-M24 is not complete.

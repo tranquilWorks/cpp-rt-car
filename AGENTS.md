@@ -265,3 +265,15 @@ them with actual capture. Keep all original samples/assertions, v1 validation
 and the 120-second CTest bound. Freshly verify combined local and hosted gates
 before scoped integration. Preserve all failed evidence. Earlier activation
 paragraphs are historical; standing scope and publication authorization remain.
+
+## M24-01 activation (2026-09-27)
+
+M23-05 is merged at `7e9fb883049df486f04a1d6730d36890cadc3853`.
+Control PR #502 merged the separately bounded M24-01 contract at
+`845e6180b9bf84dafb813ae023e19d4eedacb105`. Implement the Runtime CUDA particle reference,
+independent closed-form CPU oracle, shared portable/real graph and installed
+source consumers. Preserve Runtime, backends, benchmarks, ABI and support claims.
+Standing scoped publication/integration authorization continues. The owner
+explicitly said to continue around API failures; retain those as unperformed
+external evidence, without waiving local functional checks or claiming hardware.
+Historical checkpoints above do not reopen completed M23 work.

@@ -383,6 +383,18 @@ add_test(
         --policy ${RTFW_PROJECT_SOURCE_DIR}/tools/sbom_expected.json)
 set_tests_properties(sbom_dependencies PROPERTIES TIMEOUT 30)
 
+# M24 uses the actual Runtime/CUDA candidate with independent model oracles.
+add_executable(rtfw_cuda_physics_tests test_cuda_physics.cpp)
+target_link_libraries(rtfw_cuda_physics_tests PRIVATE rtfw::runtime rtfw::cuda_backend)
+rtfw_enable_project_warnings(rtfw_cuda_physics_tests)
+add_test(NAME m24_cuda_physics COMMAND rtfw_cuda_physics_tests)
+set_tests_properties(m24_cuda_physics PROPERTIES TIMEOUT 120)
+if(TARGET sample_cuda_physics)
+    add_test(NAME m24_cuda_physics_cli COMMAND ${RTFW_PYTHON_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/cuda_physics/test_cli.py --cli $<TARGET_FILE:sample_cuda_physics>)
+    set_tests_properties(m24_cuda_physics_cli PROPERTIES TIMEOUT 120)
+endif()
+
 # Portable M17-06 combined-protocol tests use the actual native candidate
 # classes with injected driver tables and do not depend on GoogleTest,
 # vendor toolkits, device nodes, or physical hardware.

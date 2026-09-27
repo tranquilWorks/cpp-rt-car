@@ -50,6 +50,21 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'samples/cuda_physics/CMakeLists.txt',
+    'samples/cuda_physics/cli.hpp',
+    'samples/cuda_physics/main.cpp',
+    'samples/cuda_physics/model.hpp',
+    'samples/cuda_physics/particle.cu',
+    'samples/cuda_physics/real.cmake',
+    'samples/cuda_physics/real.cpp',
+    'samples/cuda_physics/scenario.hpp',
+    'samples/cuda_physics/simulated_driver.hpp',
+    'tests/cuda_physics/allocation_guard.hpp',
+    'tests/cuda_physics/test_cli.py',
+    'tests/cuda_physics/verify_package.py',
+    'tests/test_cuda_physics.cpp',
+    'docs/cuda_physics.md',
+
     'bench/analysis/contracts.schema.json',
     'bench/analysis/example-plan.json',
     'bench/analysis/portable-policy.json',
