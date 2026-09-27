@@ -64,6 +64,15 @@ HASHED_CONTRACT_PATHS = {
     'tests/cuda_physics/verify_package.py',
     'tests/test_cuda_physics.cpp',
     'docs/cuda_physics.md',
+    'docs/cuda_pipeline.md',
+    'samples/cuda_physics/pipeline/cli.hpp',
+    'samples/cuda_physics/pipeline/main.cpp',
+    'samples/cuda_physics/pipeline/real.cpp',
+    'samples/cuda_physics/pipeline/scenario.hpp',
+    'samples/cuda_physics/pipeline/simulated_driver.hpp',
+    'tests/test_cuda_pipeline.cpp',
+    'tests/cuda_physics/test_pipeline_cli.py',
+
 
     'bench/analysis/contracts.schema.json',
     'bench/analysis/example-plan.json',

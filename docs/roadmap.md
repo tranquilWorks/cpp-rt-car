@@ -847,3 +847,11 @@ real CUDA source and installed consumers. See [model](cuda_physics.md) and
 M24-02 Graph/pipeline/active-rate work, M24-03 broader fault/determinism coverage
 and M24-04 benchmark/maturity closure remain separate. Physical CUDA and
 controlled timing remain NOT RUN. CAP-M24 is not complete.
+
+## M24-02 current scope
+
+M24-01 merged as PR #263 at c64d0672f1478acd863c68865663550d7fe22f8c after
+32 passing hosted check records. Control #504 activates M24-02's bounded
+caller-owned memory, two-stream, kernel/Graph and active-rate pipeline.
+Implementation evidence remains separate from physical CUDA and CAP-M24 closure;
+M24-03/04 remain later batches. See [pipeline](cuda_pipeline.md).

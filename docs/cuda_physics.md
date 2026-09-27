@@ -131,7 +131,7 @@ guarantee of that embedded-thread stack configuration is made. Runtime source
 is unchanged. This is a declared finite matrix, not a full Cartesian sweep.
 The actual CLI has malformed-input, maximum-run and repeat-output tests.
 
-M24-02 retains Graph/pipelining/active-rate work; M24-03 retains the broad
+M24-02 adds the separate [Graph/pipeline/active-rate example](cuda_pipeline.md); M24-03 retains the broad
 pressure, cancellation, loss/reset and determinism campaign; M24-04 retains
 benchmark/profiler and capability-matrix closure. This batch cannot claim
 CAP-M24's 90% overall/100% critical-row maturity, real GPU correctness, physical
