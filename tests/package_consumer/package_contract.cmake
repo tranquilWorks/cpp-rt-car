@@ -4,6 +4,20 @@ function(rtfw_assert_target target)
     endif()
 endfunction()
 
+set(expected_physics_sources CMakeLists.txt cli.hpp main.cpp model.hpp particle.cu
+    real.cmake real.cpp scenario.hpp simulated_driver.hpp)
+file(GLOB actual_physics_sources LIST_DIRECTORIES FALSE
+    RELATIVE "${RTFW_DATA_DIR}/examples/cuda_physics"
+    "${RTFW_DATA_DIR}/examples/cuda_physics/*")
+list(SORT expected_physics_sources)
+list(SORT actual_physics_sources)
+if(NOT actual_physics_sources STREQUAL expected_physics_sources)
+    message(FATAL_ERROR "CUDA physics source-example inventory differs from contract")
+endif()
+if(NOT EXISTS "${RTFW_DATA_DIR}/cuda_physics.md")
+    message(FATAL_ERROR "CUDA physics model documentation is missing")
+endif()
+
 foreach(target
         rtfw::c_shared
         rtfw::c_static

@@ -1,5 +1,23 @@
 # Handoff
 
+M24-01 is implemented under merged control #502
+(`845e6180b9bf84dafb813ae023e19d4eedacb105`) on target baseline
+`7e9fb883049df486f04a1d6730d36890cadc3853`. The public Runtime CUDA particle
+reference has an independent CPU oracle, actual injected-driver transfers,
+bounded failure/cleanup, optional compiled real CUDA kernel/host and installed
+source consumers. Portable quick 36/36, focused ASan/UBSan and TSan, package
+and ABI checks pass. The required experimental full suite and hosted integration
+are pending at this checkpoint; exact final results belong in the batch evidence.
+
+See [model and usage](cuda_physics.md) and
+[retained verification](evidence/M24-01-2026-09-27.md), including the separate
+Debug/TSan 512 KiB embedded-thread limitation and the passing M23-style CLI
+process-stack check. No physical CUDA run, controlled performance or CAP-M24
+maturity closure is claimed. M24-02/03/04 remain separate. M23-05 is already
+merged; earlier pending text below is historical.
+
+## Historical M23 checkpoint
+
 M23-05 is active on merged repair #262 at
 `b39ac9f281862a5a0aff051880671218e117db47`, tree
 `dbfc45df441bcad0696b34b7e92fc34827f60b34`, under canonical #500,

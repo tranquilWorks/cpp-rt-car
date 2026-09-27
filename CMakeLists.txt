@@ -1168,8 +1168,22 @@ install(
         CHANGELOG.md
         SECURITY.md
         docs/runtime_profiles.md
+        docs/cuda_physics.md
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw
 )
+
+# Source-only example: no default SDK export or vendor dependency is added.
+install(FILES
+    samples/cuda_physics/CMakeLists.txt
+    samples/cuda_physics/real.cmake
+    samples/cuda_physics/model.hpp
+    samples/cuda_physics/scenario.hpp
+    samples/cuda_physics/simulated_driver.hpp
+    samples/cuda_physics/cli.hpp
+    samples/cuda_physics/main.cpp
+    samples/cuda_physics/real.cpp
+    samples/cuda_physics/particle.cu
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/cuda_physics)
 
 install(
     FILES
