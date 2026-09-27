@@ -1,4 +1,7 @@
-set(RTFW_SAMPLE_TEST_TARGETS)
+add_executable(sample_cuda_pipeline cuda_physics/pipeline/main.cpp)
+target_link_libraries(sample_cuda_pipeline PRIVATE rtfw::runtime rtfw::cuda_backend)
+rtfw_enable_project_warnings(sample_cuda_pipeline)
+set(RTFW_SAMPLE_TEST_TARGETS sample_cuda_pipeline)
 
 add_executable(sample_cuda_physics cuda_physics/main.cpp)
 target_link_libraries(sample_cuda_physics PRIVATE rtfw::runtime rtfw::cuda_backend)
@@ -66,6 +69,9 @@ list(APPEND RTFW_SAMPLE_TEST_TARGETS
 
 if (RTFW_ENABLE_CUDA)
     include(cuda_physics/real.cmake)
+    rtfw_add_physics_real(sample_cuda_pipeline_real "${CMAKE_CURRENT_SOURCE_DIR}/cuda_physics"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cuda_physics/pipeline/real.cpp")
+    rtfw_enable_project_warnings(sample_cuda_pipeline_real)
     rtfw_add_physics_real(sample_cuda_physics_real "${CMAKE_CURRENT_SOURCE_DIR}/cuda_physics")
     rtfw_enable_project_warnings(sample_cuda_physics_real)
     add_executable(sample_cuda_qualification cuda_qualification.cpp)

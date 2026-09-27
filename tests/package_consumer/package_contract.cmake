@@ -18,6 +18,19 @@ if(NOT EXISTS "${RTFW_DATA_DIR}/cuda_physics.md")
     message(FATAL_ERROR "CUDA physics model documentation is missing")
 endif()
 
+set(expected_pipeline_sources cli.hpp main.cpp real.cpp scenario.hpp simulated_driver.hpp)
+file(GLOB actual_pipeline_sources LIST_DIRECTORIES FALSE
+    RELATIVE "${RTFW_DATA_DIR}/examples/cuda_physics/pipeline"
+    "${RTFW_DATA_DIR}/examples/cuda_physics/pipeline/*")
+list(SORT expected_pipeline_sources)
+list(SORT actual_pipeline_sources)
+if(NOT actual_pipeline_sources STREQUAL expected_pipeline_sources)
+    message(FATAL_ERROR "CUDA pipeline source-example inventory differs from contract")
+endif()
+if(NOT EXISTS "${RTFW_DATA_DIR}/cuda_pipeline.md")
+    message(FATAL_ERROR "CUDA pipeline documentation is missing")
+endif()
+
 foreach(target
         rtfw::c_shared
         rtfw::c_static

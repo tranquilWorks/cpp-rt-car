@@ -55,7 +55,7 @@ jobs:
           cmake --build build --config ${BUILD_TYPE} \
             --target simcore_tests rtfw_determinism_artifact rtfw_benchmark_consumer rtfw_benchmark_cpu_consumer rtfw_benchmark_runtime_consumer rtfw_benchmark_device_consumer \
                      rtfw_cpu_gpu_fpga_cpu_sample_tests \
-                     sample_cpu_gpu_fpga_cpu sample_cuda_physics rtfw_cuda_physics_tests -- -j2
+                     sample_cpu_gpu_fpga_cpu sample_cuda_physics rtfw_cuda_physics_tests sample_cuda_pipeline rtfw_cuda_pipeline_tests -- -j2
       - name: Run determinism tests
         env:
           ASAN_OPTIONS: abort_on_error=1:detect_leaks=0
@@ -64,7 +64,7 @@ jobs:
           GTEST_FILTER: DeterminismIntegration.*:DeterminismReplay.*:LiveControlMailbox.FrozenPolicyChangesIdentityButArrivalsDoNot:LiveControlSdk.CanonicalEnvelopeHasExactLittleEndianLayout
         run: |
           ctest --test-dir build -C ${BUILD_TYPE} --output-on-failure \
-            -R 'simcore_all|m17_cpu_gpu_fpga_cpu_sample|sample_cpu_gpu_fpga_cpu|sample_cuda_physics|m24_cuda_physics'
+            -R 'simcore_all|m17_cpu_gpu_fpga_cpu_sample|sample_cpu_gpu_fpga_cpu|sample_cuda_physics|m24_cuda_physics|sample_cuda_pipeline|m24_cuda_pipeline'
       - name: Produce M7 checkpoint artifact
         run: |
           build/tests/rtfw_determinism_artifact \
@@ -237,7 +237,7 @@ jobs:
             --build-dir "$RUNNER_TEMP/rtfw-portable-assurance" \
             --source-commit "${{ github.sha }}"
       - name: Analyze supported CUDA physics source example
-        run: clang++-14 --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/cuda_physics/main.cpp tests/test_cuda_physics.cpp
+        run: clang++-14 --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/cuda_physics/main.cpp tests/test_cuda_physics.cpp samples/cuda_physics/pipeline/main.cpp tests/test_cuda_pipeline.cpp
       - name: Verify installed and embedded CUDA physics source consumers
         run: python3 tests/cuda_physics/verify_package.py --work-directory build-physics-package
       - name: Fuzz live-control replay parser
@@ -370,7 +370,7 @@ jobs:
                      rtfw_host_adapter_tests \
                      rtfw_xdma_backend_tests \
                      rtfw_cpu_gpu_fpga_cpu_sample_tests \
-                     sample_cpu_gpu_fpga_cpu sample_cuda_physics rtfw_cuda_physics_tests sample_live_control_typed rtfw_benchmark_extension_tests \
+                     sample_cpu_gpu_fpga_cpu sample_cuda_physics rtfw_cuda_physics_tests sample_cuda_pipeline rtfw_cuda_pipeline_tests sample_live_control_typed rtfw_benchmark_extension_tests \
             -- -j2
       - name: Run executor ThreadSanitizer gate
         env:
@@ -379,7 +379,7 @@ jobs:
         run: |
           ctest --test-dir build-tsan \
             --output-on-failure \
-            -R 'm24_cuda_physics|sample_cuda_physics|m23_benchmark_extension_lifecycle|simcore_all|m15_accounting_closure|m15_stack_lifecycle|m15_cross_category_rollback|m16_rate_timeline|m16_rate_dispatch|m16_shedding_telemetry|m16_cross_rate_data|m17_command_batch_timeline|m17_hal_v2_compatibility|m17_heterogeneous_memory_topology|m17_cuda_graph|m17_xdma_control|m17_cpu_gpu_fpga_cpu_sample|sample_cpu_gpu_fpga_cpu|sample_live_control_typed|m19_extension_registration|m22_live_control_mailbox|m22_live_control_sdk|m22_live_control_stress|thread_policy_rollback|thread_policy_recovery|host_adapter|xdma_backend'
+            -R 'm24_cuda_pipeline|sample_cuda_pipeline|m24_cuda_physics|sample_cuda_physics|m23_benchmark_extension_lifecycle|simcore_all|m15_accounting_closure|m15_stack_lifecycle|m15_cross_category_rollback|m16_rate_timeline|m16_rate_dispatch|m16_shedding_telemetry|m16_cross_rate_data|m17_command_batch_timeline|m17_hal_v2_compatibility|m17_heterogeneous_memory_topology|m17_cuda_graph|m17_xdma_control|m17_cpu_gpu_fpga_cpu_sample|sample_cpu_gpu_fpga_cpu|sample_live_control_typed|m19_extension_registration|m22_live_control_mailbox|m22_live_control_sdk|m22_live_control_stress|thread_policy_rollback|thread_policy_recovery|host_adapter|xdma_backend'
 
   build-windows:
     runs-on: windows-2022
@@ -445,7 +445,7 @@ jobs:
         run: |
           cmake --build build-release --config Release \
             --target sample_embed_c sample_embed_c_static sample_embed_cpp \
-                     sample_cpu_gpu_fpga_cpu sample_cuda_physics -- -j2
+                     sample_cpu_gpu_fpga_cpu sample_cuda_physics sample_cuda_pipeline -- -j2
       - name: Run embedding samples
         working-directory: build-release
         run: |
@@ -454,6 +454,7 @@ jobs:
           ./samples/sample_embed_cpp
           ./samples/sample_cpu_gpu_fpga_cpu
           ./samples/sample_cuda_physics
+          ./samples/sample_cuda_pipeline --schedule active
       - name: Configure add_subdirectory consumer
         run: >
           cmake
@@ -672,6 +673,7 @@ jobs:
           cmake --build build-physics-real --parallel 2
           ctest --test-dir build-physics-real --output-on-failure
           build-physics-real/physics_real_consumer --help
+          build-physics-real/pipeline_real_consumer --help
       - name: Build compile-only consumers without device access
         run: |
           cmake -S tests/package_consumer -B build-vendor-consumer \

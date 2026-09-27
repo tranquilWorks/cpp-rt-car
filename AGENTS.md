@@ -277,3 +277,14 @@ Standing scoped publication/integration authorization continues. The owner
 explicitly said to continue around API failures; retain those as unperformed
 external evidence, without waiving local functional checks or claiming hardware.
 Historical checkpoints above do not reopen completed M23 work.
+
+## M24-02 activation (2026-09-27)
+
+M24-01 merged as PR #263 at `c64d0672f1478acd863c68865663550d7fe22f8c`
+after all 32 hosted checks passed. Canonical M24-02 control #504 merged at
+`36b1b8e1976c6063b1ea20c1cda3afec762e735b`. Implement only its bounded
+two-stream, borrowed-memory, kernel/Graph and active-rate pipeline scope.
+Preserve the original reference and tests, Runtime, backends, ABI and benchmarks.
+Retain the prior local timeout and stack limitation. Standing scoped
+publication/integration authorization continues; physical CUDA stays NOT RUN
+without a named actual device. M24-03/04 and maturity closure remain separate.

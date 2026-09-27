@@ -23,3 +23,16 @@ if(PHYSICS_REAL_CUDA)
   include(real.cmake)
   rtfw_add_physics_real(physics_real_consumer "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
+
+add_executable(pipeline_consumer pipeline/main.cpp)
+target_link_libraries(pipeline_consumer PRIVATE rtfw::runtime rtfw::cuda_backend)
+foreach(dispatch kernel graph)
+  foreach(schedule frame active)
+    add_test(NAME pipeline_${dispatch}_${schedule} COMMAND pipeline_consumer
+      --dispatch ${dispatch} --schedule ${schedule} --count 17 --steps 7 --seed 4294967295)
+  endforeach()
+endforeach()
+if(PHYSICS_REAL_CUDA)
+  rtfw_add_physics_real(pipeline_real_consumer "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/pipeline/real.cpp")
+endif()

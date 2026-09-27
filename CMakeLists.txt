@@ -1169,6 +1169,7 @@ install(
         SECURITY.md
         docs/runtime_profiles.md
         docs/cuda_physics.md
+        docs/cuda_pipeline.md
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw
 )
 
@@ -1184,6 +1185,14 @@ install(FILES
     samples/cuda_physics/real.cpp
     samples/cuda_physics/particle.cu
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/cuda_physics)
+install(FILES
+    samples/cuda_physics/pipeline/scenario.hpp
+    samples/cuda_physics/pipeline/simulated_driver.hpp
+    samples/cuda_physics/pipeline/cli.hpp
+    samples/cuda_physics/pipeline/main.cpp
+    samples/cuda_physics/pipeline/real.cpp
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/cuda_physics/pipeline)
+
 
 install(
     FILES

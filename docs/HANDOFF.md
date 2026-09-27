@@ -1,5 +1,18 @@
 # Handoff
 
+M24-02 is active under merged control #504 (`36b1b8e1976c6063b1ea20c1cda3afec762e735b`)
+on merged M24-01 PR #263 (`c64d0672f1478acd863c68865663550d7fe22f8c`).
+The bounded two-stream source pipeline adds caller-owned device buffers, D2D,
+kernel/Graph parity and actual active-rate dispatch. Local verification passes: quick 39/39, full 43/43, ASan/UBSan and TSan
+3/3 each, relocated/embedded source consumers and existing SDK 20/20. Hosted
+verification and integration remain pending; see [pipeline usage](cuda_pipeline.md) and
+[batch evidence](evidence/M24-02-2026-09-27.md). The original reference, Runtime,
+backends, ABI and benchmarks remain protected. Physical CUDA and M24-03/04 maturity
+closure remain separate. Earlier M24-01 pending text below is historical; it merged
+after 32 passing hosted check records, with its local timeout retained separately.
+
+## Historical M24-01 checkpoint
+
 M24-01 is implemented under merged control #502
 (`845e6180b9bf84dafb813ae023e19d4eedacb105`) on target baseline
 `7e9fb883049df486f04a1d6730d36890cadc3853`. The public Runtime CUDA particle
