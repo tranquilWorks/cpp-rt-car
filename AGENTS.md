@@ -288,3 +288,14 @@ Preserve the original reference and tests, Runtime, backends, ABI and benchmarks
 Retain the prior local timeout and stack limitation. Standing scoped
 publication/integration authorization continues; physical CUDA stays NOT RUN
 without a named actual device. M24-03/04 and maturity closure remain separate.
+
+## M24-03 activation (2026-09-27)
+
+M24-02 merged as PR #264 at `5c82703d0c2840d13e18770d2d1b3083a96e29c0`
+after all 32 exact-head checks passed. Canonical control #507 merged at
+`52aea868343911ae7c58cea619bdcacb74749aca`. Implement the separately bounded
+CUDA failure/lifetime conformance scope; preserve Runtime/backends, original
+M24-01/02 tests, ABIs, benchmarks and earlier evidence. User requested the next
+batch followed by a remaining-work update. Standing scoped publication/merge
+and API-failure continuation authorization persist. M24-04/closure and physical
+qualification remain separate. No Unreal, cybersecurity or Daybreak scope.

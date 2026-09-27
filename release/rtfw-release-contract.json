@@ -1,41 +1,12 @@
 {
-  "schema_version": 2,
-  "project": "rtfw",
-  "release_version": "1.2.1",
-  "release_status": "portable_rt0",
-  "digest_scope": "source_tree",
-  "license": "Apache-2.0",
   "c_abi": {
     "current": 8,
-    "minimum_compatible": 8,
-    "soname": 8,
+    "export_allowlist": "abi/rtfw_c_abi_v8.exports",
     "layout_fingerprint": "0xd0e7a5a14bf35f97",
-    "export_allowlist": "abi/rtfw_c_abi_v8.exports"
-  },
-  "extension_abi": {
-    "current": 1,
-    "minimum_compatible": 1,
-    "header": "rt/include/rt/extension_abi.h",
-    "entry_symbol": "rtfw_extension_entry_v1",
-    "runtime_loader": false
-  },
-  "cpp_api": {
-    "compatibility": "source_within_1.x",
-    "entrypoints": [
-      "rt/include/rt/runtime.hpp",
-      "rt/include/rt/profile.hpp",
-      "rt/include/rt/live_control.hpp"
-    ],
-    "preferred_target": "rtfw::runtime",
-    "compatibility_target": "rtfw::simcore_rt",
-    "binary_abi": false
+    "minimum_compatible": 8,
+    "soname": 8
   },
   "cmake_package": {
-    "compatibility": "same_major",
-    "preferred_component": "runtime",
-    "preferred_target": "rtfw::runtime",
-    "compatibility_component": "cpp_runtime",
-    "compatibility_target": "rtfw::simcore_rt",
     "always_components": [
       "c_shared",
       "c_static",
@@ -48,9 +19,17 @@
       "cuda_driver",
       "xdma_linux"
     ],
-    "install_optional_components": [
-      "experimental"
-    ],
+    "compatibility": "same_major",
+    "compatibility_component": "cpp_runtime",
+    "compatibility_target": "rtfw::simcore_rt",
+    "conditional_headers": {
+      "cuda_driver": [
+        "rt/cuda_driver.hpp"
+      ],
+      "xdma_linux": [
+        "rt/xdma_linux.hpp"
+      ]
+    },
     "default_headers": [
       "core/units.hpp",
       "rt/c_api.h",
@@ -72,20 +51,8 @@
       "rt/xdma_backend.hpp",
       "rtfw/version.h"
     ],
-    "conditional_headers": {
-      "cuda_driver": [
-        "rt/cuda_driver.hpp"
-      ],
-      "xdma_linux": [
-        "rt/xdma_linux.hpp"
-      ]
-    },
-    "forbidden_default_targets": [
-      "rtfw::experimental",
-      "rtfw::simcore",
-      "rtfw::simcore_core",
-      "rtfw::simcore_platform"
-    ],
+    "experimental_built_by_default": false,
+    "experimental_installed_by_default": false,
     "forbidden_default_header_prefixes": [
       "api/",
       "gpu/",
@@ -104,42 +71,24 @@
       "rt/snapshot.hpp",
       "rt/watchdog.hpp"
     ],
-    "experimental_built_by_default": false,
-    "experimental_installed_by_default": false
-  },
-  "portable_assurance": {
-    "schema_version": 1,
-    "entrypoint": "scripts/verify-portable-assurance.sh",
-    "modes": [
-      "dependencies",
-      "static",
-      "fuzz",
-      "artifacts",
-      "all"
+    "forbidden_default_targets": [
+      "rtfw::experimental",
+      "rtfw::simcore",
+      "rtfw::simcore_core",
+      "rtfw::simcore_platform"
     ],
-    "toolchain_policy": "tools/portable_assurance_toolchain.json",
-    "dependency_policy": "tools/sbom_expected.json",
-    "artifact_policy": "release/portable-assurance-policy.json",
-    "spdx_schema": "release/schemas/spdx-schema-2.3.json",
-    "source_manifest": "tools/static_analysis_sources.txt",
-    "candidate_signed": false,
-    "candidate_authenticated": false,
-    "release_publication": false,
-    "fixture_authenticates_candidate": false
-  },
-  "qualification_boundary": {
-    "portable": "RT0 on named supported tuples",
-    "RT1": "unqualified",
-    "RT2": "unqualified",
-    "CUDA": "candidate",
-    "XDMA": "candidate"
+    "install_optional_components": [
+      "experimental"
+    ],
+    "preferred_component": "runtime",
+    "preferred_target": "rtfw::runtime"
   },
   "contract_sha256": {
     ".clang-tidy": "d113e7f81fe2c7db2c721caf21706636c5df342d0a430e76ec1b37815b5eec10",
     ".gitattributes": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c",
     ".github/workflows/autotune-mapping.yml": "c40fe556317878319816edd1716d189b90a86e1a11ac8d46250fa46664bbbe4f",
     ".github/workflows/autotune-smoke.yml": "aba2383c10d5df50c042b46ff46550dc70433a035044ad28caadc712b67a2b8f",
-    ".github/workflows/ci.yml": "e77229ec990d4fef30d90a16cf606be1f1602c5c344f0ea534a8f07e5c099280",
+    ".github/workflows/ci.yml": "a3a2f5a289c888aaaaf9341b4a7ee772d2b3191c2053465bf07d43cf355e24ae",
     ".github/workflows/cuda-qualification.yml": "94a9ccca5a494281be903fa9043574a39e68110d11affa3630b0c4a95fd911b7",
     ".github/workflows/docs-contract.yml": "64607fa0435f54e0def564d48ab9e3e5d3f255f2e5b06b2ea51fd8626101e623",
     ".github/workflows/release.yml": "d87521c601fbccbc29ccddace0487d15b6d45a223df62c45f31913f683e6d407",
@@ -147,7 +96,7 @@
     ".github/workflows/xdma-qualification.yml": "3fb2d779494fce44b5d5bbdcbdcfedbf0bb0f912e5f1443a9fb033529d94a16f",
     ".gitignore": "a55b599061dfcc0c7a818cf53ef865ee1d68dd9be83bffabf72143c18254dfa3",
     "CHANGELOG.md": "1feb6ea07e4a45f3b37fd40af4113a12db9d3c1d416043443e10519577277bc7",
-    "CMakeLists.txt": "2514bf9f17316dff678deef157ef6012fec9198070c3b52c1df5a3607d715925",
+    "CMakeLists.txt": "ab2acdd5c9959f4478b62f6c3822369e5decfcac8896d9524dc2545d7982e137",
     "CMakePresets.json": "fc2adcce59f3f3b4529d37cf5bb01204761a0d71bc0d0239fdc13b8d3e83de61",
     "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
     "README.md": "12caf1b5bea0d35b2f6b55d5677529ae4b23ab0cfe55633c71e222784ea596db",
@@ -214,6 +163,7 @@
     "docs/compiled_graph.md": "e08969323c7186cc7a96c208b95bda89abb9143264604861407d71be630d40a4",
     "docs/cpu_memory_policy.md": "ba352f10d1caa1b126eb16a5275ad1233a7c2cd7b7a1a48c7fd68d687b5fc981",
     "docs/cuda_backend.md": "70a102dfcb9e55ca30e064bbf2ef97cde5aed3c174bf5d033a73ac724590780b",
+    "docs/cuda_lifetime.md": "ad63d75ded7126defc3e7b357fe44428c0b8d42e632a65391dfb651d3b7456bd",
     "docs/cuda_physics.md": "b0a392a14f37e5e638239721b301deff403bb74dc0a87e3b8a33e7efee7fd361",
     "docs/cuda_pipeline.md": "260e367e21c0ddfd4896bf8712e9e313c96298cf7caa9bbf1e03eadd1e9901ed",
     "docs/cuda_support_matrix.json": "fdaa2d31ff045987ac2ed04a6dbcefd23a37ae0a544e921e62bade4aead5d115",
@@ -331,18 +281,21 @@
     "rt/src/watchdog_monitor.hpp": "e5dc219b55262a5cffeb60ec7d31ef7d526da5b694eb714a1cdafce18cef3d7d",
     "rt/src/xdma_backend.cpp": "97232f9f2de5d3f52d58bd602329131abfc32fed9f71a467940351ec02c963c5",
     "rt/src/xdma_linux.cpp": "d0aa0cc6ae6d535b59c2a50021767445e1c85bb0448140e54a09bce3bc9cad22",
-    "samples/CMakeLists.txt": "8b567c7b1cd76fa5516e4db9b95121e03f2dc4ab97d1246425cb487000026287",
+    "samples/CMakeLists.txt": "55f99cfa052070b4888d60fe1ce480ee0ba716a6d023fc8cfba2115dc4a90f32",
     "samples/cpu_gpu_fpga_cpu.cpp": "3403cbf61e56522dfe91a61daa611d9d4cc7a1c53f0c6464459b029f46728ae0",
-    "samples/cuda_physics/CMakeLists.txt": "f17d5220dd35e5b849f2e386652d6859427ee0e0ba2b3aaf4d2fc0f1d7c6b152",
+    "samples/cuda_physics/CMakeLists.txt": "d4ad6f36491a6cfca9ae11d1f2a89221177626c3be17d7569a67c3ee7368b802",
     "samples/cuda_physics/cli.hpp": "e4e8a1ea3b4723463287c3582349196f229589b2435e8e5b2591586dc1da984a",
+    "samples/cuda_physics/lifetime/conformance.hpp": "87b51b55b9df41678f14f3427122a1a276d6ce3a19a15aa186d59920e33472db",
+    "samples/cuda_physics/lifetime/main.cpp": "f73aa4e25908bb151e93823d2fe951945754396caf487321b4b2002f05afaf5c",
+    "samples/cuda_physics/lifetime/protocol.hpp": "143af483bf244ba1b2aea40497beb8f8f7195fc5f7d5a111f1e7a3a5953b3518",
     "samples/cuda_physics/main.cpp": "eeecdb3ef8682812fa8756456d4e6ce22e7926d315137fe259e2bfe186c0d72e",
     "samples/cuda_physics/model.hpp": "09915949901a19c246918061fe74b1e11dff4af6d47832f1f6f2208c26e4c6bb",
     "samples/cuda_physics/particle.cu": "93ab3f6577eff98e0e9c679c012a39333df5f4e0eb290c4a82fed0f0875308f2",
     "samples/cuda_physics/pipeline/cli.hpp": "b382de4d773c66370e5a355c472510a647af5d6c59372b11553a4c74858507a2",
     "samples/cuda_physics/pipeline/main.cpp": "f5531724acd54b8419ced4a94c62d9ca54eb9b32c3e2d903567df5ee8f830bb5",
     "samples/cuda_physics/pipeline/real.cpp": "69bdef5cb7fe66c3319d9cbce41a19ce36b3b90239e0d99c3904cda32d057215",
-    "samples/cuda_physics/pipeline/scenario.hpp": "6552b632d49f63d403e7daadbf4d83e4b2f819862af5d5d66eaa67332d26c1c8",
-    "samples/cuda_physics/pipeline/simulated_driver.hpp": "068e85938a5e25462c4d8b5cf8c7c22c80e4937a8ecbae16e1d3488b37900a6d",
+    "samples/cuda_physics/pipeline/scenario.hpp": "c187779c0a5cd6e27f4a9d8bdf832397ee25e4122da416f61d035a1098f346d2",
+    "samples/cuda_physics/pipeline/simulated_driver.hpp": "5c1febf0697f1d3a48cf3990d02550af1a318418929a164d5d1abd2f9ecc4d7d",
     "samples/cuda_physics/real.cmake": "2de50e79fa56ca0aa7971967a952745e0d0cf7db2f49c60637f8cc363e666381",
     "samples/cuda_physics/real.cpp": "fbb956fb5b9f68a86a1b48db65ca1d3e04fe845dd381f67822d9ba82a26f8a06",
     "samples/cuda_physics/scenario.hpp": "6c1ea60280cd7e187fbde69ea6a384dc68e0435c44174561d536dfb656272993",
@@ -351,7 +304,7 @@
     "samples/live_control_typed.cpp": "8f1eb2c469513abdd022627683d8993f0cfc430df7a639dcb9dca3235a0704ac",
     "scripts/verify-portable-assurance.sh": "0fc210ffc7274429ee742c16343c6769dea1365c915ac47a1b041457f68637b7",
     "src/runtime_profile_demo.cpp": "d8b7d00ea3bca701deac84a4ced1b72cd9c9cd3bfc9a33bf72e39fb2d50a02a1",
-    "tests/CMakeLists.txt": "e27c2152c10aa12e11104f5b5d0bc044aec09080446c76158d25c3dde7161e50",
+    "tests/CMakeLists.txt": "8c473c14bec983cc60530394d5976fa922974297daa4c5fbf00c45a50c5c6447",
     "tests/add_subdirectory_consumer/CMakeLists.txt": "99aead1a31e943b8993635dfa2995697ad98227c587e685890287973d382b29e",
     "tests/add_subdirectory_consumer/main.cpp": "698d47ec1edbceeb0c72821ae0c8a49ecc2dc9f5e57a1ee9e11e7115e2554f42",
     "tests/benchmark_fixtures/analysis/test_analysis.py": "314cf652520a61ed3a88294edbedd53b10d2e582ac56a42999ef8260a39c057d",
@@ -377,6 +330,7 @@
     "tests/benchmark_fixtures/verify_package.py": "7e01cd1f7291ed611817e8818b7cd67229b82a505bbd4b3b8fc679caf6ec5fc0",
     "tests/cuda_physics/allocation_guard.hpp": "93c166fe7ad4589246601aa14e126cd99dbe407a2e7687c62ed6ef33a888854e",
     "tests/cuda_physics/test_cli.py": "1e1649a2f549e0c215b0a2d2b0f1b8f6a290317d3af8d87eac35f5422eb956e1",
+    "tests/cuda_physics/test_lifetime_cli.py": "b5659e9948ade69fae950f18f615ef032847c51a4cac5e3ea0f9adcd4e1f8199",
     "tests/cuda_physics/test_pipeline_cli.py": "29a1ea4ab299a90187a8bb9f331170e97bfc89c8aa02776da4fdb1be4d2aa4e9",
     "tests/cuda_physics/verify_package.py": "01889c5ba6fc5cdf2277eadfff9c9f56c23614482b18c90be937a3dea6689153",
     "tests/determinism_artifact.cpp": "9ab84eccc085eea6d2ebc5055e524f4ea7f0f15104d98604eecd37b34e8569ab",
@@ -408,7 +362,7 @@
     "tests/package_consumer/live_control_sdk_consumer.cpp": "5ed3c0efa0a18ecb9c4fb16c657deeb4c033eed1a6f051cf5bae800193c88bc1",
     "tests/package_consumer/loopback_consumer.cpp": "bf9f124937954293534231756122b1d28d91db2f61a03c3c13304e88105795ee",
     "tests/package_consumer/mixed_rate_consumer.cpp": "0564df2c7c5434213f95f3bd690f99907132d74b298bc3af769e179b00c12fe6",
-    "tests/package_consumer/package_contract.cmake": "2d8511aaba3e3e1a543208198bd1d24fb366a0a8d7305a28df8cb53f0087fa66",
+    "tests/package_consumer/package_contract.cmake": "b9294d8feab963de08bc9b67852904f26a0566430510d877b7955a22b6589378",
     "tests/package_consumer/profile_consumer.cpp": "5782c630f6ff31c0918c4f7753cc98c9f6d7e7d152d80bb65666b50b227fb67e",
     "tests/package_consumer/pure_c/CMakeLists.txt": "c5e341fcd37223839f1f10d26defbc6bfba0fef3191ced5200491c48b2ff1cec",
     "tests/package_consumer/pure_c/main.c": "3991ed20f3b9c0c0532a9f2f378a34c3913f27c64d334b9c1732b6c9f3948dbe",
@@ -435,6 +389,7 @@
     "tests/test_cpu_memory_policy.cpp": "44e42be6c04c37b6329fc66b0ef85f3d3c1319a8f4091b3580e43ee448cb52ea",
     "tests/test_cross_rate_data.cpp": "924a48e4130b9ec85ec7e7594b26c729af9687dbeadf9c755a5c6399dedaaf66",
     "tests/test_cuda_backend.cpp": "3f0d0b723c982853e1dee0de6daf15344ddf34e28a6fb76efe57fd4d018d624c",
+    "tests/test_cuda_lifetime.cpp": "d5248ccc4442fd880e751036630e7a3a05742a36eb44a4b6a4b62623be5ac601",
     "tests/test_cuda_physics.cpp": "dfd6d366faebb96e286b9301b367b40b92551eaf2f0dc0b3c689b36c565a076b",
     "tests/test_cuda_pipeline.cpp": "719823d5a63b8a12e134ac19e682f5e0270c6fb93a9c08044954c48b4544f337",
     "tests/test_determinism_replay.cpp": "e6152b9ac4540f5582f9a452f5fcaa08d7c7bfafd40e4f787f509ac3f049db27",
@@ -478,7 +433,7 @@
     "tools/check_c_abi.py": "2aa2657320256c74163f8293f357cb8140f65e7db13c98ed0b9523f2aebec22b",
     "tools/check_docs_contract.py": "691422834c3af30a58ca0cfa9fe803320392e77c5851741b69ece9162fd69a89",
     "tools/check_hardware_evidence.py": "b284d5341cb443ad4041858a25e3c0f8cf13c1cf176bb05fb0f56b47c17ad6c4",
-    "tools/check_release_contract.py": "4d6b0a6bec66a733dc23e4bf9965d82410be6f2e729b183ef9e5fa63b381082d",
+    "tools/check_release_contract.py": "7c1cf2e63f7a8374cdb5ce2241f1c5fadf544f7cc398c03dbd52ab969a25e3fa",
     "tools/check_static_analysis.py": "2355df02d730d0c88f036e607b8972781a3c52be4c81f6578c5f477811d7ed28",
     "tools/compare_benchmarks.py": "956bf491bad90ebe505af37c0977466072335c062c68d637823f71dc5c8713b4",
     "tools/extract_release_archive.py": "9d9675afb6c08e76c320ecf71d2098478523443d850b69e45369504a055561e2",
@@ -490,7 +445,58 @@
     "tools/sbom.py": "c059e8be09aa3241dee7a4721f12d5d67558c7431a6c0472d0a7318e6351f71f",
     "tools/sbom_expected.json": "ecb2a8ddd39ac9679e7483d11c6b93b8170874d82d1b8c87b0c8d87e00ddd796",
     "tools/stage_release_artifacts.py": "28d1f9ee40b6aa2634083ba2e288f0cc3b7926248ccbae2628e6f34ab7a7bb0e",
-    "tools/static_analysis_sources.txt": "68ddbab3ea7e741f212bacee2e1d96fb444ce1f492c4778e4dfe4ac428f8f2cd",
+    "tools/static_analysis_sources.txt": "df38a70fcb8d2013c9c50471839e7e3db5190f0ad2d821ca9e0d579e3c356830",
     "vcpkg.json": "bef1ef961a688f01a93f53010f3cd3ea986a0ab0054f0daa55894b2ba97e0b9f"
-  }
+  },
+  "cpp_api": {
+    "binary_abi": false,
+    "compatibility": "source_within_1.x",
+    "compatibility_target": "rtfw::simcore_rt",
+    "entrypoints": [
+      "rt/include/rt/runtime.hpp",
+      "rt/include/rt/profile.hpp",
+      "rt/include/rt/live_control.hpp"
+    ],
+    "preferred_target": "rtfw::runtime"
+  },
+  "digest_scope": "source_tree",
+  "extension_abi": {
+    "current": 1,
+    "entry_symbol": "rtfw_extension_entry_v1",
+    "header": "rt/include/rt/extension_abi.h",
+    "minimum_compatible": 1,
+    "runtime_loader": false
+  },
+  "license": "Apache-2.0",
+  "portable_assurance": {
+    "artifact_policy": "release/portable-assurance-policy.json",
+    "candidate_authenticated": false,
+    "candidate_signed": false,
+    "dependency_policy": "tools/sbom_expected.json",
+    "entrypoint": "scripts/verify-portable-assurance.sh",
+    "fixture_authenticates_candidate": false,
+    "modes": [
+      "dependencies",
+      "static",
+      "fuzz",
+      "artifacts",
+      "all"
+    ],
+    "release_publication": false,
+    "schema_version": 1,
+    "source_manifest": "tools/static_analysis_sources.txt",
+    "spdx_schema": "release/schemas/spdx-schema-2.3.json",
+    "toolchain_policy": "tools/portable_assurance_toolchain.json"
+  },
+  "project": "rtfw",
+  "qualification_boundary": {
+    "CUDA": "candidate",
+    "RT1": "unqualified",
+    "RT2": "unqualified",
+    "XDMA": "candidate",
+    "portable": "RT0 on named supported tuples"
+  },
+  "release_status": "portable_rt0",
+  "release_version": "1.2.1",
+  "schema_version": 2
 }

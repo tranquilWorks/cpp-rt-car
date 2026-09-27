@@ -1,31 +1,31 @@
 schema_version: 1
 batch:
-  id: M24-02
-  title: CUDA memory, stream and Graph particle pipeline
-  goal: Extend the merged integer particle reference with two bounded independent staging lanes, caller-owned
-    device memory and CUDA Graphs, kernel/Graph parity and active-rate Runtime execution through installed
-    public APIs.
+  id: M24-03
+  title: CUDA correctness, failure and lifetime conformance
+  goal: Prove the merged public Runtime particle pipeline rejects failed or stale work and retains resources
+    through bounded timeout, cancellation, loss, reset and retryable cleanup, with installed portable
+    conformance consumers.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
   - products/cpp-rt-car/PRD.md#cap-m24--cuda-physics-maturity
   - products/cpp-rt-car/acceptance.yaml#CAP-M24
-  milestone: products/cpp-rt-car/milestones/M24.md#m24-02--cuda-memory-stream-and-graph-pipeline
-  baseline_commit: c64d0672f1478acd863c68865663550d7fe22f8c
+  milestone: products/cpp-rt-car/milestones/M24.md#m24-03--correctness-determinism-failure-and-lifetime
+  baseline_commit: 5c82703d0c2840d13e18770d2d1b3083a96e29c0
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M24-02.yaml
-  predecessor: 'M24-01 target PR #263 merged at c64d0672f1478acd863c68865663550d7fe22f8c, tree 203745628086435d656fdd9dcba9178bf0f4ac39.
-    All 32 hosted check records passed at e5b0daa9e65850e6ff3ec69f78bed8ff7713cfb3, CI run 36293297075.
-    Retain local experimental 39/40 simcore_all timeout, the embedded Debug/TSan stack limitation, and
-    all prior evidence.'
+  control_plane_path: products/cpp-rt-car/batches/M24-03.yaml
+  predecessor: 'M24-02 target PR #264 merged at 5c82703d0c2840d13e18770d2d1b3083a96e29c0, tree dd6b80567308ab4285313d5e0bf02a9fc6469f53.
+    All 32 exact-head checks passed at 098f04a8065ded657b2de0ac0cc3faf8f8581be1, CI run 36329436486. Local
+    quick 39/39, full 43/43, sanitizer and consumers pass. Preserve all earlier failures and absent physical
+    evidence.'
   owner_scope: Continue the existing dependency-ordered portable software scope in automation.json. No
     cybersecurity, Daybreak, Unreal, physical qualification, signing, release or deployment. Integrate
     the canonical planning contract before target activation.
-  control_plane_revision: 36b1b8e1976c6063b1ea20c1cda3afec762e735b
-  canonical_revision: 36b1b8e1976c6063b1ea20c1cda3afec762e735b
-  canonical_blob_sha: cd9444fc486760bc4343f4a8a30c2db3bb6d9c4f
+  control_plane_revision: 52aea868343911ae7c58cea619bdcacb74749aca
+  canonical_revision: 52aea868343911ae7c58cea619bdcacb74749aca
+  canonical_blob_sha: c584f20d7c990822ed4562fe97fe8e1f67a34a1e
 dependencies:
-- M24-01
+- M24-02
 scope:
   allowed_paths:
   - .portfolio-harness.json
@@ -46,9 +46,10 @@ scope:
   - docs/HANDOFF.md
   - docs/roadmap.md
   - docs/cuda_physics.md
-  - tests/test_cuda_pipeline.cpp
   - docs/cuda_pipeline.md
-  - docs/evidence/M24-02-*.md
+  - tests/test_cuda_lifetime.cpp
+  - docs/cuda_lifetime.md
+  - docs/evidence/M24-03-*.md
   forbidden_paths:
   - rt/
   - abi/
@@ -93,90 +94,75 @@ scope:
   - samples/cuda_physics/cli.hpp
   - samples/cuda_physics/particle.cu
   - docs/evidence/M24-01-*.md
+  - tests/test_cuda_pipeline.cpp
+  - docs/evidence/M24-02-*.md
 acceptance:
-- Preserve the merged M24-01 entry points, model, seeded initial state, integer units and independent
-  closed-form oracle. Add separately named portable and opt-in real pipeline entry points. Split the same
-  global seeded particle sequence into at most two independent contiguous shards, with total count 1..4096
-  and 1..1024 completed model steps. Count one uses one lane. Kernel and Graph paths compare every particle
-  field after every completed step against the existing oracle, and against each other in finite parity
-  tests. No general physics or floating-point claim.
-- Use installed public Runtime, CudaDeviceBackend and HAL-v2 APIs exclusively. Each lane declares CPU
-  preparation -> ordered H2D, D2D, kernel-or-Graph, D2H batch -> CPU validation/publication. Use disjoint
-  named staging and work buffers, explicit access/dependency declarations, fixed copied kernel arguments
-  and a separate same-backend timeline per lane. All primary dispatch/poll flows pass through Runtime;
-  no backend-private or direct-submit substitute.
-- Use one caller-owned context/module/function, at most two caller-owned streams and two concurrent batches,
-  four named device allocations, and fixed preallocated host staging/work/original arrays per instance.
-  Bind borrowed device addresses before backend initialization and register host spans through the public
-  staged-memory domain. Pre-instantiate one kernel Graph per active lane against its exact work address/count
-  and bind the named buffer to the backend Graph registry. Graph execution performs no runtime graph construction
-  or argument mutation. Runtime memory budget remains at most 128 MiB, fixture storage at most 32 MiB
-  and CPU workers at most two.
-- Provide kernel/Graph dispatch and ordinary-frame/active-rate schedule selections with strict CLI parsing
-  and deterministic summaries. The active selection must enable the existing rate-execution policy, bind
-  CPU/device phases and complete admitted device-rate references, not merely attach reference metadata.
-  Use one documented common validation period and per-lane maximum-in-flight one; distinguish the generous
-  scheduling envelope from the unchanged 1/256-second physics model step. Confirm the compiled active
-  device plan and exact release sequences, timelines, publications and final output. Do not imply cross-rate
-  channel, heterogeneous periods, controlled timing or CUDA support qualification.
-- The portable driver must move actual H2D/D2D/D2H bytes, implement an independent iterative kernel and
-  a pre-registered Graph execution path over those bytes, and observe context/stream/argument/graph identities.
-  Check exact byte and dispatch counts, stream use, buffer registration conservation and absence of backend
-  allocations/frees for caller-owned buffers. Never use the CPU oracle to fabricate device output.
-- 'Prove two-lane in-flight staging with bounded deterministic coordination: hold terminal events, observe
-  both batches accepted on distinct streams before releasing either, and verify no premature CPU validation/publication.
-  Reuse staging only after its previous terminal completion and dependent validation. Test independent
-  per-lane timelines, odd/count-one boundaries, graph/kernel output parity, simultaneous maximum count/steps,
-  one/two workers and independent instances. Do not claim measured hardware overlap or speedup.'
-- Allocate and instantiate resources before Runtime start; all declared steady steps remain allocation-free.
-  Checked Runtime stop must precede graph, allocation, module, stream and context destruction. Retryable
-  unregister/shutdown or caller-resource cleanup failure retains every possibly-live resource. Include
-  malformed/missing session/Graph/address rejection, Graph-launch rejection, corrupted D2D/output and
-  failed-cleanup retry tests with no successful publication of failed work. Preserve actual fault evidence;
-  full pressure/cancellation/device-loss coverage belongs to M24-03 and production defects need separately
-  scoped repair.
-- The optional real host allocates device buffers, creates both streams and Graph executables using the
-  actual CUDA Driver API and executes the same pipeline and oracle as portable mode. Reuse the shipped
-  kernel source and reproducible nvcc build. Missing device/driver reports NOT RUN with exit 3; malformed
-  input exits 2; execution/oracle/cleanup errors exit 1; checked success exits 0. Portable builds must
-  not require a toolkit or probe hardware. Compile/link the actual installed real pipeline and exercise
-  help without device access in toolkit CI.
-- Extend the installed-source data ledger with the exact pipeline inventory and document ownership, staging,
-  active scheduling, capacity and mode commands. Build/run a separate find_package consumer after custom-prefix
-  archive relocation/source isolation, plus add_subdirectory consumption. Preserve all previous nine-source
-  entries, default SDK target/header/ABI surface, original benchmark/package assertions and all 207 benchmark
-  cases.
-- Add meaningful pipeline tests and actual CLI mode coverage to the existing GCC/Clang/FMA, MSVC, ASan/UBSan,
-  TSan, static-analysis and package jobs without removing prior checks. Preserve M24-01 tests and the
-  512 KiB actual CLI process-stack method; do not invent a Debug/TSan embedded-thread guarantee. Verify
-  zero steady allocations, stable ABI v8/70 exports/fingerprint/SONAME 8, device ABI v1 and release 1.2.1.
-  Refresh only exact added/modified source and document digests.
-- Record acceptance mapping, commands and retained results, exact control/target identities, source diff,
-  risks and rollback. Retain the M24-01 local timeout separately from its 32 passing hosted checks. M24-03/04,
-  the 90-percent overall and 100-percent critical maturity denominator, physical CUDA, controlled performance,
-  human review, RT1/RT2 and M25/M26 remain separate and unperformed unless named evidence exists.
+- Preserve M24-01 model, original entry points/tests and all M24-02 tests. Keep integer exact equality
+  (zero tolerance) across all nine fields, seeds, count-one/odd/maximum counts, steps, workers and four
+  kernel/Graph/frame/active modes. No floating-point model is introduced; nonzero tolerance is inapplicable
+  to this exact integer model. Retain maximum four-mode parity gates rather than substituting tolerant
+  comparison.
+- Add a separately named finite portable conformance executable and installed source consumer over the
+  actual public Runtime/CudaDeviceBackend pipeline. Any additive scenario configuration hooks are configuring-only,
+  copied, null by default and bounded. Distinguish real CUDA-driver fault injection from explicitly labeled
+  HAL protocol-adapter injection; primary dispatch/poll must still run through Runtime and the actual
+  CUDA backend, not a direct-submit substitute.
+- Observe both accepted lanes at the configured in-flight limit, reject extra/undersized capacity or injected
+  queue-full admission without unbounded retry, and preserve no-early-publication assertions. Reject malformed
+  commands and stale or mismatched batch/timeline completion identities before successful CPU publication.
+  Include a negative control showing each injected fault was actually reached.
+- 'Exercise driver timeout after an observed accepted batch, cancellation/stop while work is pending,
+  and late terminal readiness after timeout/stop. CUDA cancellation is unsupported: prove checked stop
+  requests, suppression of publication and retained ownership rather than inventing device preemption.
+  Use bounded synchronization and configurable synthetic driver time where possible; retain real Runtime
+  limits and existing test deadlines.'
+- 'Inject launch/query failure requiring quarantine and reset, failed reset synchronization followed by
+  retry, and permanent context loss. Verify health, generation/reset accounting and no release of possibly-live
+  borrowed storage. The CUDA backend rejects reset of a lost context: prove that rejection and checked
+  teardown, then recover with a fresh caller session/Runtime. Do not imply in-place lost-context recovery.'
+- Exercise failed host registration/startup rollback, failed unregister, event destruction and pending/quarantined
+  synchronization cleanup with exact live-resource counters and retry. Check event create/destroy, host
+  register/unregister, caller storage ownership, absence of backend alloc/free, no synchronizing vendor
+  calls in normal steady steps, and zero steady new allocations. Real cleanup must precede caller close;
+  leak evidence includes deterministic resource conservation and supported ASan leak scanning, with actual
+  tool limitations retained.
+- Repeat bounded lifecycle runs, verify supported stopped/configured transition behavior and fresh-instance
+  recovery, and run independent Runtime instances concurrently with distinct seeds/modes and isolated
+  injected faults. A failing instance cannot alter a healthy instance output, timeline or resource ledger.
+  No destructor may silently discard unresolved ownership.
+- Build/run the exact installed conformance sources after custom-prefix archive relocation/source isolation
+  and add_subdirectory embedding. Preserve all previous nine reference and five pipeline inventory entries,
+  default SDK targets/headers, release 1.2.1, C ABI v8/70 exports/fingerprint/SONAME8, device ABI v1 and
+  all 207 benchmarks. Refresh only changed source/document hashes.
+- Add the finite conformance gate to existing GCC/Clang/FMA/MSVC, ASan/UBSan, TSan, static-analysis and
+  package jobs without removing prior gates. Preserve the actual 512 KiB CLI process-stack check and original
+  timeouts. Run focused, strict portable, required full, ABI, relocated original SDK, root/installed real
+  CUDA compile/help and exact-head hosted checks.
+- Retain exact control/target identities, acceptance mapping, commands, all failures and corrections,
+  agent self-review, rollback and unperformed evidence. M24-04 owns benchmark/profile/capability-matrix
+  closure; M24/CAP-M24, physical CUDA, controlled performance, independent human review, RT1/RT2, M25/M26,
+  signing/release/deployment remain separate. Production defects require separately scoped repair; no
+  forbidden production changes or weakened assertions.
 validation:
   local:
   - git status --short --branch
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh quick
-  - cmake -S . -B build/m24-pipeline -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF
+  - cmake -S . -B build/m24-lifetime -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF
     -DSIM_SANITIZERS= -DSIM_WERROR=ON
-  - cmake --build build/m24-pipeline --parallel 2
-  - ctest --test-dir build/m24-pipeline --output-on-failure
-  - python3 tests/cuda_physics/verify_package.py --work-directory build/m24-pipeline-package
+  - cmake --build build/m24-lifetime --parallel 2
+  - ctest --test-dir build/m24-lifetime --output-on-failure
+  - python3 tests/cuda_physics/verify_package.py --work-directory build/m24-lifetime-package
   - ./scripts/agent-verify.sh full
-  - python3 tools/check_c_abi.py --library build/m24-pipeline/librtfw.so
+  - python3 tools/check_c_abi.py --library build/m24-lifetime/librtfw.so
   - git diff --check
   focused_tests_to_add:
-  - Actual four-mode CLI and model parity, deterministic maximum/odd/count-one coverage, active compiled
-    plan and release identities.
-  - Observed two-stream in-flight staging, actual D2D transfer, fixed Graph bindings, no early publication
-    and exact ownership/call counts.
-  - Invalid session, corrupted transfer and Graph rejection, retryable cleanup; instrumented no-allocation/ASan/UBSan/TSan
-    and actual 512 KiB CLI.
-  - Archive-relocated and embedded installed pipeline sources, optional actual CUDA host/Graph/kernel
-    compile and help.
+  - Finite four-mode Runtime failure/lifetime conformance and source-consumer entry point.
+  - Observed capacity, queue rejection, invalid descriptor, timeout, stop/cancel, stale completion, quarantine/reset
+    and permanent loss with positive injection counters.
+  - Retryable cleanup/resource conservation, repeated lifecycle, isolated concurrent fault, no-allocation
+    and sanitizer/leak checks.
+  - Preserved M24-01/02 parity/CLI/stack and original SDK/package/ABI/real CUDA compile/help gates.
   required_ci:
   - All prior 32 exact-head hosted checks, with additive portable sample/tests in existing compiler/FMA/MSVC,
     sanitizer, static and package jobs.
@@ -191,11 +177,10 @@ validation:
 risk:
   class: high
   hazards:
-  - Graph bindings point at different storage from declared Runtime buffers, creating a false parity result.
-  - Buffer or stream reuse precedes terminal completion, corrupting an independent lane.
-  - Active-rate metadata is mistaken for actual active dispatch, or scheduling envelope for physics timestep/real-time
-    qualification.
-  - Failed cleanup destroys caller-owned resources still reachable by Runtime/CUDA.
+  - Protocol injection mistaken for native CUDA behavior or portable evidence mistaken for hardware qualification.
+  - Late completion publishes failed work or permits staging reuse before terminal retirement.
+  - Cleanup failure loses resources or reset is incorrectly claimed to recover permanent context loss.
+  - Fault coordination adds races, unbounded waits, hidden allocation or misleading timeout evidence.
   stop_conditions:
   - Canonical planning contract is not integrated before activation, or target baseline moves without
     reconciliation.
@@ -206,15 +191,14 @@ risk:
   - New physical/controlled/signing/release/deployment authority or a substantive product decision would
     be required.
 rollback:
-  strategy: Revert only the isolated pipeline entry points, added source-data inventory, tests and wiring
-    as one batch. Preserve the merged M24-01 reference, Runtime/backends, all prior tests/evidence, ABI,
-    support and benchmark inventories.
+  strategy: Revert only M24-03 conformance sources, configuring-only hooks, wiring and documentation as
+    one scoped batch. Preserve original M24-01/02 tests and Runtime/backends/ABI/benchmarks and all retained
+    evidence.
 evidence:
   output:
-  - docs/evidence/M24-02-<date>.md
-  - Exact head/tree, control revision/blob, scoped diff, local and hosted outcomes with all failures retained.
-  - Per-mode oracle/parity, active plan, observed staging, allocation/lifetime and installed-consumer
-    evidence; physical results only when actually run.
+  - docs/evidence/M24-03-<date>.md
+  - Exact head/tree, canonical revision/blob, scoped diff and retained local/hosted results.
+  - Fault reachability, retirement/publication, resource conservation and actual installed consumer evidence.
   claim_boundary: Bounded validation-model and portable injected-driver software evidence. No general
     physics engine, CAP-M24 closure, real CUDA support/RT qualification, controlled performance, Unreal,
     cybersecurity, Daybreak, signing, release or deployment claim.

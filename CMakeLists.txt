@@ -1273,3 +1273,10 @@ if (RTFW_TOP_LEVEL)
   endif()
   include(CPack)
 endif()
+
+install(FILES
+    samples/cuda_physics/lifetime/protocol.hpp
+    samples/cuda_physics/lifetime/conformance.hpp
+    samples/cuda_physics/lifetime/main.cpp
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/cuda_physics/lifetime)
+install(FILES docs/cuda_lifetime.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)

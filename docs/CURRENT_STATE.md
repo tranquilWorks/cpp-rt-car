@@ -1,3 +1,14 @@
+# M24-03 continuation checkpoint
+
+M24-02 merged as #264 at `5c82703d0c2840d13e18770d2d1b3083a96e29c0` with
+all 32 exact-head checks passing. M24-03 is active under control #507;
+its conformance draft exposed a production pending-CUDA cleanup ownership cycle.
+See [retained evidence](evidence/M24-03-2026-09-27.md). Preserve the draft and
+integrate a separately scoped repair before finishing M24-03. No passing full or
+hosted result is claimed for this draft. M24-04 and physical/manual gates remain.
+
+## Historical M24-02 checkpoint
+
 # Current state
 
 M24-02 is active under merged control #504 (`36b1b8e1976c6063b1ea20c1cda3afec762e735b`)
