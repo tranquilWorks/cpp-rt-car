@@ -156,6 +156,31 @@ inline bool capacity(bool active,bool graph) {
     LIFETIME_CHECK(status==Status::invalid_config && d->registrations==0 && d->clean());
     return true;
 }
+inline bool isolated() {
+    // Configure on the control thread. Only steady stepping runs concurrently;
+    // this keeps the actual 512 KiB CLI process-stack contract under TSan.
+    Fixture good(true,true,17,0xffffffffu),bad(false,false,1,0);
+    LIFETIME_CHECK(good.start() && bad.start());
+    good.driver->hold=true; bad.driver->hold=true;
+    Status good_status=Status::internal_error,bad_status=Status::internal_error;
+    std::thread a([&]{good_status=good.scenario->run();});
+    std::thread b([&]{bad_status=bad.scenario->step();});
+    const bool overlapping=await([&]{return good.driver->records==2 && bad.driver->records==1 &&
+        good.driver->not_ready>0 && bad.driver->not_ready>0;});
+    bad.driver->lose_query=true;
+    good.driver->hold=false; bad.driver->hold=false;
+    a.join(); b.join();
+    LIFETIME_CHECK(overlapping && good_status==Status::ok && bad_status==Status::device_lost);
+    LIFETIME_CHECK(good.scenario->completed()==2 && good.scenario->publications(0)==2 &&
+        good.scenario->publications(1)==2 && good.driver->faults==0);
+    LIFETIME_CHECK(bad.scenario->completed()==0 && bad.scenario->publications(0)==0 && bad.driver->faults==1);
+    rt::DeviceTimelineInfo timeline;
+    rt::DeviceHealth health=rt::make_device_health();
+    LIFETIME_CHECK(good.scenario->timeline(0,timeline) && timeline.completed_value==2);
+    LIFETIME_CHECK(bad.scenario->health(0,health)==Status::ok && health.state==RTFW_DEVICE_HEALTH_LOST && health.outstanding==1);
+    LIFETIME_CHECK(good.finish() && bad.finish());
+    return true;
+}
 inline bool suite() {
     for(bool active:{false,true}) for(bool graph:{false,true}) {
         std::cout<<"lifetime "<<(active?"active":"frame")<<' '<<(graph?"graph":"kernel")<<'\n';
@@ -170,10 +195,7 @@ inline bool suite() {
     }
     // Repeat complete caller/Runtime lifetimes, and isolate a simultaneous fault.
     for(unsigned n=0;n<8;++n) if(!healthy(n%2==0,n%3==0,n)) return false;
-    bool good=false,bad=false;
-    std::thread a([&]{good=healthy(true,true,0xffffffffu);});
-    std::thread b([&]{bad=loss(false,false);}); a.join(); b.join();
-    LIFETIME_CHECK(good && bad);
+    if(!isolated()) return false;
     std::cout<<"CUDA lifetime conformance PASS (portable driver / HAL protocol evidence)\n";
     return true;
 }
