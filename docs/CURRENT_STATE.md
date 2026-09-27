@@ -9,7 +9,8 @@ quarantine/reset, context loss, retryable cleanup and resource conservation.
 The repair and all original M24-01/02 tests remain unchanged.
 
 Focused3/3, ASan/leak9/9, portable42/42 and source consumers6+6 pass.
-TSan exposed a Runtime rate_owned retirement race in all three lifetime gates.
+TSan exposed a Runtime rate_owned retirement race in both lifetime executables;
+the512KiB CLI also exits-11 without a diagnostic.
 Preserve feature #265 while separately scoped M24-03R2 is planned and verified. See
 [evidence](evidence/M24-03-2026-09-27.md). Integration is pending.
 M24-04 owns benchmark/profiler integration and the 90% overall / 100% critical
