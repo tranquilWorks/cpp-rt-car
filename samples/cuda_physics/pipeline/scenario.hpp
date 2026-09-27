@@ -25,6 +25,14 @@ struct Session {
     std::array<rt::CudaDeviceAddress,4> buffers{};
     std::array<std::uint64_t,4> bytes{};
 };
+// Optional configuring-time instrumentation for the installed conformance kit.
+// Copied callbacks borrow their owner through checked stop; defaults do nothing.
+struct Instrumentation {
+    void* owner{};
+    rt::HalV2BackendRegistration (*registration)(void*,std::size_t,rt::HalV2BackendRegistration) noexcept{};
+    void (*batch)(void*,std::size_t,rt::DeviceCommandBatch&) noexcept{};
+    std::size_t outstanding_capacity=2;
+};
 // Caller-owned session resources must outlive checked stop and this owner.
 class Scenario {
     struct Lane {
@@ -40,6 +48,7 @@ class Scenario {
         "pipeline.0.stage","pipeline.0.work","pipeline.1.stage","pipeline.1.work"};
     Options options_;
     Session session_;
+    Instrumentation instrumentation_;
     std::array<Lane,2> lanes_{};
     std::array<std::unique_ptr<rt::CudaDeviceBackend>,2> backends_{};
     rt::Runtime runtime_;
@@ -88,6 +97,8 @@ class Scenario {
         if (!identity(lane,c)) return rt::CallbackResult::error;
         b=lane.batch; b.timeout_ns=completion_ns;
         b.signals[0].value=lane.owner->completed_+1;
+        if (lane.owner->instrumentation_.batch)
+            lane.owner->instrumentation_.batch(lane.owner->instrumentation_.owner,lane.index,b);
         ++lane.submitted; return rt::CallbackResult::ok;
     }
     static rt::CallbackResult validate(void* p,const rt::CallbackContext& c) noexcept {
@@ -99,7 +110,7 @@ class Scenario {
         ++lane.published; return rt::CallbackResult::ok;
     }
 public:
-    Scenario(const Options& o,const Session& s): options_(o),session_(s) {}
+    Scenario(const Options& o,const Session& s,Instrumentation hooks={}): options_(o),session_(s),instrumentation_(hooks) {}
     Scenario(const Scenario&)=delete;
     Scenario& operator=(const Scenario&)=delete;
     ~Scenario() { if (stop()!=rt::Status::ok) std::terminate(); }
@@ -108,7 +119,7 @@ public:
         rt::RuntimeConfig c;
         c.worker_count=options_.workers; c.callback_capacity=6;
         c.device_backend_capacity=2; c.device_buffer_capacity=4;
-        c.device_outstanding_capacity=2; c.device_completion_batch=2;
+        c.device_outstanding_capacity=instrumentation_.outstanding_capacity; c.device_completion_batch=instrumentation_.outstanding_capacity;
         c.memory_budget_bytes=128*1024*1024; c.scratch_bytes=4096;
         c.trace_capacity=128; c.executor_queue_capacity=16;
         c.task_scratch_bytes=256; c.task_scratch_slots=16;
@@ -128,7 +139,10 @@ public:
                 if (backend.register_graph(static_cast<std::uint16_t>(i+1),session_.graphs[i],bindings)!=RTFW_DEVICE_STATUS_OK)
                     return rt::Status::invalid_argument;
             }
-            s=runtime_.register_device_backend(backend.hal_v2_registration(names[2*i]),backend_handles_[i]);
+            auto registration=backend.hal_v2_registration(names[2*i]);
+            if (instrumentation_.registration)
+                registration=instrumentation_.registration(instrumentation_.owner,i,registration);
+            s=runtime_.register_device_backend(registration,backend_handles_[i]);
             if (s!=rt::Status::ok) return s;
             rt::HalV2MemoryDomain descriptor;
             if (!runtime_.device_memory_domain_at(backend_handles_[i],1,memories[i],descriptor)) return rt::Status::device_error;
@@ -242,6 +256,16 @@ public:
             reset_=false;
         }
         return runtime_.state()==rt::RuntimeState::configuring?rt::Status::ok:runtime_.stop();
+    }
+    // May request cancellation during a step. Join that step before stop()/reset
+    // or reading ordinary state; no vendor preemption is promised.
+    rt::Status request_stop() noexcept { return runtime_.stop(); }
+    rt::Status reset(std::size_t i) noexcept { return i<lanes(options_)?runtime_.reset_device(backend_handles_[i]):rt::Status::invalid_argument; }
+    rt::Status health(std::size_t i,rt::DeviceHealth& value) noexcept {
+        return i<lanes(options_)?runtime_.device_health(backend_handles_[i],value):rt::Status::invalid_argument;
+    }
+    bool timeline(std::size_t i,rt::DeviceTimelineInfo& value) const noexcept {
+        return i<lanes(options_) && runtime_.device_timeline_at(backend_handles_[i],0,value);
     }
     std::string_view error() const noexcept { return runtime_.last_error(); }
     std::uint64_t completed() const noexcept { return completed_; }

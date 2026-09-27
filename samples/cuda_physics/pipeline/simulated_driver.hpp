@@ -49,6 +49,9 @@ class SimulatedDriver {
         phase_[lane]=4; return ok;
     }
 public:
+    std::atomic<bool> fail_kernel{},fail_query{},lose_query{},fail_destroy{},fail_event_sync{},fail_stream_sync{};
+    std::atomic<unsigned> fail_registration_at{};
+    std::atomic<std::uint64_t> faults{},event_creates{},event_destroys{},event_syncs{},clock_offset{},registration_attempts{};
     std::atomic<bool> hold{},fail_graph{},corrupt_d2d{},corrupt_output{},fail_unregister{},protocol_ok{true};
     std::atomic<std::uint64_t> uploads{},copies{},downloads{},kernels{},graphs{},upload_bytes{},copy_bytes{},download_bytes{},
         records{},not_ready{},registrations{},unregistrations{},backend_allocations{},backend_frees{},stream_mask{},stream_syncs{};
@@ -79,14 +82,15 @@ public:
         a.event_create=[](void* p,rt::CudaEvent* out) noexcept {
             auto& s=*static_cast<SimulatedDriver*>(p); if (!s.current() || !out) return bad;
             for (std::size_t i=0;i<s.events_.size();++i) if (!s.events_[i].allocated.exchange(true)) {
-                s.events_[i].recorded=false; *out=i+1; return ok;
+                s.events_[i].recorded=false; ++s.event_creates; *out=i+1; return ok;
             }
             return R::out_of_memory;
         };
         a.event_destroy=[](void* p,rt::CudaEvent e) noexcept {
             auto& s=*static_cast<SimulatedDriver*>(p); auto* v=s.event(e);
             if (!s.current() || !v) return bad;
-            v->recorded=false; v->allocated=false; return ok;
+            if (s.fail_destroy.exchange(false)) { ++s.faults; return R::error; }
+            v->recorded=false; v->allocated=false; ++s.event_destroys; return ok;
         };
         a.event_record=[](void* p,rt::CudaEvent e,rt::CudaStream st) noexcept {
             auto& s=*static_cast<SimulatedDriver*>(p); auto* v=s.event(e); const auto stream=s.stream(st);
@@ -99,21 +103,28 @@ public:
         a.event_query=[](void* p,rt::CudaEvent e) noexcept {
             auto& s=*static_cast<SimulatedDriver*>(p); auto* v=s.event(e);
             if (!s.current() || !v || !v->recorded.load()) return bad;
+            if (s.fail_query.exchange(false)) { ++s.faults; return R::error; }
+            if (s.lose_query.exchange(false)) { ++s.faults; return R::context_lost; }
             if (s.hold.load()) { ++s.not_ready; return R::not_ready; }
             s.live_[static_cast<std::size_t>(v->lane)]=false; return ok;
         };
         a.event_synchronize=[](void* p,rt::CudaEvent e) noexcept {
             auto& s=*static_cast<SimulatedDriver*>(p); auto* v=s.event(e);
             if (!s.current() || !v) return bad;
+            ++s.event_syncs;
+            if (s.fail_event_sync.exchange(false)) { ++s.faults; return R::error; }
             if (v->recorded.load()) s.live_[static_cast<std::size_t>(v->lane)]=false;
             return ok;
         };
         a.stream_synchronize=[](void* p,rt::CudaStream st) noexcept {
             auto& s=*static_cast<SimulatedDriver*>(p); const auto index=s.stream(st);
             if (!s.current() || index<0) return bad;
+            ++s.stream_syncs;
+            if (s.fail_stream_sync.exchange(false)) { ++s.faults; return R::error; }
             const auto lane=s.stream_lane_[static_cast<std::size_t>(index)];
+            if (lane>=0) s.phase_[static_cast<std::size_t>(lane)]=0;
             if (lane>=0) s.live_[static_cast<std::size_t>(lane)]=false;
-            ++s.stream_syncs; return ok;
+            return ok;
         };
         a.mem_alloc=[](void* p,std::uint64_t,rt::CudaDeviceAddress*) noexcept {
             ++static_cast<SimulatedDriver*>(p)->backend_allocations; return bad;
@@ -123,6 +134,8 @@ public:
         };
         a.host_register=[](void* p,void* host,std::uint64_t bytes) noexcept {
             auto& s=*static_cast<SimulatedDriver*>(p); if (!s.current() || !host) return bad;
+            const auto attempt=++s.registration_attempts;
+            if (s.fail_registration_at.load()==attempt) { ++s.faults; return R::error; }
             for (std::size_t i=0;i<2*lanes(s.options_);++i) if (!s.registered_[i]) {
                 if (bytes!=s.bytes_[i]) return bad;
                 s.host_[i]=host; s.registered_[i]=true; ++s.registrations; return ok;
@@ -131,7 +144,7 @@ public:
         };
         a.host_unregister=[](void* p,void* host) noexcept {
             auto& s=*static_cast<SimulatedDriver*>(p); if (!s.current()) return bad;
-            if (s.fail_unregister.exchange(false)) return R::error;
+            if (s.fail_unregister.exchange(false)) { ++s.faults; return R::error; }
             for (std::size_t i=0;i<4;++i) if (s.registered_[i] && s.host_[i]==host) {
                 s.registered_[i]=false; ++s.unregistrations; return ok;
             }
@@ -174,6 +187,7 @@ public:
             std::memcpy(&address,args[0],sizeof(address)); std::memcpy(&n,args[1],sizeof(n));
             const auto b=s.buffer(address,n*sizeof(Particle));
             if (b<0 || b%2!=1 || gx!=(n+127)/128) return bad;
+            if (s.fail_kernel.exchange(false)) { ++s.faults; return R::launch_failure; }
             const auto result=s.integrate(static_cast<std::size_t>(b)/2,st);
             if (result==ok) ++s.kernels;
             return result;
@@ -181,14 +195,15 @@ public:
         a.graph_launch=[](void* p,rt::CudaGraphExec graph,rt::CudaStream st) noexcept {
             auto& s=*static_cast<SimulatedDriver*>(p);
             if (graph<0x7001 || graph>=0x7001+lanes(s.options_)) return bad;
-            if (s.fail_graph.exchange(false)) return R::launch_failure;
+            if (s.fail_graph.exchange(false)) { ++s.faults; return R::launch_failure; }
             const auto result=s.integrate(static_cast<std::size_t>(graph-0x7001),st);
             if (result==ok) ++s.graphs;
             return result;
         };
-        a.monotonic_time_ns=[](void*) noexcept ->std::uint64_t {
+        a.monotonic_time_ns=[](void* p) noexcept ->std::uint64_t {
             return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::steady_clock::now().time_since_epoch()).count());
+                std::chrono::steady_clock::now().time_since_epoch()).count())+
+                static_cast<SimulatedDriver*>(p)->clock_offset.load();
         };
         Session result; result.driver=a; result.context=context; result.streams=streams; result.function=function;
         for (std::size_t i=0;i<lanes(options_);++i) result.graphs[i]=0x7001+i;

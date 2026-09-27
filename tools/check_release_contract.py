@@ -50,6 +50,12 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'samples/cuda_physics/lifetime/protocol.hpp',
+    'samples/cuda_physics/lifetime/conformance.hpp',
+    'samples/cuda_physics/lifetime/main.cpp',
+    'tests/test_cuda_lifetime.cpp',
+    'tests/cuda_physics/test_lifetime_cli.py',
+    'docs/cuda_lifetime.md',
     'samples/cuda_physics/CMakeLists.txt',
     'samples/cuda_physics/cli.hpp',
     'samples/cuda_physics/main.cpp',

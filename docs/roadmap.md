@@ -855,3 +855,20 @@ M24-01 merged as PR #263 at c64d0672f1478acd863c68865663550d7fe22f8c after
 caller-owned memory, two-stream, kernel/Graph and active-rate pipeline.
 Implementation evidence remains separate from physical CUDA and CAP-M24 closure;
 M24-03/04 remain later batches. See [pipeline](cuda_pipeline.md).
+
+## M24-03 correctness, failure and lifetime conformance
+
+M24-01/02 and separate repairs #266 (CUDA cleanup) and #267 (private Runtime
+ownership race) are merged. Control #514 at360bbc308989efe30bb2a6f51a455e7cf99aeeef
+activates the final M24-03 installed conformance suite on repaired main27fcb90.
+The four frame/active and kernel/Graph modes cover bounded faults, timeout,
+noncancelable stop, loss/reset, retryable cleanup, exact resource conservation,
+zero steady allocations and concurrent instance isolation. Final validation and
+integration are bound in [PR #265](https://github.com/tranquilWorks/cpp-rt-car/pull/265)
+and [evidence](evidence/M24-03-2026-09-27.md).
+
+M24-04 remains: benchmark/profiler integration and capability coverage of at least
+90% overall and100% of critical rows. M25 SDK/usability (six batches) and M26
+full-system golden reference (six batches) follow. Physical CUDA, controlled
+performance, independent human review, RT qualification, signing and release
+remain separate gates. CAP-M24 is not closed by this conformance batch.

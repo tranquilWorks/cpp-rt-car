@@ -1,102 +1,182 @@
 schema_version: 1
 batch:
-  id: M24-03R2
-  title: Repair active-rate retirement metadata race
-  goal: Remove the reproduced DeviceManager ownership-metadata data race between active submit failure,
-    host terminal retirement and service timeout observation without changing terminal/publication/timeout
-    semantics.
+  id: M24-03
+  title: CUDA correctness, failure and lifetime conformance
+  goal: Prove the merged public Runtime particle pipeline rejects failed or stale work and retains resources
+    through bounded timeout, cancellation, loss, reset and retryable cleanup, with installed portable
+    conformance consumers.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
   - products/cpp-rt-car/PRD.md#cap-m24--cuda-physics-maturity
   - products/cpp-rt-car/acceptance.yaml#CAP-M24
   milestone: products/cpp-rt-car/milestones/M24.md#m24-03--correctness-determinism-failure-and-lifetime
-  baseline_commit: ff47a64883e73cd9c2984616249b302e413566dc
+  baseline_commit: 27fcb90b49773196f8773c2edcf97ba746fa7f94
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M24-03R2.yaml
-  predecessor: 'M24-03R #266 merged. Reactivated feature #265 at 042bb7c reproduces TSan race: release_rate_batch
-    writes rate_owned at device_manager.cpp:1697 while service_loop reads it at2139 during active CUDA
-    launch failure. Two lifetime gates report this race; the512KiB CLI additionally exits-11 without a
-    diagnostic. Original six M24 gates pass.'
+  control_plane_path: products/cpp-rt-car/batches/M24-03.yaml
+  predecessor: 'M24-03R2 #267 merged at27fcb90b49773196f8773c2edcf97ba746fa7f94, tree59442fa32a4b76ad403f6d5d9937b5947278fcf1.
+    All32 exact-head records passed atc14a7420627cb8f0ef251ab8ba2381abd9ee5686 in CI36351132581. Local
+    quick39/full43, portable39, sanitizer91+6 each, source5+5, SDK20, ABI/static pass. Preserved feature0fb7cb1
+    full TSan512KiB and ASan/leak/zero-allocation pass against repaired Runtime. Reconcile feature265
+    without weakening original assertions; all prior failures remain retained.'
   owner_scope: Continue the existing dependency-ordered portable software scope in automation.json. No
     cybersecurity, Daybreak, Unreal, physical qualification, signing, release or deployment. Integrate
     the canonical planning contract before target activation.
-  control_plane_revision: ab190c04413d3cee42b05f612c2b164f36111438
-  canonical_revision: ab190c04413d3cee42b05f612c2b164f36111438
-  canonical_blob_sha: c5035eca729ab37c50b0ec3caa82ec8b57ab307f
+  control_plane_revision: 360bbc308989efe30bb2a6f51a455e7cf99aeeef
+  canonical_revision: 360bbc308989efe30bb2a6f51a455e7cf99aeeef
+  canonical_blob_sha: c0e71268a7b8725342400fb7ae7b89cf2ffcdca8
 dependencies:
+- M24-02
 - M24-03R
+- M24-03R2
 scope:
   allowed_paths:
+  - .portfolio-harness.json
   - AGENTS.md
   - contracts/active-batch.yaml
+  - CMakeLists.txt
+  - samples/CMakeLists.txt
+  - samples/cuda_physics/**
+  - tests/CMakeLists.txt
+  - tests/cuda_physics/**
+  - tests/package_consumer/CMakeLists.txt
+  - tests/package_consumer/package_contract.cmake
+  - tools/check_release_contract.py
+  - tools/static_analysis_sources.txt
   - release/rtfw-release-contract.json
-  - rt/src/device_manager.hpp
-  - rt/src/device_manager.cpp
-  - tests/test_command_batch.cpp
+  - .github/workflows/ci.yml
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
   - docs/roadmap.md
-  - docs/evidence/M24-03R2-*.md
+  - docs/cuda_physics.md
+  - docs/cuda_pipeline.md
+  - tests/test_cuda_lifetime.cpp
+  - docs/cuda_lifetime.md
+  - docs/evidence/M24-03-*.md
   forbidden_paths:
+  - rt/
   - abi/
   - core/
   - hal/
   - gpu/
   - include/
   - src/
-  - rt/include/
-  - rt/src/host_runtime.cpp
   - bench/
-  - samples/
   - integrations/
   - configs/
   - profiles/
   - qualification/
-  - tests/test_cuda_physics.cpp
-  - tests/test_cuda_pipeline.cpp
-  - docs/evidence/M24-01-*.md
-  - docs/evidence/M24-02-*.md
+  - samples/particles.cpp
+  - samples/cpu_gpu_fpga_cpu.cpp
+  - samples/cuda_qualification.cpp
+  - tests/test_cuda_backend.cpp
+  - tests/test_vendor_hal_v2.cpp
+  - tests/benchmark_fixtures/
+  - tools/check_benchmark_artifact.py
+  - tools/compare_benchmarks.py
+  - cmake/rtfwConfig.cmake.in
+  - docs/cuda_support_matrix.json
+  - docs/xdma_support_matrix.json
+  - docs/portable_support_matrix.json
+  - docs/evidence/M23-*.md
   - release/keys/
   - release/signatures/
-  - .github/
+  - .github/workflows/cuda-qualification.yml
+  - .github/workflows/xdma-qualification.yml
+  - .github/workflows/release.yml
   - VERSION.txt
   - LICENSE
   - CHANGELOG.md
   - SECURITY.md
-  - rt/src/cuda_backend.cpp
+  - tests/test_cuda_physics.cpp
+  - samples/cuda_physics/model.hpp
+  - samples/cuda_physics/scenario.hpp
+  - samples/cuda_physics/simulated_driver.hpp
+  - samples/cuda_physics/main.cpp
+  - samples/cuda_physics/real.cpp
+  - samples/cuda_physics/cli.hpp
+  - samples/cuda_physics/particle.cu
+  - docs/evidence/M24-01-*.md
+  - tests/test_cuda_pipeline.cpp
+  - docs/evidence/M24-02-*.md
   - tests/test_cuda_backend.cpp
   - docs/evidence/M24-03R-*.md
+  - tests/test_command_batch.cpp
+  - docs/evidence/M24-03R2-*.md
 acceptance:
-- Retain exact ThreadSanitizer reproducer from preserved feature042bb7c and add an independent actual
-  Runtime active-rate submission-failure/terminal-retirement regression in command-batch tests. Old source
-  must reproduce the race under TSan; all original tests and failure/publication assertions stay intact.
-- Fix only private DeviceManager batch ownership metadata accessed by service timeout observation and
-  host retirement. Use race-free bounded ownership/atomic synchronization, preserve slot publication ordering,
-  finite deadlines, status/timeline behavior, single terminal retirement and no-early-reuse. Audit related
-  accesses and exact storage accounting. No mutexes, RT heap allocation, sleeps, deadline relaxation,
-  public layouts or backend changes.
-- Exercise repeated active submission rejection/throwing, successful dispatch and existing timeout/quarantine/late-completion/stop
-  paths. Preserve all M24 CUDA cleanup repair sources/regressions and original tests, all207 benchmarks,
-  C ABI v8/70 exports/fingerprint/SONAME8 and device ABIv1.
-- Run focused command/rate tests, exact preserved feature suite against repaired Runtime, TSan and ASan/UBSan
-  with leak scanning, no-allocation, strict portable/full/ABI/static, relocated original/source SDK and
-  all32 exact-head hosted gates. Retain failures and distinguish portable from physical evidence.
-- 'Integrate repair separately, then canonically reactivate M24-03 against its merged exact source and
-  finish #265. M24-04 and wider/manual gates remain separate.'
+- Preserve M24-01 model, original entry points/tests and all M24-02 tests. Keep integer exact equality
+  (zero tolerance) across all nine fields, seeds, count-one/odd/maximum counts, steps, workers and four
+  kernel/Graph/frame/active modes. No floating-point model is introduced; nonzero tolerance is inapplicable
+  to this exact integer model. Retain maximum four-mode parity gates rather than substituting tolerant
+  comparison.
+- Add a separately named finite portable conformance executable and installed source consumer over the
+  actual public Runtime/CudaDeviceBackend pipeline. Any additive scenario configuration hooks are configuring-only,
+  copied, null by default and bounded. Distinguish real CUDA-driver fault injection from explicitly labeled
+  HAL protocol-adapter injection; primary dispatch/poll must still run through Runtime and the actual
+  CUDA backend, not a direct-submit substitute.
+- Observe both accepted lanes at the configured in-flight limit, reject extra/undersized capacity or injected
+  queue-full admission without unbounded retry, and preserve no-early-publication assertions. Reject malformed
+  commands and stale or mismatched batch/timeline completion identities before successful CPU publication.
+  Include a negative control showing each injected fault was actually reached.
+- 'Exercise driver timeout after an observed accepted batch, cancellation/stop while work is pending,
+  and late terminal readiness after timeout/stop. CUDA cancellation is unsupported: prove checked stop
+  requests, suppression of publication and retained ownership rather than inventing device preemption.
+  Use bounded synchronization and configurable synthetic driver time where possible; retain real Runtime
+  limits and existing test deadlines. Ordinary stopped graphs report cancellation immediately; active
+  noncancelable references may remain quarantined until their unchanged finite completion budget and report
+  timeout. Assert the exact schedule-specific outcome, with no publication and checked cleanup in both
+  cases.'
+- 'Inject launch/query failure requiring quarantine and reset, failed reset synchronization followed by
+  retry, and permanent context loss. Verify health, generation/reset accounting and no release of possibly-live
+  borrowed storage. The CUDA backend rejects reset of a lost context: prove that rejection and checked
+  teardown, then recover with a fresh caller session/Runtime. Do not imply in-place lost-context recovery.'
+- Exercise failed host registration/startup rollback, failed unregister, event destruction and pending/quarantined
+  synchronization cleanup with exact live-resource counters and retry. Check event create/destroy, host
+  register/unregister, caller storage ownership, absence of backend alloc/free, no synchronizing vendor
+  calls in normal steady steps, and zero steady new allocations. Real cleanup must precede caller close;
+  leak evidence includes deterministic resource conservation and supported ASan leak scanning, with actual
+  tool limitations retained.
+- Repeat bounded lifecycle runs, verify supported stopped/configured transition behavior and fresh-instance
+  recovery, and run independent Runtime instances concurrently with distinct seeds/modes and isolated
+  injected faults. A failing instance cannot alter a healthy instance output, timeline or resource ledger.
+  No destructor may silently discard unresolved ownership.
+- Build/run the exact installed conformance sources after custom-prefix archive relocation/source isolation
+  and add_subdirectory embedding. Preserve all previous nine reference and five pipeline inventory entries,
+  default SDK targets/headers, release 1.2.1, C ABI v8/70 exports/fingerprint/SONAME8, device ABI v1 and
+  all 207 benchmarks. Refresh only changed source/document hashes.
+- Add the finite conformance gate to existing GCC/Clang/FMA/MSVC, ASan/UBSan, TSan, static-analysis and
+  package jobs without removing prior gates. Preserve the actual 512 KiB CLI process-stack check and original
+  timeouts. Run focused, strict portable, required full, ABI, relocated original SDK, root/installed real
+  CUDA compile/help and exact-head hosted checks.
+- Retain exact control/target identities, acceptance mapping, commands, all failures and corrections,
+  agent self-review, rollback and unperformed evidence. M24-04 owns benchmark/profile/capability-matrix
+  closure; M24/CAP-M24, physical CUDA, controlled performance, independent human review, RT1/RT2, M25/M26,
+  signing/release/deployment remain separate. Production defects require separately scoped repair; no
+  forbidden production changes or weakened assertions. Preserve merged M24-03R stopped-retirement/uncertain-registration
+  repair source and regressions unchanged. Retain initial conformance expectation failures and both old-source
+  negative controls. Preserve M24-03R2 private Runtime ownership synchronization and its independent actual
+  Runtime/old-source TSan regression unchanged. Concurrent fixtures configure on the control thread, prove
+  simultaneous accepted work, and inject isolated loss without relaxing the actual512KiB process limit.
 validation:
   local:
   - git status --short --branch
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh quick
+  - cmake -S . -B build/m24-lifetime -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF
+    -DSIM_SANITIZERS= -DSIM_WERROR=ON
+  - cmake --build build/m24-lifetime --parallel 2
+  - ctest --test-dir build/m24-lifetime --output-on-failure
+  - python3 tests/cuda_physics/verify_package.py --work-directory build/m24-lifetime-package
   - ./scripts/agent-verify.sh full
-  - python3 tests/cuda_physics/verify_package.py --work-directory build/m24-repair-package
-  - python3 tools/check_c_abi.py --library build/m24-pipeline/librtfw.so
+  - python3 tools/check_c_abi.py --library build/m24-lifetime/librtfw.so
   - git diff --check
   focused_tests_to_add:
-  - Repeated actual active Runtime submission failures versus service timeout scan and terminal release,
-    with exact status/no-publication/resource assertions.
-  - Old-source TSan negative control and unchanged preserved M24-03 suite passing after repair.
+  - Finite four-mode Runtime failure/lifetime conformance and source-consumer entry point.
+  - Observed capacity, queue rejection, invalid descriptor, timeout, stop/cancel, stale completion, quarantine/reset
+    and permanent loss with positive injection counters.
+  - Retryable cleanup/resource conservation, repeated lifecycle, isolated concurrent fault, no-allocation
+    and sanitizer/leak checks.
+  - Preserved M24-01/02 parity/CLI/stack and original SDK/package/ABI/real CUDA compile/help gates.
   required_ci:
   - All prior 32 exact-head hosted checks, with additive portable sample/tests in existing compiler/FMA/MSVC,
     sanitizer, static and package jobs.
@@ -111,26 +191,28 @@ validation:
 risk:
   class: high
   hazards:
-  - Speculative service reads race with host retirement or slot reuse.
-  - An atomic fix hides an ownership or deadline regression.
-  - False sanitizer closure from suppressions or changing the fault schedule.
+  - Protocol injection mistaken for native CUDA behavior or portable evidence mistaken for hardware qualification.
+  - Late completion publishes failed work or permits staging reuse before terminal retirement.
+  - Cleanup failure loses resources or reset is incorrectly claimed to recover permanent context loss.
+  - Fault coordination adds races, unbounded waits, hidden allocation or misleading timeout evidence.
   stop_conditions:
   - Canonical planning contract is not integrated before activation, or target baseline moves without
     reconciliation.
-  - Public ABI, CUDA backend, host runtime or another forbidden path needs a change; retain evidence and
-    plan separately.
+  - Runtime/backend/public ABI/schema or another forbidden path needs a change; retain a reproducer and
+    plan a separate repair.
   - Success requires weakened tests, invented resource observations, unbounded waits, unsafe cleanup or
     absent hardware evidence.
   - New physical/controlled/signing/release/deployment authority or a substantive product decision would
     be required.
 rollback:
-  strategy: Revert only the isolated private DeviceManager race repair and regression; preserve all failures
-    and feature draft. Do not claim old race safe.
+  strategy: Revert only M24-03 conformance sources, configuring-only hooks, wiring and documentation as
+    one scoped batch. Preserve original M24-01/02 tests and Runtime/backends/ABI/benchmarks and all retained
+    evidence.
 evidence:
   output:
-  - docs/evidence/M24-03R-<date>.md
-  - Exact canonical/source/tree, old-order negative control, full local and exact-head hosted results
-    with failures retained.
+  - docs/evidence/M24-03-<date>.md
+  - Exact head/tree, canonical revision/blob, scoped diff and retained local/hosted results.
+  - Fault reachability, retirement/publication, resource conservation and actual installed consumer evidence.
   claim_boundary: Bounded validation-model and portable injected-driver software evidence. No general
     physics engine, CAP-M24 closure, real CUDA support/RT qualification, controlled performance, Unreal,
     cybersecurity, Daybreak, signing, release or deployment claim.

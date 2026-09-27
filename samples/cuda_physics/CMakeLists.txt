@@ -36,3 +36,8 @@ if(PHYSICS_REAL_CUDA)
   rtfw_add_physics_real(pipeline_real_consumer "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/pipeline/real.cpp")
 endif()
+
+add_executable(lifetime_consumer lifetime/main.cpp)
+target_link_libraries(lifetime_consumer PRIVATE rtfw::runtime rtfw::cuda_backend)
+add_test(NAME lifetime_consumer COMMAND lifetime_consumer)
+set_tests_properties(lifetime_consumer PROPERTIES TIMEOUT 120)

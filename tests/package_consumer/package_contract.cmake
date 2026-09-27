@@ -276,3 +276,16 @@ endif()
 if (RTFW_TEST_BENCHMARK)
     rtfw_check_cpp_header("rtfw/benchmark.hpp" benchmark rtfw::benchmark)
 endif()
+
+set(expected_lifetime_sources conformance.hpp main.cpp protocol.hpp)
+file(GLOB actual_lifetime_sources LIST_DIRECTORIES FALSE
+    RELATIVE "${RTFW_DATA_DIR}/examples/cuda_physics/lifetime"
+    "${RTFW_DATA_DIR}/examples/cuda_physics/lifetime/*")
+list(SORT expected_lifetime_sources)
+list(SORT actual_lifetime_sources)
+if(NOT actual_lifetime_sources STREQUAL expected_lifetime_sources)
+    message(FATAL_ERROR "CUDA lifetime source-example inventory differs from contract")
+endif()
+if(NOT EXISTS "${RTFW_DATA_DIR}/cuda_lifetime.md")
+    message(FATAL_ERROR "CUDA lifetime documentation is missing")
+endif()

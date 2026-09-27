@@ -305,12 +305,27 @@ cycle, within the same CUDA implementation/tests. Validate complete descriptors,
 retire only exact uncertain residual ownership, preserve successful registrations,
 and retain all failures. Reverify the combined repair before integrating #266.
 
-## M24-03R2 private Runtime race repair
+## M24-03 reactivation after repair #266
 
-Canonical control #513 merged at `ab190c04413d3cee42b05f612c2b164f36111438`.
-Preserve feature #265 at0fb7cb1 and all TSan/stack/timeout failures. Repair only
-private DeviceManager ownership metadata and independent command-batch
-regressions on integrated CUDA repair #266. No sanitizer suppressions, deadlines,
-public ABI or CUDA changes. Verify/integrate separately, canonically reactivate
-M24-03, finish the feature and report remaining work. Standing scoped authority
-continues; physical/manual gates remain separate.
+M24-03R merged at `ff47a64883e73cd9c2984616249b302e413566dc` after all32
+exact-head checks passed at b290fa5. Canonical reactivation #512 merged at
+`f168122ed236002fe54af2cea0515d24cb9c81c1`. Finish preserved feature #265 on
+this repaired source; Runtime/backends and repair regressions/evidence remain
+protected. Ordinary stop cancels immediately; active noncancelable references
+retain ownership to their existing finite budget and return timeout. Keep all
+publication/resource/timeout oracles. Complete local and exact-head hosted gates,
+then integrate and report remaining M24-04 and wider/manual work as requested.
+Standing scoped publication/integration authority continues. No physical claims.
+
+## M24-03 reactivation after Runtime repair #267
+
+R2 merged at `27fcb90b49773196f8773c2edcf97ba746fa7f94`, exact tested tree
+`59442fa32a4b76ad403f6d5d9937b5947278fcf1`, after all 32 checks passed at
+c14a742 in CI36351132581. Canonical reactivation #514 merged at
+`360bbc308989efe30bb2a6f51a455e7cf99aeeef`. Preserve the private atomic ownership
+flag, its independent command-batch regression and all earlier CUDA repairs.
+Finish feature #265 with fresh combined local and exact-head hosted gates.
+Concurrent fixture setup stays on the control thread; accepted execution/fault
+isolation and the actual 512 KiB CLI gate remain. Retain all earlier TSan,
+stack and timeout failures. Then report remaining M24-04 and broader/manual
+work. Standing scoped publication/integration authority continues.

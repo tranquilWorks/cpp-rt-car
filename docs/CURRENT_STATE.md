@@ -1,27 +1,57 @@
-# M24-03R2 active-rate retirement race repair
+# M24-03 final conformance verification
 
-Canonical control #513 is merged atab190c04413d3cee42b05f612c2b164f36111438.
-Feature #265 is preserved at0fb7cb1. TSan exposes service timeout observation
-reading rate_owned while host terminal retirement writes it. The private discriminator is now atomic. Independent old-source regression
-reproduces the race; fixed command27/27 and preserved feature TSan512KiB pass.
-Full quick39/experimental43, strict portable39, focused sanitizer91+6 each,
-source5+5, original SDK20, ABI and static checks pass. Exact-head hosted results
-and integration are recorded in the repair PR before merge. Preserve prior
-CUDA repair source/tests/evidence. See [evidence](evidence/M24-03R2-2026-09-27.md).
-M24-03 must be reactivated afterward; M24-04 and broader/manual work remain.
+M24-03 is active under merged control #514
+`360bbc308989efe30bb2a6f51a455e7cf99aeeef`, blob
+`c0e71268a7b8725342400fb7ae7b89cf2ffcdca8`, on Runtime repair #267
+`27fcb90b49773196f8773c2edcf97ba746fa7f94`. Both prerequisite repairs
+(#266 CUDA cleanup and #267 private ownership race) passed all 32 hosted checks
+and are integrated unchanged. The installed four-mode failure/lifetime suite
+is implemented and locally verified: quick42/42, experimental46/46, strict
+portable42/42, ASan/UBSan/leak9/9, TSan9/9, source6+6, original SDK20/20,
+compiled ABI, static analysis and actual root/installed CUDA compile/help/stub
+checks pass. Final exact-head hosted verification and integration are recorded
+in [feature PR #265](https://github.com/tranquilWorks/cpp-rt-car/pull/265).
 
-## Historical integrated CUDA repair
+See [usage](cuda_lifetime.md) and [evidence](evidence/M24-03-2026-09-27.md).
+M24-04 owns benchmark/profiler integration and the 90% overall / 100% critical
+capability coverage gate. M25 SDK/usability, M26 full-system reference, physical
+CUDA, controlled performance, independent human review and RT qualification
+remain separate. Earlier failure checkpoints below are historical.
 
-# M24-03R stopped CUDA cleanup repair
+## Historical pre-R2 feature checkpoint
 
-M24-02 merged as #264 at `5c82703d0c2840d13e18770d2d1b3083a96e29c0` with all
-32 hosted checks passing. M24-03 draft #265 exposed a pending/quarantined CUDA
-cleanup cycle. Control #510 and amendment #511 activate M24-03R. The repair adds descriptor-based
-uncertain registration rollback and explicit
-stop-gated retirement during unregister and preserves failed-sync retry ownership.
-See [repair evidence](evidence/M24-03R-2026-09-27.md). Verification/integration
-is pending; after merge, canonically reactivate and finish M24-03. M24-04,
-physical/manual gates, M25/M26 remain separate. Historical text below is retained.
+# M24-03 conformance verification
+
+M24-03 is active under canonical control #512, revision
+`f168122ed236002fe54af2cea0515d24cb9c81c1`, blob
+`531af791c31aa5ccb3088bbc2fba095b8d767802`, on CUDA repair #266
+`ff47a64883e73cd9c2984616249b302e413566dc`. The finite installed conformance
+suite exercises four schedule/launch modes, faults, cancellation, timeout,
+quarantine/reset, context loss, retryable cleanup and resource conservation.
+The repair and all original M24-01/02 tests remain unchanged.
+
+Focused3/3, ASan/leak9/9, portable42/42 and source consumers6+6 pass.
+TSan exposed a Runtime rate_owned retirement race in both lifetime executables;
+the512KiB CLI also exits-11 without a diagnostic.
+Preserve feature #265 while separately scoped M24-03R2 is planned and verified. See
+[evidence](evidence/M24-03-2026-09-27.md). Integration is pending.
+M24-04 owns benchmark/profiler integration and the 90% overall / 100% critical
+capability gate. Physical CUDA, controlled performance, independent review,
+RT qualification, M25 SDK/usability and M26 golden-reference work remain.
+Earlier blocked checkpoints below are historical.
+
+## Historical feature checkpoint before repair
+
+# M24-03 continuation checkpoint
+
+M24-02 merged as #264 at `5c82703d0c2840d13e18770d2d1b3083a96e29c0` with
+all 32 exact-head checks passing. M24-03 is active under control #507;
+its conformance draft exposed a production pending-CUDA cleanup ownership cycle.
+See [retained evidence](evidence/M24-03-2026-09-27.md). Preserve the draft and
+integrate a separately scoped repair before finishing M24-03. No passing full or
+hosted result is claimed for this draft. M24-04 and physical/manual gates remain.
+
+## Historical M24-02 checkpoint
 
 # Current state
 
