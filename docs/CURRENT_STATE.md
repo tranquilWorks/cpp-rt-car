@@ -6,7 +6,11 @@ M24-03 is active under merged control #514
 `27fcb90b49773196f8773c2edcf97ba746fa7f94`. Both prerequisite repairs
 (#266 CUDA cleanup and #267 private ownership race) passed all 32 hosted checks
 and are integrated unchanged. The installed four-mode failure/lifetime suite
-is implemented; final combined verification is running for feature #265.
+is implemented and locally verified: quick42/42, experimental46/46, strict
+portable42/42, ASan/UBSan/leak9/9, TSan9/9, source6+6, original SDK20/20,
+compiled ABI, static analysis and actual root/installed CUDA compile/help/stub
+checks pass. Final exact-head hosted verification and integration are recorded
+in [feature PR #265](https://github.com/tranquilWorks/cpp-rt-car/pull/265).
 
 See [usage](cuda_lifetime.md) and [evidence](evidence/M24-03-2026-09-27.md).
 M24-04 owns benchmark/profiler integration and the 90% overall / 100% critical
