@@ -1,45 +1,43 @@
 schema_version: 1
 batch:
-  id: M24-03R
-  title: Repair CUDA stopped retirement and uncertain-registration rollback
-  goal: Break the reproduced pending/quarantined CUDA cleanup ownership cycle without releasing live resources,
-    and preserve retryable checked stop. Also honor the existing descriptor-based uncertain native-memory
-    rollback contract after failed registration.
+  id: M24-03R2
+  title: Repair active-rate retirement metadata race
+  goal: Remove the reproduced DeviceManager ownership-metadata data race between active submit failure,
+    host terminal retirement and service timeout observation without changing terminal/publication/timeout
+    semantics.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
   - products/cpp-rt-car/PRD.md#cap-m24--cuda-physics-maturity
   - products/cpp-rt-car/acceptance.yaml#CAP-M24
   milestone: products/cpp-rt-car/milestones/M24.md#m24-03--correctness-determinism-failure-and-lifetime
-  baseline_commit: 5c82703d0c2840d13e18770d2d1b3083a96e29c0
+  baseline_commit: ff47a64883e73cd9c2984616249b302e413566dc
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M24-03R.yaml
-  predecessor: 'M24-02 #264 is merged at 5c82703d0c2840d13e18770d2d1b3083a96e29c0. M24-03 draft dede9ea
-    retains the actual Runtime pending-stop reproducer; completion is blocked pending this repair.'
+  control_plane_path: products/cpp-rt-car/batches/M24-03R2.yaml
+  predecessor: 'M24-03R #266 merged. Reactivated feature #265 at 042bb7c reproduces TSan race: release_rate_batch
+    writes rate_owned at device_manager.cpp:1697 while service_loop reads it at2139 during active CUDA
+    launch failure. Two lifetime gates report this race; the512KiB CLI additionally exits-11 without a
+    diagnostic. Original six M24 gates pass.'
   owner_scope: Continue the existing dependency-ordered portable software scope in automation.json. No
     cybersecurity, Daybreak, Unreal, physical qualification, signing, release or deployment. Integrate
     the canonical planning contract before target activation.
-  discovered_followup: Preserved feature dede9ea linked against repair20bc90e passes stopped retirement
-    but fails cleanup after host registration2 rejects. GDB shows finalized Runtime, no registered host
-    spans and two retained events. Native unregister_memory rejects zero submission_token while Runtime
-    keeps ownership-uncertain before register_memory. Logs /tmp/cpp-m24-03r-preserved-feature.log and
-    preserved-state.log.
-  control_plane_revision: 273c042c04cda85c542a55b6e76ad4421f2c27ce
-  canonical_revision: 273c042c04cda85c542a55b6e76ad4421f2c27ce
-  canonical_blob_sha: 17f443c4b34c8f1ad9f5e1ae26c617d224811430
+  control_plane_revision: ab190c04413d3cee42b05f612c2b164f36111438
+  canonical_revision: ab190c04413d3cee42b05f612c2b164f36111438
+  canonical_blob_sha: c5035eca729ab37c50b0ec3caa82ec8b57ab307f
 dependencies:
-- M24-02
+- M24-03R
 scope:
   allowed_paths:
   - AGENTS.md
   - contracts/active-batch.yaml
   - release/rtfw-release-contract.json
-  - rt/src/cuda_backend.cpp
-  - tests/test_cuda_backend.cpp
+  - rt/src/device_manager.hpp
+  - rt/src/device_manager.cpp
+  - tests/test_command_batch.cpp
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
   - docs/roadmap.md
-  - docs/evidence/M24-03R-*.md
+  - docs/evidence/M24-03R2-*.md
   forbidden_paths:
   - abi/
   - core/
@@ -48,7 +46,6 @@ scope:
   - include/
   - src/
   - rt/include/
-  - rt/src/device_manager.cpp
   - rt/src/host_runtime.cpp
   - bench/
   - samples/
@@ -67,38 +64,26 @@ scope:
   - LICENSE
   - CHANGELOG.md
   - SECURITY.md
+  - rt/src/cuda_backend.cpp
+  - tests/test_cuda_backend.cpp
+  - docs/evidence/M24-03R-*.md
 acceptance:
-- Reproduce pending Runtime stop on the actual merged public CUDA pipeline and preserve a failing old-order
-  negative control. Runtime cancels the step but CUDA unregister currently rejects still-owned slots before
-  backend shutdown can drain them. No timeout or assertion relaxation.
-- In the CUDA backend implementation only, permit a checked unregister after explicit native command stop
-  to retire referenced pending/quarantined work through the existing host-side event/stream synchronization
-  callbacks before freeing registrations. Preserve running unregister rejection, unsupported device cancellation,
-  non-stopped behavior and normal poll-only execution. Do not add executor synchronization or steady allocation.
-- Failed synchronization preserves the exact slot/outstanding/registration ownership for retry; no event,
-  host registration or borrowed address may be released early. Account each successful retirement once.
-  Make concurrency with poll fail safely through slot ownership or the existing serialized lifecycle contract.
-  Preserve shutdown idempotence and failure semantics.
-- Exercise ordinary and active Runtime stop with held accepted batches, successful checked cleanup, failed
-  synchronization/retry and permanent context-loss quarantine cleanup where injected driver cleanup succeeds.
-  Lost-context reset must still return lost. Native-driver/API tests also prove running unregister remains
-  rejected, stop-gated cleanup and exact counters. Actual inaccessible/lost physical context cleanup is
-  not invented.
-- Failed native staged-memory registration can leave a zero submission token and either no ownership or
-  a residual buffer. Validate the complete registration descriptor and token header/reserved fields, identify
-  only an exact matching residual registration, and make descriptor-based zero-token cleanup succeed when
-  nothing remains. Retain and retry real host/device cleanup failure; do not clear unrelated live buffers
-  or accept malformed/mismatched nonzero tokens. Preserve legacy core semantics and public layouts. Add
-  native and actual Runtime startup rollback regressions plus an old-source negative control.
-- Preserve all existing CUDA tests and Runtime/pipeline/sample/ABI/package/benchmark behavior. No public
-  layout/header, schema, support matrix, release version, ABI v8/70 exports/fingerprint/SONAME8 or device
-  ABI v1 changes.
-- Run focused CUDA/native command tests, all original M24-01/02 samples/CLI/parity, ASan/UBSan and TSan
-  with resource conservation, required full/strict portable, original and source relocated packages, compiled
-  ABI, and all 32 exact-head hosted checks. Keep all earlier evidence and clearly label unavailable physical/independent
-  human review.
-- Integrate this repair separately, then reconcile and reactivate M24-03 under a canonical amendment before
-  resuming feature draft dede9ea. M24-03 and M24-04 remain open; no qualification or maturity closure.
+- Retain exact ThreadSanitizer reproducer from preserved feature042bb7c and add an independent actual
+  Runtime active-rate submission-failure/terminal-retirement regression in command-batch tests. Old source
+  must reproduce the race under TSan; all original tests and failure/publication assertions stay intact.
+- Fix only private DeviceManager batch ownership metadata accessed by service timeout observation and
+  host retirement. Use race-free bounded ownership/atomic synchronization, preserve slot publication ordering,
+  finite deadlines, status/timeline behavior, single terminal retirement and no-early-reuse. Audit related
+  accesses and exact storage accounting. No mutexes, RT heap allocation, sleeps, deadline relaxation,
+  public layouts or backend changes.
+- Exercise repeated active submission rejection/throwing, successful dispatch and existing timeout/quarantine/late-completion/stop
+  paths. Preserve all M24 CUDA cleanup repair sources/regressions and original tests, all207 benchmarks,
+  C ABI v8/70 exports/fingerprint/SONAME8 and device ABIv1.
+- Run focused command/rate tests, exact preserved feature suite against repaired Runtime, TSan and ASan/UBSan
+  with leak scanning, no-allocation, strict portable/full/ABI/static, relocated original/source SDK and
+  all32 exact-head hosted gates. Retain failures and distinguish portable from physical evidence.
+- 'Integrate repair separately, then canonically reactivate M24-03 against its merged exact source and
+  finish #265. M24-04 and wider/manual gates remain separate.'
 validation:
   local:
   - git status --short --branch
@@ -109,10 +94,9 @@ validation:
   - python3 tools/check_c_abi.py --library build/m24-pipeline/librtfw.so
   - git diff --check
   focused_tests_to_add:
-  - Actual Runtime stopped pending-batch cleanup and failed synchronization retry for frame/active schedules.
-  - Native CUDA running rejection, stopped pending/quarantine retirement, permanent loss/reset boundary
-    and exact resource conservation.
-  - Old-order negative control plus sanitizer/no-allocation/original pipeline/ABI/package regressions.
+  - Repeated actual active Runtime submission failures versus service timeout scan and terminal release,
+    with exact status/no-publication/resource assertions.
+  - Old-source TSan negative control and unchanged preserved M24-03 suite passing after repair.
   required_ci:
   - All prior 32 exact-head hosted checks, with additive portable sample/tests in existing compiler/FMA/MSVC,
     sanitizer, static and package jobs.
@@ -127,22 +111,21 @@ validation:
 risk:
   class: high
   hazards:
-  - Synchronization occurs before explicit stop or while executor work can still reuse memory.
-  - Slot retirement decrements ownership twice or a failed sync loses the original pending/quarantine
-    state.
-  - A lost-context simulation is mistaken for physical recoverability.
+  - Speculative service reads race with host retirement or slot reuse.
+  - An atomic fix hides an ownership or deadline regression.
+  - False sanitizer closure from suppressions or changing the fault schedule.
   stop_conditions:
   - Canonical planning contract is not integrated before activation, or target baseline moves without
     reconciliation.
-  - Runtime manager, public ABI/schema or another forbidden path needs a change beyond the allowed CUDA
-    implementation; retain a reproducer and plan a separate repair.
+  - Public ABI, CUDA backend, host runtime or another forbidden path needs a change; retain evidence and
+    plan separately.
   - Success requires weakened tests, invented resource observations, unbounded waits, unsafe cleanup or
     absent hardware evidence.
   - New physical/controlled/signing/release/deployment authority or a substantive product decision would
     be required.
 rollback:
-  strategy: Revert the isolated CUDA implementation/test repair and its activation/evidence. Preserve
-    blocked M24-03 draft and baseline tests; do not call the original ownership cycle safe.
+  strategy: Revert only the isolated private DeviceManager race repair and regression; preserve all failures
+    and feature draft. Do not claim old race safe.
 evidence:
   output:
   - docs/evidence/M24-03R-<date>.md

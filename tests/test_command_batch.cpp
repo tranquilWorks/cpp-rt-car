@@ -2225,3 +2225,76 @@ TEST(CommandBatch, ExplicitFlushAndInvalidateOrderIsRequiredAndPreserved) {
   EXPECT_EQ(run(true), rt::Status::ok);
   EXPECT_EQ(run(false), rt::Status::device_error);
 }
+
+TEST(CommandBatch, ActiveSubmitFailureRetiresWhileTimeoutLaneObserves) {
+  struct ManualClock final : rt::RuntimeClock {
+    std::uint64_t now_ns() noexcept override { return 1'000; }
+    rt::Status sleep_until_ns(std::uint64_t) noexcept override {
+      return rt::Status::ok;
+    }
+  } clock;
+
+  for (const auto mode :
+       {BatchBackend::SubmitMode::error, BatchBackend::SubmitMode::throwing}) {
+    for (unsigned iteration = 0; iteration < 32; ++iteration) {
+      SCOPED_TRACE(iteration);
+      BatchBackend backend;
+      backend.mode.store(mode);
+      rt::Runtime runtime(clock);
+      ASSERT_EQ(runtime.configure(batch_config()), rt::Status::ok);
+      ASSERT_EQ(runtime.set_rate_execution_policy({1}), rt::Status::ok);
+      rt::DeviceBackendHandle backend_handle;
+      ASSERT_EQ(register_backend(runtime, backend, "rate.retirement", backend_handle),
+                rt::Status::ok);
+      std::array<std::byte, 64> storage{};
+      rt::DeviceBufferHandle buffer;
+      rt::DeviceTimelineHandle timeline;
+      ASSERT_EQ(runtime.register_device_buffer(
+                    {"rate.retirement.buffer", backend_handle, storage}, buffer),
+                rt::Status::ok);
+      ASSERT_EQ(runtime.register_device_timeline(
+                    {"rate.retirement.timeline", backend_handle, 0}, timeline),
+                rt::Status::ok);
+      BatchProvider provider;
+      provider.declaration = dispatch_declaration(buffer, timeline);
+      provider.timeout_ns = 1'000'000'000;
+      rt::PhaseHandle phase;
+      ASSERT_EQ(runtime.register_device_batch_phase(
+                    {"rate.retirement.phase", backend_handle, &provide_batch,
+                     &provider, provider.declaration},
+                    phase),
+                rt::Status::ok);
+      rt::RateDomainHandle domain;
+      ASSERT_EQ(runtime.register_rate_domain(
+                    {"rate.retirement.domain", 1'000'000'000, 1, 900'000'000, 0,
+                     rt::RateCriticality::critical, false,
+                     rt::RateLateAction::fail, 0},
+                    domain),
+                rt::Status::ok);
+      const std::array roles{rt::DeviceRatePayloadRole::input};
+      ASSERT_EQ(runtime.bind_device_phase_to_rate_domain(
+                    {phase, domain, 800'000'000, 1, roles}),
+                rt::Status::ok);
+      ASSERT_EQ(runtime.finalize(), rt::Status::ok) << runtime.last_error();
+      ASSERT_EQ(runtime.start(), rt::Status::ok);
+
+      rt::StepResult result;
+      EXPECT_EQ(runtime.step(
+                    {0, std::chrono::nanoseconds(1), std::nullopt, 1'000},
+                    &result),
+                rt::Status::device_error);
+      EXPECT_EQ(result.rate.executed_reference_records, 1u);
+      EXPECT_EQ(result.rate.failed_domain_releases, 1u);
+      EXPECT_EQ(backend.batch_cancel_calls.load(), 0u);
+      EXPECT_EQ(backend.last_batch.timeout_ns, 800'000'000u);
+
+      rt::DeviceTimelineInfo info;
+      ASSERT_TRUE(runtime.device_timeline_at(backend_handle, 0, info));
+      EXPECT_EQ(info.last_accepted_value, 1u);
+      EXPECT_EQ(info.completed_value, 0u);
+      EXPECT_EQ(backend.batch_submit_calls.load(), 1u);
+      EXPECT_EQ(runtime.stop(), rt::Status::ok);
+      EXPECT_EQ(runtime.stop(), rt::Status::ok);
+    }
+  }
+}

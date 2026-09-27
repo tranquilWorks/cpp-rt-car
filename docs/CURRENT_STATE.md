@@ -1,3 +1,17 @@
+# M24-03R2 active-rate retirement race repair
+
+Canonical control #513 is merged atab190c04413d3cee42b05f612c2b164f36111438.
+Feature #265 is preserved at0fb7cb1. TSan exposes service timeout observation
+reading rate_owned while host terminal retirement writes it. The private discriminator is now atomic. Independent old-source regression
+reproduces the race; fixed command27/27 and preserved feature TSan512KiB pass.
+Full quick39/experimental43, strict portable39, focused sanitizer91+6 each,
+source5+5, original SDK20, ABI and static checks pass. Exact-head hosted results
+and integration are recorded in the repair PR before merge. Preserve prior
+CUDA repair source/tests/evidence. See [evidence](evidence/M24-03R2-2026-09-27.md).
+M24-03 must be reactivated afterward; M24-04 and broader/manual work remain.
+
+## Historical integrated CUDA repair
+
 # M24-03R stopped CUDA cleanup repair
 
 M24-02 merged as #264 at `5c82703d0c2840d13e18770d2d1b3083a96e29c0` with all
