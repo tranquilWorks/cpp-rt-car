@@ -8,8 +8,9 @@ suite exercises four schedule/launch modes, faults, cancellation, timeout,
 quarantine/reset, context loss, retryable cleanup and resource conservation.
 The repair and all original M24-01/02 tests remain unchanged.
 
-Focused verification passes; full, sanitizer, package and hosted verification
-are in progress for feature PR #265. See
+Focused3/3, ASan/leak9/9, portable42/42 and source consumers6+6 pass.
+TSan exposed a Runtime rate_owned retirement race in all three lifetime gates.
+Preserve feature #265 while separately scoped M24-03R2 is planned and verified. See
 [evidence](evidence/M24-03-2026-09-27.md). Integration is pending.
 M24-04 owns benchmark/profiler integration and the 90% overall / 100% critical
 capability gate. Physical CUDA, controlled performance, independent review,
