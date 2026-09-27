@@ -1798,3 +1798,209 @@ TEST(CudaBackend, NativeGraphTimeoutRetainsUntilEventReadyAndStopIsIdempotent) {
     EXPECT_EQ(registration.api.shutdown(registration.api.instance),
               rt::HalV2Status::ok);
 }
+
+namespace {
+struct StoppedCudaNative {
+    std::unique_ptr<FakeCudaDriver> driver=std::make_unique<FakeCudaDriver>();
+    std::array<rt::CudaStream,1> streams{0x51u};
+    std::unique_ptr<rt::CudaDeviceBackend> backend=
+        std::make_unique<rt::CudaDeviceBackend>(driver->api_v2(),config(streams,1,1));
+    rt::HalV2BackendRegistration registration=backend->hal_v2_registration("stopped.cuda");
+    std::array<std::byte,32> bytes{};
+    std::uint64_t token{};
+    void start() {
+        rt::HalV2InitializeConfig init{}; init.requested_in_flight=1; init.requested_registered_buffers=1;
+        ASSERT_EQ(registration.api.initialize(registration.api.instance,&init),rt::HalV2Status::ok);
+        rt::HalV2BufferRegistration buffer; buffer.data=bytes.data(); buffer.bytes=bytes.size();
+        buffer.flags=RTFW_DEVICE_BUFFER_HOST_READ|RTFW_DEVICE_BUFFER_HOST_WRITE|
+                     RTFW_DEVICE_BUFFER_DEVICE_READ|RTFW_DEVICE_BUFFER_DEVICE_WRITE;
+        std::copy_n("stopped.buffer",sizeof("stopped.buffer"),buffer.name.begin());
+        ASSERT_EQ(registration.api.register_buffer(registration.api.instance,&buffer,&token),rt::HalV2Status::ok);
+        rt::DeviceCommandBatch batch; batch.batch_id=1; batch.timeout_ns=1'000'000'000;
+        batch.command_count=1; batch.signal_count=1;
+        batch.signals[0].timeline_handle=1; batch.signals[0].value=1;
+        auto& command=batch.commands[0]; command.kind=static_cast<std::uint32_t>(rt::HalV2CommandKind::dispatch);
+        command.opcode=rt::cuda_device_opcode_copy_host_to_device; command.buffer_count=1;
+        command.buffers[0]={token,RTFW_DEVICE_ACCESS_READ,0,0,bytes.size()};
+        ASSERT_EQ(registration.command_timeline->submit(registration.command_timeline->instance,&batch),rt::HalV2Status::ok);
+    }
+    rt::HalV2Status unregister() { return registration.api.unregister_buffer(registration.api.instance,token); }
+    void stop() { ASSERT_EQ(registration.command_timeline->request_stop(registration.command_timeline->instance),rt::HalV2Status::ok); }
+    ~StoppedCudaNative() { (void)registration.api.shutdown(registration.api.instance); }
+};
+}
+
+TEST(CudaBackend, StoppedHalV2PendingUnregisterRetiresExactlyOnceAndRetries) {
+    StoppedCudaNative fixture; fixture.start(); auto& driver=*fixture.driver;
+    EXPECT_EQ(fixture.unregister(),rt::HalV2Status::invalid_state);
+    EXPECT_EQ(driver.event_syncs.load(),0u); EXPECT_EQ(driver.host_unregistrations.load(),0u);
+    fixture.stop(); driver.fail_next_event_sync=true;
+    EXPECT_NE(fixture.unregister(),rt::HalV2Status::ok);
+    rt::HalV2Health health;
+    ASSERT_EQ(fixture.registration.api.get_health(fixture.registration.api.instance,&health),rt::HalV2Status::ok);
+    EXPECT_EQ(health.outstanding,1u); EXPECT_EQ(driver.host_unregistrations.load(),0u); EXPECT_EQ(driver.frees.load(),0u);
+    EXPECT_EQ(fixture.unregister(),rt::HalV2Status::ok);
+    EXPECT_EQ(driver.event_syncs.load(),1u); EXPECT_EQ(driver.host_unregistrations.load(),1u); EXPECT_EQ(driver.frees.load(),1u);
+    ASSERT_EQ(fixture.registration.api.get_health(fixture.registration.api.instance,&health),rt::HalV2Status::ok);
+    EXPECT_EQ(health.outstanding,0u);
+    EXPECT_EQ(fixture.registration.api.shutdown(fixture.registration.api.instance),rt::HalV2Status::ok);
+    EXPECT_EQ(driver.event_syncs.load(),1u);
+}
+
+TEST(CudaBackend, StoppedHalV2QuarantineAndLossRetainOnFailedSynchronization) {
+    for(bool lost:{false,true}) {
+        StoppedCudaNative fixture; fixture.start(); auto& driver=*fixture.driver;
+        if(lost) driver.lose_context_on_query=true; else driver.fail_next_event_query=true;
+        rt::HalV2BatchCompletion completion; std::uint64_t count=0;
+        const auto polled=fixture.registration.command_timeline->poll(
+            fixture.registration.command_timeline->instance,&completion,1,&count);
+        EXPECT_EQ(polled,lost?rt::HalV2Status::ok:rt::HalV2Status::reset_required);
+        if(lost) {
+            EXPECT_EQ(count,1u); EXPECT_EQ(completion.status,static_cast<std::int32_t>(rt::HalV2Status::lost));
+            EXPECT_EQ(fixture.registration.api.reset(fixture.registration.api.instance),rt::HalV2Status::lost);
+        }
+        EXPECT_EQ(fixture.unregister(),rt::HalV2Status::invalid_state);
+        fixture.stop(); driver.fail_next_stream_sync=true;
+        EXPECT_NE(fixture.unregister(),rt::HalV2Status::ok);
+        EXPECT_EQ(driver.frees.load(),0u); EXPECT_EQ(driver.host_unregistrations.load(),0u);
+        rt::HalV2Health health;
+        ASSERT_EQ(fixture.registration.api.get_health(fixture.registration.api.instance,&health),rt::HalV2Status::ok);
+        EXPECT_EQ(health.outstanding,1u);
+        EXPECT_EQ(fixture.unregister(),rt::HalV2Status::ok);
+        EXPECT_EQ(driver.stream_syncs.load(),1u); EXPECT_EQ(driver.frees.load(),1u);
+        ASSERT_EQ(fixture.registration.api.get_health(fixture.registration.api.instance,&health),rt::HalV2Status::ok);
+        EXPECT_EQ(health.outstanding,0u);
+        if(lost) { EXPECT_EQ(fixture.registration.api.reset(fixture.registration.api.instance),rt::HalV2Status::lost); }
+    }
+}
+
+#include "../samples/cuda_physics/pipeline/simulated_driver.hpp"
+
+TEST(CudaBackend, StoppedHalV2RuntimePipelineRetiresPendingAndLostBuffers) {
+    namespace p=rtfw::cuda_physics::pipeline;
+    for(bool active:{false,true}) for(bool graph:{false,true}) for(bool lost:{false,true}) {
+        SCOPED_TRACE(::testing::Message()<<"active="<<active<<" graph="<<graph<<" lost="<<lost);
+        p::Options options{{17,1,0,2},graph,active};
+        auto driver=std::make_unique<p::SimulatedDriver>(options);
+        auto session=driver->session();
+        if(lost) session.driver.event_query=[](void*,rt::CudaEvent) noexcept { return rt::CudaDriverResult::context_lost; };
+        auto scenario=std::make_unique<p::Scenario>(options,session);
+        ASSERT_EQ(scenario->prepare(),rt::Status::ok);
+        ASSERT_EQ(scenario->start(),rt::Status::ok);
+        if(lost) {
+            EXPECT_EQ(scenario->step(),rt::Status::device_lost);
+        } else {
+            driver->hold=true;
+            rt::Status result=rt::Status::internal_error;
+            std::thread worker([&]{result=scenario->step();});
+            const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+            while((driver->records<2 || driver->not_ready==0) && std::chrono::steady_clock::now()<until)
+                std::this_thread::yield();
+            const bool accepted=driver->records==2 && driver->not_ready>0;
+            const auto requested=scenario->stop();
+            worker.join();
+            EXPECT_TRUE(accepted);
+            EXPECT_EQ(requested,rt::Status::invalid_state);
+            // Active references whose vendor cannot cancel remain quarantined
+            // until their finite completion budget; ordinary graph stop is immediate.
+            EXPECT_EQ(result,active?rt::Status::device_timeout:rt::Status::device_canceled);
+        }
+        EXPECT_EQ(scenario->completed(),0u);
+        EXPECT_EQ(scenario->publications(0),0u); EXPECT_EQ(scenario->publications(1),0u);
+        EXPECT_EQ(scenario->stop(),rt::Status::ok);
+        EXPECT_EQ(scenario->stop(),rt::Status::ok);
+        EXPECT_TRUE(driver->clean());
+        EXPECT_EQ(driver->registrations.load(),4u);
+        EXPECT_EQ(driver->unregistrations.load(),4u);
+        EXPECT_EQ(driver->backend_allocations.load(),0u); EXPECT_EQ(driver->backend_frees.load(),0u);
+        EXPECT_TRUE(driver->protocol_ok.load());
+    }
+}
+
+namespace {
+rt::HalV2MemoryRegistration stopped_memory(std::span<std::byte> bytes) {
+    rt::HalV2MemoryRegistration memory;
+    memory.domain_identity=2; memory.bytes=bytes.size(); memory.host_data=bytes.data();
+    memory.ownership=static_cast<std::uint32_t>(rt::HalV2MemoryOwnership::borrowed_host);
+    memory.access=RTFW_DEVICE_BUFFER_HOST_READ|RTFW_DEVICE_BUFFER_HOST_WRITE|
+                  RTFW_DEVICE_BUFFER_DEVICE_READ|RTFW_DEVICE_BUFFER_DEVICE_WRITE;
+    memory.coherency=static_cast<std::uint32_t>(rt::HalV2MemoryCoherency::staged_copy);
+    memory.synchronization=rt::hal_v2_memory_sync_copy_to_device|rt::hal_v2_memory_sync_copy_from_device;
+    std::copy_n("rollback.buffer",sizeof("rollback.buffer"),memory.name.begin());
+    return memory;
+}
+}
+
+TEST(CudaBackend, StoppedHalV2UncertainRegistrationRollsBackAbsentOrResidualOwnership) {
+    for(bool residual:{false,true}) {
+        StoppedCudaNative fixture;
+        auto& r=fixture.registration; auto& driver=*fixture.driver;
+        rt::HalV2InitializeConfig init; init.requested_in_flight=1; init.requested_registered_buffers=1;
+        ASSERT_EQ(r.api.initialize(r.api.instance,&init),rt::HalV2Status::ok);
+        const auto memory=stopped_memory(fixture.bytes); rt::HalV2MemoryToken token;
+        driver.fail_next_host_register=true; driver.fail_next_mem_free=residual;
+        EXPECT_NE(r.memory_topology->register_memory(r.memory_topology->instance,&memory,&token),rt::HalV2Status::ok);
+        EXPECT_EQ(token.submission_token,0u);
+        EXPECT_EQ(driver.allocations.load(),1u); EXPECT_EQ(driver.host_registrations.load(),0u);
+        auto invalid=memory; invalid.reserved[0]=1;
+        EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&invalid,&token),rt::HalV2Status::invalid_argument);
+        if(residual) {
+            invalid=memory; ++invalid.bytes;
+            EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&invalid,&token),rt::HalV2Status::invalid_argument);
+            driver.fail_next_mem_free=true;
+            EXPECT_NE(r.memory_topology->unregister_memory(r.memory_topology->instance,&memory,&token),rt::HalV2Status::ok);
+            EXPECT_EQ(driver.frees.load(),0u);
+        }
+        EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&memory,&token),rt::HalV2Status::ok);
+        EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&memory,&token),rt::HalV2Status::ok);
+        EXPECT_EQ(driver.frees.load(),1u);
+        EXPECT_EQ(r.api.shutdown(r.api.instance),rt::HalV2Status::ok);
+    }
+}
+
+TEST(CudaBackend, StoppedHalV2ZeroTokenCannotReleaseSuccessfulRegistration) {
+    StoppedCudaNative fixture; auto& r=fixture.registration;
+    rt::HalV2InitializeConfig init; init.requested_in_flight=1; init.requested_registered_buffers=1;
+    ASSERT_EQ(r.api.initialize(r.api.instance,&init),rt::HalV2Status::ok);
+    const auto memory=stopped_memory(fixture.bytes); rt::HalV2MemoryToken token,empty;
+    ASSERT_EQ(r.memory_topology->register_memory(r.memory_topology->instance,&memory,&token),rt::HalV2Status::ok);
+    EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&memory,&empty),rt::HalV2Status::invalid_argument);
+    auto invalid=token; invalid.reserved[0]=1;
+    EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&memory,&invalid),rt::HalV2Status::invalid_argument);
+    auto descriptor=memory; descriptor.coherency=0;
+    EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&descriptor,&token),rt::HalV2Status::invalid_argument);
+    EXPECT_EQ(fixture.driver->frees.load(),0u); EXPECT_EQ(fixture.driver->host_unregistrations.load(),0u);
+    EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&memory,&token),rt::HalV2Status::ok);
+    EXPECT_EQ(fixture.driver->frees.load(),1u); EXPECT_EQ(fixture.driver->host_unregistrations.load(),1u);
+}
+
+TEST(CudaBackend, StoppedHalV2RuntimeStartupFailureReleasesUncertainMemory) {
+    namespace p=rtfw::cuda_physics::pipeline;
+    struct Driver : p::SimulatedDriver {
+        unsigned attempts=0;
+        explicit Driver(const p::Options& options):p::SimulatedDriver(options) {}
+        p::Session failing_session() {
+            auto result=session();
+            result.driver.host_register=[](void* driver_data,void* host,std::uint64_t bytes) noexcept {
+                auto& owner=static_cast<Driver&>(*static_cast<p::SimulatedDriver*>(driver_data));
+                if(++owner.attempts==2) return rt::CudaDriverResult::error;
+                const auto original=owner.session().driver;
+                return original.host_register(driver_data,host,bytes);
+            };
+            return result;
+        }
+    };
+    for(bool active:{false,true}) for(bool graph:{false,true}) {
+        p::Options options{{17,1,0,2},graph,active};
+        auto driver=std::make_unique<Driver>(options);
+        auto scenario=std::make_unique<p::Scenario>(options,driver->failing_session());
+        ASSERT_EQ(scenario->prepare(),rt::Status::ok);
+        EXPECT_NE(scenario->start(),rt::Status::ok);
+        EXPECT_EQ(driver->attempts,2u);
+        EXPECT_EQ(scenario->stop(),rt::Status::ok);
+        EXPECT_EQ(scenario->stop(),rt::Status::ok);
+        EXPECT_EQ(scenario->publications(0),0u); EXPECT_EQ(scenario->publications(1),0u);
+        EXPECT_EQ(driver->registrations.load(),1u); EXPECT_EQ(driver->unregistrations.load(),1u);
+        EXPECT_TRUE(driver->clean()); EXPECT_EQ(driver->backend_frees.load(),0u);
+    }
+}

@@ -11,21 +11,23 @@ sources:
   - products/cpp-rt-car/PRD.md#cap-m24--cuda-physics-maturity
   - products/cpp-rt-car/acceptance.yaml#CAP-M24
   milestone: products/cpp-rt-car/milestones/M24.md#m24-03--correctness-determinism-failure-and-lifetime
-  baseline_commit: 5c82703d0c2840d13e18770d2d1b3083a96e29c0
+  baseline_commit: ff47a64883e73cd9c2984616249b302e413566dc
   control_plane_repository: tranquilWorks/portfolio-control
   control_plane_path: products/cpp-rt-car/batches/M24-03.yaml
-  predecessor: 'M24-02 target PR #264 merged at 5c82703d0c2840d13e18770d2d1b3083a96e29c0, tree dd6b80567308ab4285313d5e0bf02a9fc6469f53.
-    All 32 exact-head checks passed at 098f04a8065ded657b2de0ac0cc3faf8f8581be1, CI run 36329436486. Local
-    quick 39/39, full 43/43, sanitizer and consumers pass. Preserve all earlier failures and absent physical
-    evidence.'
+  predecessor: 'Combined M24-03R target #266 merged at ff47a64883e73cd9c2984616249b302e413566dc, tree
+    a39e10cd27e95075641afd9ef27b17a26183d023. All32 exact-head checks passed at b290fa55415ce92f7a7844c869d389813883183a
+    in CI36348539120. Fresh local focused63/63, quick39/full43, portable39, sanitizer/leak63+6 each, relocated/embedded5+5,
+    SDK20 and ABI/static pass. Feature #265 at dede9ea preserves original failures; rebase/reconcile onto
+    this repair without weakening prior oracles.'
   owner_scope: Continue the existing dependency-ordered portable software scope in automation.json. No
     cybersecurity, Daybreak, Unreal, physical qualification, signing, release or deployment. Integrate
     the canonical planning contract before target activation.
-  control_plane_revision: 52aea868343911ae7c58cea619bdcacb74749aca
-  canonical_revision: 52aea868343911ae7c58cea619bdcacb74749aca
-  canonical_blob_sha: c584f20d7c990822ed4562fe97fe8e1f67a34a1e
+  control_plane_revision: f168122ed236002fe54af2cea0515d24cb9c81c1
+  canonical_revision: f168122ed236002fe54af2cea0515d24cb9c81c1
+  canonical_blob_sha: 531af791c31aa5ccb3088bbc2fba095b8d767802
 dependencies:
 - M24-02
+- M24-03R
 scope:
   allowed_paths:
   - .portfolio-harness.json
@@ -96,6 +98,8 @@ scope:
   - docs/evidence/M24-01-*.md
   - tests/test_cuda_pipeline.cpp
   - docs/evidence/M24-02-*.md
+  - tests/test_cuda_backend.cpp
+  - docs/evidence/M24-03R-*.md
 acceptance:
 - Preserve M24-01 model, original entry points/tests and all M24-02 tests. Keep integer exact equality
   (zero tolerance) across all nine fields, seeds, count-one/odd/maximum counts, steps, workers and four
@@ -115,7 +119,10 @@ acceptance:
   and late terminal readiness after timeout/stop. CUDA cancellation is unsupported: prove checked stop
   requests, suppression of publication and retained ownership rather than inventing device preemption.
   Use bounded synchronization and configurable synthetic driver time where possible; retain real Runtime
-  limits and existing test deadlines.'
+  limits and existing test deadlines. Ordinary stopped graphs report cancellation immediately; active
+  noncancelable references may remain quarantined until their unchanged finite completion budget and report
+  timeout. Assert the exact schedule-specific outcome, with no publication and checked cleanup in both
+  cases.'
 - 'Inject launch/query failure requiring quarantine and reset, failed reset synchronization followed by
   retry, and permanent context loss. Verify health, generation/reset accounting and no release of possibly-live
   borrowed storage. The CUDA backend rejects reset of a lost context: prove that rejection and checked
@@ -142,7 +149,9 @@ acceptance:
   agent self-review, rollback and unperformed evidence. M24-04 owns benchmark/profile/capability-matrix
   closure; M24/CAP-M24, physical CUDA, controlled performance, independent human review, RT1/RT2, M25/M26,
   signing/release/deployment remain separate. Production defects require separately scoped repair; no
-  forbidden production changes or weakened assertions.
+  forbidden production changes or weakened assertions. Preserve merged M24-03R stopped-retirement/uncertain-registration
+  repair source and regressions unchanged. Retain initial conformance expectation failures and both old-source
+  negative controls.
 validation:
   local:
   - git status --short --branch

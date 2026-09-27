@@ -1,3 +1,15 @@
+# M24-03 reconciliation after repair integration
+
+Combined CUDA repair #266 merged at `ff47a64883e73cd9c2984616249b302e413566dc`,
+tree `a39e10cd27e95075641afd9ef27b17a26183d023`, after all32 hosted checks passed
+at b290fa5. Fresh focused63, quick39/full43, portable39, sanitizers/leaks, source
+and SDK consumers, static and ABI checks passed. Preserve the integrated repair.
+M24-03 reactivation is being canonically bound before completing feature #265.
+The old blocker below is historical; full feature verification remains pending.
+M24-04, physical/manual gates and M25/M26 remain separate.
+
+## Historical feature checkpoint before repair
+
 # M24-03 continuation checkpoint
 
 M24-02 merged as #264 at `5c82703d0c2840d13e18770d2d1b3083a96e29c0` with

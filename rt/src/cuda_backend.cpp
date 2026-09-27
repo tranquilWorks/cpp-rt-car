@@ -220,6 +220,7 @@ struct CudaDeviceBackend::Impl {
         bool owns_device_address = false;
         bool owns_host_registration = false;
         bool heterogeneous = false;
+        bool registration_uncertain = false;
         std::array<char, RTFW_DEVICE_IDENTIFIER_CAPACITY> name{};
     };
 
@@ -1324,6 +1325,7 @@ struct CudaDeviceBackend::Impl {
                     pending.token =
                         static_cast<std::uint64_t>(free_index + 1);
                     pending.registered = true;
+                    pending.registration_uncertain = true;
                     pending.owns_device_address =
                         allocate_device_address && address != 0;
                     pending.owns_host_registration =
@@ -1379,18 +1381,57 @@ struct CudaDeviceBackend::Impl {
         for (std::size_t slot_index = 0;
              slot_index < backend->config.queue_capacity;
              ++slot_index) {
-            const auto& slot = backend->slots[slot_index];
-            if (slot.state.load(std::memory_order_acquire) ==
-                kSlotFree) {
+            auto& slot = backend->slots[slot_index];
+            auto state = slot.state.load(std::memory_order_acquire);
+            if (state == kSlotFree) {
                 continue;
             }
-            for (std::size_t reference_index = 0;
-                 reference_index < slot.buffer_count;
-                 ++reference_index) {
-                if (slot.buffer_tokens[reference_index] == token) {
-                    return RTFW_DEVICE_STATUS_INVALID_STATE;
-                }
+            // Claim the slot before reading references: poll may otherwise
+            // retire it concurrently. A submit/poll/reset owner makes cleanup
+            // retryable rather than allowing a borrowed buffer to be released.
+            if ((state != kSlotPending && state != kSlotQuarantined) ||
+                !slot.state.compare_exchange_strong(
+                    state, kSlotOwned, std::memory_order_acq_rel,
+                    std::memory_order_relaxed)) {
+                return RTFW_DEVICE_STATUS_INVALID_STATE;
             }
+            const auto previous = state;
+            bool referenced = false;
+            for (std::size_t reference_index = 0;
+                 reference_index < slot.buffer_count; ++reference_index) {
+                referenced = referenced ||
+                    slot.buffer_tokens[reference_index] == token;
+            }
+            if (!referenced) {
+                slot.state.store(previous, std::memory_order_release);
+                continue;
+            }
+            if (!backend->stop_requested.load(std::memory_order_acquire)) {
+                slot.state.store(previous, std::memory_order_release);
+                return RTFW_DEVICE_STATUS_INVALID_STATE;
+            }
+            // Runtime unregisters borrowed memory before backend shutdown.
+            // After explicit command stop, drain referenced work here on the
+            // host cleanup path; ordinary running unregister still rejects it.
+            auto result = backend->push_context();
+            if (result == CudaDriverResult::success) {
+                result = previous == kSlotPending
+                    ? backend->driver.event_synchronize(
+                          backend->driver.user_data, slot.event)
+                    : backend->driver.stream_synchronize(
+                          backend->driver.user_data, slot.stream);
+                result = combine_with_pop(result, backend->pop_context());
+            }
+            if (result != CudaDriverResult::success) {
+                slot.state.store(previous, std::memory_order_release);
+                const auto status = device_status(result);
+                backend->set_health_after(status);
+                return status;
+            }
+            backend->outstanding.fetch_sub(1, std::memory_order_relaxed);
+            slot.batch = false;
+            slot.buffer_count = 0;
+            slot.state.store(kSlotFree, std::memory_order_release);
         }
         if (buffer->owns_device_address ||
             buffer->owns_host_registration) {
@@ -2170,10 +2211,9 @@ struct CudaDeviceBackend::Impl {
                bytes_zero(handle.reserved.data(), handle.reserved.size());
     }
 
-    static HalV2Status register_memory(
-        void* instance, const HalV2MemoryRegistration* registration,
-        HalV2MemoryToken* out_token) noexcept {
-        if (!registration || !out_token ||
+    static bool valid_memory_registration(
+        const HalV2MemoryRegistration* registration) noexcept {
+        if (!registration ||
             registration->struct_size < sizeof(*registration) ||
             registration->extension_version !=
                 hal_v2_memory_topology_extension_version ||
@@ -2186,9 +2226,24 @@ struct CudaDeviceBackend::Impl {
                 (hal_v2_memory_sync_copy_to_device |
                  hal_v2_memory_sync_copy_from_device) ||
             !registration->host_data || registration->bytes == 0 ||
+            registration->bytes > std::numeric_limits<std::size_t>::max() ||
+            registration->access == 0 ||
+            (registration->access & ~(RTFW_DEVICE_BUFFER_HOST_READ |
+                 RTFW_DEVICE_BUFFER_HOST_WRITE | RTFW_DEVICE_BUFFER_DEVICE_READ |
+                 RTFW_DEVICE_BUFFER_DEVICE_WRITE)) != 0 ||
+            !valid_identifier(registration->name.data(), registration->name.size()) ||
             !opaque_empty(registration->opaque_handle) ||
             !bytes_zero(registration->reserved.data(),
                         registration->reserved.size())) {
+            return false;
+        }
+        return true;
+    }
+
+    static HalV2Status register_memory(
+        void* instance, const HalV2MemoryRegistration* registration,
+        HalV2MemoryToken* out_token) noexcept {
+        if (!out_token || !valid_memory_registration(registration)) {
             return HalV2Status::invalid_argument;
         }
         HalV2BufferRegistration core{};
@@ -2210,27 +2265,48 @@ struct CudaDeviceBackend::Impl {
     static HalV2Status unregister_memory(
         void* instance, const HalV2MemoryRegistration* registration,
         const HalV2MemoryToken* token) noexcept {
-        if (!registration || !token ||
+        if (!valid_memory_registration(registration) || !token ||
             token->struct_size < sizeof(*token) ||
             token->extension_version !=
                 hal_v2_memory_topology_extension_version ||
-            token->submission_token == 0 ||
             !opaque_empty(token->native_token) ||
             !bytes_zero(token->reserved.data(), token->reserved.size())) {
             return HalV2Status::invalid_argument;
         }
         auto* backend = self(instance);
-        auto* buffer = backend ? backend->buffer_for(token->submission_token)
-                               : nullptr;
-        if (!buffer || registration->domain_identity != 2 ||
-            registration->host_data != buffer->host_data ||
+        if (!backend || !backend->initialized.load(std::memory_order_acquire)) {
+            return HalV2Status::invalid_state;
+        }
+        auto* buffer = backend->buffer_for(token->submission_token);
+        if (token->submission_token == 0) {
+            // Runtime retains the descriptor even if register_memory failed
+            // before returning a token. Only an uncertain exact registration
+            // may be retired this way; a successful same-name object stays live.
+            for (std::size_t index = 0; index < backend->config.buffer_capacity;
+                 ++index) {
+                auto& candidate = backend->buffers[index];
+                if (candidate.registered &&
+                    std::strncmp(registration->name.data(), candidate.name.data(),
+                                 RTFW_DEVICE_IDENTIFIER_CAPACITY) == 0) {
+                    if (!candidate.registration_uncertain) {
+                        return HalV2Status::invalid_argument;
+                    }
+                    buffer = &candidate;
+                    break;
+                }
+            }
+            if (!buffer) {
+                return HalV2Status::ok; // Failed registration retained nothing.
+            }
+        }
+        if (!buffer || registration->host_data != buffer->host_data ||
             registration->bytes != buffer->bytes ||
             registration->access != buffer->flags ||
             std::strncmp(registration->name.data(), buffer->name.data(),
                          RTFW_DEVICE_IDENTIFIER_CAPACITY) != 0) {
             return HalV2Status::invalid_argument;
         }
-        return hal_unregister_buffer(instance, token->submission_token);
+        return hal_unregister_buffer(instance, buffer->token);
     }
 
     static HalV2Status query_correlation(
