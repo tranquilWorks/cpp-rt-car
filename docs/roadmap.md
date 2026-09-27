@@ -855,3 +855,15 @@ M24-01 merged as PR #263 at c64d0672f1478acd863c68865663550d7fe22f8c after
 caller-owned memory, two-stream, kernel/Graph and active-rate pipeline.
 Implementation evidence remains separate from physical CUDA and CAP-M24 closure;
 M24-03/04 remain later batches. See [pipeline](cuda_pipeline.md).
+
+## M24-03 current scope after integrated cleanup repair
+
+M24-02 merged as #264. Separate repair #266 at ff47a64883e73cd9c2984616249b302e413566dc
+fixes stopped CUDA retirement and uncertain native registration rollback, with
+all32 hosted checks passing. Reactivation control #512 activates M24-03's finite
+installed failure/lifetime conformance runner. Preserve all earlier evidence;
+final feature verification/integration is recorded in PR #265 and
+[evidence](evidence/M24-03-2026-09-27.md). M24-04 still owns benchmark/profiler
+integration and capability coverage90% overall/100% critical. Physical CUDA,
+controlled performance, independent human review and qualification remain separate;
+M25 SDK/usability and M26 golden-system work follow afterward.

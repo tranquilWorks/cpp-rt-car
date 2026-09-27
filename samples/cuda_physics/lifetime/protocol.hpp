@@ -15,9 +15,15 @@ class Protocol {
 public:
     enum class Fault { none, queue_full, invalid_descriptor, stale_batch, wrong_signal };
     Fault fault=Fault::none; // Configure before start.
+    bool invalid_provider=false;
+    std::atomic<std::uint64_t> provider_faults{};
     std::atomic<std::uint64_t> injected{},submits{},polls{},cancels{},unsupported_cancels{},stops{};
     pipeline::Instrumentation hooks() noexcept {
         pipeline::Instrumentation hooks; hooks.owner=this; hooks.outstanding_capacity=2;
+        hooks.batch=[](void* owner,std::size_t,rt::DeviceCommandBatch& batch) noexcept {
+            auto& self=*static_cast<Protocol*>(owner);
+            if (self.invalid_provider) { batch.timeout_ns=0; ++self.provider_faults; }
+        };
         hooks.registration=[](void* owner,std::size_t i,rt::HalV2BackendRegistration r) noexcept {
             auto& self=*static_cast<Protocol*>(owner); auto& lane=self.lanes_[i];
             lane.owner=&self; lane.original=*r.command_timeline; lane.wrapped=lane.original;

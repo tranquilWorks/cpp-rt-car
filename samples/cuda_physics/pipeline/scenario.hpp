@@ -260,12 +260,12 @@ public:
     // May request cancellation during a step. Join that step before stop()/reset
     // or reading ordinary state; no vendor preemption is promised.
     rt::Status request_stop() noexcept { return runtime_.stop(); }
-    rt::Status reset(std::size_t i) noexcept { return runtime_.reset_device(backend_handles_.at(i)); }
+    rt::Status reset(std::size_t i) noexcept { return i<lanes(options_)?runtime_.reset_device(backend_handles_[i]):rt::Status::invalid_argument; }
     rt::Status health(std::size_t i,rt::DeviceHealth& value) noexcept {
-        return runtime_.device_health(backend_handles_.at(i),value);
+        return i<lanes(options_)?runtime_.device_health(backend_handles_[i],value):rt::Status::invalid_argument;
     }
     bool timeline(std::size_t i,rt::DeviceTimelineInfo& value) const noexcept {
-        return runtime_.device_timeline_at(backend_handles_.at(i),0,value);
+        return i<lanes(options_) && runtime_.device_timeline_at(backend_handles_[i],0,value);
     }
     std::string_view error() const noexcept { return runtime_.last_error(); }
     std::uint64_t completed() const noexcept { return completed_; }

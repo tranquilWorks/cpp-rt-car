@@ -1,12 +1,20 @@
-# M24-03 reconciliation after repair integration
+# M24-03 conformance verification
 
-Combined CUDA repair #266 merged at `ff47a64883e73cd9c2984616249b302e413566dc`,
-tree `a39e10cd27e95075641afd9ef27b17a26183d023`, after all32 hosted checks passed
-at b290fa5. Fresh focused63, quick39/full43, portable39, sanitizers/leaks, source
-and SDK consumers, static and ABI checks passed. Preserve the integrated repair.
-M24-03 reactivation is being canonically bound before completing feature #265.
-The old blocker below is historical; full feature verification remains pending.
-M24-04, physical/manual gates and M25/M26 remain separate.
+M24-03 is active under canonical control #512, revision
+`f168122ed236002fe54af2cea0515d24cb9c81c1`, blob
+`531af791c31aa5ccb3088bbc2fba095b8d767802`, on CUDA repair #266
+`ff47a64883e73cd9c2984616249b302e413566dc`. The finite installed conformance
+suite exercises four schedule/launch modes, faults, cancellation, timeout,
+quarantine/reset, context loss, retryable cleanup and resource conservation.
+The repair and all original M24-01/02 tests remain unchanged.
+
+Focused verification passes; full, sanitizer, package and hosted verification
+are in progress for feature PR #265. See
+[evidence](evidence/M24-03-2026-09-27.md). Integration is pending.
+M24-04 owns benchmark/profiler integration and the 90% overall / 100% critical
+capability gate. Physical CUDA, controlled performance, independent review,
+RT qualification, M25 SDK/usability and M26 golden-reference work remain.
+Earlier blocked checkpoints below are historical.
 
 ## Historical feature checkpoint before repair
 

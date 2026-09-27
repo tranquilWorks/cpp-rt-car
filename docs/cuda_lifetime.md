@@ -32,14 +32,17 @@ synchronization and destruction. Its synthetic clock offset advances only the
 injected driver's timeout clock; it does not change the Runtime or physics clock.
 
 The separately labeled `Protocol` adapter wraps the public command extension to
-inject queue rejection, malformed descriptors, stale batch identity and mismatched
+inject queue rejection, malformed native descriptors, stale batch identity and mismatched
 timeline signals. These are HAL protocol tests, not claims that CUDA emits those
-protocol records. Valid dispatch/poll/cancel/stop calls forward to the actual
+protocol records. A separate provider mutation requires Runtime to reject a zero
+timeout before any backend submission. Valid dispatch/poll/cancel/stop calls forward to the actual
 backend. The stale-completion test replays the first completed batch during the second
 step and requires terminal rejection with no second publication or timeline advance.
 
 CUDA does not support canceling an accepted kernel. Concurrent checked stop
-requests cancellation and returns invalid_state until the host joins the step;
+requests cancellation and returns invalid_state until the host joins the step.
+Ordinary frames then report device_canceled; active noncancelable references
+retain ownership until their unchanged five-second budget and report device_timeout;
 borrowed storage stays live until a later checked stop succeeds. Failure tests
 require suppression of CPU publication. Quarantine reset may synchronize on the
 host control path and can fail/retry. Normal successful steps must perform no

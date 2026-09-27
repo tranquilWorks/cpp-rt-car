@@ -53,6 +53,12 @@ inline bool protocol_failure(bool active,bool graph,Protocol::Fault fault,Status
     LIFETIME_CHECK(f.scenario->timeline(0,timeline) && timeline.completed_value==0);
     LIFETIME_CHECK(f.finish()); return true;
 }
+inline bool invalid_provider(bool active,bool graph) {
+    Fixture f(active,graph); f.protocol.invalid_provider=true; LIFETIME_CHECK(f.start());
+    LIFETIME_CHECK(f.scenario->step()==Status::invalid_argument && f.protocol.provider_faults==1);
+    LIFETIME_CHECK(f.protocol.submits==0 && f.driver->records==0 && f.scenario->publications(0)==0);
+    LIFETIME_CHECK(f.finish()); return true;
+}
 inline bool stale(bool active,bool graph) {
     Fixture f(active,graph); f.protocol.fault=Protocol::Fault::stale_batch; LIFETIME_CHECK(f.start());
     LIFETIME_CHECK(f.scenario->step()==Status::ok && f.scenario->publications(0)==1);
@@ -81,7 +87,7 @@ inline bool pending_stop(bool active,bool graph,bool fail_cleanup) {
     Status result=Status::internal_error; std::thread worker([&]{result=f.scenario->step();});
     const bool reached=await([&]{return f.driver->records==2 && f.driver->not_ready>0;});
     const auto requested=f.scenario->request_stop(); worker.join();
-    LIFETIME_CHECK(reached && requested==Status::invalid_state && result==Status::device_canceled);
+    LIFETIME_CHECK(reached && requested==Status::invalid_state && result==(active?Status::device_timeout:Status::device_canceled));
     LIFETIME_CHECK(f.protocol.stops>=2 && f.protocol.cancels>=2 && f.protocol.unsupported_cancels==f.protocol.cancels.load());
     LIFETIME_CHECK(f.scenario->publications(0)==0 && f.scenario->publications(1)==0 && !f.driver->clean());
     if(fail_cleanup) {
@@ -89,9 +95,6 @@ inline bool pending_stop(bool active,bool graph,bool fail_cleanup) {
         const auto stopped=f.scenario->stop();
         const bool retained=!f.driver->clean();
         const auto injected=f.driver->faults.load();
-        std::cerr<<"pending stop "<<static_cast<int>(stopped)<<" injected="<<injected<<" retained="<<retained
-                 <<" sync="<<f.driver->event_syncs<<" stream="<<f.driver->stream_syncs<<'\n';
-        f.driver->fail_event_sync=false;
         f.driver->hold=false;
         const bool cleaned=f.finish();
         LIFETIME_CHECK(stopped!=Status::ok && injected==1 && retained && cleaned);
@@ -156,7 +159,7 @@ inline bool capacity(bool active,bool graph) {
 inline bool suite() {
     for(bool active:{false,true}) for(bool graph:{false,true}) {
         std::cout<<"lifetime "<<(active?"active":"frame")<<' '<<(graph?"graph":"kernel")<<'\n';
-        if(!healthy(active,graph) || !capacity(active,graph) ||
+        if(!healthy(active,graph) || !capacity(active,graph) || !invalid_provider(active,graph) ||
            !protocol_failure(active,graph,Protocol::Fault::queue_full,Status::device_queue_full) ||
            !protocol_failure(active,graph,Protocol::Fault::invalid_descriptor,Status::invalid_argument) ||
            !protocol_failure(active,graph,Protocol::Fault::wrong_signal,Status::device_error) ||
