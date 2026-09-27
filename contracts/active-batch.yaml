@@ -1,9 +1,10 @@
 schema_version: 1
 batch:
   id: M24-03R
-  title: Repair stopped CUDA borrowed-buffer retirement
+  title: Repair CUDA stopped retirement and uncertain-registration rollback
   goal: Break the reproduced pending/quarantined CUDA cleanup ownership cycle without releasing live resources,
-    and preserve retryable checked stop.
+    and preserve retryable checked stop. Also honor the existing descriptor-based uncertain native-memory
+    rollback contract after failed registration.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
@@ -18,9 +19,14 @@ sources:
   owner_scope: Continue the existing dependency-ordered portable software scope in automation.json. No
     cybersecurity, Daybreak, Unreal, physical qualification, signing, release or deployment. Integrate
     the canonical planning contract before target activation.
-  control_plane_revision: 97c8db65f265b64c8d10d15bdcb5c3a02c66631a
-  canonical_revision: 97c8db65f265b64c8d10d15bdcb5c3a02c66631a
-  canonical_blob_sha: 55d78ff2f151a9953addaf0b840aa36e948ae845
+  discovered_followup: Preserved feature dede9ea linked against repair20bc90e passes stopped retirement
+    but fails cleanup after host registration2 rejects. GDB shows finalized Runtime, no registered host
+    spans and two retained events. Native unregister_memory rejects zero submission_token while Runtime
+    keeps ownership-uncertain before register_memory. Logs /tmp/cpp-m24-03r-preserved-feature.log and
+    preserved-state.log.
+  control_plane_revision: 273c042c04cda85c542a55b6e76ad4421f2c27ce
+  canonical_revision: 273c042c04cda85c542a55b6e76ad4421f2c27ce
+  canonical_blob_sha: 17f443c4b34c8f1ad9f5e1ae26c617d224811430
 dependencies:
 - M24-02
 scope:
@@ -78,6 +84,12 @@ acceptance:
   Lost-context reset must still return lost. Native-driver/API tests also prove running unregister remains
   rejected, stop-gated cleanup and exact counters. Actual inaccessible/lost physical context cleanup is
   not invented.
+- Failed native staged-memory registration can leave a zero submission token and either no ownership or
+  a residual buffer. Validate the complete registration descriptor and token header/reserved fields, identify
+  only an exact matching residual registration, and make descriptor-based zero-token cleanup succeed when
+  nothing remains. Retain and retry real host/device cleanup failure; do not clear unrelated live buffers
+  or accept malformed/mismatched nonzero tokens. Preserve legacy core semantics and public layouts. Add
+  native and actual Runtime startup rollback regressions plus an old-source negative control.
 - Preserve all existing CUDA tests and Runtime/pipeline/sample/ABI/package/benchmark behavior. No public
   layout/header, schema, support matrix, release version, ABI v8/70 exports/fingerprint/SONAME8 or device
   ABI v1 changes.

@@ -298,3 +298,9 @@ main, preserving all earlier tests/evidence and ABI/Runtime boundaries. Verify
 old-order negative control, full/sanitizer/package/ABI and exact-head hosted gates,
 then integrate separately and reactivate M24-03 under a canonical amendment.
 Standing scoped publication/merge authorization persists; no physical claims.
+
+Control amendment #511 at `273c042c04cda85c542a55b6e76ad4421f2c27ce`
+also covers the reproduced failed native-memory registration zero-token rollback
+cycle, within the same CUDA implementation/tests. Validate complete descriptors,
+retire only exact uncertain residual ownership, preserve successful registrations,
+and retain all failures. Reverify the combined repair before integrating #266.

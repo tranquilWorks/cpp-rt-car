@@ -1916,3 +1916,91 @@ TEST(CudaBackend, StoppedHalV2RuntimePipelineRetiresPendingAndLostBuffers) {
         EXPECT_TRUE(driver->protocol_ok.load());
     }
 }
+
+namespace {
+rt::HalV2MemoryRegistration stopped_memory(std::span<std::byte> bytes) {
+    rt::HalV2MemoryRegistration memory;
+    memory.domain_identity=2; memory.bytes=bytes.size(); memory.host_data=bytes.data();
+    memory.ownership=static_cast<std::uint32_t>(rt::HalV2MemoryOwnership::borrowed_host);
+    memory.access=RTFW_DEVICE_BUFFER_HOST_READ|RTFW_DEVICE_BUFFER_HOST_WRITE|
+                  RTFW_DEVICE_BUFFER_DEVICE_READ|RTFW_DEVICE_BUFFER_DEVICE_WRITE;
+    memory.coherency=static_cast<std::uint32_t>(rt::HalV2MemoryCoherency::staged_copy);
+    memory.synchronization=rt::hal_v2_memory_sync_copy_to_device|rt::hal_v2_memory_sync_copy_from_device;
+    std::copy_n("rollback.buffer",sizeof("rollback.buffer"),memory.name.begin());
+    return memory;
+}
+}
+
+TEST(CudaBackend, StoppedHalV2UncertainRegistrationRollsBackAbsentOrResidualOwnership) {
+    for(bool residual:{false,true}) {
+        StoppedCudaNative fixture;
+        auto& r=fixture.registration; auto& driver=*fixture.driver;
+        rt::HalV2InitializeConfig init; init.requested_in_flight=1; init.requested_registered_buffers=1;
+        ASSERT_EQ(r.api.initialize(r.api.instance,&init),rt::HalV2Status::ok);
+        const auto memory=stopped_memory(fixture.bytes); rt::HalV2MemoryToken token;
+        driver.fail_next_host_register=true; driver.fail_next_mem_free=residual;
+        EXPECT_NE(r.memory_topology->register_memory(r.memory_topology->instance,&memory,&token),rt::HalV2Status::ok);
+        EXPECT_EQ(token.submission_token,0u);
+        EXPECT_EQ(driver.allocations.load(),1u); EXPECT_EQ(driver.host_registrations.load(),0u);
+        auto invalid=memory; invalid.reserved[0]=1;
+        EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&invalid,&token),rt::HalV2Status::invalid_argument);
+        if(residual) {
+            invalid=memory; ++invalid.bytes;
+            EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&invalid,&token),rt::HalV2Status::invalid_argument);
+            driver.fail_next_mem_free=true;
+            EXPECT_NE(r.memory_topology->unregister_memory(r.memory_topology->instance,&memory,&token),rt::HalV2Status::ok);
+            EXPECT_EQ(driver.frees.load(),0u);
+        }
+        EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&memory,&token),rt::HalV2Status::ok);
+        EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&memory,&token),rt::HalV2Status::ok);
+        EXPECT_EQ(driver.frees.load(),1u);
+        EXPECT_EQ(r.api.shutdown(r.api.instance),rt::HalV2Status::ok);
+    }
+}
+
+TEST(CudaBackend, StoppedHalV2ZeroTokenCannotReleaseSuccessfulRegistration) {
+    StoppedCudaNative fixture; auto& r=fixture.registration;
+    rt::HalV2InitializeConfig init; init.requested_in_flight=1; init.requested_registered_buffers=1;
+    ASSERT_EQ(r.api.initialize(r.api.instance,&init),rt::HalV2Status::ok);
+    const auto memory=stopped_memory(fixture.bytes); rt::HalV2MemoryToken token,empty;
+    ASSERT_EQ(r.memory_topology->register_memory(r.memory_topology->instance,&memory,&token),rt::HalV2Status::ok);
+    EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&memory,&empty),rt::HalV2Status::invalid_argument);
+    auto invalid=token; invalid.reserved[0]=1;
+    EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&memory,&invalid),rt::HalV2Status::invalid_argument);
+    auto descriptor=memory; descriptor.coherency=0;
+    EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&descriptor,&token),rt::HalV2Status::invalid_argument);
+    EXPECT_EQ(fixture.driver->frees.load(),0u); EXPECT_EQ(fixture.driver->host_unregistrations.load(),0u);
+    EXPECT_EQ(r.memory_topology->unregister_memory(r.memory_topology->instance,&memory,&token),rt::HalV2Status::ok);
+    EXPECT_EQ(fixture.driver->frees.load(),1u); EXPECT_EQ(fixture.driver->host_unregistrations.load(),1u);
+}
+
+TEST(CudaBackend, StoppedHalV2RuntimeStartupFailureReleasesUncertainMemory) {
+    namespace p=rtfw::cuda_physics::pipeline;
+    struct Driver : p::SimulatedDriver {
+        unsigned attempts=0;
+        explicit Driver(const p::Options& options):p::SimulatedDriver(options) {}
+        p::Session failing_session() {
+            auto result=session();
+            result.driver.host_register=[](void* driver_data,void* host,std::uint64_t bytes) noexcept {
+                auto& owner=static_cast<Driver&>(*static_cast<p::SimulatedDriver*>(driver_data));
+                if(++owner.attempts==2) return rt::CudaDriverResult::error;
+                const auto original=owner.session().driver;
+                return original.host_register(driver_data,host,bytes);
+            };
+            return result;
+        }
+    };
+    for(bool active:{false,true}) for(bool graph:{false,true}) {
+        p::Options options{{17,1,0,2},graph,active};
+        auto driver=std::make_unique<Driver>(options);
+        auto scenario=std::make_unique<p::Scenario>(options,driver->failing_session());
+        ASSERT_EQ(scenario->prepare(),rt::Status::ok);
+        EXPECT_NE(scenario->start(),rt::Status::ok);
+        EXPECT_EQ(driver->attempts,2u);
+        EXPECT_EQ(scenario->stop(),rt::Status::ok);
+        EXPECT_EQ(scenario->stop(),rt::Status::ok);
+        EXPECT_EQ(scenario->publications(0),0u); EXPECT_EQ(scenario->publications(1),0u);
+        EXPECT_EQ(driver->registrations.load(),1u); EXPECT_EQ(driver->unregistrations.load(),1u);
+        EXPECT_TRUE(driver->clean()); EXPECT_EQ(driver->backend_frees.load(),0u);
+    }
+}

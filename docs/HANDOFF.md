@@ -2,7 +2,8 @@
 
 M24-02 merged as #264 at `5c82703d0c2840d13e18770d2d1b3083a96e29c0` with all
 32 hosted checks passing. M24-03 draft #265 exposed a pending/quarantined CUDA
-cleanup cycle. Separate control #510 activates M24-03R. The repair adds explicit
+cleanup cycle. Control #510 and amendment #511 activate M24-03R. The repair adds descriptor-based
+uncertain registration rollback and explicit
 stop-gated retirement during unregister and preserves failed-sync retry ownership.
 See [repair evidence](evidence/M24-03R-2026-09-27.md). Verification/integration
 is pending; after merge, canonically reactivate and finish M24-03. M24-04,
