@@ -168,8 +168,9 @@ inline bool isolated() {
     const bool overlapping=await([&]{return good.driver->records==2 && bad.driver->records==1 &&
         good.driver->not_ready>0 && bad.driver->not_ready>0;});
     bad.driver->lose_query=true;
+    b.join();
     good.driver->hold=false; bad.driver->hold=false;
-    a.join(); b.join();
+    a.join();
     LIFETIME_CHECK(overlapping && good_status==Status::ok && bad_status==Status::device_lost);
     LIFETIME_CHECK(good.scenario->completed()==2 && good.scenario->publications(0)==2 &&
         good.scenario->publications(1)==2 && good.driver->faults==0);
