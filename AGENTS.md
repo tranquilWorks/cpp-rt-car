@@ -288,3 +288,19 @@ Preserve the original reference and tests, Runtime, backends, ABI and benchmarks
 Retain the prior local timeout and stack limitation. Standing scoped
 publication/integration authorization continues; physical CUDA stays NOT RUN
 without a named actual device. M24-03/04 and maturity closure remain separate.
+
+## M24-03R stopped CUDA retirement repair
+
+Control #510 merged at `97c8db65f265b64c8d10d15bdcb5c3a02c66631a`.
+M24-03 draft #265 at `dede9ea` retains a pending CUDA cleanup ownership cycle.
+Repair only the allowed CUDA implementation and regressions against M24-02
+main, preserving all earlier tests/evidence and ABI/Runtime boundaries. Verify
+old-order negative control, full/sanitizer/package/ABI and exact-head hosted gates,
+then integrate separately and reactivate M24-03 under a canonical amendment.
+Standing scoped publication/merge authorization persists; no physical claims.
+
+Control amendment #511 at `273c042c04cda85c542a55b6e76ad4421f2c27ce`
+also covers the reproduced failed native-memory registration zero-token rollback
+cycle, within the same CUDA implementation/tests. Validate complete descriptors,
+retire only exact uncertain residual ownership, preserve successful registrations,
+and retain all failures. Reverify the combined repair before integrating #266.
