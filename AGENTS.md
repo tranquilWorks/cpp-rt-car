@@ -304,3 +304,13 @@ also covers the reproduced failed native-memory registration zero-token rollback
 cycle, within the same CUDA implementation/tests. Validate complete descriptors,
 retire only exact uncertain residual ownership, preserve successful registrations,
 and retain all failures. Reverify the combined repair before integrating #266.
+
+## M24-03R2 private Runtime race repair
+
+Canonical control #513 merged at `ab190c04413d3cee42b05f612c2b164f36111438`.
+Preserve feature #265 at0fb7cb1 and all TSan/stack/timeout failures. Repair only
+private DeviceManager ownership metadata and independent command-batch
+regressions on integrated CUDA repair #266. No sanitizer suppressions, deadlines,
+public ABI or CUDA changes. Verify/integrate separately, canonically reactivate
+M24-03, finish the feature and report remaining work. Standing scoped authority
+continues; physical/manual gates remain separate.
