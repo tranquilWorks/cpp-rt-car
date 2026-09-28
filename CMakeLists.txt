@@ -1288,3 +1288,10 @@ install(FILES
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/cuda_physics/benchmark)
 install(FILES docs/cuda_benchmarking.md docs/cuda_capabilities.json docs/cuda_capabilities.md
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+
+# Source-only onboarding kit; no SDK export or public header is added.
+install(FILES samples/hello_runtime/main.cpp samples/hello_runtime/CMakeLists.txt
+    samples/hello_runtime/check_output.cmake
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/hello_runtime)
+install(FILES docs/getting_started.md
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)

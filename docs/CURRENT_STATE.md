@@ -1,3 +1,23 @@
+# M25-01 consumer installation and hello Runtime
+
+M24 portable software merged as PR268 at facc42d4a09d1dab398d75dc92000a05fb08c396.
+Canonical control PR520 at d1512a06be447fb275c625ca51b7d67a854b4bed activates
+M25-01, blob462f1f1ab2915ff833905e45be317cb5a484c438. The 57-line public graph,
+installed source kit, consumer-first README/shipped guide and legacy notices
+are implemented. Local quick46/full50, SDK21, CUDA source11+11, ASan/UBSan3
+and TSan3, exact README transcripts, static and ABI checks pass. Exact-head
+hosted verification and integration are tracked in
+[evidence](evidence/M25-01-2026-09-28.md); integration is pending.
+
+The next software batch is M25-02 typed helpers/RAII/diagnostics, followed by
+backend authoring, external CIL, independent host integration and full installed
+API/recipes. M26 has six more software batches. No later batch is activated.
+Independent novice review, physical/RT qualification, controlled performance,
+Unreal and signing/release/deployment remain separate. Preserve every Runtime,
+ABI, M23/M24 source, repair and evidence binding.
+
+## Historical M24 completion checkpoint
+
 # M24-04 benchmark and maturity closure
 
 M24-03 merged as #265 at `74e59e8850ccb24d71a0fdbedfe4305971e773df` with all32

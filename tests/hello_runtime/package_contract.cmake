@@ -1,0 +1,11 @@
+# Keep this additive to the preserved SDK/CUDA inventories.
+set(hello_kit "${RTFW_DATA_DIR}/examples/hello_runtime")
+file(GLOB hello_sources LIST_DIRECTORIES FALSE RELATIVE "${hello_kit}" "${hello_kit}/*")
+list(SORT hello_sources)
+if(NOT "${hello_sources}" STREQUAL "CMakeLists.txt;check_output.cmake;main.cpp")
+    message(FATAL_ERROR "hello Runtime source inventory differs from contract")
+endif()
+if(NOT EXISTS "${RTFW_DATA_DIR}/getting_started.md")
+    message(FATAL_ERROR "hello Runtime first-use guide is missing")
+endif()
+add_subdirectory("${hello_kit}" hello-runtime)

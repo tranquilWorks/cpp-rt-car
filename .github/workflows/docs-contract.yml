@@ -24,7 +24,24 @@ jobs:
         run: python3 tools/check_release_contract.py
       - name: Test release tooling
         run: python3 tests/test_release_tools.py
-      - name: Run README quick start
+      - name: Run installed SDK first use
+        run: |
+          cmake -S . -B build-sdk -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF -DRTFW_BUILD_EXAMPLES=OFF -DRTFW_BUILD_RUNTIME_DEMO=OFF -DRTFW_BUILD_EXPERIMENTAL=OFF
+          cmake --build build-sdk --config Release --parallel 2
+          cmake --install build-sdk --config Release --prefix "$PWD/rtfw-sdk"
+          cmake -S rtfw-sdk/share/rtfw/examples/hello_runtime -B build-hello -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/rtfw-sdk"
+          cmake --build build-hello --config Release --parallel 2
+          ctest --test-dir build-hello -C Release --output-on-failure
+      - name: Run embedded SDK first use
+        run: |
+          cmake -S samples/hello_runtime -B build-hello-embedded -DCMAKE_BUILD_TYPE=Release -DHELLO_RTFW_SOURCE="$PWD"
+          cmake --build build-hello-embedded --config Release --parallel 2
+          ctest --test-dir build-hello-embedded -C Release --output-on-failure
+      - name: Verify relocated hello and failure diagnostics
+        run: python3 tests/hello_runtime/verify_package.py --work-directory build-hello-package
+      - name: Analyze public hello source
+        run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/hello_runtime/main.cpp
+      - name: Run README contributor build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF -DSIM_WERROR=OFF
           cmake --build build --parallel 2

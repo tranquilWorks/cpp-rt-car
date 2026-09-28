@@ -208,3 +208,5 @@ if (RTFW_TEST_BENCHMARK)
     target_link_libraries(rtfw_consumer_benchmark_runtime PRIVATE rtfw::runtime rtfw::benchmark)
     add_test(NAME benchmark_runtime_package_consumer COMMAND rtfw_consumer_benchmark_runtime)
 endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/../hello_runtime/package_contract.cmake")

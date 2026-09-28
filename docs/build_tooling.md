@@ -1,6 +1,9 @@
 # Build and Tooling Guide
 
-## Direct build
+For first use, follow the [installed SDK and hello graph guide](getting_started.md).
+It includes a tests-OFF installation and both public consumer modes.
+
+## Contributor direct build
 
 The supported baseline is CMake 3.20+ and C++20:
 

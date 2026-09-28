@@ -1,3 +1,4 @@
+// Legacy research experiment; not the Runtime SDK entry path. See README.md.
 #include <vector>
 #include <iostream>
 

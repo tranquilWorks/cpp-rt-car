@@ -885,3 +885,15 @@ Portable closure requires at least90% of all rows and100% critical coverage;
 physical-only rows remain included and explicitly NOT RUN. M25's six consumer/
 SDK batches and M26's six full-system batches remain. Physical CUDA/RT, controlled
 performance, independent human review, signing/release/deployment are separate.
+
+## M25-01 consumer installation and hello Runtime
+
+M24 portable software merged as PR268 at facc42d4a09d1dab398d75dc92000a05fb08c396
+after all32 exact-head checks. Control PR520 activates the separately bounded
+first-use batch: a 57-line raw public graph, installed/embedded consumer paths,
+shipped guide, exact-output/package tests and legacy experiment notices.
+See [first use](getting_started.md) and [evidence](evidence/M25-01-2026-09-28.md).
+M25-02 typed helpers, M25-03 backend kit, M25-04 external CIL, M25-05 independent
+host and M25-06 full installed docs remain. M26 has six further software batches.
+Independent novice review, physical/RT qualification, controlled performance
+and signing/release remain separate.
