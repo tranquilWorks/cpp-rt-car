@@ -1,8 +1,8 @@
 # RTFW Completion Roadmap
 
-M21, M22 and M23 are portable-software complete. M24-01/02/03 are merged,
-including lifetime repairs. M24-04 implementation and local verification are
-complete; its scoped target PR records final exact-head hosted checks/integration.
+M21 through M24 portable software and M25-01 are merged. M25-02 optional typed
+SDK helpers are implemented; its evidence and scoped target PR track verification
+and integration. M25-03 through M25-06 remain separate later batches.
 Software feature completion remains M26-06. Physical and controlled-host evidence
 remain separate and unperformed here.
 
@@ -49,7 +49,7 @@ pass; file presence or a passing smoke test is not sufficient.
 | M22 | Complete | M22-01 through M22-04 merged; typed controls, replay and stress closure at portable RT0 |
 | M23 | Complete | M23-01 through M23-05 merged, including offline analysis and the extension source kit; physical/controlled evidence remains separate |
 | M24 | Portable closure | Runtime CUDA model, oracle, failure/lifetime, benchmarks, host correlations and capability coverage40/44 with37/37 critical; final hosted/integration evidence is retained in the M24-04 PR; physical M18 gates remain |
-| M25 | Planned | Consumer SDK, backend kit, external CIL, independent host adapter and installed docs |
+| M25 | In progress | M25-01 merged; M25-02 typed SDK verification/integration active; backend kit, external CIL, independent host adapter and full installed docs remain |
 | M26 | Planned | Golden full-system scenario, fault/benchmark/replay/documentation and final software audit |
 
 ## M0 — Product contract and truth reset
@@ -897,3 +897,13 @@ M25-02 typed helpers, M25-03 backend kit, M25-04 external CIL, M25-05 independen
 host and M25-06 full installed docs remain. M26 has six further software batches.
 Independent novice review, physical/RT qualification, controlled performance
 and signing/release remain separate.
+
+## M25-02 optional typed SDK
+
+The optional header-only SDK, typed source kit and guide are implemented under
+canonical control PR524. Builders preserve raw graph/config statuses and plans;
+partial capacity arithmetic and checked-stop ownership remain explicit. See
+[typed SDK](typed_runtime.md) and [evidence](evidence/M25-02-2026-09-28.md) for
+validation and integration. Four later M25 software batches and six M26 batches
+remain; independent novice review and hardware/RT/performance/release gates are
+separate. The raw hello and all compiled production implementations are preserved.

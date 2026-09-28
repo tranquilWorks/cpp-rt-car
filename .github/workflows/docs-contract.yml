@@ -41,6 +41,10 @@ jobs:
         run: python3 tests/hello_runtime/verify_package.py --work-directory build-hello-package
       - name: Analyze public hello source
         run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/hello_runtime/main.cpp
+      - name: Verify relocated typed SDK and negative controls
+        run: python3 tests/typed_runtime/verify_package.py --work-directory build-typed-package
+      - name: Analyze typed SDK source
+        run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/typed_runtime/main.cpp tests/typed_runtime/test_sdk.cpp
       - name: Run README contributor build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF -DSIM_WERROR=OFF

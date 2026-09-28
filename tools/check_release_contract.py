@@ -50,6 +50,18 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'rt/include/rt/sdk.hpp',
+    'docs/typed_runtime.md',
+    'samples/typed_runtime/CMakeLists.txt',
+    'samples/typed_runtime/check_output.cmake',
+    'samples/typed_runtime/main.cpp',
+    'tests/typed_runtime/check_stop_failure.cmake',
+    'tests/typed_runtime/CMakeLists.txt',
+    'tests/typed_runtime/plan_fields.inc',
+    'tests/typed_runtime/package_contract.cmake',
+    'tests/typed_runtime/test_sdk.cpp',
+    'tests/typed_runtime/verify_package.py',
+
     'samples/hello_runtime/main.cpp',
     'samples/hello_runtime/CMakeLists.txt',
     'samples/hello_runtime/check_output.cmake',

@@ -1,5 +1,11 @@
 # Architecture
 
+M25-02 adds optional `<rt/sdk.hpp>` source helpers above the unchanged raw API.
+Typed callbacks borrow explicit state; builders delegate validation, capacity
+arithmetic is partial, and checked-stop guards terminate on unresolved destructor
+cleanup. No compiled ABI, execution lane or Runtime allocation changes.
+See [typed Runtime](typed_runtime.md) for ownership and error semantics.
+
 M21-05 closes the existing M21 transport without adding an execution lane.
 M22-01 adds the separate data-only live-control staging surface. M22-02 adds a
 bounded frame-owner scan, deterministic replacement/order, inactive/active

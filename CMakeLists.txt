@@ -1061,6 +1061,7 @@ install(
         rt/include/rt/runtime.hpp
         rt/include/rt/loopback_backend.hpp
         rt/include/rt/live_control.hpp
+        rt/include/rt/sdk.hpp
         rt/include/rt/status.hpp
         rt/include/rt/version.hpp
         rt/include/rt/cuda_backend.hpp
@@ -1295,3 +1296,8 @@ install(FILES samples/hello_runtime/main.cpp samples/hello_runtime/CMakeLists.tx
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/hello_runtime)
 install(FILES docs/getting_started.md
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+
+install(FILES samples/typed_runtime/main.cpp samples/typed_runtime/CMakeLists.txt
+    samples/typed_runtime/check_output.cmake
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/typed_runtime)
+install(FILES docs/typed_runtime.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)

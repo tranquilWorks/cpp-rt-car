@@ -1,0 +1,11 @@
+# Keep this additive to the preserved SDK/CUDA inventories.
+set(typed_kit "${RTFW_DATA_DIR}/examples/typed_runtime")
+file(GLOB typed_sources LIST_DIRECTORIES FALSE RELATIVE "${typed_kit}" "${typed_kit}/*")
+list(SORT typed_sources)
+if(NOT "${typed_sources}" STREQUAL "CMakeLists.txt;check_output.cmake;main.cpp")
+    message(FATAL_ERROR "typed Runtime source inventory differs from contract")
+endif()
+if(NOT EXISTS "${RTFW_DATA_DIR}/typed_runtime.md")
+    message(FATAL_ERROR "typed Runtime first-use guide is missing")
+endif()
+add_subdirectory("${typed_kit}" typed-runtime)

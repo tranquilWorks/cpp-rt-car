@@ -112,3 +112,13 @@ if(RTFW_BUILD_TESTS)
             -P "${CMAKE_CURRENT_SOURCE_DIR}/hello_runtime/check_output.cmake")
     set_tests_properties(hello_runtime_output PROPERTIES TIMEOUT 30)
 endif()
+
+add_executable(sample_typed_runtime typed_runtime/main.cpp)
+target_link_libraries(sample_typed_runtime PRIVATE rtfw::runtime)
+rtfw_enable_project_warnings(sample_typed_runtime)
+if(RTFW_BUILD_TESTS)
+    add_test(NAME typed_runtime_output
+        COMMAND "${CMAKE_COMMAND}" "-DTYPED_EXECUTABLE=$<TARGET_FILE:sample_typed_runtime>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/typed_runtime/check_output.cmake")
+    set_tests_properties(typed_runtime_output PROPERTIES TIMEOUT 30)
+endif()

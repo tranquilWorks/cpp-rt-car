@@ -350,3 +350,13 @@ Implement only the bounded hello/install/embedding/legacy separation contract.
 Preserve Runtime, ABI, all M23/M24 implementation and evidence bindings.
 Standing scoped publication/integration authorization applies. M25-02 and later
 batches, independent novice review, hardware/RT, signing/release remain separate.
+
+## M25-02 activation (2026-09-28)
+
+M25-01 merged as PR269 at d3052a0f7f17a0cd68334123aea3869fcae2094a.
+Canonical control PR524 merged at ad159304c00151e248ffe2b7f5699c341a8b5361,
+blob d598ea817902036ebdf85cb1407e6cb78043ca08. Implement only its optional typed SDK, checked builders,
+capacity arithmetic, guard, diagnostics and shipped consumer scope. Preserve
+compiled production and historical evidence. All32 target checks remain required.
+Standing scoped publication/integration authorization persists. Do not activate
+M25-03; hardware/RT, independent review, performance and release remain separate.

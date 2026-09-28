@@ -539,3 +539,5 @@ add_test(NAME m24_cuda_capabilities COMMAND ${RTFW_PYTHON_EXECUTABLE}
 set_tests_properties(m24_cuda_capabilities PROPERTIES TIMEOUT 60)
 
 add_subdirectory(hello_runtime)
+
+add_subdirectory(typed_runtime)
