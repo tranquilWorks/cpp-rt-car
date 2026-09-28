@@ -1280,3 +1280,11 @@ install(FILES
     samples/cuda_physics/lifetime/main.cpp
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/cuda_physics/lifetime)
 install(FILES docs/cuda_lifetime.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+
+install(FILES
+    samples/cuda_physics/benchmark/provider.hpp
+    samples/cuda_physics/benchmark/provider.cpp
+    samples/cuda_physics/benchmark/main.cpp
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/cuda_physics/benchmark)
+install(FILES docs/cuda_benchmarking.md docs/cuda_capabilities.json docs/cuda_capabilities.md
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)

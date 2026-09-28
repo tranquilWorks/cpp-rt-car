@@ -1,8 +1,8 @@
 # RTFW Completion Roadmap
 
-M21 and M22 are portable-software complete. M23-01 through M23-04 are merged,
-including PR #260 after all 32 exact-head checks. M23-05 is active under control
-PR #494: offline regression analysis and an installed third-party provider kit.
+M21, M22 and M23 are portable-software complete. M24-01/02/03 are merged,
+including lifetime repairs. M24-04 implementation and local verification are
+complete; its scoped target PR records final exact-head hosted checks/integration.
 Software feature completion remains M26-06. Physical and controlled-host evidence
 remain separate and unperformed here.
 
@@ -47,8 +47,8 @@ pass; file presence or a passing smoke test is not sufficient.
 | M20 | In progress | M20-PRE-01 is merged with deterministic host-independent fuzz, static, dependency, candidate-SBOM/provenance, strict-manifest, offline-fixture, and relocated-package assurance without signing or release; CAP-M20 remains open |
 | M21 | Complete | M21-01 through M21-05 are merged with fixed logical actions, conditional checkpoint state, deterministic active replay, and reusable public-surface conformance; physical/RT qualification remains separate |
 | M22 | Complete | M22-01 through M22-04 merged; typed controls, replay and stress closure at portable RT0 |
-| M23 | In progress | M23-01 through M23-04 merged; M23-05 analysis/extension implementation complete in PR #261, which records final verification/integration; physical/controlled evidence remains separate |
-| M24 | Planned | Runtime-integrated CUDA physics, CPU oracle, bounded failure/lifetime and capability coverage |
+| M23 | Complete | M23-01 through M23-05 merged, including offline analysis and the extension source kit; physical/controlled evidence remains separate |
+| M24 | Portable closure | Runtime CUDA model, oracle, failure/lifetime, benchmarks, host correlations and capability coverage40/44 with37/37 critical; final hosted/integration evidence is retained in the M24-04 PR; physical M18 gates remain |
 | M25 | Planned | Consumer SDK, backend kit, external CIL, independent host adapter and installed docs |
 | M26 | Planned | Golden full-system scenario, fault/benchmark/replay/documentation and final software audit |
 
@@ -872,3 +872,16 @@ M24-04 remains: benchmark/profiler integration and capability coverage of at lea
 full-system golden reference (six batches) follow. Physical CUDA, controlled
 performance, independent human review, RT qualification, signing and release
 remain separate gates. CAP-M24 is not closed by this conformance batch.
+
+## M24-04 benchmark and capability closure
+
+M24-03 merged as #265 after all32 checks. Control #516 activates the optional
+M23 particle benchmark provider, fixed host correlation stream and evidence-bound
+capability matrix. Existing Runtime/backends, model, all207 M23 cases and lifetime
+repairs remain unchanged. See [benchmark usage](cuda_benchmarking.md),
+[generated coverage](cuda_capabilities.md) and
+[verification](evidence/M24-04-2026-09-27.md) for current gate/integration status.
+Portable closure requires at least90% of all rows and100% critical coverage;
+physical-only rows remain included and explicitly NOT RUN. M25's six consumer/
+SDK batches and M26's six full-system batches remain. Physical CUDA/RT, controlled
+performance, independent human review, signing/release/deployment are separate.

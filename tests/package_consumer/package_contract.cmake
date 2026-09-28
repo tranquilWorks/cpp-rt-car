@@ -289,3 +289,18 @@ endif()
 if(NOT EXISTS "${RTFW_DATA_DIR}/cuda_lifetime.md")
     message(FATAL_ERROR "CUDA lifetime documentation is missing")
 endif()
+
+set(expected_cuda_benchmark_sources main.cpp provider.cpp provider.hpp)
+file(GLOB actual_cuda_benchmark_sources LIST_DIRECTORIES FALSE
+    RELATIVE "${RTFW_DATA_DIR}/examples/cuda_physics/benchmark"
+    "${RTFW_DATA_DIR}/examples/cuda_physics/benchmark/*")
+list(SORT expected_cuda_benchmark_sources)
+list(SORT actual_cuda_benchmark_sources)
+if(NOT actual_cuda_benchmark_sources STREQUAL expected_cuda_benchmark_sources)
+    message(FATAL_ERROR "CUDA benchmark source inventory differs from contract")
+endif()
+foreach(document cuda_benchmarking.md cuda_capabilities.json cuda_capabilities.md)
+    if(NOT EXISTS "${RTFW_DATA_DIR}/${document}")
+        message(FATAL_ERROR "Missing CUDA maturity document ${document}")
+    endif()
+endforeach()
