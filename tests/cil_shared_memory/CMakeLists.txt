@@ -1,0 +1,11 @@
+if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8
+   AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+    add_executable(test_cil_shared_memory test_cil.cpp)
+    target_link_libraries(test_cil_shared_memory PRIVATE rtfw::runtime)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_libraries(test_cil_shared_memory PRIVATE rt)
+    endif()
+    rtfw_enable_project_warnings(test_cil_shared_memory)
+    add_test(NAME cil_shared_memory_contract COMMAND test_cil_shared_memory)
+    set_tests_properties(cil_shared_memory_contract PROPERTIES TIMEOUT 60)
+endif()

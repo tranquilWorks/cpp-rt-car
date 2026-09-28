@@ -1,5 +1,10 @@
 # First bounded Runtime graph
 
+M25-04 adds the optional source-only [external shared-memory CIL reference](cil_shared_memory.md):
+separate controller and public Runtime plant, bounded versioned channels, explicit
+hold/reconnect/ownership policy and installed process tests on Linux/Windows x86-64.
+It adds no mandatory SDK target or compiled ABI and makes no physical/RT claim.
+
 RTFW 1.2.1 is a C++20 portable RT0 runtime. This guide and the
 `examples/hello_runtime/` source kit ship beside each other under
 `<prefix>/<datadir>/rtfw/`. The kit contains `main.cpp`, `CMakeLists.txt` and

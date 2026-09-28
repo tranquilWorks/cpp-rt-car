@@ -1309,3 +1309,12 @@ install(FILES samples/backend_authoring/main.cpp samples/backend_authoring/CMake
     samples/backend_authoring/runtime_example.hpp
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/backend_authoring)
 install(FILES docs/backend_authoring.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+
+# Optional source reference, never a mandatory Runtime dependency or SDK target.
+install(FILES samples/cil_shared_memory/CMakeLists.txt
+    samples/cil_shared_memory/channel.hpp samples/cil_shared_memory/common.hpp
+    samples/cil_shared_memory/controller.cpp samples/cil_shared_memory/mapping.hpp
+    samples/cil_shared_memory/plant.cpp samples/cil_shared_memory/plant_runtime.hpp
+    samples/cil_shared_memory/runner.py samples/cil_shared_memory/wire.hpp
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/cil_shared_memory)
+install(FILES docs/cil_shared_memory.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)

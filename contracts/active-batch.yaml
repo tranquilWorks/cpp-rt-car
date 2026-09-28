@@ -1,27 +1,27 @@
 schema_version: 1
 batch:
-  id: M25-03
-  title: Backend authoring kit and conformance
-  goal: Ship a minimal fixed-storage HAL-v2 backend template, reusable bounded conformance harness, real
-    Runtime consumer and complete ownership/failure guide using installed public artifacts.
+  id: M25-04
+  title: External CIL shared-memory reference
+  goal: Ship an optional fixed-capacity local shared-memory transport and actual external-controller/Runtime-plant
+    reference with exact wire, freshness, generation, reconnect and shutdown contracts.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
   - products/cpp-rt-car/PRD.md#cap-m25--consumer-sdk-and-integration-experience
   - products/cpp-rt-car/acceptance.yaml#CAP-M25
-  milestone: products/cpp-rt-car/milestones/M25.md#m25-03--backend-authoring-kit-and-conformance
-  baseline_commit: e562ab164162b67d009171b5c8f53e9b04866285
+  milestone: products/cpp-rt-car/milestones/M25.md#m25-04--external-cil-shared-memory-reference
+  baseline_commit: 315b04b25dd41acbd3a21313a093cf90b19c95ac
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M25-03.yaml
-  predecessor: M25-02 PR270 merged after all32 exact-head checks; tested/merged tree e2dc960d402881623a8369099f71a22c440cc226.
-  owner_scope: Owner requested 03 now. Standing scoped planning, implementation, publication and integration
-    authorization persists. Merge canonical planning before target activation; do not activate M25-04.
-  control_plane_revision: 7585342836adf7d5e90cd62acb8d4237dc802f22
-  canonical_revision: 7585342836adf7d5e90cd62acb8d4237dc802f22
-  canonical_blob_sha: d65ec3071611b480748f3a92eca937160a5ea8d7
+  control_plane_path: products/cpp-rt-car/batches/M25-04.yaml
+  predecessor: M25-03 PR271 merged after all32 exact-head checks; tested/merged tree9ef0cee658daf2d56b8c17500debaa80a26ccaa9.
+  owner_scope: Owner requested 04 lets go. Standing scoped planning, implementation, publication and integration
+    authority persists. Merge canonical planning before target activation. Do not activate M25-05.
+  control_plane_revision: 6927945598352edb25ec27759f6fd633a3b6f4de
+  canonical_revision: 6927945598352edb25ec27759f6fd633a3b6f4de
+  canonical_blob_sha: e0e7d67c81ca110f18762425402899273311403a
 dependencies:
-- M25-02
-- M21-05
+- M25-03
+- M22-04
 scope:
   allowed_paths:
   - AGENTS.md
@@ -32,18 +32,18 @@ scope:
   - CMakeLists.txt
   - samples/CMakeLists.txt
   - samples/README.md
-  - samples/backend_authoring/**
+  - samples/cil_shared_memory/**
   - tests/CMakeLists.txt
-  - tests/backend_authoring/**
+  - tests/cil_shared_memory/**
   - tests/package_consumer/CMakeLists.txt
-  - docs/backend_authoring.md
+  - docs/cil_shared_memory.md
   - docs/getting_started.md
   - docs/product_contract.md
   - docs/architecture.md
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
   - docs/roadmap.md
-  - docs/evidence/M25-03-*
+  - docs/evidence/M25-04-*
   - tools/check_release_contract.py
   - tools/static_analysis_sources.txt
   - .github/workflows/docs-contract.yml
@@ -87,93 +87,101 @@ scope:
   - LICENSE
   - CHANGELOG.md
   - SECURITY.md
+  - samples/backend_authoring/
+  - tests/backend_authoring/
+  - docs/backend_authoring.md
+  - docs/evidence/M25-03-*
 acceptance:
-- Ship a small source-only HAL-v2 core backend template under samples/backend_authoring, independent of
-  private Runtime headers and vendor libraries. Implement all ten required table operations, complete
-  size/version/reserved validation and truthful capabilities using fixed caller-owned/backend-owned storage,
-  explicit negotiated capacities, nonzero stale-safe buffer tokens and one bounded copy command. Unsupported
-  extensions remain absent; no production HAL/runtime repair or public header/export change.
-- Handle concurrent submit/poll with bounded nonblocking atomic ownership and no spin wait, heap allocation,
-  hidden threads, locks or I/O. Bound copies and queue/registry scans; reject saturation before ownership
-  transfer. Match accepted submission IDs exactly once; never write payload after failure/cancel/retirement.
-  Report health/generation/counters and retain borrowed buffers until work is quiescent. Explain single-slot
-  throughput limits and control-thread-only lifecycle operations.
-- Provide explicit deterministic fault hooks for partial initialization, registration, completion error/timeout/loss
-  and cleanup failures as portable test fixtures. Successful reset and reinitialization must retire stale
-  work consistently. Failed unregister/shutdown must preserve ownership and permit bounded explicit retry;
-  report invalid_state after failed initialization only when no resource remains. Fault injection is not
-  hardware failure qualification.
-- Ship reusable framework-free conformance code accepting the public HAL table plus explicit command-profile/fault/ownership
-  hooks and caller-owned test storage. Exercise discovery, malformed input, negotiated queue/buffer saturation,
-  token/range/access validity, accepted completion content/count/identity, cancel, health/reset, failed-start
-  rollback, stop and cleanup retry. Keep a finite call budget and explicit result records, and keep caller
-  storage alive if cleanup remains unresolved. Do not present a copy-profile fixture as universal HAL
-  or vendor qualification.
-- Run the same reference backend through actual public Runtime register/finalize/start/device-phase/dependent-CPU/step/checked-stop
-  entry points. Independently verify copied bytes, sequencing, status propagation, resource conservation,
-  failure recovery and multiple-instance isolation. Demonstrate existing device-ABI-v1 compatibility with
-  public mock registration alongside native v2 and document their source/binary and optional native-driver
-  boundaries.
-- Add independent harness negative controls that detect deliberately defective capability/capacity, token/ownership,
-  completion identity/count/content, failure/reset and cleanup reporting. Exercise direct concurrent submit/poll,
-  repeated generations, malformed boundaries, zero steady-state allocation, strict compiler builds, ASan/UBSan/leaks
-  and TSan. Preserve earlier tests and evidence rather than deriving expectations from the backend implementation.
-- Install exact source/CMake/oracle/harness inventory and a self-contained authoring guide with capability
-  checklist, fixed-storage publication/retirement pattern, lifecycle/ownership table, failure matrix,
-  v1 translation guidance and extension/native-driver limits. Compile/run standalone installed find_package
-  and source embedding from a relocated archive with removed original prefix, custom paths/spaces and
-  public target only. Add package coverage through a separate additive consumer contract; preserve the
-  exact public SDK header/target inventory and all earlier raw/typed/CUDA consumers.
-- Run full local profiles, focused sanitizer/static/allocation gates, complete SDK and existing CUDA relocated/source
-  consumers, ABI and all32 exact-head target check records with unchanged name/multiplicity. Preserve
-  the complete M24 capability matrix/source/evidence bindings unchanged. Record canonical revision/blob,
-  acceptance mapping, retained failures, commands/results, self-review, rollback and residual/unperformed
-  gates. Close only M25-03; M25-04 and later remain separate.
+- Ship a source-only optional shared-memory CIL kit and guide using public Runtime artifacts. Keep it
+  off the mandatory runtime/library dependency graph and SDK header/export inventory. Support and test
+  declared little-endian64-bit Linux GCC/Clang and Windows MSVC mappings/atomic primitives; fail clearly
+  for unsupported standalone targets and keep unrelated supported Runtime builds independent. No production
+  runtime/backend repair or ABI/support promotion.
+- Define an exact versioned fixed-size byte protocol with explicit offsets, endianness, lengths, known
+  kinds/flags/reserved fields, nonzero session generation, sequence, correlation, host timestamp domain
+  and finite expiry. Provide an independently encoded golden fixture and reject malformed, truncated,
+  oversized, duplicate, skipped, stale-generation, stale/future/expired and overflow records without applying
+  plant input. Explain trusted same-host peer assumptions and absence of authentication/network/safety
+  claims.
+- Use fixed-capacity bounded SPSC channels with explicit backpressure and release/acquire publication/retirement;
+  never overwrite unread or partially written payload. Steady transport and Runtime callbacks perform
+  no allocation, mapping/open/close/process operations, locks, I/O, hidden thread creation or unbounded
+  retries. Initialization, process orchestration and finite waits remain outside RT callbacks. Test capacity
+  and no-allocation, concurrent payload conservation, sequence exhaustion and exact ordering.
+- Provide checked OS mapping ownership for exclusive creation, bounded names, attachment/header validation,
+  initialization-not-ready, wrong schema/extent, duplicate controller rejection, close/unlink and partial
+  failure cleanup. Reconnect creates a fresh exclusive mapping and generation, never resets shared slots
+  in place under a stale peer. An old live or dead peer cannot corrupt the new session; stale name/generation
+  and crash-mid-publication cases must remain explicit. Detach callback endpoints before unmapping; retain
+  any unresolved local cleanup resource for explicit retry.
+- Ship separate actual plant and external controller executables. A public Runtime graph consumes validated
+  timestamped controller inputs, advances a bounded integer plant and publishes outputs; the separate
+  process computes feedback from observed plant output. Independently verify every command/state/sequence
+  and deterministic final result, including concurrent isolated sessions. Separate host-issued protocol
+  timestamps/expiry from finite orchestration deadlines; timeout/stale/disconnect select an explicit reference
+  hold/no-apply behavior, never silently replay old input.
+- Exercise real two-process shared-memory exchange on Linux and Windows through finite process supervision
+  with captured diagnostics and checked exit/cleanup. Cover normal exchange, startup/attachment errors,
+  full slots, malformed schema/records, delayed or missing controller, stale/expired/replayed commands,
+  peer death or partial publication, reconnect with a fresh generation, orderly stop acknowledgement and
+  missing acknowledgement/forced local detach. Include deterministic clock-controlled unit negatives so
+  scheduler timing does not substitute for protocol assertions. TSan covers same-process shared-channel
+  races; separate process tests do not claim TSan detects cross-process races.
+- Install the exact source/CMake/oracle/process-runner inventory and self-contained guide with protocol
+  table, ownership/lifecycle/failure rules, build/run transcripts, mapping/platform assumptions and residual
+  limits. Build/run standalone find_package and source embedding from a relocated testsOFF SDK archive
+  with original prefix removed, custom include/data paths and spaces. Add a separate additive package-consumer
+  contract and preserve all earlier raw/typed/backend/CUDA consumers and exact public SDK inventory.
+- Run full local profiles, focused strict/sanitizer/static/allocation and multiprocess checks, complete
+  SDK and existing CUDA relocated/source consumers, compiled ABI, unchanged M24 capability validator,
+  and all32 exact-head hosted target check records with predecessor names/multiplicity. Retain exact canonical/head/tree
+  identities, acceptance/evidence mapping, failures/corrections, risk review, rollback and unperformed
+  gates. Close only M25-04; M25-05 and later, human/hardware/RT/performance/release gates remain separate.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh full
-  - python3 tests/backend_authoring/verify_package.py --work-directory build/m25-03-package
-  - python3 tests/cuda_physics/verify_package.py --work-directory build/m25-03-cuda-package
+  - python3 tests/cil_shared_memory/verify_package.py --work-directory build/m25-04-package
+  - python3 tests/cuda_physics/verify_package.py --work-directory build/m25-04-cuda-package
   - python3 tools/check_c_abi.py --library build/agent-quick/librtfw.so
-  - Focused strict backend/conformance/runtime/allocation tests; ASan/UBSan with leak detection, TSan
-    and Clang14 static analysis.
+  - Focused strict wire/channel/mapping/Runtime/multiprocess/allocation tests; ASan/UBSan with leak detection,
+    TSan and Clang14 static analysis.
   - python3 tools/check_cuda_capabilities.py
   - git diff --check
   focused_tests_to_add:
-  - Reusable public-table conformance with explicit caller storage and deterministic finite fault injection;
-    independent defective-backend negative controls.
-  - Actual Runtime native-v2 and adapted-v1 integration, failure/cleanup retry, generation and concurrent
-    instance isolation, zero allocations and direct submit/poll concurrency.
-  - Relocated installed source kit and embedded consumers; exact inventory/output/header isolation, missing
-    package/source and oracle negative controls.
+  - Independent wire golden/invalid/freshness/correlation/generation tests, bounded SPSC concurrency/backpressure
+    and allocation instrumentation.
+  - Actual separately launched controller/Runtime plant, mapping ownership, missing/dead/stale peer, generation
+    reconnect, stop/detach and concurrent session isolation on declared Linux/Windows targets.
+  - Relocated installed and embedded shared-memory kit, exact inventory/output/public target isolation,
+    missing artifact and process/output negative controls.
   required_ci:
   - All32 existing exact-head target check records with predecessor name/multiplicity inventory, all successful
     and no unresolved review thread.
-  - Existing compiler/FMA/MSVC/ASan, static, package and docs gates gain backend source kit coverage without
-    removing prior checks.
+  - Existing compiler/FMA/MSVC/ASan, static, package and docs gates gain wire/channel and actual two-process
+    source-kit coverage without removing prior checks.
   manual:
   - Independent first-use walkthrough by an unfamiliar human remains UNPERFORMED.
   - No hardware, RT1/RT2, controlled performance, Unreal, signing/release/deployment qualification.
 risk:
   class: moderate
   hazards:
-  - Backend example teaches unsafe publication, buffer retirement or cleanup-success assumptions.
-  - Conformance harness relies on implementation internals or reports success for malformed/unfinished
-    ownership.
-  - A minimal mock source kit is mistaken for a production driver, all HAL extensions or hardware/RT qualification.
+  - Shared-memory publication/reset races let a stale or dying peer corrupt live input or borrowed storage.
+  - Wire layout, arithmetic, sequence or timestamp assumptions vary across processes/platforms or accept
+    malformed/stale commands.
+  - A fixed local reference is mistaken for authenticated networking, CAN, certified safety behavior,
+    RT timing or physical HIL qualification.
   stop_conditions:
   - A production or forbidden path change is needed; retain reproducer and plan a separate repair.
   - A mandatory test would need weakening or canonical planning has not integrated.
 rollback:
-  strategy: Revert only the additive backend source kit, conformance tests, documentation and package
-    wiring; preserve compiled production, SDK headers/exports, M23/M24/M25 predecessor implementation
-    and evidence.
+  strategy: Revert only additive shared-memory kit, tests/docs and package wiring. Preserve runtime/backend/ABI
+    sources, SDK headers/exports and all earlier evidence and capability bindings.
 evidence:
   output:
-  - docs/evidence/M25-03-<date>.md
-  - Exact canonical/head/tree/check identities, conformance and negative-control results, package transcripts
-    and retained failures.
-  claim_boundary: Portable HAL-v2 core copy-profile authoring and integration only. No universal conformance,
-    physical hardware/RT/performance, independent novice review, M25 milestone closure, Unreal or signing/release/deployment
-    claim.
+  - docs/evidence/M25-04-<date>.md
+  - Canonical/head/tree/check identities, wire/concurrency/multiprocess and negative-control transcripts,
+    package checks and retained failures.
+  claim_boundary: Portable local trusted-peer external CIL reference on declared Linux/Windows targets
+    only; no universal protocol, network/CAN/security/safety, hardware/HIL/RT/performance, independent
+    novice review, M25 closure, Unreal or signing/release/deployment claim.

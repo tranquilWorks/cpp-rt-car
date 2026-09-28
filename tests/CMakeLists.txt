@@ -543,3 +543,5 @@ add_subdirectory(hello_runtime)
 add_subdirectory(typed_runtime)
 
 add_subdirectory(backend_authoring)
+
+add_subdirectory(cil_shared_memory)

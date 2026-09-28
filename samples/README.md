@@ -1,5 +1,10 @@
 # Runtime samples
 
+M25-04 adds the optional source-only [external shared-memory CIL reference](../docs/cil_shared_memory.md):
+separate controller and public Runtime plant, bounded versioned channels, explicit
+hold/reconnect/ownership policy and installed process tests on Linux/Windows x86-64.
+It adds no mandatory SDK target or compiled ABI and makes no physical/RT claim.
+
 Start with [hello_runtime](hello_runtime/main.cpp), the small raw public-API graph.
 The [first-use guide](../docs/getting_started.md) gives tested install/find_package
 and add_subdirectory commands. The source kit is also installed under

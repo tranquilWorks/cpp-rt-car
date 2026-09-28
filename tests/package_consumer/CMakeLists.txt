@@ -214,3 +214,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../hello_runtime/package_contract.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../typed_runtime/package_contract.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../backend_authoring/package_contract.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../cil_shared_memory/package_contract.cmake")

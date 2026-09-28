@@ -1,3 +1,19 @@
+# M25-04 external shared-memory CIL reference
+
+M25-03 merged as PR271 at 315b04b25dd41acbd3a21313a093cf90b19c95ac.
+Canonical control PR530 merged at 6927945598352edb25ec27759f6fd633a3b6f4de,
+blob e0e7d67c81ca110f18762425402899273311403a. The active batch adds the
+optional source-only external controller and Runtime plant, versioned bounded
+channels, explicit failure/ownership/reconnect policy and relocated consumers.
+Verification/integration are tracked in [M25-04 evidence](evidence/M25-04-2026-09-28.md).
+
+After this batch, two M25 software batches remain: independent host adapter and
+installed API/docs/recipes. M26 has six full-system batches. Independent novice
+review, hardware/RT, controlled performance, Unreal and signing/release/deployment
+remain separate. Do not activate M25-05 here.
+
+## Historical M25-03 checkpoint
+
 # M25-03 backend authoring kit
 
 M25-02 merged as PR270 at e562ab164162b67d009171b5c8f53e9b04866285.

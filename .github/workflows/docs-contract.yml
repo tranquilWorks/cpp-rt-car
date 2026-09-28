@@ -49,6 +49,10 @@ jobs:
         run: python3 tests/backend_authoring/verify_package.py --work-directory build-backend-package
       - name: Analyze backend authoring source
         run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/backend_authoring/main.cpp tests/backend_authoring/test_backend.cpp
+      - name: Verify relocated external CIL kit
+        run: python3 tests/cil_shared_memory/verify_package.py --work-directory build-cil-package
+      - name: Analyze external CIL source
+        run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/cil_shared_memory/plant.cpp samples/cil_shared_memory/controller.cpp tests/cil_shared_memory/test_cil.cpp
       - name: Run README contributor build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF -DSIM_WERROR=OFF
