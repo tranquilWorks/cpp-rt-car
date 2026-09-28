@@ -1,27 +1,30 @@
 schema_version: 1
 batch:
-  id: M25-04
-  title: External CIL shared-memory reference
-  goal: Ship an optional fixed-capacity local shared-memory transport and actual external-controller/Runtime-plant
-    reference with exact wire, freshness, generation, reconnect and shutdown contracts.
+  id: M25-05
+  title: Independent host-adapter reference
+  goal: Ship an optional source-only headless host with fixed-capacity jobs and memory provider, monotonic
+    clock, frame loop, multiple Runtime instances, telemetry drain and checked teardown using only public
+    SDK artifacts.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
   - products/cpp-rt-car/PRD.md#cap-m25--consumer-sdk-and-integration-experience
   - products/cpp-rt-car/acceptance.yaml#CAP-M25
-  milestone: products/cpp-rt-car/milestones/M25.md#m25-04--external-cil-shared-memory-reference
-  baseline_commit: 315b04b25dd41acbd3a21313a093cf90b19c95ac
+  milestone: products/cpp-rt-car/milestones/M25.md#m25-05--independent-host-adapter-reference
+  baseline_commit: 2c431a40f450aba06b721dd0929f467fd12652b4
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M25-04.yaml
-  predecessor: M25-03 PR271 merged after all32 exact-head checks; tested/merged tree9ef0cee658daf2d56b8c17500debaa80a26ccaa9.
-  owner_scope: Owner requested 04 lets go. Standing scoped planning, implementation, publication and integration
-    authority persists. Merge canonical planning before target activation. Do not activate M25-05.
-  control_plane_revision: 6927945598352edb25ec27759f6fd633a3b6f4de
-  canonical_revision: 6927945598352edb25ec27759f6fd633a3b6f4de
-  canonical_blob_sha: e0e7d67c81ca110f18762425402899273311403a
+  control_plane_path: products/cpp-rt-car/batches/M25-05.yaml
+  predecessor: M25-04 PR272 merged after all32 exact-head checks; tested/merged tree281104170c3ae76da03f3d8b424f0184e0d0f1f1.
+    Control closure PR533.
+  owner_scope: Owner requested lets do 05. Standing scoped planning, implementation, publication and integration
+    authority persists. Merge canonical planning before target activation. Do not activate M25-06.
+  control_plane_revision: 2808734c34b7189aef41630ab9fcf6f0b79d958a
+  canonical_revision: 2808734c34b7189aef41630ab9fcf6f0b79d958a
+  canonical_blob_sha: 957f0e507493768ef17ab26d90bf48b5f13cd9ea
 dependencies:
-- M25-03
-- M22-04
+- M25-04
+- M25-02
+- M15-04
 scope:
   allowed_paths:
   - AGENTS.md
@@ -32,18 +35,18 @@ scope:
   - CMakeLists.txt
   - samples/CMakeLists.txt
   - samples/README.md
-  - samples/cil_shared_memory/**
+  - samples/host_adapter/**
   - tests/CMakeLists.txt
-  - tests/cil_shared_memory/**
+  - tests/host_adapter/**
   - tests/package_consumer/CMakeLists.txt
-  - docs/cil_shared_memory.md
+  - docs/host_adapter.md
   - docs/getting_started.md
   - docs/product_contract.md
   - docs/architecture.md
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
   - docs/roadmap.md
-  - docs/evidence/M25-04-*
+  - docs/evidence/M25-05-*
   - tools/check_release_contract.py
   - tools/static_analysis_sources.txt
   - .github/workflows/docs-contract.yml
@@ -91,97 +94,98 @@ scope:
   - tests/backend_authoring/
   - docs/backend_authoring.md
   - docs/evidence/M25-03-*
+  - samples/cil_shared_memory/
+  - tests/cil_shared_memory/
+  - docs/cil_shared_memory.md
+  - docs/evidence/M25-04-*
 acceptance:
-- Ship a source-only optional shared-memory CIL kit and guide using public Runtime artifacts. Keep it
-  off the mandatory runtime/library dependency graph and SDK header/export inventory. Support and test
-  declared little-endian64-bit Linux GCC/Clang and Windows MSVC mappings/atomic primitives; fail clearly
-  for unsupported standalone targets and keep unrelated supported Runtime builds independent. No production
-  runtime/backend repair or ABI/support promotion.
-- Define an exact versioned fixed-size byte protocol with explicit offsets, endianness, lengths, known
-  kinds/flags/reserved fields, nonzero session generation, sequence, correlation, host timestamp domain
-  and finite expiry. Provide an independently encoded golden fixture and reject malformed, truncated,
-  oversized, duplicate, skipped, stale-generation, stale/future/expired and overflow records without applying
-  plant input. Explain trusted same-host peer assumptions and absence of authentication/network/safety
-  claims.
-- Use fixed-capacity bounded SPSC channels with explicit backpressure and release/acquire publication/retirement;
-  never overwrite unread or partially written payload. Steady transport and Runtime callbacks perform
-  no allocation, mapping/open/close/process operations, locks, I/O, hidden thread creation or unbounded
-  retries. Initialization, process orchestration and finite waits remain outside RT callbacks. Test capacity
-  and no-allocation, concurrent payload conservation, sequence exhaustion and exact ordering.
-- Provide checked OS mapping ownership for exclusive creation, bounded names, attachment/header validation,
-  initialization-not-ready, wrong schema/extent, duplicate controller rejection, close/unlink and partial
-  failure cleanup. Reconnect creates a fresh exclusive mapping and generation, never resets shared slots
-  in place under a stale peer. An old live or dead peer cannot corrupt the new session; stale name/generation
-  and crash-mid-publication cases must remain explicit. Detach callback endpoints before unmapping; retain
-  any unresolved local cleanup resource for explicit retry.
-- Ship separate actual plant and external controller executables. A public Runtime graph consumes validated
-  timestamped controller inputs, advances a bounded integer plant and publishes outputs; the separate
-  process computes feedback from observed plant output. Independently verify every command/state/sequence
-  and deterministic final result, including concurrent isolated sessions. Separate host-issued protocol
-  timestamps/expiry from finite orchestration deadlines; timeout/stale/disconnect select an explicit reference
-  hold/no-apply behavior, never silently replay old input.
-- Exercise real two-process shared-memory exchange on Linux and Windows through finite process supervision
-  with captured diagnostics and checked exit/cleanup. Cover normal exchange, startup/attachment errors,
-  full slots, malformed schema/records, delayed or missing controller, stale/expired/replayed commands,
-  peer death or partial publication, reconnect with a fresh generation, orderly stop acknowledgement and
-  missing acknowledgement/forced local detach. Include deterministic clock-controlled unit negatives so
-  scheduler timing does not substitute for protocol assertions. TSan covers same-process shared-channel
-  races; separate process tests do not claim TSan detects cross-process races.
-- Install the exact source/CMake/oracle/process-runner inventory and self-contained guide with protocol
-  table, ownership/lifecycle/failure rules, build/run transcripts, mapping/platform assumptions and residual
-  limits. Build/run standalone find_package and source embedding from a relocated testsOFF SDK archive
-  with original prefix removed, custom include/data paths and spaces. Add a separate additive package-consumer
-  contract and preserve all earlier raw/typed/backend/CUDA consumers and exact public SDK inventory.
-- Run full local profiles, focused strict/sanitizer/static/allocation and multiprocess checks, complete
-  SDK and existing CUDA relocated/source consumers, compiled ABI, unchanged M24 capability validator,
-  and all32 exact-head hosted target check records with predecessor names/multiplicity. Retain exact canonical/head/tree
-  identities, acceptance/evidence mapping, failures/corrections, risk review, rollback and unperformed
-  gates. Close only M25-04; M25-05 and later, human/hardware/RT/performance/release gates remain separate.
+- Ship a small source-only headless/game-style host kit and installed guide using only public rtfw::runtime
+  artifacts. Exercise native Runtime workers and host_adapter mode through the same graph and independent
+  state oracle on Linux and Windows. Keep all production, public headers/targets, compiled ABI and earlier
+  kits/evidence unchanged. No Unreal, vendor adapter, runtime repair or later batch.
+- Provide an actual already-running host-owned fixed-capacity job system with copied HostExecutorJob records,
+  bounded nonblocking submission and at-most-one-job cooperative help. Execute each accepted job exactly
+  once; reject capacity/unavailable admission without retaining or executing rejected work. Preserve opaque
+  completion identity and scratch lifetime through execute return; support nested Runtime work without
+  holding a queue lock or waiting on a saturated team. Bound registry/queue scans and document worker-index/control-thread
+  ownership and lifecycle. Thread creation/join remain control-plane operations; no callback allocation,
+  mutex, I/O or hidden spill execution.
+- Provide a fixed-storage host allocator/MemoryProvider for all three supported Runtime-owned regions
+  (phase scratch, task scratch, trace). Validate category, capacity, alignment and unsupported policy
+  requests before admission; report truthful usable/committed storage and capabilities. Track exact live
+  tokens, reject duplicate acquisition and retain storage through any failed rollback/stop until checked
+  retry succeeds. No invented NUMA/locking/pinning/guard/huge-page/independent-observation claims. Demonstrate
+  explicit memory-plan and host-resource accounting boundaries rather than claiming the provider covers
+  every Runtime allocation.
+- Inject a host-owned monotonic clock and execute an explicit finite host frame loop with at least two
+  isolated Runtime instances alive at once. Use a bounded graph with nested parallel work, independent
+  per-element/frame and final-state oracles, and both native/host executor modes. Drain public trace/metrics
+  into caller-owned bounded buffers outside callbacks, verify identity/count/loss behavior and report
+  failures truthfully. Keep logical frame time separate from physical clock timing; no throughput or RT
+  qualification claim.
+- Demonstrate and test exact capacity/backpressure, copied-job ownership, accepted/completed conservation,
+  helper progress/nested saturation, no-allocation steady operation, telemetry overflow/loss, clock/capacity/provider
+  failures, partial startup, callback failure, checked stop retry and host detach ordering. Stop admission,
+  quiesce accepted jobs and Runtime callbacks, check stop, then release provider/host owners; never drop
+  accepted work, detach early or destroy unresolved borrowed ownership. Include repeated lifecycle, independent
+  concurrent host instances and negative controls that detect incorrect output or ownership. Preserve
+  failing evidence and require a separately approved repair if production changes are needed.
+- Install an exact source/CMake/oracle inventory and self-contained guide with lifecycle, capacities,
+  memory/clock/job ownership, telemetry, build/run transcripts, failure/retry rules and residual limits.
+  Run standalone find_package native/host modes and source embedding from a relocated testsOFF SDK with
+  original prefix removed, custom data/include paths and spaces. Add a separate additive package-consumer
+  contract and preserve all prior raw/typed/backend/CIL/CUDA consumers and exact public SDK inventory.
+- Run full local profiles, focused strict/sanitizer/static/allocation/concurrency/lifecycle checks, complete
+  SDK and existing CUDA relocated/source consumers, compiled ABI and unchanged M24 matrix, plus all32
+  exact-head hosted target records with predecessor names/multiplicity. Retain canonical/head/tree/check
+  identities, acceptance mapping, failed runs/corrections, risk review, rollback and unperformed gates.
+  Close only M25-05; M25-06, M26, independent human, physical/RT/performance/Unreal/release gates stay
+  separate.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh full
-  - python3 tests/cil_shared_memory/verify_package.py --work-directory build/m25-04-package
-  - python3 tests/cuda_physics/verify_package.py --work-directory build/m25-04-cuda-package
+  - python3 tests/host_adapter/verify_package.py --work-directory build/m25-05-package
+  - python3 tests/cuda_physics/verify_package.py --work-directory build/m25-05-cuda-package
   - python3 tools/check_c_abi.py --library build/agent-quick/librtfw.so
-  - Focused strict wire/channel/mapping/Runtime/multiprocess/allocation tests; ASan/UBSan with leak detection,
-    TSan and Clang14 static analysis.
+  - Focused strict job/provider/clock/Runtime/telemetry/lifecycle/allocation tests; ASan/UBSan with leak
+    detection, TSan and Clang14 static analysis.
   - python3 tools/check_cuda_capabilities.py
   - git diff --check
   focused_tests_to_add:
-  - Independent wire golden/invalid/freshness/correlation/generation tests, bounded SPSC concurrency/backpressure
-    and allocation instrumentation.
-  - Actual separately launched controller/Runtime plant, mapping ownership, missing/dead/stale peer, generation
-    reconnect, stop/detach and concurrent session isolation on declared Linux/Windows targets.
-  - Relocated installed and embedded shared-memory kit, exact inventory/output/public target isolation,
-    missing artifact and process/output negative controls.
+  - Fixed-capacity copied-job conservation, bounded rejection, helper/nested/concurrent execution, scratch
+    identity and steady allocation checks.
+  - Actual native and host-adapter Runtime graphs with independent per-frame state and trace/metrics oracles,
+    multiple instances and lifecycle/rollback retry failures.
+  - Relocated and embedded host kit, exact inventory/public target isolation, native/host output and missing
+    artifact/false-output negative controls.
   required_ci:
   - All32 existing exact-head target check records with predecessor name/multiplicity inventory, all successful
     and no unresolved review thread.
-  - Existing compiler/FMA/MSVC/ASan, static, package and docs gates gain wire/channel and actual two-process
-    source-kit coverage without removing prior checks.
+  - Existing compiler/FMA/MSVC/ASan, static, package and docs gates gain host job/provider/clock/telemetry
+    and actual native/adapter consumer coverage without removing earlier checks.
   manual:
   - Independent first-use walkthrough by an unfamiliar human remains UNPERFORMED.
   - No hardware, RT1/RT2, controlled performance, Unreal, signing/release/deployment qualification.
 risk:
   class: moderate
   hazards:
-  - Shared-memory publication/reset races let a stale or dying peer corrupt live input or borrowed storage.
-  - Wire layout, arithmetic, sequence or timestamp assumptions vary across processes/platforms or accept
-    malformed/stale commands.
-  - A fixed local reference is mistaken for authenticated networking, CAN, certified safety behavior,
-    RT timing or physical HIL qualification.
+  - Host queue admission/completion races, nested saturation or duplicate execution corrupt opaque Runtime
+    job/scratch ownership.
+  - Provider token reclamation or host detach before checked quiescence invalidates borrowed Runtime storage.
+  - Host-controlled telemetry/time/allocation observations are overstated as complete memory accounting,
+    performance, RT or engine qualification.
   stop_conditions:
   - A production or forbidden path change is needed; retain reproducer and plan a separate repair.
   - A mandatory test would need weakening or canonical planning has not integrated.
 rollback:
-  strategy: Revert only additive shared-memory kit, tests/docs and package wiring. Preserve runtime/backend/ABI
-    sources, SDK headers/exports and all earlier evidence and capability bindings.
+  strategy: Revert only the additive host reference, tests/docs and package wiring. Preserve production
+    runtime/backend/ABI, SDK inventory and all earlier capability/evidence bindings.
 evidence:
   output:
-  - docs/evidence/M25-04-<date>.md
-  - Canonical/head/tree/check identities, wire/concurrency/multiprocess and negative-control transcripts,
-    package checks and retained failures.
-  claim_boundary: Portable local trusted-peer external CIL reference on declared Linux/Windows targets
-    only; no universal protocol, network/CAN/security/safety, hardware/HIL/RT/performance, independent
-    novice review, M25 closure, Unreal or signing/release/deployment claim.
+  - docs/evidence/M25-05-<date>.md
+  - Canonical/head/tree/check identities, native/host graph and job/provider/lifecycle/telemetry negative
+    transcripts, package results and retained failures.
+  claim_boundary: Portable independent headless host integration using public SDK only; no general-purpose
+    engine/job scheduler, complete Runtime allocation replacement, physical/RT/performance, Unreal, independent
+    novice review, M25 closure or signing/release/deployment claim.

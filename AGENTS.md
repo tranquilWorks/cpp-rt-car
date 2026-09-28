@@ -381,3 +381,14 @@ reconnect/ownership tests and installed guide. Preserve compiled production,
 SDK headers/targets, ABIs and prior source/evidence bindings. All32 target
 checks remain required. Standing scoped publication/integration authority
 persists. Do not activate M25-05; no hardware/RT or release promotion.
+
+## M25-05 activation (2026-09-28)
+
+M25-04 merged as PR272 at2c431a40f450aba06b721dd0929f467fd12652b4.
+Canonical control PR535 merged at2808734c34b7189aef41630ab9fcf6f0b79d958a,
+blob957f0e507493768ef17ab26d90bf48b5f13cd9ea. Implement only the optional
+independent headless host kit, actual native/host execution, jobs/provider/clock/
+telemetry/lifecycle tests and installed guide. Preserve production, SDK inventory,
+ABIs and all prior source/evidence bindings. All32 target checks remain required.
+Standing scoped publication/integration authority persists. Do not activate
+M25-06; Unreal, hardware/RT and release remain separate.

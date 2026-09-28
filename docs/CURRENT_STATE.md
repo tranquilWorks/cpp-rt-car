@@ -1,3 +1,20 @@
+# M25-05 independent host-adapter reference
+
+M25-04 merged as PR272 at2c431a40f450aba06b721dd0929f467fd12652b4.
+Canonical control PR535 merged at2808734c34b7189aef41630ab9fcf6f0b79d958a,
+blob957f0e507493768ef17ab26d90bf48b5f13cd9ea. The active source-only kit
+provides fixed host jobs and memory regions, independent residency observation,
+a monotonic clock/frame loop, multiple Runtime instances, telemetry and checked
+shutdown using public SDK artifacts. Native/adapter execution and lifecycle
+verification are tracked in [M25-05 evidence](evidence/M25-05-2026-09-28.md).
+
+After this batch, M25-06 installed API/docs/recipes is the one remaining M25
+software batch. M26 has six full-system batches. Independent novice review,
+hardware/RT, controlled performance, Unreal and signing/release/deployment remain
+separate. Do not activate M25-06 here.
+
+## Historical M25-04 checkpoint
+
 # M25-04 external shared-memory CIL reference
 
 M25-03 merged as PR271 at 315b04b25dd41acbd3a21313a093cf90b19c95ac.

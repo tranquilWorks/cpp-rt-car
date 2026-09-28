@@ -1318,3 +1318,10 @@ install(FILES samples/cil_shared_memory/CMakeLists.txt
     samples/cil_shared_memory/runner.py samples/cil_shared_memory/wire.hpp
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/cil_shared_memory)
 install(FILES docs/cil_shared_memory.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+
+# Independent host reference is installed source, not an exported SDK dependency.
+install(FILES samples/host_adapter/CMakeLists.txt samples/host_adapter/main.cpp
+    samples/host_adapter/host.hpp samples/host_adapter/jobs.hpp
+    samples/host_adapter/memory.hpp samples/host_adapter/check_output.cmake
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/host_adapter)
+install(FILES docs/host_adapter.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)

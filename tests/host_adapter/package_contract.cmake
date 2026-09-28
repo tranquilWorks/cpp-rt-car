@@ -1,0 +1,13 @@
+# Additive consumer contract; preserve all earlier SDK/source-kit checks.
+if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(host_kit "${RTFW_DATA_DIR}/examples/host_adapter")
+    file(GLOB host_sources LIST_DIRECTORIES FALSE RELATIVE "${host_kit}" "${host_kit}/*")
+    list(SORT host_sources)
+    if(NOT "${host_sources}" STREQUAL "CMakeLists.txt;check_output.cmake;host.hpp;jobs.hpp;main.cpp;memory.hpp")
+        message(FATAL_ERROR "Host adapter source inventory differs from contract")
+    endif()
+    if(NOT EXISTS "${RTFW_DATA_DIR}/host_adapter.md")
+        message(FATAL_ERROR "Host adapter guide is missing")
+    endif()
+    add_subdirectory("${host_kit}" host-adapter)
+endif()
