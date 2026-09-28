@@ -340,3 +340,13 @@ backend, CUDA model/test and benchmark source and repair evidence. Standing scop
 publication/integration authority persists; all target gates remain required.
 Physical, controlled-performance, independent review, M25/M26 and release gates
 remain separate. Earlier checkpoint paragraphs are historical.
+
+## M25-01 activation (2026-09-28)
+
+M24-04 merged as PR268 at facc42d4a09d1dab398d75dc92000a05fb08c396 after
+all32 exact-head checks. Canonical M25-01 control PR520 merged at
+d1512a06be447fb275c625ca51b7d67a854b4bed, blob462f1f1ab2915ff833905e45be317cb5a484c438.
+Implement only the bounded hello/install/embedding/legacy separation contract.
+Preserve Runtime, ABI, all M23/M24 implementation and evidence bindings.
+Standing scoped publication/integration authorization applies. M25-02 and later
+batches, independent novice review, hardware/RT, signing/release remain separate.

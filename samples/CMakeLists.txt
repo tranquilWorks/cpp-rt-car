@@ -101,3 +101,14 @@ if(RTFW_BUILD_TESTS)
     add_test(NAME sample_cuda_lifetime COMMAND sample_cuda_lifetime)
     set_tests_properties(sample_cuda_lifetime PROPERTIES TIMEOUT 120)
 endif()
+
+# Canonical first-use graph; the same source is shipped as a standalone consumer.
+add_executable(sample_hello_runtime hello_runtime/main.cpp)
+target_link_libraries(sample_hello_runtime PRIVATE rtfw::runtime)
+rtfw_enable_project_warnings(sample_hello_runtime)
+if(RTFW_BUILD_TESTS)
+    add_test(NAME hello_runtime_output
+        COMMAND "${CMAKE_COMMAND}" "-DHELLO_EXECUTABLE=$<TARGET_FILE:sample_hello_runtime>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/hello_runtime/check_output.cmake")
+    set_tests_properties(hello_runtime_output PROPERTIES TIMEOUT 30)
+endif()

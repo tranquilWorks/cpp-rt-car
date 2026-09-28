@@ -1,20 +1,5 @@
 # RTFW — Bounded Simulation Runtime
 
-Portable hosts can use the additive `<rt/runtime.hpp>` live-control policy and
-bounded mailboxes to publish copied canonical update bytes at exact frame/rate
-boundaries through callback-local immutable views. M22-03 adds Runtime-
-generation rollback, payload-free action records, conditional checkpoint
-state, and explicit bounded replay artifacts. The M22-04 candidate adds the
-optional header-only `<rt/live_control.hpp>` fixed typed-payload layer and
-portable stress closure; see
-[`docs/live_controls.md`](docs/live_controls.md). Portable mixed-rate
-users can combine `<rt/runtime.hpp>` with the installed
-`<rt/loopback_backend.hpp>` for fixed-capacity sampled I/O, closed logical
-actions, quiescent checkpoints, and deterministic active replay. See
-[`docs/sampled_io.md`](docs/sampled_io.md) and
-[`docs/determinism_replay.md`](docs/determinism_replay.md). This is software
-RT0 evidence, not physical HIL.
-
 [![CI](https://github.com/tranquilWorks/cpp-rt-car/actions/workflows/ci.yml/badge.svg)](https://github.com/tranquilWorks/cpp-rt-car/actions/workflows/ci.yml)
 [![Documentation contract](https://github.com/tranquilWorks/cpp-rt-car/actions/workflows/docs-contract.yml/badge.svg)](https://github.com/tranquilWorks/cpp-rt-car/actions/workflows/docs-contract.yml)
 
@@ -28,6 +13,47 @@ versioned observability/replay, and asynchronous device integration.
 > determinism, CUDA-hardware, XDMA, or C++ binary ABI claim. See the
 > [product contract](docs/product_contract.md)
 > and [release policy](docs/release_policy.md) before integrating it.
+
+## Start with the installed SDK
+
+You need CMake 3.20+, a C++20 compiler and its platform build tools. The SDK
+build below needs no GoogleTest checkout, Python, CUDA toolkit or experimental
+SimCore dependencies. Run these Bash commands from the RTFW source root:
+
+<!-- ci-verified: .github/workflows/docs-contract.yml -->
+```bash
+cmake -S . -B build-sdk -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF -DRTFW_BUILD_EXAMPLES=OFF -DRTFW_BUILD_RUNTIME_DEMO=OFF -DRTFW_BUILD_EXPERIMENTAL=OFF
+cmake --build build-sdk --config Release --parallel 2
+cmake --install build-sdk --config Release --prefix "$PWD/rtfw-sdk"
+cmake -S rtfw-sdk/share/rtfw/examples/hello_runtime -B build-hello -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/rtfw-sdk"
+cmake --build build-hello --config Release --parallel 2
+ctest --test-dir build-hello -C Release --output-on-failure
+```
+
+The shipped [hello graph](samples/hello_runtime/main.cpp) uses only
+`<rt/runtime.hpp>` and `rtfw::runtime`. CTest checks exit status and this exact
+program output (use `ctest --test-dir build-hello -C Release -V` to display it):
+
+```text
+hello_runtime: frames=3 produced=3 consumed=3 stopped=ok
+```
+
+To embed a source checkout instead, run the same example through
+`add_subdirectory`:
+
+<!-- ci-verified: .github/workflows/docs-contract.yml -->
+```bash
+cmake -S samples/hello_runtime -B build-hello-embedded -DCMAKE_BUILD_TYPE=Release -DHELLO_RTFW_SOURCE="$PWD"
+cmake --build build-hello-embedded --config Release --parallel 2
+ctest --test-dir build-hello-embedded -C Release --output-on-failure
+```
+
+Both paths run two dependent phases over three host-driven frames and check
+shutdown. The [first-use guide](docs/getting_started.md) explains the graph,
+ownership, capacities, Windows commands, package relocation and troubleshooting.
+It also ships as `<prefix>/<datadir>/rtfw/getting_started.md`.
+See [supported samples](samples/README.md) for next steps; the
+[legacy experiments](examples/README.md) are a separate research directory.
 
 ## Current implementation
 
@@ -43,7 +69,7 @@ versioned observability/replay, and asynchronous device integration.
 | CPU/memory policy model | M15 complete | Additive bounded C++ reports retain twelve stable memory identities, reconcile exact logical control extents, observe live runtime-owned stacks, accept declared-only external/backend facts, and preserve retryable reverse cleanup; the provider still backs only phase scratch, task scratch, and trace storage |
 | Multi-rate simulation | M16 complete in merged history | Bounded domains/reference order, exact cross-rate selection/storage, opt-in mandatory admission, optional CPU dispatch and hysteretic recovery, canonical policy state, and separate rate-action telemetry |
 | Mixed-rate device and sampled-I/O closure | M21 complete in merged history | M21-01 through M21-05 join admission, concurrent dispatch, cross-rate payloads, sampled frames, safe outputs, public HAL-v2 loopback, fixed mixed-rate actions, conditional checkpoint state, and bounded active replay for explicitly deterministic backends. Hardware, HIL, and RT qualification remain separate. |
-| Transactional live controls | M22-04 implementation candidate | M22-01 through M22-03 raw staging/publication/rollback/action/checkpoint/replay plus an optional header-only canonical typed-payload SDK, domain sample, package coverage, and deterministic portable stress. Executable/shared-library/Unreal reload, application/backend/physical side-effect rollback, physical control, HIL, and RT qualification remain excluded. |
+| Transactional live controls | M22 complete in merged history | M22-01 through M22-03 raw staging/publication/rollback/action/checkpoint/replay plus an optional header-only canonical typed-payload SDK, domain sample, package coverage, and deterministic portable stress. Executable/shared-library/Unreal reload, application/backend/physical side-effect rollback, physical control, HIL, and RT qualification remain excluded. |
 | HAL v2 command/timeline, memory/topology, and device ABI v1 compatibility | M17-06 portable path merged; qualification incomplete | Runtime seeds the exact native command-capability input header and retains whole-record validation. Actual CUDA/XDMA candidates register together through canonical Runtime, and one portable CPU-to-simulated-CUDA-to-host-stage-to-simulated-XDMA-to-CPU sample uses separate backend-local timelines and fixed storage. This is simulated protocol, not hardware qualification. |
 | Qualification schemas and proposals | M18-01 offline tooling; no tuple qualified | Version-1 plan, record, review, and proposal schemas with bounded artifact/digest/threshold/trial validation and deterministic proposal-only output; synthetic fixtures cannot promote support |
 | Extension registration | M19-01 implemented; M19 incomplete | Installed size-versioned C ABI v1 plus transactional C++ Runtime registration, device-v1 compatibility, host-control services, checked stop and detach; direct entry pointers only, with no loader or Unreal lifecycle |
@@ -75,6 +101,21 @@ versioned observability/replay, and asynchronous device integration.
 task rules. The M11 host adapter is the only supported path for an external
 engine job system.
 
+Portable hosts can use the additive `<rt/runtime.hpp>` live-control policy and
+bounded mailboxes to publish copied canonical update bytes at exact frame/rate
+boundaries through callback-local immutable views. M22-03 adds Runtime-
+generation rollback, payload-free action records, conditional checkpoint
+state, and explicit bounded replay artifacts. M22-04 adds the
+optional header-only `<rt/live_control.hpp>` fixed typed-payload layer and
+portable stress closure; see
+[`docs/live_controls.md`](docs/live_controls.md). Portable mixed-rate
+users can combine `<rt/runtime.hpp>` with the installed
+`<rt/loopback_backend.hpp>` for fixed-capacity sampled I/O, closed logical
+actions, quiescent checkpoints, and deterministic active replay. See
+[`docs/sampled_io.md`](docs/sampled_io.md) and
+[`docs/determinism_replay.md`](docs/determinism_replay.md). This is software
+RT0 evidence, not physical HIL.
+
 ## Support and compatibility
 
 RTFW 1.x supports only the exact RT0 build/test tuples in the
@@ -95,7 +136,7 @@ The M20-PRE-01 candidate assurance lane and its exact limits are documented in
 [portable assurance](docs/portable_assurance.md). Its SBOM and provenance
 outputs are verification candidates, not authenticated release provenance.
 
-## Quick start
+## Contributor build and test
 
 Prerequisites are CMake 3.20+, a C++20 compiler, and a recursive checkout of
 the GoogleTest submodule when tests are enabled.
@@ -146,7 +187,7 @@ The transfer is destructive to the selected AXI-MM range and must run only
 against the declared qualification bitstream. It does not qualify hardware by
 itself; see the [XDMA contract](docs/xdma_backend.md).
 
-## Demo command line
+## Legacy experimental demo command line
 
 These are the options implemented by `src/main.cpp`. Unknown options are
 rejected.

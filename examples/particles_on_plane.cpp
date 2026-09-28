@@ -1,3 +1,4 @@
+// Legacy research experiment; not the Runtime SDK entry path. See README.md.
 #include <simcore/SimCore.hpp>
 #include <simcore/worker_pool.hpp>
 #include <simcore/soa/aosoa.hpp>

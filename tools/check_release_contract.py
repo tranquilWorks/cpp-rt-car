@@ -50,6 +50,20 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'samples/hello_runtime/main.cpp',
+    'samples/hello_runtime/CMakeLists.txt',
+    'samples/hello_runtime/check_output.cmake',
+    'samples/README.md',
+    'examples/README.md',
+    'examples/particles_on_plane.cpp',
+    'examples/tyre_belt_on_drum.cpp',
+    'examples/gpu_offload_demo.cpp',
+    'examples/perf_experiments.cpp',
+    'docs/getting_started.md',
+    'tests/hello_runtime/package_contract.cmake',
+    'tests/hello_runtime/verify_package.py',
+    'tests/hello_runtime/CMakeLists.txt',
+    'tests/hello_runtime/check_failure.cmake',
     'samples/cuda_physics/benchmark/provider.hpp',
     'samples/cuda_physics/benchmark/provider.cpp',
     'samples/cuda_physics/benchmark/main.cpp',

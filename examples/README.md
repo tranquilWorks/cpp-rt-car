@@ -1,13 +1,17 @@
-# Minimal Samples
+# Legacy research experiments — not the Runtime SDK
 
-This directory contains tiny programs illustrating core simulation concepts.
+These archived research programs are not the supported `rt::Runtime` entry
+path, installed SDK examples, or a tested standalone build recipe. New users
+should start with [hello Runtime](../samples/hello_runtime/main.cpp) and the
+[consumer guide](../docs/getting_started.md).
 
-- `particles_on_plane.cpp` – integrates a particle falling under gravity.
-- `tyre_belt_on_drum.cpp` – scalar math kernel for belt tension around a drum.
-- `gpu_offload_demo.cpp` – demonstrates OpenMP target offload.
-- `perf_experiments.cpp` – assorted micro‑benchmarks for memory and math performance, including
-  NUMA cross‑node access and fiber‑vs‑thread blocking tests. Uses the project's logger and
-  profiler and accepts a `--scale` flag to grow workloads.
+- `particles_on_plane.cpp` uses legacy SimCore/WorkerPool internals.
+- `tyre_belt_on_drum.cpp` is a standalone numerical experiment.
+- `gpu_offload_demo.cpp` is an OpenMP offload experiment, not the CUDA backend.
+- `perf_experiments.cpp` uses experimental logging, profiling and platform APIs.
 
-Build a sample with `g++ -std=c++20 -I../include <file.cpp> -DLOG_ENABLED -DPROF_ENABLED -pthread -o <prog>`.
-The GPU demo additionally requires OpenMP offload support (`-fopenmp`).
+The former generic one-file compiler command omitted required implementation
+and platform dependencies and has been withdrawn. These sources are retained
+for research history; no current standalone compilation or execution claim is
+made. Repository-built experimental samples are listed separately in
+[samples](../samples/README.md) and require `RTFW_BUILD_EXPERIMENTAL=ON`.

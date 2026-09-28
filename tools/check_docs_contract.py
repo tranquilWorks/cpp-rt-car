@@ -221,6 +221,33 @@ def check_verified_commands() -> None:
                 )
 
 
+def check_hello_contract() -> None:
+    source = read("samples/hello_runtime/main.cpp")
+    if not 30 <= len(source.splitlines()) <= 60:
+        fail("hello Runtime must contain 30-60 physical source lines")
+    includes = set(re.findall(r"^#include <([^>]+)>", source, re.MULTILINE))
+    if includes != {"rt/runtime.hpp", "chrono", "cstdint", "iostream"}:
+        fail("hello Runtime must use only the public Runtime and standard headers")
+    readme = read("README.md")
+    guide = read("docs/getting_started.md")
+    for name in ("install", "embed"):
+        match = re.search(rf"<!-- transcript: {name} -->\s*```bash\n(.*?)```", guide, re.DOTALL)
+        if not match or match.group(1) not in readme:
+            fail(f"first-use {name} transcript differs from the CI-verified README")
+    expected = "hello_runtime: frames=3 produced=3 consumed=3 stopped=ok"
+    for relative in ("README.md", "docs/getting_started.md", "samples/hello_runtime/check_output.cmake"):
+        if expected not in read(relative):
+            fail(f"{relative}: missing exact hello output")
+    if readme.index("## Start with the installed SDK") > readme.index("## Contributor build and test"):
+        fail("README must introduce SDK consumption before contributor builds")
+    legacy = read("examples/README.md")
+    if "Legacy research experiments" not in legacy or "g++ -std=c++20" in legacy:
+        fail("legacy examples must not advertise the retired standalone build recipe")
+    for path in (ROOT / "examples").glob("*.cpp"):
+        if not path.read_text().startswith("// Legacy research experiment; not the Runtime SDK entry path."):
+            fail(f"{path.name}: missing legacy source notice")
+
+
 def check_claims() -> None:
     surfaces = "\n".join(path.read_text(encoding="utf-8") for path in markdown_files())
     banned = (
@@ -3272,6 +3299,7 @@ def main() -> int:
     check_markdown_links()
     check_cli_contract()
     check_verified_commands()
+    check_hello_contract()
     check_claims()
     check_runtime_contract()
     check_qualification_contract()
