@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>rt/c_api.h — RTFW 1.2.1</title>
+<style>body{font:16px system-ui;margin:2rem}pre{font:13px monospace;overflow:auto}pre a{color:#555}a{color:#0758a5}</style>
+<h1>rt/c_api.h</h1><p>Default installed header. Version 1.2.1.</p>
+<p>Source: rt/include/rt/c_api.h; SHA-256: d238b7f2e36022376f40d7fba3e0455773597ac94b174bca5bd31261ceeeb39a. Exact declaration/comment source; private/detail content is not a supported API promise.</p>
+<p><a href="index.html">API index</a> · <a href="../README.md">Manual</a></p><pre><span id="L1"><a href="#L1">    1</a> #pragma once</span>
+<span id="L2"><a href="#L2">    2</a> </span>
+<span id="L3"><a href="#L3">    3</a> #include &lt;stddef.h&gt;</span>
+<span id="L4"><a href="#L4">    4</a> #include &lt;stdint.h&gt;</span>
+<span id="L5"><a href="#L5">    5</a> </span>
+<span id="L6"><a href="#L6">    6</a> #include &lt;rt/device_abi.h&gt;</span>
+<span id="L7"><a href="#L7">    7</a> #include &lt;rtfw/version.h&gt;</span>
+<span id="L8"><a href="#L8">    8</a> </span>
+<span id="L9"><a href="#L9">    9</a> #if defined RTFW_STATIC_DEFINE</span>
+<span id="L10"><a href="#L10">   10</a> #  define RTFW_API</span>
+<span id="L11"><a href="#L11">   11</a> #elif defined _WIN32 || defined __CYGWIN__</span>
+<span id="L12"><a href="#L12">   12</a> #  if defined RTFW_BUILD</span>
+<span id="L13"><a href="#L13">   13</a> #    define RTFW_API __declspec(dllexport)</span>
+<span id="L14"><a href="#L14">   14</a> #  else</span>
+<span id="L15"><a href="#L15">   15</a> #    define RTFW_API __declspec(dllimport)</span>
+<span id="L16"><a href="#L16">   16</a> #  endif</span>
+<span id="L17"><a href="#L17">   17</a> #elif defined __GNUC__ || defined __clang__</span>
+<span id="L18"><a href="#L18">   18</a> #  define RTFW_API __attribute__((visibility(&quot;default&quot;)))</span>
+<span id="L19"><a href="#L19">   19</a> #else</span>
+<span id="L20"><a href="#L20">   20</a> #  define RTFW_API</span>
+<span id="L21"><a href="#L21">   21</a> #endif</span>
+<span id="L22"><a href="#L22">   22</a> </span>
+<span id="L23"><a href="#L23">   23</a> #ifdef __cplusplus</span>
+<span id="L24"><a href="#L24">   24</a> extern &quot;C&quot; {</span>
+<span id="L25"><a href="#L25">   25</a> #endif</span>
+<span id="L26"><a href="#L26">   26</a> </span>
+<span id="L27"><a href="#L27">   27</a> #define RT_VERSION_MAJOR RTFW_VERSION_MAJOR</span>
+<span id="L28"><a href="#L28">   28</a> #define RT_VERSION_MINOR RTFW_VERSION_MINOR</span>
+<span id="L29"><a href="#L29">   29</a> #define RT_VERSION_PATCH RTFW_VERSION_PATCH</span>
+<span id="L30"><a href="#L30">   30</a> #define RTFW_C_ABI_VERSION 8u</span>
+<span id="L31"><a href="#L31">   31</a> #define RTFW_C_ABI_MIN_COMPATIBLE_VERSION 8u</span>
+<span id="L32"><a href="#L32">   32</a> #define RTFW_C_ABI_LAYOUT_FINGERPRINT UINT64_C(0xd0e7a5a14bf35f97)</span>
+<span id="L33"><a href="#L33">   33</a> </span>
+<span id="L34"><a href="#L34">   34</a> typedef struct {</span>
+<span id="L35"><a href="#L35">   35</a>     uint8_t compiled_graph;</span>
+<span id="L36"><a href="#L36">   36</a>     uint8_t host_driven_time;</span>
+<span id="L37"><a href="#L37">   37</a>     uint8_t unified_cpu_executor;</span>
+<span id="L38"><a href="#L38">   38</a>     uint8_t host_executor_adapter;</span>
+<span id="L39"><a href="#L39">   39</a>     uint8_t bounded_memory_plan;</span>
+<span id="L40"><a href="#L40">   40</a>     uint8_t self_paced_time;</span>
+<span id="L41"><a href="#L41">   41</a>     uint8_t frame_watchdog;</span>
+<span id="L42"><a href="#L42">   42</a>     uint8_t strict_platform_preflight;</span>
+<span id="L43"><a href="#L43">   43</a>     uint8_t versioned_observability;</span>
+<span id="L44"><a href="#L44">   44</a>     uint8_t deterministic_replay;</span>
+<span id="L45"><a href="#L45">   45</a>     uint8_t bounded_device_backend;</span>
+<span id="L46"><a href="#L46">   46</a> } rt_capabilities_c;</span>
+<span id="L47"><a href="#L47">   47</a> </span>
+<span id="L48"><a href="#L48">   48</a> typedef struct rtfw_handle rtfw_handle;</span>
+<span id="L49"><a href="#L49">   49</a> typedef struct rtfw_task_context rtfw_task_context;</span>
+<span id="L50"><a href="#L50">   50</a> </span>
+<span id="L51"><a href="#L51">   51</a> /* All C ABI discriminators are fixed-width so malformed input is readable. */</span>
+<span id="L52"><a href="#L52">   52</a> typedef int32_t rtfw_status;</span>
+<span id="L53"><a href="#L53">   53</a> #define RTFW_STATUS_OK ((rtfw_status)0)</span>
+<span id="L54"><a href="#L54">   54</a> #define RTFW_STATUS_INVALID_ARGUMENT ((rtfw_status)-1)</span>
+<span id="L55"><a href="#L55">   55</a> #define RTFW_STATUS_INVALID_STATE ((rtfw_status)-2)</span>
+<span id="L56"><a href="#L56">   56</a> #define RTFW_STATUS_INVALID_CONFIG ((rtfw_status)-3)</span>
+<span id="L57"><a href="#L57">   57</a> #define RTFW_STATUS_CAPACITY_EXCEEDED ((rtfw_status)-4)</span>
+<span id="L58"><a href="#L58">   58</a> #define RTFW_STATUS_CALLBACK_FAILED ((rtfw_status)-5)</span>
+<span id="L59"><a href="#L59">   59</a> #define RTFW_STATUS_RESOURCE_EXHAUSTED ((rtfw_status)-6)</span>
+<span id="L60"><a href="#L60">   60</a> #define RTFW_STATUS_INTERNAL_ERROR ((rtfw_status)-7)</span>
+<span id="L61"><a href="#L61">   61</a> #define RTFW_STATUS_INVALID_HANDLE ((rtfw_status)-8)</span>
+<span id="L62"><a href="#L62">   62</a> #define RTFW_STATUS_GRAPH_CYCLE ((rtfw_status)-9)</span>
+<span id="L63"><a href="#L63">   63</a> #define RTFW_STATUS_RESOURCE_CONFLICT ((rtfw_status)-10)</span>
+<span id="L64"><a href="#L64">   64</a> #define RTFW_STATUS_QUEUE_FULL ((rtfw_status)-11)</span>
+<span id="L65"><a href="#L65">   65</a> #define RTFW_STATUS_SCRATCH_EXHAUSTED ((rtfw_status)-12)</span>
+<span id="L66"><a href="#L66">   66</a> #define RTFW_STATUS_PLATFORM_PREFLIGHT_FAILED ((rtfw_status)-13)</span>
+<span id="L67"><a href="#L67">   67</a> #define RTFW_STATUS_CLOCK_FAILURE ((rtfw_status)-14)</span>
+<span id="L68"><a href="#L68">   68</a> #define RTFW_STATUS_INVALID_ARTIFACT ((rtfw_status)-15)</span>
+<span id="L69"><a href="#L69">   69</a> #define RTFW_STATUS_INCOMPATIBLE_ARTIFACT ((rtfw_status)-16)</span>
+<span id="L70"><a href="#L70">   70</a> #define RTFW_STATUS_DEVICE_QUEUE_FULL ((rtfw_status)-17)</span>
+<span id="L71"><a href="#L71">   71</a> #define RTFW_STATUS_DEVICE_TIMEOUT ((rtfw_status)-18)</span>
+<span id="L72"><a href="#L72">   72</a> #define RTFW_STATUS_DEVICE_ERROR ((rtfw_status)-19)</span>
+<span id="L73"><a href="#L73">   73</a> #define RTFW_STATUS_DEVICE_LOST ((rtfw_status)-20)</span>
+<span id="L74"><a href="#L74">   74</a> #define RTFW_STATUS_DEVICE_CANCELED ((rtfw_status)-21)</span>
+<span id="L75"><a href="#L75">   75</a> #define RTFW_STATUS_DEVICE_RESET_REQUIRED ((rtfw_status)-22)</span>
+<span id="L76"><a href="#L76">   76</a> #define RTFW_STATUS_INCOMPATIBLE_ABI ((rtfw_status)-23)</span>
+<span id="L77"><a href="#L77">   77</a> </span>
+<span id="L78"><a href="#L78">   78</a> typedef uint64_t rtfw_abi_feature_flags;</span>
+<span id="L79"><a href="#L79">   79</a> #define RTFW_ABI_FEATURE_HOST_EXECUTOR_ADAPTER \</span>
+<span id="L80"><a href="#L80">   80</a>     (UINT64_C(1) &lt;&lt; 0)</span>
+<span id="L81"><a href="#L81">   81</a> #define RTFW_ABI_FEATURE_DEVICE_BACKEND \</span>
+<span id="L82"><a href="#L82">   82</a>     (UINT64_C(1) &lt;&lt; 1)</span>
+<span id="L83"><a href="#L83">   83</a> #define RTFW_ABI_FEATURE_DETERMINISTIC_REPLAY \</span>
+<span id="L84"><a href="#L84">   84</a>     (UINT64_C(1) &lt;&lt; 2)</span>
+<span id="L85"><a href="#L85">   85</a> </span>
+<span id="L86"><a href="#L86">   86</a> typedef struct rtfw_abi_info {</span>
+<span id="L87"><a href="#L87">   87</a>     uint32_t struct_size;</span>
+<span id="L88"><a href="#L88">   88</a>     uint32_t abi_version;</span>
+<span id="L89"><a href="#L89">   89</a>     uint32_t min_compatible_abi_version;</span>
+<span id="L90"><a href="#L90">   90</a>     uint32_t pointer_size;</span>
+<span id="L91"><a href="#L91">   91</a>     uint64_t layout_fingerprint;</span>
+<span id="L92"><a href="#L92">   92</a>     uint64_t feature_flags;</span>
+<span id="L93"><a href="#L93">   93</a>     uint64_t reserved[4];</span>
+<span id="L94"><a href="#L94">   94</a> } rtfw_abi_info;</span>
+<span id="L95"><a href="#L95">   95</a> </span>
+<span id="L96"><a href="#L96">   96</a> typedef uint32_t rtfw_runtime_state;</span>
+<span id="L97"><a href="#L97">   97</a> #define RTFW_STATE_CONFIGURING ((rtfw_runtime_state)0u)</span>
+<span id="L98"><a href="#L98">   98</a> #define RTFW_STATE_FINALIZED ((rtfw_runtime_state)1u)</span>
+<span id="L99"><a href="#L99">   99</a> #define RTFW_STATE_RUNNING ((rtfw_runtime_state)2u)</span>
+<span id="L100"><a href="#L100">  100</a> #define RTFW_STATE_STOPPED ((rtfw_runtime_state)3u)</span>
+<span id="L101"><a href="#L101">  101</a> </span>
+<span id="L102"><a href="#L102">  102</a> typedef uint32_t rtfw_numerical_mode;</span>
+<span id="L103"><a href="#L103">  103</a> #define RTFW_NUMERICAL_PRECISE ((rtfw_numerical_mode)0u)</span>
+<span id="L104"><a href="#L104">  104</a> #define RTFW_NUMERICAL_FUSED_MULTIPLY_ADD ((rtfw_numerical_mode)1u)</span>
+<span id="L105"><a href="#L105">  105</a> </span>
+<span id="L106"><a href="#L106">  106</a> /*</span>
+<span id="L107"><a href="#L107">  107</a>  * Fixed-width so malformed numeric input remains well-defined at the C</span>
+<span id="L108"><a href="#L108">  108</a>  * boundary. Policies are immutable after finalization.</span>
+<span id="L109"><a href="#L109">  109</a>  */</span>
+<span id="L110"><a href="#L110">  110</a> typedef uint32_t rtfw_executor_policy;</span>
+<span id="L111"><a href="#L111">  111</a> #define RTFW_EXECUTOR_STATIC_DETERMINISTIC ((rtfw_executor_policy)0u)</span>
+<span id="L112"><a href="#L112">  112</a> #define RTFW_EXECUTOR_BOUNDED_THROUGHPUT ((rtfw_executor_policy)1u)</span>
+<span id="L113"><a href="#L113">  113</a> #define RTFW_EXECUTOR_HOST_ADAPTER ((rtfw_executor_policy)2u)</span>
+<span id="L114"><a href="#L114">  114</a> </span>
+<span id="L115"><a href="#L115">  115</a> typedef uint32_t rtfw_overload_policy;</span>
+<span id="L116"><a href="#L116">  116</a> #define RTFW_OVERLOAD_REJECT_SUBMISSION ((rtfw_overload_policy)0u)</span>
+<span id="L117"><a href="#L117">  117</a> #define RTFW_OVERLOAD_FAIL_FRAME ((rtfw_overload_policy)1u)</span>
+<span id="L118"><a href="#L118">  118</a> </span>
+<span id="L119"><a href="#L119">  119</a> typedef uint32_t rtfw_platform_preflight_mode;</span>
+<span id="L120"><a href="#L120">  120</a> #define RTFW_PLATFORM_PREFLIGHT_DISABLED ((rtfw_platform_preflight_mode)0u)</span>
+<span id="L121"><a href="#L121">  121</a> #define RTFW_PLATFORM_PREFLIGHT_STRICT ((rtfw_platform_preflight_mode)1u)</span>
+<span id="L122"><a href="#L122">  122</a> </span>
+<span id="L123"><a href="#L123">  123</a> typedef uint32_t rtfw_determinism_tier;</span>
+<span id="L124"><a href="#L124">  124</a> #define RTFW_DETERMINISM_D0_UNSPECIFIED ((rtfw_determinism_tier)0u)</span>
+<span id="L125"><a href="#L125">  125</a> #define RTFW_DETERMINISM_D1_SCHEDULE_INDEPENDENT \</span>
+<span id="L126"><a href="#L126">  126</a>     ((rtfw_determinism_tier)1u)</span>
+<span id="L127"><a href="#L127">  127</a> #define RTFW_DETERMINISM_D2_REPRODUCIBLE_BUILD \</span>
+<span id="L128"><a href="#L128">  128</a>     ((rtfw_determinism_tier)2u)</span>
+<span id="L129"><a href="#L129">  129</a> #define RTFW_DETERMINISM_D3_PORTABLE ((rtfw_determinism_tier)3u)</span>
+<span id="L130"><a href="#L130">  130</a> </span>
+<span id="L131"><a href="#L131">  131</a> typedef uint32_t rtfw_platform_check_id;</span>
+<span id="L132"><a href="#L132">  132</a> #define RTFW_PLATFORM_CHECK_ABSOLUTE_MONOTONIC_CLOCK \</span>
+<span id="L133"><a href="#L133">  133</a>     ((rtfw_platform_check_id)0u)</span>
+<span id="L134"><a href="#L134">  134</a> #define RTFW_PLATFORM_CHECK_REALTIME_KERNEL ((rtfw_platform_check_id)1u)</span>
+<span id="L135"><a href="#L135">  135</a> #define RTFW_PLATFORM_CHECK_MEMORY_LOCK_LIMIT ((rtfw_platform_check_id)2u)</span>
+<span id="L136"><a href="#L136">  136</a> #define RTFW_PLATFORM_CHECK_LOCKED_MEMORY ((rtfw_platform_check_id)3u)</span>
+<span id="L137"><a href="#L137">  137</a> #define RTFW_PLATFORM_CHECK_ISOLATED_CPU_AFFINITY \</span>
+<span id="L138"><a href="#L138">  138</a>     ((rtfw_platform_check_id)4u)</span>
+<span id="L139"><a href="#L139">  139</a> #define RTFW_PLATFORM_CHECK_REALTIME_SCHEDULER \</span>
+<span id="L140"><a href="#L140">  140</a>     ((rtfw_platform_check_id)5u)</span>
+<span id="L141"><a href="#L141">  141</a> </span>
+<span id="L142"><a href="#L142">  142</a> typedef uint32_t rtfw_platform_check_status;</span>
+<span id="L143"><a href="#L143">  143</a> #define RTFW_PLATFORM_CHECK_PASSED ((rtfw_platform_check_status)0u)</span>
+<span id="L144"><a href="#L144">  144</a> #define RTFW_PLATFORM_CHECK_FAILED ((rtfw_platform_check_status)1u)</span>
+<span id="L145"><a href="#L145">  145</a> #define RTFW_PLATFORM_CHECK_UNSUPPORTED ((rtfw_platform_check_status)2u)</span>
+<span id="L146"><a href="#L146">  146</a> </span>
+<span id="L147"><a href="#L147">  147</a> #define RTFW_PLATFORM_CHECK_CAPACITY 6u</span>
+<span id="L148"><a href="#L148">  148</a> #define RTFW_PLATFORM_CHECK_MESSAGE_CAPACITY 96u</span>
+<span id="L149"><a href="#L149">  149</a> #define RTFW_OBSERVABILITY_SCHEMA_VERSION 2u</span>
+<span id="L150"><a href="#L150">  150</a> #define RTFW_OBSERVABILITY_IDENTIFIER_CAPACITY 64u</span>
+<span id="L151"><a href="#L151">  151</a> #define RTFW_CHECKPOINT_SCHEMA_VERSION 1u</span>
+<span id="L152"><a href="#L152">  152</a> #define RTFW_INPUT_LOG_SCHEMA_VERSION 1u</span>
+<span id="L153"><a href="#L153">  153</a> #define RTFW_REPLAY_IDENTIFIER_CAPACITY 64u</span>
+<span id="L154"><a href="#L154">  154</a> #define RTFW_RUNTIME_METRIC_COUNT 32u</span>
+<span id="L155"><a href="#L155">  155</a> #define RTFW_INVALID_TRACE_INDEX UINT32_MAX</span>
+<span id="L156"><a href="#L156">  156</a> </span>
+<span id="L157"><a href="#L157">  157</a> typedef struct rtfw_config {</span>
+<span id="L158"><a href="#L158">  158</a>     uint32_t struct_size;</span>
+<span id="L159"><a href="#L159">  159</a>     uint32_t abi_version;</span>
+<span id="L160"><a href="#L160">  160</a>     uint64_t callback_capacity;</span>
+<span id="L161"><a href="#L161">  161</a>     uint64_t scratch_bytes;</span>
+<span id="L162"><a href="#L162">  162</a>     uint64_t trace_capacity;</span>
+<span id="L163"><a href="#L163">  163</a>     uint32_t numerical_mode;</span>
+<span id="L164"><a href="#L164">  164</a>     uint32_t executor_policy;</span>
+<span id="L165"><a href="#L165">  165</a>     uint64_t worker_count;</span>
+<span id="L166"><a href="#L166">  166</a>     uint64_t executor_queue_capacity;</span>
+<span id="L167"><a href="#L167">  167</a>     uint64_t scratch_alignment;</span>
+<span id="L168"><a href="#L168">  168</a>     uint64_t task_scratch_bytes;</span>
+<span id="L169"><a href="#L169">  169</a>     uint64_t task_scratch_slots;</span>
+<span id="L170"><a href="#L170">  170</a>     uint64_t memory_budget_bytes;</span>
+<span id="L171"><a href="#L171">  171</a>     uint32_t overload_policy;</span>
+<span id="L172"><a href="#L172">  172</a>     uint32_t platform_preflight_mode;</span>
+<span id="L173"><a href="#L173">  173</a>     uint64_t watchdog_timeout_ns;</span>
+<span id="L174"><a href="#L174">  174</a>     uint32_t watchdog_max_degradation_level;</span>
+<span id="L175"><a href="#L175">  175</a>     uint32_t determinism_tier;</span>
+<span id="L176"><a href="#L176">  176</a>     uint64_t state_capacity;</span>
+<span id="L177"><a href="#L177">  177</a>     uint64_t snapshot_max_bytes;</span>
+<span id="L178"><a href="#L178">  178</a>     uint64_t replay_input_capacity;</span>
+<span id="L179"><a href="#L179">  179</a>     uint64_t input_log_max_bytes;</span>
+<span id="L180"><a href="#L180">  180</a>     uint64_t device_backend_capacity;</span>
+<span id="L181"><a href="#L181">  181</a>     uint64_t device_buffer_capacity;</span>
+<span id="L182"><a href="#L182">  182</a>     uint64_t device_outstanding_capacity;</span>
+<span id="L183"><a href="#L183">  183</a>     uint64_t device_completion_batch;</span>
+<span id="L184"><a href="#L184">  184</a>     char workload_id[RTFW_OBSERVABILITY_IDENTIFIER_CAPACITY];</span>
+<span id="L185"><a href="#L185">  185</a>     uint64_t reserved[2];</span>
+<span id="L186"><a href="#L186">  186</a> } rtfw_config;</span>
+<span id="L187"><a href="#L187">  187</a> </span>
+<span id="L188"><a href="#L188">  188</a> typedef struct rtfw_frame_context {</span>
+<span id="L189"><a href="#L189">  189</a>     uint32_t struct_size;</span>
+<span id="L190"><a href="#L190">  190</a>     uint32_t reserved0;</span>
+<span id="L191"><a href="#L191">  191</a>     uint64_t frame_index;</span>
+<span id="L192"><a href="#L192">  192</a>     int64_t delta_ns;</span>
+<span id="L193"><a href="#L193">  193</a>     uint8_t has_deadline;</span>
+<span id="L194"><a href="#L194">  194</a>     uint8_t reserved1[7];</span>
+<span id="L195"><a href="#L195">  195</a>     uint64_t deadline_ns;</span>
+<span id="L196"><a href="#L196">  196</a> } rtfw_frame_context;</span>
+<span id="L197"><a href="#L197">  197</a> </span>
+<span id="L198"><a href="#L198">  198</a> typedef struct rtfw_callback_context {</span>
+<span id="L199"><a href="#L199">  199</a>     uint32_t struct_size;</span>
+<span id="L200"><a href="#L200">  200</a>     uint32_t numerical_mode;</span>
+<span id="L201"><a href="#L201">  201</a>     uint32_t degradation_level;</span>
+<span id="L202"><a href="#L202">  202</a>     uint32_t reserved0;</span>
+<span id="L203"><a href="#L203">  203</a>     uint64_t frame_index;</span>
+<span id="L204"><a href="#L204">  204</a>     int64_t delta_ns;</span>
+<span id="L205"><a href="#L205">  205</a>     uint8_t has_deadline;</span>
+<span id="L206"><a href="#L206">  206</a>     uint8_t reserved[7];</span>
+<span id="L207"><a href="#L207">  207</a>     uint64_t deadline_ns;</span>
+<span id="L208"><a href="#L208">  208</a>     void* scratch;</span>
+<span id="L209"><a href="#L209">  209</a>     uint64_t scratch_bytes;</span>
+<span id="L210"><a href="#L210">  210</a>     const rtfw_task_context* tasks;</span>
+<span id="L211"><a href="#L211">  211</a> } rtfw_callback_context;</span>
+<span id="L212"><a href="#L212">  212</a> </span>
+<span id="L213"><a href="#L213">  213</a> typedef struct rtfw_step_result {</span>
+<span id="L214"><a href="#L214">  214</a>     uint32_t struct_size;</span>
+<span id="L215"><a href="#L215">  215</a>     uint32_t reserved0;</span>
+<span id="L216"><a href="#L216">  216</a>     uint64_t callbacks_executed;</span>
+<span id="L217"><a href="#L217">  217</a>     uint64_t start_ns;</span>
+<span id="L218"><a href="#L218">  218</a>     uint64_t finish_ns;</span>
+<span id="L219"><a href="#L219">  219</a>     uint8_t deadline_missed;</span>
+<span id="L220"><a href="#L220">  220</a>     uint8_t watchdog_fired;</span>
+<span id="L221"><a href="#L221">  221</a>     uint8_t reserved1[2];</span>
+<span id="L222"><a href="#L222">  222</a>     uint32_t degradation_level;</span>
+<span id="L223"><a href="#L223">  223</a> } rtfw_step_result;</span>
+<span id="L224"><a href="#L224">  224</a> </span>
+<span id="L225"><a href="#L225">  225</a> typedef struct rtfw_periodic_config {</span>
+<span id="L226"><a href="#L226">  226</a>     uint32_t struct_size;</span>
+<span id="L227"><a href="#L227">  227</a>     uint32_t reserved0;</span>
+<span id="L228"><a href="#L228">  228</a>     uint64_t first_frame_index;</span>
+<span id="L229"><a href="#L229">  229</a>     uint64_t frame_count;</span>
+<span id="L230"><a href="#L230">  230</a>     uint64_t period_ns;</span>
+<span id="L231"><a href="#L231">  231</a>     uint8_t has_first_release;</span>
+<span id="L232"><a href="#L232">  232</a>     uint8_t reserved1[7];</span>
+<span id="L233"><a href="#L233">  233</a>     uint64_t first_release_ns;</span>
+<span id="L234"><a href="#L234">  234</a>     uint64_t relative_deadline_ns;</span>
+<span id="L235"><a href="#L235">  235</a>     uint64_t reserved[2];</span>
+<span id="L236"><a href="#L236">  236</a> } rtfw_periodic_config;</span>
+<span id="L237"><a href="#L237">  237</a> </span>
+<span id="L238"><a href="#L238">  238</a> typedef struct rtfw_periodic_frame_result {</span>
+<span id="L239"><a href="#L239">  239</a>     uint32_t struct_size;</span>
+<span id="L240"><a href="#L240">  240</a>     int32_t status;</span>
+<span id="L241"><a href="#L241">  241</a>     uint64_t frame_index;</span>
+<span id="L242"><a href="#L242">  242</a>     uint64_t release_ns;</span>
+<span id="L243"><a href="#L243">  243</a>     uint64_t wake_ns;</span>
+<span id="L244"><a href="#L244">  244</a>     uint64_t start_ns;</span>
+<span id="L245"><a href="#L245">  245</a>     uint64_t finish_ns;</span>
+<span id="L246"><a href="#L246">  246</a>     int64_t slack_ns;</span>
+<span id="L247"><a href="#L247">  247</a>     uint8_t deadline_missed;</span>
+<span id="L248"><a href="#L248">  248</a>     uint8_t watchdog_fired;</span>
+<span id="L249"><a href="#L249">  249</a>     uint8_t reserved0[2];</span>
+<span id="L250"><a href="#L250">  250</a>     uint32_t degradation_level;</span>
+<span id="L251"><a href="#L251">  251</a> } rtfw_periodic_frame_result;</span>
+<span id="L252"><a href="#L252">  252</a> </span>
+<span id="L253"><a href="#L253">  253</a> typedef struct rtfw_periodic_run_result {</span>
+<span id="L254"><a href="#L254">  254</a>     uint32_t struct_size;</span>
+<span id="L255"><a href="#L255">  255</a>     uint32_t reserved0;</span>
+<span id="L256"><a href="#L256">  256</a>     uint64_t frames_executed;</span>
+<span id="L257"><a href="#L257">  257</a>     uint64_t deadline_misses;</span>
+<span id="L258"><a href="#L258">  258</a>     uint64_t watchdog_events;</span>
+<span id="L259"><a href="#L259">  259</a>     uint32_t final_degradation_level;</span>
+<span id="L260"><a href="#L260">  260</a>     uint32_t reserved1;</span>
+<span id="L261"><a href="#L261">  261</a>     uint64_t first_release_ns;</span>
+<span id="L262"><a href="#L262">  262</a>     uint64_t next_release_ns;</span>
+<span id="L263"><a href="#L263">  263</a>     rtfw_periodic_frame_result last_frame;</span>
+<span id="L264"><a href="#L264">  264</a>     uint64_t reserved[2];</span>
+<span id="L265"><a href="#L265">  265</a> } rtfw_periodic_run_result;</span>
+<span id="L266"><a href="#L266">  266</a> </span>
+<span id="L267"><a href="#L267">  267</a> typedef struct rtfw_memory_plan {</span>
+<span id="L268"><a href="#L268">  268</a>     uint32_t struct_size;</span>
+<span id="L269"><a href="#L269">  269</a>     uint32_t overload_policy;</span>
+<span id="L270"><a href="#L270">  270</a>     uint64_t memory_budget_bytes;</span>
+<span id="L271"><a href="#L271">  271</a>     uint64_t planned_bytes;</span>
+<span id="L272"><a href="#L272">  272</a>     uint64_t runtime_control_bytes;</span>
+<span id="L273"><a href="#L273">  273</a>     uint64_t executor_control_bytes;</span>
+<span id="L274"><a href="#L274">  274</a>     uint64_t phase_count;</span>
+<span id="L275"><a href="#L275">  275</a>     uint64_t phase_scratch_bytes;</span>
+<span id="L276"><a href="#L276">  276</a>     uint64_t phase_scratch_stride;</span>
+<span id="L277"><a href="#L277">  277</a>     uint64_t phase_scratch_total_bytes;</span>
+<span id="L278"><a href="#L278">  278</a>     uint64_t task_scratch_bytes;</span>
+<span id="L279"><a href="#L279">  279</a>     uint64_t task_scratch_stride;</span>
+<span id="L280"><a href="#L280">  280</a>     uint64_t task_scratch_slots;</span>
+<span id="L281"><a href="#L281">  281</a>     uint64_t task_scratch_total_bytes;</span>
+<span id="L282"><a href="#L282">  282</a>     uint64_t trace_capacity;</span>
+<span id="L283"><a href="#L283">  283</a>     uint64_t trace_slot_bytes;</span>
+<span id="L284"><a href="#L284">  284</a>     uint64_t trace_storage_bytes;</span>
+<span id="L285"><a href="#L285">  285</a>     uint64_t state_count;</span>
+<span id="L286"><a href="#L286">  286</a>     uint64_t registered_state_bytes;</span>
+<span id="L287"><a href="#L287">  287</a>     uint64_t snapshot_max_bytes;</span>
+<span id="L288"><a href="#L288">  288</a>     uint64_t replay_input_capacity;</span>
+<span id="L289"><a href="#L289">  289</a>     uint64_t input_log_max_bytes;</span>
+<span id="L290"><a href="#L290">  290</a>     uint64_t device_backend_count;</span>
+<span id="L291"><a href="#L291">  291</a>     uint64_t device_buffer_count;</span>
+<span id="L292"><a href="#L292">  292</a>     uint64_t device_outstanding_capacity;</span>
+<span id="L293"><a href="#L293">  293</a>     uint64_t device_completion_batch;</span>
+<span id="L294"><a href="#L294">  294</a>     uint64_t device_control_bytes;</span>
+<span id="L295"><a href="#L295">  295</a>     uint64_t device_backend_reported_bytes;</span>
+<span id="L296"><a href="#L296">  296</a>     uint64_t queue_slots;</span>
+<span id="L297"><a href="#L297">  297</a>     uint64_t scratch_alignment;</span>
+<span id="L298"><a href="#L298">  298</a>     uint64_t reserved[4];</span>
+<span id="L299"><a href="#L299">  299</a> } rtfw_memory_plan;</span>
+<span id="L300"><a href="#L300">  300</a> </span>
+<span id="L301"><a href="#L301">  301</a> typedef struct rtfw_platform_check_result {</span>
+<span id="L302"><a href="#L302">  302</a>     uint32_t id;</span>
+<span id="L303"><a href="#L303">  303</a>     uint32_t status;</span>
+<span id="L304"><a href="#L304">  304</a>     int32_t system_error;</span>
+<span id="L305"><a href="#L305">  305</a>     uint32_t reserved0;</span>
+<span id="L306"><a href="#L306">  306</a>     char message[RTFW_PLATFORM_CHECK_MESSAGE_CAPACITY];</span>
+<span id="L307"><a href="#L307">  307</a> } rtfw_platform_check_result;</span>
+<span id="L308"><a href="#L308">  308</a> </span>
+<span id="L309"><a href="#L309">  309</a> typedef struct rtfw_platform_preflight_report {</span>
+<span id="L310"><a href="#L310">  310</a>     uint32_t struct_size;</span>
+<span id="L311"><a href="#L311">  311</a>     uint32_t mode;</span>
+<span id="L312"><a href="#L312">  312</a>     uint8_t passed;</span>
+<span id="L313"><a href="#L313">  313</a>     uint8_t reserved0[7];</span>
+<span id="L314"><a href="#L314">  314</a>     uint64_t check_count;</span>
+<span id="L315"><a href="#L315">  315</a>     rtfw_platform_check_result checks[RTFW_PLATFORM_CHECK_CAPACITY];</span>
+<span id="L316"><a href="#L316">  316</a>     uint64_t reserved[2];</span>
+<span id="L317"><a href="#L317">  317</a> } rtfw_platform_preflight_report;</span>
+<span id="L318"><a href="#L318">  318</a> </span>
+<span id="L319"><a href="#L319">  319</a> typedef uint16_t rtfw_trace_event_type;</span>
+<span id="L320"><a href="#L320">  320</a> #define RTFW_TRACE_FINALIZED ((rtfw_trace_event_type)1u)</span>
+<span id="L321"><a href="#L321">  321</a> #define RTFW_TRACE_STARTED ((rtfw_trace_event_type)2u)</span>
+<span id="L322"><a href="#L322">  322</a> #define RTFW_TRACE_PERIODIC_RELEASE ((rtfw_trace_event_type)3u)</span>
+<span id="L323"><a href="#L323">  323</a> #define RTFW_TRACE_PERIODIC_WAKE ((rtfw_trace_event_type)4u)</span>
+<span id="L324"><a href="#L324">  324</a> #define RTFW_TRACE_STEP_BEGIN ((rtfw_trace_event_type)5u)</span>
+<span id="L325"><a href="#L325">  325</a> #define RTFW_TRACE_CALLBACK_BEGIN ((rtfw_trace_event_type)6u)</span>
+<span id="L326"><a href="#L326">  326</a> #define RTFW_TRACE_CALLBACK_END ((rtfw_trace_event_type)7u)</span>
+<span id="L327"><a href="#L327">  327</a> #define RTFW_TRACE_WATCHDOG_FIRED ((rtfw_trace_event_type)8u)</span>
+<span id="L328"><a href="#L328">  328</a> #define RTFW_TRACE_DEGRADATION_APPLIED ((rtfw_trace_event_type)9u)</span>
+<span id="L329"><a href="#L329">  329</a> #define RTFW_TRACE_STEP_END ((rtfw_trace_event_type)10u)</span>
+<span id="L330"><a href="#L330">  330</a> #define RTFW_TRACE_STOPPED ((rtfw_trace_event_type)11u)</span>
+<span id="L331"><a href="#L331">  331</a> #define RTFW_TRACE_DEVICE_SUBMITTED ((rtfw_trace_event_type)12u)</span>
+<span id="L332"><a href="#L332">  332</a> #define RTFW_TRACE_DEVICE_COMPLETED ((rtfw_trace_event_type)13u)</span>
+<span id="L333"><a href="#L333">  333</a> #define RTFW_TRACE_DEVICE_RESET ((rtfw_trace_event_type)14u)</span>
+<span id="L334"><a href="#L334">  334</a> </span>
+<span id="L335"><a href="#L335">  335</a> typedef uint16_t rtfw_trace_producer;</span>
+<span id="L336"><a href="#L336">  336</a> #define RTFW_TRACE_PRODUCER_HOST ((rtfw_trace_producer)0u)</span>
+<span id="L337"><a href="#L337">  337</a> #define RTFW_TRACE_PRODUCER_WORKER ((rtfw_trace_producer)1u)</span>
+<span id="L338"><a href="#L338">  338</a> #define RTFW_TRACE_PRODUCER_DEVICE_SERVICE ((rtfw_trace_producer)2u)</span>
+<span id="L339"><a href="#L339">  339</a> </span>
+<span id="L340"><a href="#L340">  340</a> typedef struct rtfw_trace_event {</span>
+<span id="L341"><a href="#L341">  341</a>     uint32_t schema_version;</span>
+<span id="L342"><a href="#L342">  342</a>     uint16_t record_size;</span>
+<span id="L343"><a href="#L343">  343</a>     uint16_t type;</span>
+<span id="L344"><a href="#L344">  344</a>     int32_t status;</span>
+<span id="L345"><a href="#L345">  345</a>     uint16_t producer;</span>
+<span id="L346"><a href="#L346">  346</a>     uint16_t reserved0;</span>
+<span id="L347"><a href="#L347">  347</a>     uint64_t sequence;</span>
+<span id="L348"><a href="#L348">  348</a>     uint64_t timestamp_ns;</span>
+<span id="L349"><a href="#L349">  349</a>     uint64_t frame_index;</span>
+<span id="L350"><a href="#L350">  350</a>     uint32_t callback_index;</span>
+<span id="L351"><a href="#L351">  351</a>     uint32_t worker_index;</span>
+<span id="L352"><a href="#L352">  352</a>     uint64_t value;</span>
+<span id="L353"><a href="#L353">  353</a>     uint64_t reserved1;</span>
+<span id="L354"><a href="#L354">  354</a> } rtfw_trace_event;</span>
+<span id="L355"><a href="#L355">  355</a> </span>
+<span id="L356"><a href="#L356">  356</a> typedef uint8_t rtfw_metric_kind;</span>
+<span id="L357"><a href="#L357">  357</a> #define RTFW_METRIC_COUNTER ((rtfw_metric_kind)0u)</span>
+<span id="L358"><a href="#L358">  358</a> #define RTFW_METRIC_GAUGE ((rtfw_metric_kind)1u)</span>
+<span id="L359"><a href="#L359">  359</a> </span>
+<span id="L360"><a href="#L360">  360</a> typedef uint32_t rtfw_metric_window;</span>
+<span id="L361"><a href="#L361">  361</a> #define RTFW_METRIC_CUMULATIVE ((rtfw_metric_window)0u)</span>
+<span id="L362"><a href="#L362">  362</a> #define RTFW_METRIC_INTERVAL ((rtfw_metric_window)1u)</span>
+<span id="L363"><a href="#L363">  363</a> </span>
+<span id="L364"><a href="#L364">  364</a> typedef uint16_t rtfw_metric_id;</span>
+<span id="L365"><a href="#L365">  365</a> #define RTFW_METRIC_FRAMES_STARTED ((rtfw_metric_id)0u)</span>
+<span id="L366"><a href="#L366">  366</a> #define RTFW_METRIC_FRAMES_COMPLETED ((rtfw_metric_id)1u)</span>
+<span id="L367"><a href="#L367">  367</a> #define RTFW_METRIC_FRAMES_FAILED ((rtfw_metric_id)2u)</span>
+<span id="L368"><a href="#L368">  368</a> #define RTFW_METRIC_CALLBACKS_STARTED ((rtfw_metric_id)3u)</span>
+<span id="L369"><a href="#L369">  369</a> #define RTFW_METRIC_CALLBACKS_COMPLETED ((rtfw_metric_id)4u)</span>
+<span id="L370"><a href="#L370">  370</a> #define RTFW_METRIC_CALLBACK_FAILURES ((rtfw_metric_id)5u)</span>
+<span id="L371"><a href="#L371">  371</a> #define RTFW_METRIC_DEADLINE_MISSES ((rtfw_metric_id)6u)</span>
+<span id="L372"><a href="#L372">  372</a> #define RTFW_METRIC_WATCHDOG_EVENTS ((rtfw_metric_id)7u)</span>
+<span id="L373"><a href="#L373">  373</a> #define RTFW_METRIC_DEGRADATION_EVENTS ((rtfw_metric_id)8u)</span>
+<span id="L374"><a href="#L374">  374</a> #define RTFW_METRIC_PERIODIC_RELEASES ((rtfw_metric_id)9u)</span>
+<span id="L375"><a href="#L375">  375</a> #define RTFW_METRIC_PERIODIC_WAKES ((rtfw_metric_id)10u)</span>
+<span id="L376"><a href="#L376">  376</a> #define RTFW_METRIC_TRACE_EVENTS_EMITTED ((rtfw_metric_id)11u)</span>
+<span id="L377"><a href="#L377">  377</a> #define RTFW_METRIC_TRACE_EVENTS_OVERWRITTEN ((rtfw_metric_id)12u)</span>
+<span id="L378"><a href="#L378">  378</a> #define RTFW_METRIC_TRACE_EVENTS_DROPPED ((rtfw_metric_id)13u)</span>
+<span id="L379"><a href="#L379">  379</a> #define RTFW_METRIC_EXECUTOR_SUBMITTED_TASKS ((rtfw_metric_id)14u)</span>
+<span id="L380"><a href="#L380">  380</a> #define RTFW_METRIC_EXECUTOR_LOCAL_EXECUTIONS ((rtfw_metric_id)15u)</span>
+<span id="L381"><a href="#L381">  381</a> #define RTFW_METRIC_EXECUTOR_STEAL_ATTEMPTS ((rtfw_metric_id)16u)</span>
+<span id="L382"><a href="#L382">  382</a> #define RTFW_METRIC_EXECUTOR_SUCCESSFUL_STEALS ((rtfw_metric_id)17u)</span>
+<span id="L383"><a href="#L383">  383</a> #define RTFW_METRIC_EXECUTOR_QUEUE_REJECTIONS ((rtfw_metric_id)18u)</span>
+<span id="L384"><a href="#L384">  384</a> #define RTFW_METRIC_EXECUTOR_SCRATCH_EXHAUSTIONS ((rtfw_metric_id)19u)</span>
+<span id="L385"><a href="#L385">  385</a> #define RTFW_METRIC_EXECUTOR_WORKER_STARTS ((rtfw_metric_id)20u)</span>
+<span id="L386"><a href="#L386">  386</a> #define RTFW_METRIC_DEGRADATION_LEVEL ((rtfw_metric_id)21u)</span>
+<span id="L387"><a href="#L387">  387</a> #define RTFW_METRIC_DEVICE_SUBMISSIONS ((rtfw_metric_id)22u)</span>
+<span id="L388"><a href="#L388">  388</a> #define RTFW_METRIC_DEVICE_COMPLETIONS ((rtfw_metric_id)23u)</span>
+<span id="L389"><a href="#L389">  389</a> #define RTFW_METRIC_DEVICE_FAILURES ((rtfw_metric_id)24u)</span>
+<span id="L390"><a href="#L390">  390</a> #define RTFW_METRIC_DEVICE_QUEUE_REJECTIONS ((rtfw_metric_id)25u)</span>
+<span id="L391"><a href="#L391">  391</a> #define RTFW_METRIC_DEVICE_TIMEOUTS ((rtfw_metric_id)26u)</span>
+<span id="L392"><a href="#L392">  392</a> #define RTFW_METRIC_DEVICE_LOSSES ((rtfw_metric_id)27u)</span>
+<span id="L393"><a href="#L393">  393</a> #define RTFW_METRIC_DEVICE_RESETS ((rtfw_metric_id)28u)</span>
+<span id="L394"><a href="#L394">  394</a> #define RTFW_METRIC_DEVICE_SERVICE_POLLS ((rtfw_metric_id)29u)</span>
+<span id="L395"><a href="#L395">  395</a> #define RTFW_METRIC_DEVICE_OUTSTANDING ((rtfw_metric_id)30u)</span>
+<span id="L396"><a href="#L396">  396</a> #define RTFW_METRIC_DEVICE_SERVICE_STARTS ((rtfw_metric_id)31u)</span>
+<span id="L397"><a href="#L397">  397</a> </span>
+<span id="L398"><a href="#L398">  398</a> typedef struct rtfw_observability_metadata {</span>
+<span id="L399"><a href="#L399">  399</a>     uint32_t struct_size;</span>
+<span id="L400"><a href="#L400">  400</a>     uint32_t schema_version;</span>
+<span id="L401"><a href="#L401">  401</a>     uint32_t runtime_version_major;</span>
+<span id="L402"><a href="#L402">  402</a>     uint32_t runtime_version_minor;</span>
+<span id="L403"><a href="#L403">  403</a>     uint32_t runtime_version_patch;</span>
+<span id="L404"><a href="#L404">  404</a>     uint32_t trace_event_size;</span>
+<span id="L405"><a href="#L405">  405</a>     uint32_t metric_sample_size;</span>
+<span id="L406"><a href="#L406">  406</a>     uint32_t metric_count;</span>
+<span id="L407"><a href="#L407">  407</a>     uint64_t config_id;</span>
+<span id="L408"><a href="#L408">  408</a>     uint64_t runtime_id;</span>
+<span id="L409"><a href="#L409">  409</a>     uint64_t trace_capacity;</span>
+<span id="L410"><a href="#L410">  410</a>     char build_id[RTFW_OBSERVABILITY_IDENTIFIER_CAPACITY];</span>
+<span id="L411"><a href="#L411">  411</a>     char workload_id[RTFW_OBSERVABILITY_IDENTIFIER_CAPACITY];</span>
+<span id="L412"><a href="#L412">  412</a> } rtfw_observability_metadata;</span>
+<span id="L413"><a href="#L413">  413</a> </span>
+<span id="L414"><a href="#L414">  414</a> typedef struct rtfw_metric_sample {</span>
+<span id="L415"><a href="#L415">  415</a>     uint16_t id;</span>
+<span id="L416"><a href="#L416">  416</a>     uint8_t kind;</span>
+<span id="L417"><a href="#L417">  417</a>     uint8_t reserved0;</span>
+<span id="L418"><a href="#L418">  418</a>     uint32_t reserved1;</span>
+<span id="L419"><a href="#L419">  419</a>     uint64_t value;</span>
+<span id="L420"><a href="#L420">  420</a> } rtfw_metric_sample;</span>
+<span id="L421"><a href="#L421">  421</a> </span>
+<span id="L422"><a href="#L422">  422</a> typedef struct rtfw_metric_cursor {</span>
+<span id="L423"><a href="#L423">  423</a>     uint32_t struct_size;</span>
+<span id="L424"><a href="#L424">  424</a>     uint32_t schema_version;</span>
+<span id="L425"><a href="#L425">  425</a>     uint64_t runtime_id;</span>
+<span id="L426"><a href="#L426">  426</a>     uint64_t window_end_ns;</span>
+<span id="L427"><a href="#L427">  427</a>     uint64_t counters[RTFW_RUNTIME_METRIC_COUNT];</span>
+<span id="L428"><a href="#L428">  428</a>     uint64_t reserved[2];</span>
+<span id="L429"><a href="#L429">  429</a> } rtfw_metric_cursor;</span>
+<span id="L430"><a href="#L430">  430</a> </span>
+<span id="L431"><a href="#L431">  431</a> typedef struct rtfw_metric_snapshot {</span>
+<span id="L432"><a href="#L432">  432</a>     uint32_t struct_size;</span>
+<span id="L433"><a href="#L433">  433</a>     uint32_t window;</span>
+<span id="L434"><a href="#L434">  434</a>     rtfw_observability_metadata metadata;</span>
+<span id="L435"><a href="#L435">  435</a>     uint64_t snapshot_sequence;</span>
+<span id="L436"><a href="#L436">  436</a>     uint64_t window_start_ns;</span>
+<span id="L437"><a href="#L437">  437</a>     uint64_t window_end_ns;</span>
+<span id="L438"><a href="#L438">  438</a>     uint64_t sample_count;</span>
+<span id="L439"><a href="#L439">  439</a>     rtfw_metric_sample samples[RTFW_RUNTIME_METRIC_COUNT];</span>
+<span id="L440"><a href="#L440">  440</a>     uint64_t reserved[2];</span>
+<span id="L441"><a href="#L441">  441</a> } rtfw_metric_snapshot;</span>
+<span id="L442"><a href="#L442">  442</a> </span>
+<span id="L443"><a href="#L443">  443</a> typedef struct rtfw_trace_cursor {</span>
+<span id="L444"><a href="#L444">  444</a>     uint32_t struct_size;</span>
+<span id="L445"><a href="#L445">  445</a>     uint32_t schema_version;</span>
+<span id="L446"><a href="#L446">  446</a>     uint64_t runtime_id;</span>
+<span id="L447"><a href="#L447">  447</a>     uint64_t next_sequence;</span>
+<span id="L448"><a href="#L448">  448</a>     uint64_t reserved[2];</span>
+<span id="L449"><a href="#L449">  449</a> } rtfw_trace_cursor;</span>
+<span id="L450"><a href="#L450">  450</a> </span>
+<span id="L451"><a href="#L451">  451</a> typedef struct rtfw_trace_read_result {</span>
+<span id="L452"><a href="#L452">  452</a>     uint32_t struct_size;</span>
+<span id="L453"><a href="#L453">  453</a>     uint32_t reserved0;</span>
+<span id="L454"><a href="#L454">  454</a>     rtfw_observability_metadata metadata;</span>
+<span id="L455"><a href="#L455">  455</a>     uint64_t first_sequence;</span>
+<span id="L456"><a href="#L456">  456</a>     uint64_t next_sequence;</span>
+<span id="L457"><a href="#L457">  457</a>     uint64_t events_read;</span>
+<span id="L458"><a href="#L458">  458</a>     uint64_t lost_events;</span>
+<span id="L459"><a href="#L459">  459</a>     uint64_t remaining_sequence_count;</span>
+<span id="L460"><a href="#L460">  460</a>     uint64_t reserved[2];</span>
+<span id="L461"><a href="#L461">  461</a> } rtfw_trace_read_result;</span>
+<span id="L462"><a href="#L462">  462</a> </span>
+<span id="L463"><a href="#L463">  463</a> typedef struct rtfw_artifact_write_result {</span>
+<span id="L464"><a href="#L464">  464</a>     uint32_t struct_size;</span>
+<span id="L465"><a href="#L465">  465</a>     uint32_t reserved0;</span>
+<span id="L466"><a href="#L466">  466</a>     uint64_t required_bytes;</span>
+<span id="L467"><a href="#L467">  467</a>     uint64_t bytes_written;</span>
+<span id="L468"><a href="#L468">  468</a>     uint64_t checksum;</span>
+<span id="L469"><a href="#L469">  469</a>     uint64_t reserved[2];</span>
+<span id="L470"><a href="#L470">  470</a> } rtfw_artifact_write_result;</span>
+<span id="L471"><a href="#L471">  471</a> </span>
+<span id="L472"><a href="#L472">  472</a> typedef struct rtfw_checkpoint_metadata {</span>
+<span id="L473"><a href="#L473">  473</a>     uint32_t struct_size;</span>
+<span id="L474"><a href="#L474">  474</a>     uint32_t schema_version;</span>
+<span id="L475"><a href="#L475">  475</a>     uint32_t runtime_version_major;</span>
+<span id="L476"><a href="#L476">  476</a>     uint32_t runtime_version_minor;</span>
+<span id="L477"><a href="#L477">  477</a>     uint32_t runtime_version_patch;</span>
+<span id="L478"><a href="#L478">  478</a>     uint32_t determinism_tier;</span>
+<span id="L479"><a href="#L479">  479</a>     uint32_t state_count;</span>
+<span id="L480"><a href="#L480">  480</a>     uint32_t reserved0;</span>
+<span id="L481"><a href="#L481">  481</a>     uint64_t config_id;</span>
+<span id="L482"><a href="#L482">  482</a>     uint64_t replay_id;</span>
+<span id="L483"><a href="#L483">  483</a>     uint64_t graph_id;</span>
+<span id="L484"><a href="#L484">  484</a>     uint64_t state_schema_id;</span>
+<span id="L485"><a href="#L485">  485</a>     uint64_t checkpoint_frame_index;</span>
+<span id="L486"><a href="#L486">  486</a>     uint64_t state_payload_bytes;</span>
+<span id="L487"><a href="#L487">  487</a>     uint64_t total_bytes;</span>
+<span id="L488"><a href="#L488">  488</a>     uint64_t state_hash;</span>
+<span id="L489"><a href="#L489">  489</a>     uint64_t artifact_checksum;</span>
+<span id="L490"><a href="#L490">  490</a>     char build_id[RTFW_REPLAY_IDENTIFIER_CAPACITY];</span>
+<span id="L491"><a href="#L491">  491</a>     char workload_id[RTFW_REPLAY_IDENTIFIER_CAPACITY];</span>
+<span id="L492"><a href="#L492">  492</a>     uint64_t reserved[2];</span>
+<span id="L493"><a href="#L493">  493</a> } rtfw_checkpoint_metadata;</span>
+<span id="L494"><a href="#L494">  494</a> </span>
+<span id="L495"><a href="#L495">  495</a> typedef struct rtfw_input_log_metadata {</span>
+<span id="L496"><a href="#L496">  496</a>     uint32_t struct_size;</span>
+<span id="L497"><a href="#L497">  497</a>     uint32_t schema_version;</span>
+<span id="L498"><a href="#L498">  498</a>     uint32_t runtime_version_major;</span>
+<span id="L499"><a href="#L499">  499</a>     uint32_t runtime_version_minor;</span>
+<span id="L500"><a href="#L500">  500</a>     uint32_t runtime_version_patch;</span>
+<span id="L501"><a href="#L501">  501</a>     uint32_t determinism_tier;</span>
+<span id="L502"><a href="#L502">  502</a>     uint32_t record_count;</span>
+<span id="L503"><a href="#L503">  503</a>     uint32_t reserved0;</span>
+<span id="L504"><a href="#L504">  504</a>     uint64_t replay_id;</span>
+<span id="L505"><a href="#L505">  505</a>     uint64_t state_schema_id;</span>
+<span id="L506"><a href="#L506">  506</a>     uint64_t payload_bytes;</span>
+<span id="L507"><a href="#L507">  507</a>     uint64_t total_bytes;</span>
+<span id="L508"><a href="#L508">  508</a>     uint64_t artifact_checksum;</span>
+<span id="L509"><a href="#L509">  509</a>     uint64_t first_frame_index;</span>
+<span id="L510"><a href="#L510">  510</a>     uint64_t last_frame_index;</span>
+<span id="L511"><a href="#L511">  511</a>     char workload_id[RTFW_REPLAY_IDENTIFIER_CAPACITY];</span>
+<span id="L512"><a href="#L512">  512</a>     uint64_t reserved[2];</span>
+<span id="L513"><a href="#L513">  513</a> } rtfw_input_log_metadata;</span>
+<span id="L514"><a href="#L514">  514</a> </span>
+<span id="L515"><a href="#L515">  515</a> typedef struct rtfw_replay_input_record {</span>
+<span id="L516"><a href="#L516">  516</a>     uint32_t struct_size;</span>
+<span id="L517"><a href="#L517">  517</a>     uint32_t input_type;</span>
+<span id="L518"><a href="#L518">  518</a>     uint64_t frame_index;</span>
+<span id="L519"><a href="#L519">  519</a>     int64_t delta_ns;</span>
+<span id="L520"><a href="#L520">  520</a>     uint8_t has_deadline;</span>
+<span id="L521"><a href="#L521">  521</a>     uint8_t reserved0[7];</span>
+<span id="L522"><a href="#L522">  522</a>     uint64_t deadline_ns;</span>
+<span id="L523"><a href="#L523">  523</a>     const void* payload;</span>
+<span id="L524"><a href="#L524">  524</a>     uint64_t payload_size;</span>
+<span id="L525"><a href="#L525">  525</a>     uint64_t reserved[2];</span>
+<span id="L526"><a href="#L526">  526</a> } rtfw_replay_input_record;</span>
+<span id="L527"><a href="#L527">  527</a> </span>
+<span id="L528"><a href="#L528">  528</a> typedef struct rtfw_replay_input_view {</span>
+<span id="L529"><a href="#L529">  529</a>     uint32_t struct_size;</span>
+<span id="L530"><a href="#L530">  530</a>     uint32_t input_type;</span>
+<span id="L531"><a href="#L531">  531</a>     uint64_t frame_index;</span>
+<span id="L532"><a href="#L532">  532</a>     int64_t delta_ns;</span>
+<span id="L533"><a href="#L533">  533</a>     uint8_t has_deadline;</span>
+<span id="L534"><a href="#L534">  534</a>     uint8_t reserved0[7];</span>
+<span id="L535"><a href="#L535">  535</a>     uint64_t deadline_ns;</span>
+<span id="L536"><a href="#L536">  536</a>     const void* payload;</span>
+<span id="L537"><a href="#L537">  537</a>     uint64_t payload_size;</span>
+<span id="L538"><a href="#L538">  538</a> } rtfw_replay_input_view;</span>
+<span id="L539"><a href="#L539">  539</a> </span>
+<span id="L540"><a href="#L540">  540</a> typedef struct rtfw_replay_result {</span>
+<span id="L541"><a href="#L541">  541</a>     uint32_t struct_size;</span>
+<span id="L542"><a href="#L542">  542</a>     uint32_t reserved0;</span>
+<span id="L543"><a href="#L543">  543</a>     uint64_t checkpoint_frame_index;</span>
+<span id="L544"><a href="#L544">  544</a>     uint64_t first_frame_index;</span>
+<span id="L545"><a href="#L545">  545</a>     uint64_t last_frame_index;</span>
+<span id="L546"><a href="#L546">  546</a>     uint64_t records_processed;</span>
+<span id="L547"><a href="#L547">  547</a>     uint64_t frames_replayed;</span>
+<span id="L548"><a href="#L548">  548</a>     uint64_t final_state_hash;</span>
+<span id="L549"><a href="#L549">  549</a>     uint64_t reserved[2];</span>
+<span id="L550"><a href="#L550">  550</a> } rtfw_replay_result;</span>
+<span id="L551"><a href="#L551">  551</a> </span>
+<span id="L552"><a href="#L552">  552</a> typedef uint32_t rtfw_callback_result;</span>
+<span id="L553"><a href="#L553">  553</a> #define RTFW_CALLBACK_OK ((rtfw_callback_result)0u)</span>
+<span id="L554"><a href="#L554">  554</a> #define RTFW_CALLBACK_ERROR ((rtfw_callback_result)1u)</span>
+<span id="L555"><a href="#L555">  555</a> </span>
+<span id="L556"><a href="#L556">  556</a> /* Opaque process-local values: do not persist, decode, or mix their kinds. */</span>
+<span id="L557"><a href="#L557">  557</a> typedef uint64_t rtfw_phase_id;</span>
+<span id="L558"><a href="#L558">  558</a> typedef uint64_t rtfw_resource_id;</span>
+<span id="L559"><a href="#L559">  559</a> typedef uint64_t rtfw_device_backend_id;</span>
+<span id="L560"><a href="#L560">  560</a> typedef uint64_t rtfw_device_buffer_id;</span>
+<span id="L561"><a href="#L561">  561</a> </span>
+<span id="L562"><a href="#L562">  562</a> #define RTFW_INVALID_PHASE_ID UINT64_MAX</span>
+<span id="L563"><a href="#L563">  563</a> #define RTFW_INVALID_RESOURCE_ID UINT64_MAX</span>
+<span id="L564"><a href="#L564">  564</a> #define RTFW_INVALID_DEVICE_BACKEND_ID UINT64_MAX</span>
+<span id="L565"><a href="#L565">  565</a> #define RTFW_INVALID_DEVICE_BUFFER_ID UINT64_MAX</span>
+<span id="L566"><a href="#L566">  566</a> </span>
+<span id="L567"><a href="#L567">  567</a> /*</span>
+<span id="L568"><a href="#L568">  568</a>  * Fixed-width rather than an enum so the C boundary can validate malformed</span>
+<span id="L569"><a href="#L569">  569</a>  * numeric input without first loading an out-of-range enum value.</span>
+<span id="L570"><a href="#L570">  570</a>  */</span>
+<span id="L571"><a href="#L571">  571</a> typedef uint32_t rtfw_resource_access;</span>
+<span id="L572"><a href="#L572">  572</a> #define RTFW_RESOURCE_READ ((rtfw_resource_access)0u)</span>
+<span id="L573"><a href="#L573">  573</a> #define RTFW_RESOURCE_WRITE ((rtfw_resource_access)1u)</span>
+<span id="L574"><a href="#L574">  574</a> </span>
+<span id="L575"><a href="#L575">  575</a> typedef rtfw_callback_result (*rtfw_frame_callback)(</span>
+<span id="L576"><a href="#L576">  576</a>     void* user_data,</span>
+<span id="L577"><a href="#L577">  577</a>     const rtfw_callback_context* context);</span>
+<span id="L578"><a href="#L578">  578</a> </span>
+<span id="L579"><a href="#L579">  579</a> typedef rtfw_callback_result (*rtfw_device_command_callback)(</span>
+<span id="L580"><a href="#L580">  580</a>     void* user_data,</span>
+<span id="L581"><a href="#L581">  581</a>     const rtfw_callback_context* context,</span>
+<span id="L582"><a href="#L582">  582</a>     rtfw_device_submission* submission);</span>
+<span id="L583"><a href="#L583">  583</a> </span>
+<span id="L584"><a href="#L584">  584</a> typedef rtfw_callback_result (*rtfw_range_callback)(</span>
+<span id="L585"><a href="#L585">  585</a>     void* user_data,</span>
+<span id="L586"><a href="#L586">  586</a>     const rtfw_task_context* context,</span>
+<span id="L587"><a href="#L587">  587</a>     uint64_t begin,</span>
+<span id="L588"><a href="#L588">  588</a>     uint64_t end,</span>
+<span id="L589"><a href="#L589">  589</a>     uint64_t task_index);</span>
+<span id="L590"><a href="#L590">  590</a> </span>
+<span id="L591"><a href="#L591">  591</a> typedef rtfw_callback_result (*rtfw_reduction_callback)(</span>
+<span id="L592"><a href="#L592">  592</a>     void* user_data,</span>
+<span id="L593"><a href="#L593">  593</a>     const rtfw_task_context* context,</span>
+<span id="L594"><a href="#L594">  594</a>     uint64_t left_task_index,</span>
+<span id="L595"><a href="#L595">  595</a>     uint64_t right_task_index);</span>
+<span id="L596"><a href="#L596">  596</a> </span>
+<span id="L597"><a href="#L597">  597</a> typedef rtfw_callback_result (*rtfw_periodic_frame_callback)(</span>
+<span id="L598"><a href="#L598">  598</a>     void* user_data,</span>
+<span id="L599"><a href="#L599">  599</a>     const rtfw_periodic_frame_result* frame);</span>
+<span id="L600"><a href="#L600">  600</a> </span>
+<span id="L601"><a href="#L601">  601</a> typedef rtfw_callback_result (*rtfw_replay_input_callback)(</span>
+<span id="L602"><a href="#L602">  602</a>     void* user_data,</span>
+<span id="L603"><a href="#L603">  603</a>     const rtfw_replay_input_view* input);</span>
+<span id="L604"><a href="#L604">  604</a> </span>
+<span id="L605"><a href="#L605">  605</a> /*</span>
+<span id="L606"><a href="#L606">  606</a>  * A host adapter copies each job before submit returns and invokes execute</span>
+<span id="L607"><a href="#L607">  607</a>  * exactly once for every accepted job. completion_context and</span>
+<span id="L608"><a href="#L608">  608</a>  * completion_token are opaque runtime values. scratch is exclusive to that</span>
+<span id="L609"><a href="#L609">  609</a>  * job and valid only until execute returns.</span>
+<span id="L610"><a href="#L610">  610</a>  */</span>
+<span id="L611"><a href="#L611">  611</a> typedef void (*rtfw_host_job_execute)(</span>
+<span id="L612"><a href="#L612">  612</a>     void* execution_context,</span>
+<span id="L613"><a href="#L613">  613</a>     void* completion_context,</span>
+<span id="L614"><a href="#L614">  614</a>     uint64_t completion_token,</span>
+<span id="L615"><a href="#L615">  615</a>     uint32_t worker_index);</span>
+<span id="L616"><a href="#L616">  616</a> </span>
+<span id="L617"><a href="#L617">  617</a> typedef struct rtfw_host_job {</span>
+<span id="L618"><a href="#L618">  618</a>     uint32_t struct_size;</span>
+<span id="L619"><a href="#L619">  619</a>     uint32_t reserved0;</span>
+<span id="L620"><a href="#L620">  620</a>     rtfw_host_job_execute execute;</span>
+<span id="L621"><a href="#L621">  621</a>     void* execution_context;</span>
+<span id="L622"><a href="#L622">  622</a>     void* completion_context;</span>
+<span id="L623"><a href="#L623">  623</a>     uint64_t completion_token;</span>
+<span id="L624"><a href="#L624">  624</a>     void* scratch;</span>
+<span id="L625"><a href="#L625">  625</a>     uint64_t scratch_bytes;</span>
+<span id="L626"><a href="#L626">  626</a>     uint64_t reserved[2];</span>
+<span id="L627"><a href="#L627">  627</a> } rtfw_host_job;</span>
+<span id="L628"><a href="#L628">  628</a> </span>
+<span id="L629"><a href="#L629">  629</a> typedef rtfw_status (*rtfw_host_executor_submit)(</span>
+<span id="L630"><a href="#L630">  630</a>     void* user_data,</span>
+<span id="L631"><a href="#L631">  631</a>     const rtfw_host_job* job);</span>
+<span id="L632"><a href="#L632">  632</a> typedef uint8_t (*rtfw_host_executor_try_execute_one)(</span>
+<span id="L633"><a href="#L633">  633</a>     void* user_data);</span>
+<span id="L634"><a href="#L634">  634</a> </span>
+<span id="L635"><a href="#L635">  635</a> typedef struct rtfw_host_executor {</span>
+<span id="L636"><a href="#L636">  636</a>     uint32_t struct_size;</span>
+<span id="L637"><a href="#L637">  637</a>     uint32_t abi_version;</span>
+<span id="L638"><a href="#L638">  638</a>     void* user_data;</span>
+<span id="L639"><a href="#L639">  639</a>     uint64_t worker_count;</span>
+<span id="L640"><a href="#L640">  640</a>     uint64_t queue_capacity;</span>
+<span id="L641"><a href="#L641">  641</a>     rtfw_host_executor_submit submit;</span>
+<span id="L642"><a href="#L642">  642</a>     rtfw_host_executor_try_execute_one try_execute_one;</span>
+<span id="L643"><a href="#L643">  643</a>     uint64_t reserved[4];</span>
+<span id="L644"><a href="#L644">  644</a> } rtfw_host_executor;</span>
+<span id="L645"><a href="#L645">  645</a> </span>
+<span id="L646"><a href="#L646">  646</a> /* Capability bytes are 0 or 1 and report completed target-path guarantees. */</span>
+<span id="L647"><a href="#L647">  647</a> RTFW_API uint32_t rt_version_major(void);</span>
+<span id="L648"><a href="#L648">  648</a> RTFW_API uint32_t rt_version_minor(void);</span>
+<span id="L649"><a href="#L649">  649</a> RTFW_API uint32_t rt_version_patch(void);</span>
+<span id="L650"><a href="#L650">  650</a> RTFW_API rt_capabilities_c rt_query_capabilities(void);</span>
+<span id="L651"><a href="#L651">  651</a> RTFW_API rtfw_status rtfw_get_abi_info(rtfw_abi_info* out_info);</span>
+<span id="L652"><a href="#L652">  652</a> RTFW_API rtfw_status rtfw_check_abi(</span>
+<span id="L653"><a href="#L653">  653</a>     uint32_t requested_abi_version,</span>
+<span id="L654"><a href="#L654">  654</a>     uint64_t requested_layout_fingerprint);</span>
+<span id="L655"><a href="#L655">  655</a> RTFW_API const char* rtfw_status_message(rtfw_status status);</span>
+<span id="L656"><a href="#L656">  656</a> RTFW_API const char* rtfw_metric_name(rtfw_metric_id id);</span>
+<span id="L657"><a href="#L657">  657</a> RTFW_API const char* rtfw_trace_event_name(</span>
+<span id="L658"><a href="#L658">  658</a>     rtfw_trace_event_type type);</span>
+<span id="L659"><a href="#L659">  659</a> </span>
+<span id="L660"><a href="#L660">  660</a> /* Use the init functions below. All reserved members must remain zero. */</span>
+<span id="L661"><a href="#L661">  661</a> RTFW_API void rtfw_abi_info_init(rtfw_abi_info* info);</span>
+<span id="L662"><a href="#L662">  662</a> RTFW_API void rtfw_config_init(rtfw_config* config);</span>
+<span id="L663"><a href="#L663">  663</a> RTFW_API rtfw_status rtfw_config_set(</span>
+<span id="L664"><a href="#L664">  664</a>     rtfw_config* config,</span>
+<span id="L665"><a href="#L665">  665</a>     const char* key,</span>
+<span id="L666"><a href="#L666">  666</a>     const char* value);</span>
+<span id="L667"><a href="#L667">  667</a> RTFW_API void rtfw_frame_context_init(rtfw_frame_context* context);</span>
+<span id="L668"><a href="#L668">  668</a> RTFW_API void rtfw_step_result_init(rtfw_step_result* result);</span>
+<span id="L669"><a href="#L669">  669</a> RTFW_API void rtfw_periodic_config_init(rtfw_periodic_config* config);</span>
+<span id="L670"><a href="#L670">  670</a> RTFW_API void rtfw_periodic_run_result_init(</span>
+<span id="L671"><a href="#L671">  671</a>     rtfw_periodic_run_result* result);</span>
+<span id="L672"><a href="#L672">  672</a> RTFW_API void rtfw_memory_plan_init(rtfw_memory_plan* plan);</span>
+<span id="L673"><a href="#L673">  673</a> RTFW_API void rtfw_platform_preflight_report_init(</span>
+<span id="L674"><a href="#L674">  674</a>     rtfw_platform_preflight_report* report);</span>
+<span id="L675"><a href="#L675">  675</a> RTFW_API void rtfw_observability_metadata_init(</span>
+<span id="L676"><a href="#L676">  676</a>     rtfw_observability_metadata* metadata);</span>
+<span id="L677"><a href="#L677">  677</a> RTFW_API void rtfw_metric_cursor_init(</span>
+<span id="L678"><a href="#L678">  678</a>     rtfw_metric_cursor* cursor);</span>
+<span id="L679"><a href="#L679">  679</a> RTFW_API void rtfw_metric_snapshot_init(</span>
+<span id="L680"><a href="#L680">  680</a>     rtfw_metric_snapshot* snapshot);</span>
+<span id="L681"><a href="#L681">  681</a> RTFW_API void rtfw_trace_cursor_init(</span>
+<span id="L682"><a href="#L682">  682</a>     rtfw_trace_cursor* cursor);</span>
+<span id="L683"><a href="#L683">  683</a> RTFW_API void rtfw_trace_read_result_init(</span>
+<span id="L684"><a href="#L684">  684</a>     rtfw_trace_read_result* result);</span>
+<span id="L685"><a href="#L685">  685</a> RTFW_API void rtfw_artifact_write_result_init(</span>
+<span id="L686"><a href="#L686">  686</a>     rtfw_artifact_write_result* result);</span>
+<span id="L687"><a href="#L687">  687</a> RTFW_API void rtfw_checkpoint_metadata_init(</span>
+<span id="L688"><a href="#L688">  688</a>     rtfw_checkpoint_metadata* metadata);</span>
+<span id="L689"><a href="#L689">  689</a> RTFW_API void rtfw_input_log_metadata_init(</span>
+<span id="L690"><a href="#L690">  690</a>     rtfw_input_log_metadata* metadata);</span>
+<span id="L691"><a href="#L691">  691</a> RTFW_API void rtfw_replay_input_record_init(</span>
+<span id="L692"><a href="#L692">  692</a>     rtfw_replay_input_record* record);</span>
+<span id="L693"><a href="#L693">  693</a> RTFW_API void rtfw_replay_result_init(</span>
+<span id="L694"><a href="#L694">  694</a>     rtfw_replay_result* result);</span>
+<span id="L695"><a href="#L695">  695</a> RTFW_API void rtfw_device_health_init(</span>
+<span id="L696"><a href="#L696">  696</a>     rtfw_device_health* health);</span>
+<span id="L697"><a href="#L697">  697</a> RTFW_API void rtfw_host_executor_init(</span>
+<span id="L698"><a href="#L698">  698</a>     rtfw_host_executor* executor);</span>
+<span id="L699"><a href="#L699">  699</a> </span>
+<span id="L700"><a href="#L700">  700</a> /*</span>
+<span id="L701"><a href="#L701">  701</a>  * The runtime copies configuration and callback names. Callback user_data is</span>
+<span id="L702"><a href="#L702">  702</a>  * borrowed until the runtime is stopped/destroyed. Callback context and</span>
+<span id="L703"><a href="#L703">  703</a>  * scratch pointers are valid only for that synchronous callback invocation.</span>
+<span id="L704"><a href="#L704">  704</a>  * Lifecycle and graph functions are single-host-thread operations in ABI</span>
+<span id="L705"><a href="#L705">  705</a>  * version 8. Device backend tables, instances, and registered buffer storage</span>
+<span id="L706"><a href="#L706">  706</a>  * are borrowed until rtfw_stop or rtfw_destroy has completed shutdown.</span>
+<span id="L707"><a href="#L707">  707</a>  */</span>
+<span id="L708"><a href="#L708">  708</a> RTFW_API rtfw_status rtfw_create(</span>
+<span id="L709"><a href="#L709">  709</a>     const rtfw_config* config,</span>
+<span id="L710"><a href="#L710">  710</a>     rtfw_handle** out_handle);</span>
+<span id="L711"><a href="#L711">  711</a> /*</span>
+<span id="L712"><a href="#L712">  712</a>  * Copies the adapter table and borrows user_data through stop/destroy. This is</span>
+<span id="L713"><a href="#L713">  713</a>  * valid only while configuring and required by RTFW_EXECUTOR_HOST_ADAPTER.</span>
+<span id="L714"><a href="#L714">  714</a>  */</span>
+<span id="L715"><a href="#L715">  715</a> RTFW_API rtfw_status rtfw_set_host_executor(</span>
+<span id="L716"><a href="#L716">  716</a>     rtfw_handle* handle,</span>
+<span id="L717"><a href="#L717">  717</a>     const rtfw_host_executor* executor);</span>
+<span id="L718"><a href="#L718">  718</a> RTFW_API rtfw_status rtfw_register_callback(</span>
+<span id="L719"><a href="#L719">  719</a>     rtfw_handle* handle,</span>
+<span id="L720"><a href="#L720">  720</a>     const char* name,</span>
+<span id="L721"><a href="#L721">  721</a>     rtfw_frame_callback callback,</span>
+<span id="L722"><a href="#L722">  722</a>     void* user_data);</span>
+<span id="L723"><a href="#L723">  723</a> /* Preferred M2 registration form: returns an instance-local phase ID. */</span>
+<span id="L724"><a href="#L724">  724</a> RTFW_API rtfw_status rtfw_register_phase(</span>
+<span id="L725"><a href="#L725">  725</a>     rtfw_handle* handle,</span>
+<span id="L726"><a href="#L726">  726</a>     const char* name,</span>
+<span id="L727"><a href="#L727">  727</a>     rtfw_frame_callback callback,</span>
+<span id="L728"><a href="#L728">  728</a>     void* user_data,</span>
+<span id="L729"><a href="#L729">  729</a>     rtfw_phase_id* out_phase);</span>
+<span id="L730"><a href="#L730">  730</a> RTFW_API rtfw_status rtfw_register_device_backend(</span>
+<span id="L731"><a href="#L731">  731</a>     rtfw_handle* handle,</span>
+<span id="L732"><a href="#L732">  732</a>     const char* name,</span>
+<span id="L733"><a href="#L733">  733</a>     const rtfw_device_backend_api* backend,</span>
+<span id="L734"><a href="#L734">  734</a>     rtfw_device_backend_id* out_backend);</span>
+<span id="L735"><a href="#L735">  735</a> RTFW_API rtfw_status rtfw_register_device_buffer(</span>
+<span id="L736"><a href="#L736">  736</a>     rtfw_handle* handle,</span>
+<span id="L737"><a href="#L737">  737</a>     const char* name,</span>
+<span id="L738"><a href="#L738">  738</a>     rtfw_device_backend_id backend,</span>
+<span id="L739"><a href="#L739">  739</a>     void* storage,</span>
+<span id="L740"><a href="#L740">  740</a>     uint64_t storage_bytes,</span>
+<span id="L741"><a href="#L741">  741</a>     rtfw_device_buffer_flags flags,</span>
+<span id="L742"><a href="#L742">  742</a>     rtfw_device_buffer_id* out_buffer);</span>
+<span id="L743"><a href="#L743">  743</a> RTFW_API rtfw_status rtfw_register_device_phase(</span>
+<span id="L744"><a href="#L744">  744</a>     rtfw_handle* handle,</span>
+<span id="L745"><a href="#L745">  745</a>     const char* name,</span>
+<span id="L746"><a href="#L746">  746</a>     rtfw_device_backend_id backend,</span>
+<span id="L747"><a href="#L747">  747</a>     rtfw_device_command_callback callback,</span>
+<span id="L748"><a href="#L748">  748</a>     void* user_data,</span>
+<span id="L749"><a href="#L749">  749</a>     rtfw_phase_id* out_phase);</span>
+<span id="L750"><a href="#L750">  750</a> RTFW_API rtfw_status rtfw_register_resource(</span>
+<span id="L751"><a href="#L751">  751</a>     rtfw_handle* handle,</span>
+<span id="L752"><a href="#L752">  752</a>     const char* name,</span>
+<span id="L753"><a href="#L753">  753</a>     rtfw_resource_id* out_resource);</span>
+<span id="L754"><a href="#L754">  754</a> RTFW_API rtfw_status rtfw_register_state(</span>
+<span id="L755"><a href="#L755">  755</a>     rtfw_handle* handle,</span>
+<span id="L756"><a href="#L756">  756</a>     const char* name,</span>
+<span id="L757"><a href="#L757">  757</a>     uint32_t schema_version,</span>
+<span id="L758"><a href="#L758">  758</a>     void* storage,</span>
+<span id="L759"><a href="#L759">  759</a>     uint64_t storage_bytes);</span>
+<span id="L760"><a href="#L760">  760</a> RTFW_API rtfw_status rtfw_add_dependency(</span>
+<span id="L761"><a href="#L761">  761</a>     rtfw_handle* handle,</span>
+<span id="L762"><a href="#L762">  762</a>     rtfw_phase_id prerequisite,</span>
+<span id="L763"><a href="#L763">  763</a>     rtfw_phase_id dependent);</span>
+<span id="L764"><a href="#L764">  764</a> RTFW_API rtfw_status rtfw_declare_resource_access(</span>
+<span id="L765"><a href="#L765">  765</a>     rtfw_handle* handle,</span>
+<span id="L766"><a href="#L766">  766</a>     rtfw_phase_id phase,</span>
+<span id="L767"><a href="#L767">  767</a>     rtfw_resource_id resource,</span>
+<span id="L768"><a href="#L768">  768</a>     rtfw_resource_access access);</span>
+<span id="L769"><a href="#L769">  769</a> /*</span>
+<span id="L770"><a href="#L770">  770</a>  * Nested work uses the runtime&#x27;s existing fixed worker team and waits</span>
+<span id="L771"><a href="#L771">  771</a>  * synchronously. A full/busy bounded queue returns RTFW_STATUS_QUEUE_FULL;</span>
+<span id="L772"><a href="#L772">  772</a>  * unavailable task scratch returns RTFW_STATUS_SCRATCH_EXHAUSTED. The</span>
+<span id="L773"><a href="#L773">  773</a>  * configured overload policy controls whether rejection also fails the active</span>
+<span id="L774"><a href="#L774">  774</a>  * frame. No helper thread or inline emergency path is created.</span>
+<span id="L775"><a href="#L775">  775</a>  */</span>
+<span id="L776"><a href="#L776">  776</a> RTFW_API rtfw_status rtfw_parallel_for(</span>
+<span id="L777"><a href="#L777">  777</a>     const rtfw_task_context* context,</span>
+<span id="L778"><a href="#L778">  778</a>     uint64_t item_count,</span>
+<span id="L779"><a href="#L779">  779</a>     uint64_t grain_size,</span>
+<span id="L780"><a href="#L780">  780</a>     rtfw_range_callback callback,</span>
+<span id="L781"><a href="#L781">  781</a>     void* user_data);</span>
+<span id="L782"><a href="#L782">  782</a> RTFW_API rtfw_status rtfw_parallel_reduce(</span>
+<span id="L783"><a href="#L783">  783</a>     const rtfw_task_context* context,</span>
+<span id="L784"><a href="#L784">  784</a>     uint64_t item_count,</span>
+<span id="L785"><a href="#L785">  785</a>     uint64_t grain_size,</span>
+<span id="L786"><a href="#L786">  786</a>     rtfw_range_callback range_callback,</span>
+<span id="L787"><a href="#L787">  787</a>     rtfw_reduction_callback combine_callback,</span>
+<span id="L788"><a href="#L788">  788</a>     void* user_data);</span>
+<span id="L789"><a href="#L789">  789</a> RTFW_API rtfw_status rtfw_task_worker_index(</span>
+<span id="L790"><a href="#L790">  790</a>     const rtfw_task_context* context,</span>
+<span id="L791"><a href="#L791">  791</a>     uint64_t* out_worker_index);</span>
+<span id="L792"><a href="#L792">  792</a> /*</span>
+<span id="L793"><a href="#L793">  793</a>  * Returns storage exclusively owned by this callback invocation. Contents are</span>
+<span id="L794"><a href="#L794">  794</a>  * unspecified on entry; the pointer must not escape the callback.</span>
+<span id="L795"><a href="#L795">  795</a>  */</span>
+<span id="L796"><a href="#L796">  796</a> RTFW_API rtfw_status rtfw_task_scratch(</span>
+<span id="L797"><a href="#L797">  797</a>     const rtfw_task_context* context,</span>
+<span id="L798"><a href="#L798">  798</a>     void** out_scratch,</span>
+<span id="L799"><a href="#L799">  799</a>     uint64_t* out_scratch_bytes);</span>
+<span id="L800"><a href="#L800">  800</a> RTFW_API rtfw_status rtfw_finalize(rtfw_handle* handle);</span>
+<span id="L801"><a href="#L801">  801</a> RTFW_API rtfw_status rtfw_start(rtfw_handle* handle);</span>
+<span id="L802"><a href="#L802">  802</a> RTFW_API rtfw_status rtfw_step(</span>
+<span id="L803"><a href="#L803">  803</a>     rtfw_handle* handle,</span>
+<span id="L804"><a href="#L804">  804</a>     const rtfw_frame_context* frame,</span>
+<span id="L805"><a href="#L805">  805</a>     rtfw_step_result* result);</span>
+<span id="L806"><a href="#L806">  806</a> /*</span>
+<span id="L807"><a href="#L807">  807</a>  * Executes a finite runtime-paced loop on the calling frame thread. Release</span>
+<span id="L808"><a href="#L808">  808</a>  * timestamps are absolute and never drift after a late frame.</span>
+<span id="L809"><a href="#L809">  809</a>  */</span>
+<span id="L810"><a href="#L810">  810</a> RTFW_API rtfw_status rtfw_run_periodic(</span>
+<span id="L811"><a href="#L811">  811</a>     rtfw_handle* handle,</span>
+<span id="L812"><a href="#L812">  812</a>     const rtfw_periodic_config* config,</span>
+<span id="L813"><a href="#L813">  813</a>     rtfw_periodic_frame_callback observer,</span>
+<span id="L814"><a href="#L814">  814</a>     void* observer_data,</span>
+<span id="L815"><a href="#L815">  815</a>     rtfw_periodic_run_result* result);</span>
+<span id="L816"><a href="#L816">  816</a> RTFW_API rtfw_status rtfw_stop(rtfw_handle* handle);</span>
+<span id="L817"><a href="#L817">  817</a> RTFW_API rtfw_status rtfw_get_device_health(</span>
+<span id="L818"><a href="#L818">  818</a>     rtfw_handle* handle,</span>
+<span id="L819"><a href="#L819">  819</a>     rtfw_device_backend_id backend,</span>
+<span id="L820"><a href="#L820">  820</a>     rtfw_device_health* out_health);</span>
+<span id="L821"><a href="#L821">  821</a> RTFW_API rtfw_status rtfw_reset_device(</span>
+<span id="L822"><a href="#L822">  822</a>     rtfw_handle* handle,</span>
+<span id="L823"><a href="#L823">  823</a>     rtfw_device_backend_id backend);</span>
+<span id="L824"><a href="#L824">  824</a> RTFW_API rtfw_status rtfw_get_state(</span>
+<span id="L825"><a href="#L825">  825</a>     const rtfw_handle* handle,</span>
+<span id="L826"><a href="#L826">  826</a>     rtfw_runtime_state* out_state);</span>
+<span id="L827"><a href="#L827">  827</a> /*</span>
+<span id="L828"><a href="#L828">  828</a>  * Available after finalization. Initialize out_plan and keep reserved fields</span>
+<span id="L829"><a href="#L829">  829</a>  * zero.</span>
+<span id="L830"><a href="#L830">  830</a>  */</span>
+<span id="L831"><a href="#L831">  831</a> RTFW_API rtfw_status rtfw_get_memory_plan(</span>
+<span id="L832"><a href="#L832">  832</a>     const rtfw_handle* handle,</span>
+<span id="L833"><a href="#L833">  833</a>     rtfw_memory_plan* out_plan);</span>
+<span id="L834"><a href="#L834">  834</a> /* Available after start is attempted, including strict preflight failure. */</span>
+<span id="L835"><a href="#L835">  835</a> RTFW_API rtfw_status rtfw_get_platform_preflight_report(</span>
+<span id="L836"><a href="#L836">  836</a>     const rtfw_handle* handle,</span>
+<span id="L837"><a href="#L837">  837</a>     rtfw_platform_preflight_report* out_report);</span>
+<span id="L838"><a href="#L838">  838</a> RTFW_API rtfw_status rtfw_get_degradation_level(</span>
+<span id="L839"><a href="#L839">  839</a>     const rtfw_handle* handle,</span>
+<span id="L840"><a href="#L840">  840</a>     uint32_t* out_level);</span>
+<span id="L841"><a href="#L841">  841</a> /*</span>
+<span id="L842"><a href="#L842">  842</a>  * Observability reads are non-RT host operations and reject an active frame</span>
+<span id="L843"><a href="#L843">  843</a>  * or periodic loop. Interval metrics require a caller-owned cursor; trace</span>
+<span id="L844"><a href="#L844">  844</a>  * output storage is caller-owned and may be read in bounded batches. Fresh</span>
+<span id="L845"><a href="#L845">  845</a>  * cursors must come from their matching init functions.</span>
+<span id="L846"><a href="#L846">  846</a>  */</span>
+<span id="L847"><a href="#L847">  847</a> RTFW_API rtfw_status rtfw_get_observability_metadata(</span>
+<span id="L848"><a href="#L848">  848</a>     rtfw_handle* handle,</span>
+<span id="L849"><a href="#L849">  849</a>     rtfw_observability_metadata* out_metadata);</span>
+<span id="L850"><a href="#L850">  850</a> RTFW_API rtfw_status rtfw_get_metrics(</span>
+<span id="L851"><a href="#L851">  851</a>     rtfw_handle* handle,</span>
+<span id="L852"><a href="#L852">  852</a>     rtfw_metric_window window,</span>
+<span id="L853"><a href="#L853">  853</a>     rtfw_metric_cursor* cursor,</span>
+<span id="L854"><a href="#L854">  854</a>     rtfw_metric_snapshot* out_snapshot);</span>
+<span id="L855"><a href="#L855">  855</a> RTFW_API rtfw_status rtfw_read_trace(</span>
+<span id="L856"><a href="#L856">  856</a>     rtfw_handle* handle,</span>
+<span id="L857"><a href="#L857">  857</a>     rtfw_trace_cursor* cursor,</span>
+<span id="L858"><a href="#L858">  858</a>     rtfw_trace_event* events,</span>
+<span id="L859"><a href="#L859">  859</a>     uint64_t event_capacity,</span>
+<span id="L860"><a href="#L860">  860</a>     rtfw_trace_read_result* out_result);</span>
+<span id="L861"><a href="#L861">  861</a> RTFW_API rtfw_status rtfw_checkpoint_size(</span>
+<span id="L862"><a href="#L862">  862</a>     rtfw_handle* handle,</span>
+<span id="L863"><a href="#L863">  863</a>     uint64_t* out_required_bytes);</span>
+<span id="L864"><a href="#L864">  864</a> RTFW_API rtfw_status rtfw_checkpoint_write(</span>
+<span id="L865"><a href="#L865">  865</a>     rtfw_handle* handle,</span>
+<span id="L866"><a href="#L866">  866</a>     uint64_t checkpoint_frame_index,</span>
+<span id="L867"><a href="#L867">  867</a>     void* output,</span>
+<span id="L868"><a href="#L868">  868</a>     uint64_t output_bytes,</span>
+<span id="L869"><a href="#L869">  869</a>     rtfw_artifact_write_result* out_result);</span>
+<span id="L870"><a href="#L870">  870</a> RTFW_API rtfw_status rtfw_checkpoint_inspect(</span>
+<span id="L871"><a href="#L871">  871</a>     const void* checkpoint,</span>
+<span id="L872"><a href="#L872">  872</a>     uint64_t checkpoint_bytes,</span>
+<span id="L873"><a href="#L873">  873</a>     rtfw_checkpoint_metadata* out_metadata);</span>
+<span id="L874"><a href="#L874">  874</a> RTFW_API rtfw_status rtfw_checkpoint_restore(</span>
+<span id="L875"><a href="#L875">  875</a>     rtfw_handle* handle,</span>
+<span id="L876"><a href="#L876">  876</a>     const void* checkpoint,</span>
+<span id="L877"><a href="#L877">  877</a>     uint64_t checkpoint_bytes,</span>
+<span id="L878"><a href="#L878">  878</a>     rtfw_checkpoint_metadata* out_metadata);</span>
+<span id="L879"><a href="#L879">  879</a> RTFW_API rtfw_status rtfw_input_log_write(</span>
+<span id="L880"><a href="#L880">  880</a>     rtfw_handle* handle,</span>
+<span id="L881"><a href="#L881">  881</a>     const rtfw_replay_input_record* records,</span>
+<span id="L882"><a href="#L882">  882</a>     uint64_t record_count,</span>
+<span id="L883"><a href="#L883">  883</a>     void* output,</span>
+<span id="L884"><a href="#L884">  884</a>     uint64_t output_bytes,</span>
+<span id="L885"><a href="#L885">  885</a>     rtfw_artifact_write_result* out_result);</span>
+<span id="L886"><a href="#L886">  886</a> RTFW_API rtfw_status rtfw_input_log_inspect(</span>
+<span id="L887"><a href="#L887">  887</a>     const void* input_log,</span>
+<span id="L888"><a href="#L888">  888</a>     uint64_t input_log_bytes,</span>
+<span id="L889"><a href="#L889">  889</a>     rtfw_input_log_metadata* out_metadata);</span>
+<span id="L890"><a href="#L890">  890</a> RTFW_API rtfw_status rtfw_replay(</span>
+<span id="L891"><a href="#L891">  891</a>     rtfw_handle* handle,</span>
+<span id="L892"><a href="#L892">  892</a>     const void* checkpoint,</span>
+<span id="L893"><a href="#L893">  893</a>     uint64_t checkpoint_bytes,</span>
+<span id="L894"><a href="#L894">  894</a>     const void* input_log,</span>
+<span id="L895"><a href="#L895">  895</a>     uint64_t input_log_bytes,</span>
+<span id="L896"><a href="#L896">  896</a>     rtfw_replay_input_callback input_callback,</span>
+<span id="L897"><a href="#L897">  897</a>     void* input_user_data,</span>
+<span id="L898"><a href="#L898">  898</a>     rtfw_replay_result* out_result);</span>
+<span id="L899"><a href="#L899">  899</a> RTFW_API rtfw_status rtfw_registered_state_hash(</span>
+<span id="L900"><a href="#L900">  900</a>     rtfw_handle* handle,</span>
+<span id="L901"><a href="#L901">  901</a>     uint64_t* out_hash);</span>
+<span id="L902"><a href="#L902">  902</a> RTFW_API rtfw_status rtfw_now_ns(</span>
+<span id="L903"><a href="#L903">  903</a>     rtfw_handle* handle,</span>
+<span id="L904"><a href="#L904">  904</a>     uint64_t* out_now_ns);</span>
+<span id="L905"><a href="#L905">  905</a> /* Returned text is library-owned; handle-specific text may change on a call. */</span>
+<span id="L906"><a href="#L906">  906</a> RTFW_API const char* rtfw_last_error(const rtfw_handle* handle);</span>
+<span id="L907"><a href="#L907">  907</a> RTFW_API void rtfw_destroy(rtfw_handle* handle);</span>
+<span id="L908"><a href="#L908">  908</a> </span>
+<span id="L909"><a href="#L909">  909</a> #ifdef __cplusplus</span>
+<span id="L910"><a href="#L910">  910</a> }</span>
+<span id="L911"><a href="#L911">  911</a> #endif</span></pre></html>

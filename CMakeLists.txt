@@ -1325,3 +1325,16 @@ install(FILES samples/host_adapter/CMakeLists.txt samples/host_adapter/main.cpp
     samples/host_adapter/memory.hpp samples/host_adapter/check_output.cmake
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/host_adapter)
 install(FILES docs/host_adapter.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+
+# M25-06: checked-in offline docs need no generator at consumer build/install time.
+install(DIRECTORY docs/sdk/generated/ DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/manual)
+install(FILES samples/recipes/CMakeLists.txt samples/recipes/transcripts.json
+    samples/recipes/run_transcripts.py DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/recipes)
+install(FILES tests/mixed_rate_conformance.hpp
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/recipes)
+install(FILES tests/package_consumer/c_consumer.c tests/package_consumer/cpp_consumer.cpp
+    tests/package_consumer/profile_consumer.cpp tests/package_consumer/mixed_rate_consumer.cpp
+    tests/package_consumer/live_control_consumer.cpp tests/package_consumer/live_control_replay_consumer.cpp
+    tests/package_consumer/cuda_consumer.cpp tests/package_consumer/xdma_consumer.cpp
+    tests/package_consumer/benchmark_consumer.cpp
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/recipes/package_consumer)

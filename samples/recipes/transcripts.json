@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "commands": [
+    {"argv": ["cmake", "-S", "{kit}", "-B", "{build}", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DCMAKE_PREFIX_PATH={prefix}", "-DRECIPE_RTFW_SOURCE={source}", "-DRECIPE_WITH_BENCHMARK={benchmark}", "-DRTFW_BUILD_BENCHMARKS={benchmark}", "-DENABLE_TESTS=OFF", "-DRTFW_BUILD_EXAMPLES=OFF", "-DRTFW_BUILD_EXPERIMENTAL=OFF", "-DRTFW_BUILD_RUNTIME_DEMO=OFF", "-DSIM_SANITIZERS=", "-DSIM_WERROR=ON"], "contains": "Generating done"},
+    {"argv": ["cmake", "--build", "{build}", "--config", "Release", "--parallel", "2"], "contains": ""},
+    {"argv": ["ctest", "--test-dir", "{build}", "-C", "Release", "--output-on-failure", "--no-tests=error", "-R", "^recipe_"], "contains": "100% tests passed"}
+  ]
+}

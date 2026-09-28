@@ -50,6 +50,17 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'docs/sdk/inventory.json',
+    'docs/sdk/recipes.md',
+    'samples/recipes/CMakeLists.txt',
+    'samples/recipes/run_transcripts.py',
+    'samples/recipes/transcripts.json',
+    'tests/installed_docs/package_contract.cmake',
+    'tests/installed_docs/test_docs.py',
+    'tests/installed_docs/verify_package.py',
+    'tools/check_sdk_docs.py',
+    'tools/generate_sdk_docs.py',
+
     'rt/include/rt/sdk.hpp',
     'docs/host_adapter.md',
     'samples/host_adapter/CMakeLists.txt',

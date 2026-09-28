@@ -392,3 +392,14 @@ telemetry/lifecycle tests and installed guide. Preserve production, SDK inventor
 ABIs and all prior source/evidence bindings. All32 target checks remain required.
 Standing scoped publication/integration authority persists. Do not activate
 M25-06; Unreal, hardware/RT and release remain separate.
+
+## M25-06 activation (2026-09-28)
+
+M25-05 merged as PR273 at98ecca5a6572dd83d59e26063716f6d76b7a5d4f.
+Canonical control PR541 merged atd385731eb44762e73596e830d4f99a8534bc5bf5,
+blobac12e901ec4c12d945d83beda7535d5e84defc22. Implement only installed docs, reproducible
+source-linked API reference, public-SDK recipes and archive/transcript/link checks.
+Preserve production, SDK/ABI and prior sources/evidence. All32 target checks remain
+required. Standing scoped publication/integration authority persists. Close M25
+software only; human first-use, physical/RT/performance/Unreal/release stay separate.
+Do not activate M26. Earlier activation paragraphs are historical.

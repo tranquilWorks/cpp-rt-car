@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>rt/device_abi.h — RTFW 1.2.1</title>
+<style>body{font:16px system-ui;margin:2rem}pre{font:13px monospace;overflow:auto}pre a{color:#555}a{color:#0758a5}</style>
+<h1>rt/device_abi.h</h1><p>Default installed header. Version 1.2.1.</p>
+<p>Source: rt/include/rt/device_abi.h; SHA-256: 25aec480938fa195a7d6f0a13941a9c5f5d921e102bea21fbb6a200e5b4c8c32. Exact declaration/comment source; private/detail content is not a supported API promise.</p>
+<p><a href="index.html">API index</a> · <a href="../README.md">Manual</a></p><pre><span id="L1"><a href="#L1">    1</a> #pragma once</span>
+<span id="L2"><a href="#L2">    2</a> </span>
+<span id="L3"><a href="#L3">    3</a> #include &lt;stddef.h&gt;</span>
+<span id="L4"><a href="#L4">    4</a> #include &lt;stdint.h&gt;</span>
+<span id="L5"><a href="#L5">    5</a> </span>
+<span id="L6"><a href="#L6">    6</a> #ifdef __cplusplus</span>
+<span id="L7"><a href="#L7">    7</a> extern &quot;C&quot; {</span>
+<span id="L8"><a href="#L8">    8</a> #endif</span>
+<span id="L9"><a href="#L9">    9</a> </span>
+<span id="L10"><a href="#L10">   10</a> #define RTFW_DEVICE_ABI_VERSION 1u</span>
+<span id="L11"><a href="#L11">   11</a> #define RTFW_DEVICE_IDENTIFIER_CAPACITY 64u</span>
+<span id="L12"><a href="#L12">   12</a> #define RTFW_DEVICE_INLINE_PAYLOAD_CAPACITY 128u</span>
+<span id="L13"><a href="#L13">   13</a> #define RTFW_DEVICE_BUFFER_REF_CAPACITY 8u</span>
+<span id="L14"><a href="#L14">   14</a> </span>
+<span id="L15"><a href="#L15">   15</a> typedef int32_t rtfw_device_status;</span>
+<span id="L16"><a href="#L16">   16</a> #define RTFW_DEVICE_STATUS_OK ((rtfw_device_status)0)</span>
+<span id="L17"><a href="#L17">   17</a> #define RTFW_DEVICE_STATUS_INVALID_ARGUMENT ((rtfw_device_status)-1)</span>
+<span id="L18"><a href="#L18">   18</a> #define RTFW_DEVICE_STATUS_INVALID_STATE ((rtfw_device_status)-2)</span>
+<span id="L19"><a href="#L19">   19</a> #define RTFW_DEVICE_STATUS_QUEUE_FULL ((rtfw_device_status)-3)</span>
+<span id="L20"><a href="#L20">   20</a> #define RTFW_DEVICE_STATUS_TIMEOUT ((rtfw_device_status)-4)</span>
+<span id="L21"><a href="#L21">   21</a> #define RTFW_DEVICE_STATUS_ERROR ((rtfw_device_status)-5)</span>
+<span id="L22"><a href="#L22">   22</a> #define RTFW_DEVICE_STATUS_LOST ((rtfw_device_status)-6)</span>
+<span id="L23"><a href="#L23">   23</a> #define RTFW_DEVICE_STATUS_CANCELED ((rtfw_device_status)-7)</span>
+<span id="L24"><a href="#L24">   24</a> #define RTFW_DEVICE_STATUS_UNSUPPORTED ((rtfw_device_status)-8)</span>
+<span id="L25"><a href="#L25">   25</a> #define RTFW_DEVICE_STATUS_RESOURCE_EXHAUSTED ((rtfw_device_status)-9)</span>
+<span id="L26"><a href="#L26">   26</a> #define RTFW_DEVICE_STATUS_INTERNAL_ERROR ((rtfw_device_status)-10)</span>
+<span id="L27"><a href="#L27">   27</a> #define RTFW_DEVICE_STATUS_RESET_REQUIRED ((rtfw_device_status)-11)</span>
+<span id="L28"><a href="#L28">   28</a> </span>
+<span id="L29"><a href="#L29">   29</a> typedef uint32_t rtfw_device_health_state;</span>
+<span id="L30"><a href="#L30">   30</a> #define RTFW_DEVICE_HEALTH_SHUTDOWN ((rtfw_device_health_state)0u)</span>
+<span id="L31"><a href="#L31">   31</a> #define RTFW_DEVICE_HEALTH_HEALTHY ((rtfw_device_health_state)1u)</span>
+<span id="L32"><a href="#L32">   32</a> #define RTFW_DEVICE_HEALTH_DEGRADED ((rtfw_device_health_state)2u)</span>
+<span id="L33"><a href="#L33">   33</a> #define RTFW_DEVICE_HEALTH_RESET_REQUIRED ((rtfw_device_health_state)3u)</span>
+<span id="L34"><a href="#L34">   34</a> #define RTFW_DEVICE_HEALTH_LOST ((rtfw_device_health_state)4u)</span>
+<span id="L35"><a href="#L35">   35</a> </span>
+<span id="L36"><a href="#L36">   36</a> typedef uint32_t rtfw_device_buffer_flags;</span>
+<span id="L37"><a href="#L37">   37</a> #define RTFW_DEVICE_BUFFER_HOST_READ \</span>
+<span id="L38"><a href="#L38">   38</a>     ((rtfw_device_buffer_flags)(1u &lt;&lt; 0u))</span>
+<span id="L39"><a href="#L39">   39</a> #define RTFW_DEVICE_BUFFER_HOST_WRITE \</span>
+<span id="L40"><a href="#L40">   40</a>     ((rtfw_device_buffer_flags)(1u &lt;&lt; 1u))</span>
+<span id="L41"><a href="#L41">   41</a> #define RTFW_DEVICE_BUFFER_DEVICE_READ \</span>
+<span id="L42"><a href="#L42">   42</a>     ((rtfw_device_buffer_flags)(1u &lt;&lt; 2u))</span>
+<span id="L43"><a href="#L43">   43</a> #define RTFW_DEVICE_BUFFER_DEVICE_WRITE \</span>
+<span id="L44"><a href="#L44">   44</a>     ((rtfw_device_buffer_flags)(1u &lt;&lt; 3u))</span>
+<span id="L45"><a href="#L45">   45</a> </span>
+<span id="L46"><a href="#L46">   46</a> typedef uint32_t rtfw_device_buffer_access;</span>
+<span id="L47"><a href="#L47">   47</a> #define RTFW_DEVICE_ACCESS_READ ((rtfw_device_buffer_access)1u)</span>
+<span id="L48"><a href="#L48">   48</a> #define RTFW_DEVICE_ACCESS_WRITE ((rtfw_device_buffer_access)2u)</span>
+<span id="L49"><a href="#L49">   49</a> #define RTFW_DEVICE_ACCESS_READ_WRITE ((rtfw_device_buffer_access)3u)</span>
+<span id="L50"><a href="#L50">   50</a> </span>
+<span id="L51"><a href="#L51">   51</a> typedef struct rtfw_device_capabilities {</span>
+<span id="L52"><a href="#L52">   52</a>     uint32_t struct_size;</span>
+<span id="L53"><a href="#L53">   53</a>     uint32_t abi_version;</span>
+<span id="L54"><a href="#L54">   54</a>     uint64_t max_in_flight;</span>
+<span id="L55"><a href="#L55">   55</a>     uint64_t max_registered_buffers;</span>
+<span id="L56"><a href="#L56">   56</a>     uint64_t max_buffer_bytes;</span>
+<span id="L57"><a href="#L57">   57</a>     uint32_t inline_payload_capacity;</span>
+<span id="L58"><a href="#L58">   58</a>     uint32_t buffer_ref_capacity;</span>
+<span id="L59"><a href="#L59">   59</a>     uint8_t supports_cancel;</span>
+<span id="L60"><a href="#L60">   60</a>     uint8_t supports_reset;</span>
+<span id="L61"><a href="#L61">   61</a>     uint8_t deterministic_mock;</span>
+<span id="L62"><a href="#L62">   62</a>     uint8_t reserved0;</span>
+<span id="L63"><a href="#L63">   63</a>     char backend_id[RTFW_DEVICE_IDENTIFIER_CAPACITY];</span>
+<span id="L64"><a href="#L64">   64</a>     uint64_t control_storage_bytes;</span>
+<span id="L65"><a href="#L65">   65</a>     uint64_t reserved[4];</span>
+<span id="L66"><a href="#L66">   66</a> } rtfw_device_capabilities;</span>
+<span id="L67"><a href="#L67">   67</a> </span>
+<span id="L68"><a href="#L68">   68</a> typedef struct rtfw_device_init_config {</span>
+<span id="L69"><a href="#L69">   69</a>     uint32_t struct_size;</span>
+<span id="L70"><a href="#L70">   70</a>     uint32_t abi_version;</span>
+<span id="L71"><a href="#L71">   71</a>     uint64_t requested_in_flight;</span>
+<span id="L72"><a href="#L72">   72</a>     uint64_t requested_registered_buffers;</span>
+<span id="L73"><a href="#L73">   73</a>     uint64_t reserved[4];</span>
+<span id="L74"><a href="#L74">   74</a> } rtfw_device_init_config;</span>
+<span id="L75"><a href="#L75">   75</a> </span>
+<span id="L76"><a href="#L76">   76</a> typedef struct rtfw_device_buffer_registration {</span>
+<span id="L77"><a href="#L77">   77</a>     uint32_t struct_size;</span>
+<span id="L78"><a href="#L78">   78</a>     uint32_t flags;</span>
+<span id="L79"><a href="#L79">   79</a>     void* data;</span>
+<span id="L80"><a href="#L80">   80</a>     uint64_t bytes;</span>
+<span id="L81"><a href="#L81">   81</a>     char name[RTFW_DEVICE_IDENTIFIER_CAPACITY];</span>
+<span id="L82"><a href="#L82">   82</a>     uint64_t reserved[4];</span>
+<span id="L83"><a href="#L83">   83</a> } rtfw_device_buffer_registration;</span>
+<span id="L84"><a href="#L84">   84</a> </span>
+<span id="L85"><a href="#L85">   85</a> typedef struct rtfw_device_buffer_ref {</span>
+<span id="L86"><a href="#L86">   86</a>     uint64_t buffer_token;</span>
+<span id="L87"><a href="#L87">   87</a>     uint32_t access;</span>
+<span id="L88"><a href="#L88">   88</a>     uint32_t reserved0;</span>
+<span id="L89"><a href="#L89">   89</a>     uint64_t offset;</span>
+<span id="L90"><a href="#L90">   90</a>     uint64_t bytes;</span>
+<span id="L91"><a href="#L91">   91</a> } rtfw_device_buffer_ref;</span>
+<span id="L92"><a href="#L92">   92</a> </span>
+<span id="L93"><a href="#L93">   93</a> typedef struct rtfw_device_submission {</span>
+<span id="L94"><a href="#L94">   94</a>     uint32_t struct_size;</span>
+<span id="L95"><a href="#L95">   95</a>     uint32_t abi_version;</span>
+<span id="L96"><a href="#L96">   96</a>     uint64_t submission_id;</span>
+<span id="L97"><a href="#L97">   97</a>     uint64_t frame_index;</span>
+<span id="L98"><a href="#L98">   98</a>     uint64_t timeout_ns;</span>
+<span id="L99"><a href="#L99">   99</a>     uint32_t opcode;</span>
+<span id="L100"><a href="#L100">  100</a>     uint32_t flags;</span>
+<span id="L101"><a href="#L101">  101</a>     uint32_t payload_size;</span>
+<span id="L102"><a href="#L102">  102</a>     uint32_t buffer_count;</span>
+<span id="L103"><a href="#L103">  103</a>     uint8_t payload[RTFW_DEVICE_INLINE_PAYLOAD_CAPACITY];</span>
+<span id="L104"><a href="#L104">  104</a>     rtfw_device_buffer_ref buffers[RTFW_DEVICE_BUFFER_REF_CAPACITY];</span>
+<span id="L105"><a href="#L105">  105</a>     uint64_t reserved[4];</span>
+<span id="L106"><a href="#L106">  106</a> } rtfw_device_submission;</span>
+<span id="L107"><a href="#L107">  107</a> </span>
+<span id="L108"><a href="#L108">  108</a> typedef struct rtfw_device_completion {</span>
+<span id="L109"><a href="#L109">  109</a>     uint32_t struct_size;</span>
+<span id="L110"><a href="#L110">  110</a>     int32_t status;</span>
+<span id="L111"><a href="#L111">  111</a>     uint64_t submission_id;</span>
+<span id="L112"><a href="#L112">  112</a>     uint64_t device_timestamp_ns;</span>
+<span id="L113"><a href="#L113">  113</a>     uint64_t value;</span>
+<span id="L114"><a href="#L114">  114</a>     uint64_t reserved[4];</span>
+<span id="L115"><a href="#L115">  115</a> } rtfw_device_completion;</span>
+<span id="L116"><a href="#L116">  116</a> </span>
+<span id="L117"><a href="#L117">  117</a> typedef struct rtfw_device_health {</span>
+<span id="L118"><a href="#L118">  118</a>     uint32_t struct_size;</span>
+<span id="L119"><a href="#L119">  119</a>     uint32_t state;</span>
+<span id="L120"><a href="#L120">  120</a>     int32_t last_status;</span>
+<span id="L121"><a href="#L121">  121</a>     uint32_t reserved0;</span>
+<span id="L122"><a href="#L122">  122</a>     uint64_t generation;</span>
+<span id="L123"><a href="#L123">  123</a>     uint64_t submissions;</span>
+<span id="L124"><a href="#L124">  124</a>     uint64_t completions;</span>
+<span id="L125"><a href="#L125">  125</a>     uint64_t queue_rejections;</span>
+<span id="L126"><a href="#L126">  126</a>     uint64_t timeouts;</span>
+<span id="L127"><a href="#L127">  127</a>     uint64_t errors;</span>
+<span id="L128"><a href="#L128">  128</a>     uint64_t losses;</span>
+<span id="L129"><a href="#L129">  129</a>     uint64_t cancellations;</span>
+<span id="L130"><a href="#L130">  130</a>     uint64_t resets;</span>
+<span id="L131"><a href="#L131">  131</a>     uint64_t outstanding;</span>
+<span id="L132"><a href="#L132">  132</a>     uint64_t reserved[4];</span>
+<span id="L133"><a href="#L133">  133</a> } rtfw_device_health;</span>
+<span id="L134"><a href="#L134">  134</a> </span>
+<span id="L135"><a href="#L135">  135</a> typedef rtfw_device_status (*rtfw_device_get_capabilities_fn)(</span>
+<span id="L136"><a href="#L136">  136</a>     void* instance,</span>
+<span id="L137"><a href="#L137">  137</a>     rtfw_device_capabilities* capabilities);</span>
+<span id="L138"><a href="#L138">  138</a> typedef rtfw_device_status (*rtfw_device_initialize_fn)(</span>
+<span id="L139"><a href="#L139">  139</a>     void* instance,</span>
+<span id="L140"><a href="#L140">  140</a>     const rtfw_device_init_config* config);</span>
+<span id="L141"><a href="#L141">  141</a> typedef rtfw_device_status (*rtfw_device_register_buffer_fn)(</span>
+<span id="L142"><a href="#L142">  142</a>     void* instance,</span>
+<span id="L143"><a href="#L143">  143</a>     const rtfw_device_buffer_registration* registration,</span>
+<span id="L144"><a href="#L144">  144</a>     uint64_t* out_buffer_token);</span>
+<span id="L145"><a href="#L145">  145</a> typedef rtfw_device_status (*rtfw_device_unregister_buffer_fn)(</span>
+<span id="L146"><a href="#L146">  146</a>     void* instance,</span>
+<span id="L147"><a href="#L147">  147</a>     uint64_t buffer_token);</span>
+<span id="L148"><a href="#L148">  148</a> typedef rtfw_device_status (*rtfw_device_submit_fn)(</span>
+<span id="L149"><a href="#L149">  149</a>     void* instance,</span>
+<span id="L150"><a href="#L150">  150</a>     const rtfw_device_submission* submission);</span>
+<span id="L151"><a href="#L151">  151</a> typedef rtfw_device_status (*rtfw_device_poll_fn)(</span>
+<span id="L152"><a href="#L152">  152</a>     void* instance,</span>
+<span id="L153"><a href="#L153">  153</a>     rtfw_device_completion* completions,</span>
+<span id="L154"><a href="#L154">  154</a>     uint64_t completion_capacity,</span>
+<span id="L155"><a href="#L155">  155</a>     uint64_t* out_completion_count);</span>
+<span id="L156"><a href="#L156">  156</a> typedef rtfw_device_status (*rtfw_device_cancel_fn)(</span>
+<span id="L157"><a href="#L157">  157</a>     void* instance,</span>
+<span id="L158"><a href="#L158">  158</a>     uint64_t submission_id);</span>
+<span id="L159"><a href="#L159">  159</a> typedef rtfw_device_status (*rtfw_device_get_health_fn)(</span>
+<span id="L160"><a href="#L160">  160</a>     void* instance,</span>
+<span id="L161"><a href="#L161">  161</a>     rtfw_device_health* health);</span>
+<span id="L162"><a href="#L162">  162</a> typedef rtfw_device_status (*rtfw_device_reset_fn)(void* instance);</span>
+<span id="L163"><a href="#L163">  163</a> typedef rtfw_device_status (*rtfw_device_shutdown_fn)(void* instance);</span>
+<span id="L164"><a href="#L164">  164</a> </span>
+<span id="L165"><a href="#L165">  165</a> /*</span>
+<span id="L166"><a href="#L166">  166</a>  * The table and instance remain borrowed until shutdown returns. Every</span>
+<span id="L167"><a href="#L167">  167</a>  * function must be nonthrowing. submit and poll are bounded, nonblocking</span>
+<span id="L168"><a href="#L168">  168</a>  * operations; poll must never invoke runtime or host callbacks. submit and</span>
+<span id="L169"><a href="#L169">  169</a>  * poll may be invoked concurrently for one initialized backend instance and</span>
+<span id="L170"><a href="#L170">  170</a>  * the backend must synchronize its own fixed-capacity state without blocking.</span>
+<span id="L171"><a href="#L171">  171</a>  */</span>
+<span id="L172"><a href="#L172">  172</a> typedef struct rtfw_device_backend_api {</span>
+<span id="L173"><a href="#L173">  173</a>     uint32_t struct_size;</span>
+<span id="L174"><a href="#L174">  174</a>     uint32_t abi_version;</span>
+<span id="L175"><a href="#L175">  175</a>     void* instance;</span>
+<span id="L176"><a href="#L176">  176</a>     rtfw_device_get_capabilities_fn get_capabilities;</span>
+<span id="L177"><a href="#L177">  177</a>     rtfw_device_initialize_fn initialize;</span>
+<span id="L178"><a href="#L178">  178</a>     rtfw_device_register_buffer_fn register_buffer;</span>
+<span id="L179"><a href="#L179">  179</a>     rtfw_device_unregister_buffer_fn unregister_buffer;</span>
+<span id="L180"><a href="#L180">  180</a>     rtfw_device_submit_fn submit;</span>
+<span id="L181"><a href="#L181">  181</a>     rtfw_device_poll_fn poll;</span>
+<span id="L182"><a href="#L182">  182</a>     rtfw_device_cancel_fn cancel;</span>
+<span id="L183"><a href="#L183">  183</a>     rtfw_device_get_health_fn get_health;</span>
+<span id="L184"><a href="#L184">  184</a>     rtfw_device_reset_fn reset;</span>
+<span id="L185"><a href="#L185">  185</a>     rtfw_device_shutdown_fn shutdown;</span>
+<span id="L186"><a href="#L186">  186</a>     uint64_t reserved[8];</span>
+<span id="L187"><a href="#L187">  187</a> } rtfw_device_backend_api;</span>
+<span id="L188"><a href="#L188">  188</a> </span>
+<span id="L189"><a href="#L189">  189</a> #ifdef __cplusplus</span>
+<span id="L190"><a href="#L190">  190</a> }</span>
+<span id="L191"><a href="#L191">  191</a> #endif</span>
+<span id="L192"><a href="#L192">  192</a> </span></pre></html>

@@ -1,5 +1,11 @@
 # Architecture
 
+M25-06 adds the [installed SDK manual](sdk/generated/README.md), reproducible
+source-linked public-header reference and executable public-package recipes in
+CPack archives. Generation is a developer check; no default SDK tool dependency,
+public inventory or compiled behavior changes. M25 software delivery remains
+separate from human first-use, M26, physical/RT, Unreal and release acceptance.
+
 M25-05 adds the optional [independent headless host](host_adapter.md): fixed-capacity
 jobs and memory provider, host clock/frame loop, two Runtime instances, bounded
 telemetry and checked stop/detach in native and host-adapter modes. It uses public

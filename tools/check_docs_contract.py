@@ -137,7 +137,10 @@ def markdown_files() -> list[pathlib.Path]:
             ROOT / "reports/README.md",
         ]
     )
-    return sorted({path for path in paths if path.is_file()})
+    # Generated manual links use the installed data-directory layout, validated
+    # (including fragments and exact source bytes) by check_sdk_docs below.
+    generated = ROOT / "docs/sdk/generated"
+    return sorted({path for path in paths if path.is_file() and generated not in path.parents})
 
 
 def check_markdown_links() -> None:
@@ -3297,6 +3300,11 @@ def main() -> int:
     check_version()
     check_license()
     check_markdown_links()
+    import check_sdk_docs
+    try:
+        check_sdk_docs.verify()
+    except (OSError, ValueError, KeyError) as exc:
+        fail(f"installed SDK documentation: {exc}")
     check_cli_contract()
     check_verified_commands()
     check_hello_contract()

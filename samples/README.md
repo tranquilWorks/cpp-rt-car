@@ -35,3 +35,8 @@ builders, checked-stop guards and fixed diagnostics. See [the guide](../docs/typ
 The installed source-only `backend_authoring` kit includes a minimal HAL-v2 copy
 backend, reusable conformance and native/v1 Runtime example. See [the guide](../docs/backend_authoring.md) for build commands,
 fixed storage, lifetime rules and failure/cleanup retry.
+
+The [installed recipe manual](../docs/sdk/generated/recipes.md) connects the
+source kits to unchanged public-package consumers for C/C++, profiles, multi-rate
+sampled I/O, controls/replay and optional benchmarks. `recipes/CMakeLists.txt`
+builds those sources without adding a public SDK target.

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>rt/xdma_linux.hpp — RTFW 1.2.1</title>
+<style>body{font:16px system-ui;margin:2rem}pre{font:13px monospace;overflow:auto}pre a{color:#555}a{color:#0758a5}</style>
+<h1>rt/xdma_linux.hpp</h1><p>Optional xdma_linux component; this reference does not imply the header/library is installed or qualified. Version 1.2.1.</p>
+<p>Source: rt/include/rt/xdma_linux.hpp; SHA-256: 6950a7f146e4d5f7b42f632cb24e74ba42498c75b53bc40d89646242cfae0e83. Exact declaration/comment source; private/detail content is not a supported API promise.</p>
+<p><a href="index.html">API index</a> · <a href="../README.md">Manual</a></p><pre><span id="L1"><a href="#L1">    1</a> #pragma once</span>
+<span id="L2"><a href="#L2">    2</a> </span>
+<span id="L3"><a href="#L3">    3</a> #include &lt;memory&gt;</span>
+<span id="L4"><a href="#L4">    4</a> #include &lt;span&gt;</span>
+<span id="L5"><a href="#L5">    5</a> #include &lt;string_view&gt;</span>
+<span id="L6"><a href="#L6">    6</a> </span>
+<span id="L7"><a href="#L7">    7</a> #include &lt;rt/xdma_backend.hpp&gt;</span>
+<span id="L8"><a href="#L8">    8</a> </span>
+<span id="L9"><a href="#L9">    9</a> namespace rt {</span>
+<span id="L10"><a href="#L10">   10</a> </span>
+<span id="L11"><a href="#L11">   11</a> #if defined(RTFW_XDMA_LINUX_AVAILABLE)</span>
+<span id="L12"><a href="#L12">   12</a> </span>
+<span id="L13"><a href="#L13">   13</a> struct LinuxXdmaConfig {</span>
+<span id="L14"><a href="#L14">   14</a>     std::span&lt;const std::string_view&gt; h2c_paths{};</span>
+<span id="L15"><a href="#L15">   15</a>     std::span&lt;const std::string_view&gt; c2h_paths{};</span>
+<span id="L16"><a href="#L16">   16</a>     std::string_view user_path{};</span>
+<span id="L17"><a href="#L17">   17</a>     std::span&lt;const std::string_view&gt; event_paths{};</span>
+<span id="L18"><a href="#L18">   18</a> };</span>
+<span id="L19"><a href="#L19">   19</a> </span>
+<span id="L20"><a href="#L20">   20</a> /*</span>
+<span id="L21"><a href="#L21">   21</a>  * Adapter for Xilinx/dma_ip_drivers XDMA Linux AXI-MM character nodes, such</span>
+<span id="L22"><a href="#L22">   22</a>  * as /dev/xdma0_h2c_0 and /dev/xdma0_c2h_0. File descriptors are opened by</span>
+<span id="L23"><a href="#L23">   23</a>  * initialize(), remain owned by this object, and close at shutdown().</span>
+<span id="L24"><a href="#L24">   24</a>  */</span>
+<span id="L25"><a href="#L25">   25</a> class LinuxXdmaDriver final {</span>
+<span id="L26"><a href="#L26">   26</a> public:</span>
+<span id="L27"><a href="#L27">   27</a>     explicit LinuxXdmaDriver(const LinuxXdmaConfig&amp; config);</span>
+<span id="L28"><a href="#L28">   28</a>     ~LinuxXdmaDriver();</span>
+<span id="L29"><a href="#L29">   29</a> </span>
+<span id="L30"><a href="#L30">   30</a>     LinuxXdmaDriver(LinuxXdmaDriver&amp;&amp;) noexcept;</span>
+<span id="L31"><a href="#L31">   31</a>     LinuxXdmaDriver&amp; operator=(LinuxXdmaDriver&amp;&amp;) noexcept;</span>
+<span id="L32"><a href="#L32">   32</a> </span>
+<span id="L33"><a href="#L33">   33</a>     LinuxXdmaDriver(const LinuxXdmaDriver&amp;) = delete;</span>
+<span id="L34"><a href="#L34">   34</a>     LinuxXdmaDriver&amp; operator=(const LinuxXdmaDriver&amp;) = delete;</span>
+<span id="L35"><a href="#L35">   35</a> </span>
+<span id="L36"><a href="#L36">   36</a>     [[nodiscard]] XdmaDriverApi api() noexcept;</span>
+<span id="L37"><a href="#L37">   37</a> </span>
+<span id="L38"><a href="#L38">   38</a> private:</span>
+<span id="L39"><a href="#L39">   39</a>     struct Impl;</span>
+<span id="L40"><a href="#L40">   40</a>     std::unique_ptr&lt;Impl&gt; impl_;</span>
+<span id="L41"><a href="#L41">   41</a> };</span>
+<span id="L42"><a href="#L42">   42</a> </span>
+<span id="L43"><a href="#L43">   43</a> #endif</span>
+<span id="L44"><a href="#L44">   44</a> </span>
+<span id="L45"><a href="#L45">   45</a> } // namespace rt</span></pre></html>

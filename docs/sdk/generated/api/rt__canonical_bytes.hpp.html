@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>rt/canonical_bytes.hpp — RTFW 1.2.1</title>
+<style>body{font:16px system-ui;margin:2rem}pre{font:13px monospace;overflow:auto}pre a{color:#555}a{color:#0758a5}</style>
+<h1>rt/canonical_bytes.hpp</h1><p>Default installed header. Version 1.2.1.</p>
+<p>Source: rt/include/rt/canonical_bytes.hpp; SHA-256: 72bc9a39c0f19b2671c575c904b912b91f6e5756a6996d1e8f910c918ed7fd78. Exact declaration/comment source; private/detail content is not a supported API promise.</p>
+<p><a href="index.html">API index</a> · <a href="../README.md">Manual</a></p><pre><span id="L1"><a href="#L1">    1</a> #pragma once</span>
+<span id="L2"><a href="#L2">    2</a> </span>
+<span id="L3"><a href="#L3">    3</a> #include &lt;cstddef&gt;</span>
+<span id="L4"><a href="#L4">    4</a> #include &lt;cstdint&gt;</span>
+<span id="L5"><a href="#L5">    5</a> #include &lt;span&gt;</span>
+<span id="L6"><a href="#L6">    6</a> </span>
+<span id="L7"><a href="#L7">    7</a> namespace rt {</span>
+<span id="L8"><a href="#L8">    8</a> </span>
+<span id="L9"><a href="#L9">    9</a> inline bool store_u32_le(</span>
+<span id="L10"><a href="#L10">   10</a>     std::span&lt;std::byte&gt; output,</span>
+<span id="L11"><a href="#L11">   11</a>     std::size_t offset,</span>
+<span id="L12"><a href="#L12">   12</a>     std::uint32_t value) noexcept {</span>
+<span id="L13"><a href="#L13">   13</a>     if (offset &gt; output.size() || output.size() - offset &lt; sizeof(value)) {</span>
+<span id="L14"><a href="#L14">   14</a>         return false;</span>
+<span id="L15"><a href="#L15">   15</a>     }</span>
+<span id="L16"><a href="#L16">   16</a>     for (std::size_t index = 0; index &lt; sizeof(value); ++index) {</span>
+<span id="L17"><a href="#L17">   17</a>         output[offset + index] = static_cast&lt;std::byte&gt;(</span>
+<span id="L18"><a href="#L18">   18</a>             (value &gt;&gt; (index * 8u)) &amp; 0xffu);</span>
+<span id="L19"><a href="#L19">   19</a>     }</span>
+<span id="L20"><a href="#L20">   20</a>     return true;</span>
+<span id="L21"><a href="#L21">   21</a> }</span>
+<span id="L22"><a href="#L22">   22</a> </span>
+<span id="L23"><a href="#L23">   23</a> inline bool store_u64_le(</span>
+<span id="L24"><a href="#L24">   24</a>     std::span&lt;std::byte&gt; output,</span>
+<span id="L25"><a href="#L25">   25</a>     std::size_t offset,</span>
+<span id="L26"><a href="#L26">   26</a>     std::uint64_t value) noexcept {</span>
+<span id="L27"><a href="#L27">   27</a>     if (offset &gt; output.size() || output.size() - offset &lt; sizeof(value)) {</span>
+<span id="L28"><a href="#L28">   28</a>         return false;</span>
+<span id="L29"><a href="#L29">   29</a>     }</span>
+<span id="L30"><a href="#L30">   30</a>     for (std::size_t index = 0; index &lt; sizeof(value); ++index) {</span>
+<span id="L31"><a href="#L31">   31</a>         output[offset + index] = static_cast&lt;std::byte&gt;(</span>
+<span id="L32"><a href="#L32">   32</a>             (value &gt;&gt; (index * 8u)) &amp; 0xffu);</span>
+<span id="L33"><a href="#L33">   33</a>     }</span>
+<span id="L34"><a href="#L34">   34</a>     return true;</span>
+<span id="L35"><a href="#L35">   35</a> }</span>
+<span id="L36"><a href="#L36">   36</a> </span>
+<span id="L37"><a href="#L37">   37</a> inline bool load_u32_le(</span>
+<span id="L38"><a href="#L38">   38</a>     std::span&lt;const std::byte&gt; input,</span>
+<span id="L39"><a href="#L39">   39</a>     std::size_t offset,</span>
+<span id="L40"><a href="#L40">   40</a>     std::uint32_t&amp; value) noexcept {</span>
+<span id="L41"><a href="#L41">   41</a>     value = 0;</span>
+<span id="L42"><a href="#L42">   42</a>     if (offset &gt; input.size() || input.size() - offset &lt; sizeof(value)) {</span>
+<span id="L43"><a href="#L43">   43</a>         return false;</span>
+<span id="L44"><a href="#L44">   44</a>     }</span>
+<span id="L45"><a href="#L45">   45</a>     for (std::size_t index = 0; index &lt; sizeof(value); ++index) {</span>
+<span id="L46"><a href="#L46">   46</a>         value |= static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L47"><a href="#L47">   47</a>                      static_cast&lt;std::uint8_t&gt;(input[offset + index]))</span>
+<span id="L48"><a href="#L48">   48</a>                  &lt;&lt; (index * 8u);</span>
+<span id="L49"><a href="#L49">   49</a>     }</span>
+<span id="L50"><a href="#L50">   50</a>     return true;</span>
+<span id="L51"><a href="#L51">   51</a> }</span>
+<span id="L52"><a href="#L52">   52</a> </span>
+<span id="L53"><a href="#L53">   53</a> inline bool load_u64_le(</span>
+<span id="L54"><a href="#L54">   54</a>     std::span&lt;const std::byte&gt; input,</span>
+<span id="L55"><a href="#L55">   55</a>     std::size_t offset,</span>
+<span id="L56"><a href="#L56">   56</a>     std::uint64_t&amp; value) noexcept {</span>
+<span id="L57"><a href="#L57">   57</a>     value = 0;</span>
+<span id="L58"><a href="#L58">   58</a>     if (offset &gt; input.size() || input.size() - offset &lt; sizeof(value)) {</span>
+<span id="L59"><a href="#L59">   59</a>         return false;</span>
+<span id="L60"><a href="#L60">   60</a>     }</span>
+<span id="L61"><a href="#L61">   61</a>     for (std::size_t index = 0; index &lt; sizeof(value); ++index) {</span>
+<span id="L62"><a href="#L62">   62</a>         value |= static_cast&lt;std::uint64_t&gt;(</span>
+<span id="L63"><a href="#L63">   63</a>                      static_cast&lt;std::uint8_t&gt;(input[offset + index]))</span>
+<span id="L64"><a href="#L64">   64</a>                  &lt;&lt; (index * 8u);</span>
+<span id="L65"><a href="#L65">   65</a>     }</span>
+<span id="L66"><a href="#L66">   66</a>     return true;</span>
+<span id="L67"><a href="#L67">   67</a> }</span>
+<span id="L68"><a href="#L68">   68</a> </span>
+<span id="L69"><a href="#L69">   69</a> } // namespace rt</span></pre></html>

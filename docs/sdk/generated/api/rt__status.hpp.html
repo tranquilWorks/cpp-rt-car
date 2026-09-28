@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>rt/status.hpp — RTFW 1.2.1</title>
+<style>body{font:16px system-ui;margin:2rem}pre{font:13px monospace;overflow:auto}pre a{color:#555}a{color:#0758a5}</style>
+<h1>rt/status.hpp</h1><p>Default installed header. Version 1.2.1.</p>
+<p>Source: rt/include/rt/status.hpp; SHA-256: ee14de3b740b0568cbd407ca07cb8c299df154ec663bf0c6eca6e01c8eea121d. Exact declaration/comment source; private/detail content is not a supported API promise.</p>
+<p><a href="index.html">API index</a> · <a href="../README.md">Manual</a></p><pre><span id="L1"><a href="#L1">    1</a> #pragma once</span>
+<span id="L2"><a href="#L2">    2</a> </span>
+<span id="L3"><a href="#L3">    3</a> #include &lt;cstdint&gt;</span>
+<span id="L4"><a href="#L4">    4</a> </span>
+<span id="L5"><a href="#L5">    5</a> namespace rt {</span>
+<span id="L6"><a href="#L6">    6</a> </span>
+<span id="L7"><a href="#L7">    7</a> enum class Status : std::int32_t {</span>
+<span id="L8"><a href="#L8">    8</a>     ok = 0,</span>
+<span id="L9"><a href="#L9">    9</a>     invalid_argument = -1,</span>
+<span id="L10"><a href="#L10">   10</a>     invalid_state = -2,</span>
+<span id="L11"><a href="#L11">   11</a>     invalid_config = -3,</span>
+<span id="L12"><a href="#L12">   12</a>     capacity_exceeded = -4,</span>
+<span id="L13"><a href="#L13">   13</a>     callback_failed = -5,</span>
+<span id="L14"><a href="#L14">   14</a>     resource_exhausted = -6,</span>
+<span id="L15"><a href="#L15">   15</a>     internal_error = -7,</span>
+<span id="L16"><a href="#L16">   16</a>     invalid_handle = -8,</span>
+<span id="L17"><a href="#L17">   17</a>     graph_cycle = -9,</span>
+<span id="L18"><a href="#L18">   18</a>     resource_conflict = -10,</span>
+<span id="L19"><a href="#L19">   19</a>     queue_full = -11,</span>
+<span id="L20"><a href="#L20">   20</a>     scratch_exhausted = -12,</span>
+<span id="L21"><a href="#L21">   21</a>     platform_preflight_failed = -13,</span>
+<span id="L22"><a href="#L22">   22</a>     clock_failure = -14,</span>
+<span id="L23"><a href="#L23">   23</a>     invalid_artifact = -15,</span>
+<span id="L24"><a href="#L24">   24</a>     incompatible_artifact = -16,</span>
+<span id="L25"><a href="#L25">   25</a>     device_queue_full = -17,</span>
+<span id="L26"><a href="#L26">   26</a>     device_timeout = -18,</span>
+<span id="L27"><a href="#L27">   27</a>     device_error = -19,</span>
+<span id="L28"><a href="#L28">   28</a>     device_lost = -20,</span>
+<span id="L29"><a href="#L29">   29</a>     device_canceled = -21,</span>
+<span id="L30"><a href="#L30">   30</a>     device_reset_required = -22,</span>
+<span id="L31"><a href="#L31">   31</a>     incompatible_abi = -23,</span>
+<span id="L32"><a href="#L32">   32</a> };</span>
+<span id="L33"><a href="#L33">   33</a> </span>
+<span id="L34"><a href="#L34">   34</a> [[nodiscard]] const char* status_message(Status status) noexcept;</span>
+<span id="L35"><a href="#L35">   35</a> </span>
+<span id="L36"><a href="#L36">   36</a> } // namespace rt</span></pre></html>
