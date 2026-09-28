@@ -1,60 +1,47 @@
 schema_version: 1
 batch:
-  id: M25-06
-  title: Installed docs, API reference, and recipes
-  goal: Ship a relocatable offline documentation bundle, reproducible source-linked public API reference
-    and executable public-SDK recipes in ordinary release archives; close M25 software delivery without
-    promoting human or physical qualification.
+  id: M26-01
+  title: Golden scenario and lever contract
+  goal: Freeze a checked sample-owned golden-system specification before implementing the M26 runtime
+    scenario; bind numerical, scheduling, channel, control, fault, telemetry and benchmark identities
+    and portable/optional claim boundaries.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
-  - products/cpp-rt-car/PRD.md#cap-m25--consumer-sdk-and-integration-experience
-  - products/cpp-rt-car/acceptance.yaml#CAP-M25
-  milestone: products/cpp-rt-car/milestones/M25.md#m25-06--installed-docs-api-reference-and-recipes
-  baseline_commit: 98ecca5a6572dd83d59e26063716f6d76b7a5d4f
+  - products/cpp-rt-car/PRD.md#cap-m26--golden-full-system-reference
+  - products/cpp-rt-car/acceptance.yaml#CAP-M26
+  milestone: products/cpp-rt-car/milestones/M26.md#m26-01--golden-scenario-and-lever-contract
+  baseline_commit: 62e61474c2d2efa6d673a9db31c45e2f35974ada
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M25-06.yaml
-  predecessor: M25-05 PR273 merged with all32 exact-head checks; tested/merged tree34d5a23796849187f361084ccab7f43990387d55.
-    Control closure PR538.
-  owner_scope: Owner requested 06 please. Standing scoped planning, publication and integration authorization
-    persists. Merge canonical plan before implementation; close only M25-06 and M25 software delivery.
-    Do not activate M26.
-  control_plane_revision: d385731eb44762e73596e830d4f99a8534bc5bf5
-  canonical_revision: d385731eb44762e73596e830d4f99a8534bc5bf5
-  canonical_blob_sha: ac12e901ec4c12d945d83beda7535d5e84defc22
+  control_plane_path: products/cpp-rt-car/batches/M26-01.yaml
+  predecessor: M25-06 target PR274 merged after all32 exact-head checks; control closure PR543. M25 software
+    is complete; independent unfamiliar-consumer acceptance remains unperformed.
+  owner_scope: Owner requested lets go for m26-1. Standing scoped planning/publication/integration authority
+    persists. Merge this plan before target changes; close only M26-01. M26-02 through M26-06 remain inactive
+    and M25 human acceptance remains unperformed.
+  control_plane_revision: 3850342958f8daa9607c9ba2e5f82e49efbe40d6
+  canonical_revision: 3850342958f8daa9607c9ba2e5f82e49efbe40d6
+  canonical_blob_sha: acd6b1b1589de95a638f91fe41866125243c4d40
 dependencies:
-- M25-01
-- M25-02
-- M25-03
-- M25-04
-- M25-05
+- M21-05
+- M22-04
 - M23-05
 - M24-04
+- M25-06
 scope:
   allowed_paths:
   - AGENTS.md
-  - .portfolio-harness.json
   - contracts/active-batch.yaml
-  - contracts/verification.yaml
   - contracts/verification.commands
-  - CMakeLists.txt
-  - README.md
-  - samples/CMakeLists.txt
-  - samples/README.md
-  - samples/recipes/**
-  - tests/CMakeLists.txt
-  - tests/installed_docs/**
-  - tests/package_consumer/CMakeLists.txt
-  - docs/sdk/**
-  - docs/getting_started.md
-  - docs/product_contract.md
-  - docs/architecture.md
+  - samples/golden_system/contract.json
+  - samples/golden_system/README.md
+  - docs/golden_system.md
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
   - docs/roadmap.md
-  - docs/evidence/M25-06-*
-  - tools/generate_sdk_docs.py
-  - tools/check_sdk_docs.py
+  - docs/evidence/M26-01-*
+  - tools/check_golden_contract.py
+  - tests/golden_system/test_contract.py
   - tools/check_docs_contract.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
@@ -113,84 +100,82 @@ scope:
   - tests/mixed_rate_conformance.hpp
   - tests/package_consumer/*.cpp
   - tests/package_consumer/*.c
+  - samples/recipes/
+  - tests/installed_docs/
+  - docs/sdk/
+  - tools/generate_sdk_docs.py
+  - tools/check_sdk_docs.py
+  - docs/evidence/M25-06-*
+  - CMakeLists.txt
+  - tests/CMakeLists.txt
+  - samples/CMakeLists.txt
 acceptance:
-- Generate deterministic source-linked API reference from an explicit exact default installed-header inventory
-  plus clearly identified optional CUDA/XDMA/benchmark headers. Include readable declaration/comment source,
-  stable checked line anchors and a navigable entry-point/type index. Validate missing/ambiguous symbols,
-  stale content, version/header-byte drift and broken local links/fragments. Do not alter production headers
-  or claim a parser understands semantic constructs it does not support. Regeneration is a developer-only
-  standard-library tool; consuming the default SDK must not acquire a documentation-generator dependency.
-- Ship an offline documentation entry point and relevant README/build, lifecycle/ownership/capacity, multi-rate/sampled-I/O,
-  live control, backend, CUDA, XDMA, external CIL/HIL, benchmark, checkpoint/replay, error, migration
-  and claim-boundary guides. Link recipes to exact shipped source and API declarations. Reuse authoritative
-  existing guides without editing earlier evidence or source kits; preserve navigable local links and
-  explicitly identify repository-only or optional hardware material. Package material must not depend
-  on the original checkout/prefix for ordinary reading or build.
-- Ship compiling/running public-SDK recipes and exact command transcripts for raw C/C++, profile/lifecycle,
-  active multi-rate and sampled-I/O, live control and trusted replay, backend/device surfaces and optional
-  benchmark extension. Reuse unchanged existing public conformance/consumer sources where useful with
-  complete support-source inventory; distinguish actual exercised scenarios from compile-only vendor boundaries.
-  Preserve all independent state/count/status/cleanup and failed-evidence oracles. Connect earlier hello/typed/backend/CIL/host/CUDA
-  installed source kits rather than duplicating or weakening them.
-- Use machine-readable transcript/source inventories to bind documented commands to actual execution with
-  explicit source, prefix, data and build paths. Run installed find_package and source embedding, tests-OFF
-  SDK, custom include/data paths with spaces, original prefix removed and an actual CPack archive extracted
-  elsewhere. Verify full public export/header inventory and complete prior consumers. Check exact documentation/generated-reference/source
-  bytes and local links in the archive; reject missing docs/source, stale source links, changed expected
-  results and private/original include leaks with negative controls.
-- Run complete local profiles, documentation generator/link/transcript negative tests, installed/embedded
-  recipe executions and prior complete SDK/CUDA consumers, compiled ABI and unchanged capability matrix
-  plus all32 exact-head hosted target checks with predecessor name/multiplicity. Add docs/package coverage
-  to existing gates without changing the main CI workflow or removing prior tests. Retain canonical/head/tree/check
-  identities, acceptance mapping, failures/corrections, review/rollback and unperformed validation.
-- Close M25-06 and all six M25 software batches only after integration. Keep the independent unfamiliar-consumer
-  walkthrough explicitly UNPERFORMED, so software completion does not invent full human acceptance. M26
-  golden-system composition/audit, Unreal, physical CUDA/XDMA/HIL, RT1/RT2, controlled performance and
-  signing/release/deployment remain separate. Preserve ABI v8/SONAME8/device v1, production code, prior
-  benchmark/CUDA/source/evidence and default target/header inventory.
+- 'Freeze one versioned machine-readable scenario contract and readable source-linked guide: fixed-capacity
+  sample-owned SoA layout, field types/ranges/units/ownership, deterministic initialization/update/correctness
+  rules, explicit numerical overflow bounds, bounded nested work partition and native/independent-host
+  execution identities. Use M24 integer CPU/CUDA oracle semantics for the declared physics stage, including
+  piecewise control changes; do not implement Runtime callbacks, driver variants or new SDK APIs in this
+  batch.'
+- Freeze the phase/resource DAG, integer base clock and CPU/device rate table with exact baseline release
+  counts; timestamped sampled channel payload/selection/age/safe-output rules; explicit host staging and
+  backend-local timelines. Bind live-control schemas, bounds, capacities, exact boundary ordering/generation/reset
+  and trusted checkpoint/replay identity. Resolve reference defaults using existing public contracts and
+  identify consumer-owned lifecycle versus Runtime guarantees.
+- Freeze a fault matrix with deterministic injection points, observable outcomes, bounded detection/recovery/checked-stop
+  rules and owning future batch. Cover overload, stale input, underflow/overrun, device loss, rejected/replaced
+  controls and reset/recovery. Freeze telemetry and M23 subsystem/end-loop case identities, bounded tuning
+  levers, expected artifact fields/status and variant boundaries. All future execution remains explicitly
+  planned; no scenario performance or completion result is fabricated.
+- Provide a standard-library offline validator and meaningful negative tests rejecting missing/unknown
+  fields, dangling/cyclic graph references, invalid rates/counts, unsafe arithmetic/channel/control bounds,
+  duplicate identity, missing subsystem/fault coverage, artifact/variant overclaims and source-link drift.
+  Check reproducible contract identity, independently derived arithmetic/rate/partition feasibility, and
+  require explicit version/hash review when frozen content changes. Integrate these checks into existing
+  local contract and hosted documentation gates without replacing any gate.
+- Run full local profiles and focused contract tests; preserve ABI v8/SONAME8/device v1, default package/header
+  inventory, production code, prior samples/tests/evidence and all32 exact-head target checks with predecessor
+  names/multiplicity. Retain canonical/head/tree/check identities, acceptance mapping, failures/corrections,
+  review/rollback and unperformed validation. No package install behavior changes in this specification-only
+  batch.
+- Close only M26-01 after integration and leave five later M26 batches unactivated. Preserve M25 human
+  acceptance as UNPERFORMED. Physical CUDA/XDMA/HIL, RT1/RT2, controlled performance, Unreal and signing/release/deployment
+  remain separate gates.
 validation:
   local:
+  - python3 tools/check_golden_contract.py
+  - python3 -m unittest discover -s tests/golden_system -p "test_*.py"
   - ./scripts/agent-verify.sh contract
+  - ./scripts/agent-verify.sh quick
   - ./scripts/agent-verify.sh full
-  - python3 tools/generate_sdk_docs.py --check
-  - python3 tools/check_sdk_docs.py
-  - python3 -m unittest discover -s tests/installed_docs -p "test_*.py"
-  - python3 tests/installed_docs/verify_package.py --work-directory build/m25-06-package
-  - python3 tests/cuda_physics/verify_package.py --work-directory build/m25-06-cuda-package
-  - python3 tools/check_c_abi.py --library build/agent-quick/librtfw.so
-  - python3 tools/check_cuda_capabilities.py
   - git diff --check
   focused_tests_to_add:
-  - Generated reference/header/declaration/link integrity and truthful optional API inventory.
-  - Executable installed and embedded recipe/transcript inventory with full prior consumers and actual
-    CPack extraction.
-  - Missing documentation/source, source/declaration drift, invalid links/fragments, changed expected
-    results and private/original path negative controls.
+  - Schema/identity/DAG/rate/numerical/channel/control/fault/artifact/claim mutation negatives.
+  - Independent rate counts, numerical closed-form bounds and fixed-capacity partition feasibility.
   required_ci:
-  - All32 existing exact-head successful target check records with predecessor names/multiplicity and
+  - All32 existing exact-head target records successful with predecessor exact names/multiplicity and
     no unresolved review thread.
-  - Documentation contract adds deterministic generation, links and negative/CPack/recipe checks; existing
-    package consumers gain additive recipe coverage without losing prior tests.
+  - Existing documentation gate runs golden contract validator and negatives; no new required check name
+    or removed coverage.
   manual:
-  - Independent first-use walkthrough by an unfamiliar human remains UNPERFORMED.
-  - No hardware, RT1/RT2, controlled performance, Unreal, signing/release/deployment qualification.
+  - M25 unfamiliar-consumer walkthrough remains UNPERFORMED.
+  - No physical/RT/performance/Unreal/release qualification; golden scenario execution is deferred to
+    M26-02 onward.
 risk:
   class: moderate
   hazards:
-  - Generated documentation appears authoritative while stale, incomplete, wrongly anchored or dependent
-    on checkout paths.
-  - Installed recipes lack support files, bypass real behavior or silently weaken cleanup/state oracles.
-  - Software milestone closure is overstated as independent human, physical/RT or release acceptance.
+  - A superficially complete specification contradicts existing SDK timing/ownership semantics.
+  - Unchecked cross-references or arithmetic make later variants incomparable or unsafe.
+  - Planned scenario or future benchmark artifacts are misrepresented as execution evidence.
   stop_conditions:
-  - A production/forbidden-path repair or ABI/default public-inventory change is required.
-  - A required gate or existing assertion would need weakening.
+  - Production/forbidden-path changes or ABI/package changes are required.
+  - Existing validation would need weakening or unresolved product requirements prevent a coherent bounded
+    reference.
 rollback:
-  strategy: Revert only additive documentation generation, bundle/recipe sources, install and verification
-    wiring. Preserve production, public SDK/ABI, all prior source kits and evidence.
+  strategy: Revert additive golden specification, validator/tests and their gate wiring only; preserve
+    all runtime, SDK, source kits and earlier evidence.
 evidence:
   output:
-  - docs/evidence/M25-06-<date>.md
-  - Exact generation/link/transcript/archive/recipe/full/hosted results, canonical/head/tree/merge identities
-    and retained failures.
-  claim_boundary: M25 portable software delivery only; human first-use acceptance and all physical/RT/performance/Unreal/release
-    gates remain unperformed. No M26 activation.
+  - docs/evidence/M26-01-<date>.md
+  - Exact contract/full/negative/hosted results and canonical/head/tree/merge identities.
+  claim_boundary: M26-01 checked design contract only, not implemented golden scenario or M26 software
+    completion. M25 human acceptance and all physical/RT/Unreal/performance/release gates remain open.
