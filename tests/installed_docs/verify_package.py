@@ -108,7 +108,7 @@ def main():
             build_test(ROOT / 'tests/package_consumer', relocated / ('full SDK ' + mode),
                        f'-DCMAKE_PREFIX_PATH={prefix}', f'-DRTFW_TEST_BENCHMARK={option}')
             recipe_inventory(relocated / ('full SDK ' + mode), benchmark)
-            embedded = relocated / 'embedded'
+            embedded = relocated / ('embedded ' + mode)
             run(sys.executable, kit / 'run_transcripts.py', '--prefix', prefix, '--build', embedded,
                 '--source', ROOT, '--benchmark', option)
             recipe_inventory(embedded, benchmark)
