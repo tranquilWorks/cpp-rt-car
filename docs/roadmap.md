@@ -1,10 +1,9 @@
 # RTFW Completion Roadmap
 
-M21 through M24 portable software and M25-01 are merged. M25-02 optional typed
-SDK helpers are implemented; its evidence and scoped target PR track verification
-and integration. M25-03 through M25-06 remain separate later batches.
-Software feature completion remains M26-06. Physical and controlled-host evidence
-remain separate and unperformed here.
+M21 through M24 portable software and M25-01/02 are merged. M25-03 backend
+authoring and conformance are active; its evidence tracks verification/integration.
+M25-04 through M25-06 remain separate. Software feature completion remains
+M26-06; physical, controlled-host and independent first-use evidence remain separate.
 
 The roadmap converts the [product contract](product_contract.md) into
 dependency-ordered milestones. A milestone is complete only when its exit gates

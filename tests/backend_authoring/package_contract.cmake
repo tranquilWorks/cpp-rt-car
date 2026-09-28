@@ -1,0 +1,11 @@
+# Additive kit contract; preserved SDK headers/targets and CUDA inventory still apply.
+set(backend_kit "${RTFW_DATA_DIR}/examples/backend_authoring")
+file(GLOB backend_sources LIST_DIRECTORIES FALSE RELATIVE "${backend_kit}" "${backend_kit}/*")
+list(SORT backend_sources)
+if(NOT "${backend_sources}" STREQUAL "CMakeLists.txt;backend.hpp;check_output.cmake;conformance.hpp;main.cpp;profile.hpp;runtime_example.hpp")
+    message(FATAL_ERROR "backend authoring source inventory differs from contract")
+endif()
+if(NOT EXISTS "${RTFW_DATA_DIR}/backend_authoring.md")
+    message(FATAL_ERROR "backend authoring guide is missing")
+endif()
+add_subdirectory("${backend_kit}" backend-authoring)

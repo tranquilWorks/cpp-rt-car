@@ -122,3 +122,13 @@ if(RTFW_BUILD_TESTS)
             -P "${CMAKE_CURRENT_SOURCE_DIR}/typed_runtime/check_output.cmake")
     set_tests_properties(typed_runtime_output PROPERTIES TIMEOUT 30)
 endif()
+
+add_executable(sample_backend_authoring backend_authoring/main.cpp)
+target_link_libraries(sample_backend_authoring PRIVATE rtfw::runtime)
+rtfw_enable_project_warnings(sample_backend_authoring)
+if(RTFW_BUILD_TESTS)
+    add_test(NAME backend_authoring_output
+        COMMAND "${CMAKE_COMMAND}" "-DBACKEND_EXECUTABLE=$<TARGET_FILE:sample_backend_authoring>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/backend_authoring/check_output.cmake")
+    set_tests_properties(backend_authoring_output PROPERTIES TIMEOUT 30)
+endif()

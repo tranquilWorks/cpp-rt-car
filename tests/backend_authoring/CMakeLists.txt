@@ -1,0 +1,5 @@
+add_executable(test_backend_authoring test_backend.cpp)
+target_link_libraries(test_backend_authoring PRIVATE rtfw::runtime)
+rtfw_enable_project_warnings(test_backend_authoring)
+add_test(NAME backend_authoring_conformance COMMAND test_backend_authoring)
+set_tests_properties(backend_authoring_conformance PROPERTIES TIMEOUT 90)
