@@ -57,7 +57,7 @@ GATE_SOURCES = {
 
 def product_sources(root):
     # Bind the implementation behind the sample, not just its tests/wrappers.
-    return {str(path.relative_to(root)) for directory in ('rt', 'core/include')
+    return {path.relative_to(root).as_posix() for directory in ('rt', 'core/include')
             for path in (root/directory).rglob('*') if path.suffix in ('.cpp', '.hpp', '.h')}
 
 

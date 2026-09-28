@@ -3,12 +3,13 @@
 import copy
 import importlib.util
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import subprocess
 import shutil
 import tempfile
 import sys
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('coverage', ROOT/'tools/check_cuda_capabilities.py')
@@ -61,6 +62,13 @@ class CoverageTests(unittest.TestCase):
         self.reject(lambda m: m['gates']['benchmark']['sources'].update({path: '0'*64}))
         self.reject(lambda m: m['gates']['benchmark']['evidence'].update({'docs/evidence/absent.txt': '0'*64}))
         self.reject(lambda m: m['gates']['benchmark']['sources'].update({'../outside': '0'*64}))
+
+    def test_windows_inventory_uses_canonical_forward_slashes(self):
+        root = PureWindowsPath('C:/checkout')
+        files = [[root/'rt/src/runtime.cpp'], [root/'core/include/core/units.hpp']]
+        with mock.patch.object(PureWindowsPath, 'rglob', create=True, side_effect=files):
+            self.assertEqual(coverage.product_sources(root),
+                             {'rt/src/runtime.cpp', 'core/include/core/units.hpp'})
 
     def test_underlying_runtime_and_backend_changes_invalidate_evidence(self):
         path = 'rt/src/cuda_backend.cpp'
