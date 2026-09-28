@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>rt/extension_abi.h — RTFW 1.2.1</title>
+<style>body{font:16px system-ui;margin:2rem}pre{font:13px monospace;overflow:auto}pre a{color:#555}a{color:#0758a5}</style>
+<h1>rt/extension_abi.h</h1><p>Default installed header. Version 1.2.1.</p>
+<p>Source: rt/include/rt/extension_abi.h; SHA-256: e833986bd3f0930d0090980f021721906bbe06ad7b1e8cb26ee0752a3487e22f. Exact declaration/comment source; private/detail content is not a supported API promise.</p>
+<p><a href="index.html">API index</a> · <a href="../README.md">Manual</a></p><pre><span id="L1"><a href="#L1">    1</a> #pragma once</span>
+<span id="L2"><a href="#L2">    2</a> </span>
+<span id="L3"><a href="#L3">    3</a> #include &lt;stddef.h&gt;</span>
+<span id="L4"><a href="#L4">    4</a> #include &lt;stdint.h&gt;</span>
+<span id="L5"><a href="#L5">    5</a> </span>
+<span id="L6"><a href="#L6">    6</a> #include &lt;rt/c_api.h&gt;</span>
+<span id="L7"><a href="#L7">    7</a> #include &lt;rt/device_abi.h&gt;</span>
+<span id="L8"><a href="#L8">    8</a> </span>
+<span id="L9"><a href="#L9">    9</a> #if defined(_MSC_VER)</span>
+<span id="L10"><a href="#L10">   10</a> #define RTFW_EXTENSION_CALL __cdecl</span>
+<span id="L11"><a href="#L11">   11</a> #else</span>
+<span id="L12"><a href="#L12">   12</a> #define RTFW_EXTENSION_CALL</span>
+<span id="L13"><a href="#L13">   13</a> #endif</span>
+<span id="L14"><a href="#L14">   14</a> </span>
+<span id="L15"><a href="#L15">   15</a> #ifdef __cplusplus</span>
+<span id="L16"><a href="#L16">   16</a> extern &quot;C&quot; {</span>
+<span id="L17"><a href="#L17">   17</a> #endif</span>
+<span id="L18"><a href="#L18">   18</a> </span>
+<span id="L19"><a href="#L19">   19</a> #define RTFW_EXTENSION_ABI_VERSION 1u</span>
+<span id="L20"><a href="#L20">   20</a> #define RTFW_EXTENSION_ABI_MIN_COMPATIBLE_VERSION 1u</span>
+<span id="L21"><a href="#L21">   21</a> #define RTFW_EXTENSION_IDENTIFIER_CAPACITY 64u</span>
+<span id="L22"><a href="#L22">   22</a> #define RTFW_EXTENSION_ENTRY_SYMBOL_V1 &quot;rtfw_extension_entry_v1&quot;</span>
+<span id="L23"><a href="#L23">   23</a> </span>
+<span id="L24"><a href="#L24">   24</a> #define RTFW_EXTENSION_PHASE_CAPACITY 64u</span>
+<span id="L25"><a href="#L25">   25</a> #define RTFW_EXTENSION_BACKEND_CAPACITY 16u</span>
+<span id="L26"><a href="#L26">   26</a> #define RTFW_EXTENSION_SERVICE_CAPACITY 16u</span>
+<span id="L27"><a href="#L27">   27</a> #define RTFW_EXTENSION_RESOURCE_CAPACITY 64u</span>
+<span id="L28"><a href="#L28">   28</a> #define RTFW_EXTENSION_RELATIONSHIP_CAPACITY 256u</span>
+<span id="L29"><a href="#L29">   29</a> #define RTFW_RUNTIME_EXTENSION_CAPACITY 16u</span>
+<span id="L30"><a href="#L30">   30</a> </span>
+<span id="L31"><a href="#L31">   31</a> typedef uint32_t rtfw_extension_handle_kind;</span>
+<span id="L32"><a href="#L32">   32</a> #define RTFW_EXTENSION_HANDLE_EXTENSION ((rtfw_extension_handle_kind)1u)</span>
+<span id="L33"><a href="#L33">   33</a> #define RTFW_EXTENSION_HANDLE_PHASE ((rtfw_extension_handle_kind)2u)</span>
+<span id="L34"><a href="#L34">   34</a> #define RTFW_EXTENSION_HANDLE_BACKEND ((rtfw_extension_handle_kind)3u)</span>
+<span id="L35"><a href="#L35">   35</a> #define RTFW_EXTENSION_HANDLE_SERVICE ((rtfw_extension_handle_kind)4u)</span>
+<span id="L36"><a href="#L36">   36</a> #define RTFW_EXTENSION_HANDLE_RESOURCE ((rtfw_extension_handle_kind)5u)</span>
+<span id="L37"><a href="#L37">   37</a> </span>
+<span id="L38"><a href="#L38">   38</a> typedef struct rtfw_extension_handle_v1 {</span>
+<span id="L39"><a href="#L39">   39</a>     uint32_t owner;</span>
+<span id="L40"><a href="#L40">   40</a>     uint32_t kind;</span>
+<span id="L41"><a href="#L41">   41</a>     uint32_t slot;</span>
+<span id="L42"><a href="#L42">   42</a>     uint32_t generation;</span>
+<span id="L43"><a href="#L43">   43</a> } rtfw_extension_handle_v1;</span>
+<span id="L44"><a href="#L44">   44</a> </span>
+<span id="L45"><a href="#L45">   45</a> typedef uint32_t rtfw_extension_relationship_kind;</span>
+<span id="L46"><a href="#L46">   46</a> #define RTFW_EXTENSION_RELATIONSHIP_PHASE_DEPENDENCY \</span>
+<span id="L47"><a href="#L47">   47</a>     ((rtfw_extension_relationship_kind)1u)</span>
+<span id="L48"><a href="#L48">   48</a> #define RTFW_EXTENSION_RELATIONSHIP_PHASE_RESOURCE \</span>
+<span id="L49"><a href="#L49">   49</a>     ((rtfw_extension_relationship_kind)2u)</span>
+<span id="L50"><a href="#L50">   50</a> #define RTFW_EXTENSION_RELATIONSHIP_SERVICE_BACKEND \</span>
+<span id="L51"><a href="#L51">   51</a>     ((rtfw_extension_relationship_kind)3u)</span>
+<span id="L52"><a href="#L52">   52</a> </span>
+<span id="L53"><a href="#L53">   53</a> typedef uint32_t rtfw_extension_resource_access;</span>
+<span id="L54"><a href="#L54">   54</a> #define RTFW_EXTENSION_RESOURCE_ACCESS_NONE \</span>
+<span id="L55"><a href="#L55">   55</a>     ((rtfw_extension_resource_access)0u)</span>
+<span id="L56"><a href="#L56">   56</a> #define RTFW_EXTENSION_RESOURCE_ACCESS_READ \</span>
+<span id="L57"><a href="#L57">   57</a>     ((rtfw_extension_resource_access)1u)</span>
+<span id="L58"><a href="#L58">   58</a> #define RTFW_EXTENSION_RESOURCE_ACCESS_WRITE \</span>
+<span id="L59"><a href="#L59">   59</a>     ((rtfw_extension_resource_access)2u)</span>
+<span id="L60"><a href="#L60">   60</a> </span>
+<span id="L61"><a href="#L61">   61</a> typedef struct rtfw_extension_phase_v1 {</span>
+<span id="L62"><a href="#L62">   62</a>     uint32_t struct_size;</span>
+<span id="L63"><a href="#L63">   63</a>     uint32_t abi_version;</span>
+<span id="L64"><a href="#L64">   64</a>     char name[RTFW_EXTENSION_IDENTIFIER_CAPACITY];</span>
+<span id="L65"><a href="#L65">   65</a>     rtfw_frame_callback callback;</span>
+<span id="L66"><a href="#L66">   66</a>     void* user_data;</span>
+<span id="L67"><a href="#L67">   67</a>     uint64_t reserved[4];</span>
+<span id="L68"><a href="#L68">   68</a> } rtfw_extension_phase_v1;</span>
+<span id="L69"><a href="#L69">   69</a> </span>
+<span id="L70"><a href="#L70">   70</a> typedef struct rtfw_extension_backend_v1 {</span>
+<span id="L71"><a href="#L71">   71</a>     uint32_t struct_size;</span>
+<span id="L72"><a href="#L72">   72</a>     uint32_t abi_version;</span>
+<span id="L73"><a href="#L73">   73</a>     char name[RTFW_EXTENSION_IDENTIFIER_CAPACITY];</span>
+<span id="L74"><a href="#L74">   74</a>     rtfw_device_backend_api api;</span>
+<span id="L75"><a href="#L75">   75</a>     uint64_t reserved[4];</span>
+<span id="L76"><a href="#L76">   76</a> } rtfw_extension_backend_v1;</span>
+<span id="L77"><a href="#L77">   77</a> </span>
+<span id="L78"><a href="#L78">   78</a> typedef rtfw_status (RTFW_EXTENSION_CALL *rtfw_extension_service_initialize_fn)(</span>
+<span id="L79"><a href="#L79">   79</a>     void* instance);</span>
+<span id="L80"><a href="#L80">   80</a> typedef rtfw_status (RTFW_EXTENSION_CALL *rtfw_extension_service_request_stop_fn)(</span>
+<span id="L81"><a href="#L81">   81</a>     void* instance);</span>
+<span id="L82"><a href="#L82">   82</a> typedef rtfw_status (RTFW_EXTENSION_CALL *rtfw_extension_service_quiesce_fn)(</span>
+<span id="L83"><a href="#L83">   83</a>     void* instance);</span>
+<span id="L84"><a href="#L84">   84</a> typedef rtfw_status (RTFW_EXTENSION_CALL *rtfw_extension_service_shutdown_fn)(</span>
+<span id="L85"><a href="#L85">   85</a>     void* instance);</span>
+<span id="L86"><a href="#L86">   86</a> </span>
+<span id="L87"><a href="#L87">   87</a> typedef struct rtfw_extension_service_status_v1 {</span>
+<span id="L88"><a href="#L88">   88</a>     uint32_t struct_size;</span>
+<span id="L89"><a href="#L89">   89</a>     uint32_t abi_version;</span>
+<span id="L90"><a href="#L90">   90</a>     uint32_t healthy;</span>
+<span id="L91"><a href="#L91">   91</a>     uint32_t reserved0;</span>
+<span id="L92"><a href="#L92">   92</a>     int32_t status;</span>
+<span id="L93"><a href="#L93">   93</a>     uint32_t reserved1;</span>
+<span id="L94"><a href="#L94">   94</a>     uint64_t observed_value;</span>
+<span id="L95"><a href="#L95">   95</a>     uint64_t reserved[4];</span>
+<span id="L96"><a href="#L96">   96</a> } rtfw_extension_service_status_v1;</span>
+<span id="L97"><a href="#L97">   97</a> </span>
+<span id="L98"><a href="#L98">   98</a> typedef rtfw_status (RTFW_EXTENSION_CALL *rtfw_extension_service_status_fn)(</span>
+<span id="L99"><a href="#L99">   99</a>     void* instance,</span>
+<span id="L100"><a href="#L100">  100</a>     rtfw_extension_service_status_v1* status);</span>
+<span id="L101"><a href="#L101">  101</a> </span>
+<span id="L102"><a href="#L102">  102</a> typedef struct rtfw_extension_service_api_v1 {</span>
+<span id="L103"><a href="#L103">  103</a>     uint32_t struct_size;</span>
+<span id="L104"><a href="#L104">  104</a>     uint32_t abi_version;</span>
+<span id="L105"><a href="#L105">  105</a>     void* instance;</span>
+<span id="L106"><a href="#L106">  106</a>     rtfw_extension_service_initialize_fn initialize;</span>
+<span id="L107"><a href="#L107">  107</a>     rtfw_extension_service_request_stop_fn request_stop;</span>
+<span id="L108"><a href="#L108">  108</a>     rtfw_extension_service_quiesce_fn quiesce;</span>
+<span id="L109"><a href="#L109">  109</a>     rtfw_extension_service_shutdown_fn shutdown;</span>
+<span id="L110"><a href="#L110">  110</a>     rtfw_extension_service_status_fn status;</span>
+<span id="L111"><a href="#L111">  111</a>     uint64_t reserved[4];</span>
+<span id="L112"><a href="#L112">  112</a> } rtfw_extension_service_api_v1;</span>
+<span id="L113"><a href="#L113">  113</a> </span>
+<span id="L114"><a href="#L114">  114</a> typedef struct rtfw_extension_service_v1 {</span>
+<span id="L115"><a href="#L115">  115</a>     uint32_t struct_size;</span>
+<span id="L116"><a href="#L116">  116</a>     uint32_t abi_version;</span>
+<span id="L117"><a href="#L117">  117</a>     char name[RTFW_EXTENSION_IDENTIFIER_CAPACITY];</span>
+<span id="L118"><a href="#L118">  118</a>     char interface_name[RTFW_EXTENSION_IDENTIFIER_CAPACITY];</span>
+<span id="L119"><a href="#L119">  119</a>     uint32_t interface_version;</span>
+<span id="L120"><a href="#L120">  120</a>     uint32_t reserved0;</span>
+<span id="L121"><a href="#L121">  121</a>     rtfw_extension_service_api_v1 api;</span>
+<span id="L122"><a href="#L122">  122</a>     uint64_t reserved[4];</span>
+<span id="L123"><a href="#L123">  123</a> } rtfw_extension_service_v1;</span>
+<span id="L124"><a href="#L124">  124</a> </span>
+<span id="L125"><a href="#L125">  125</a> typedef struct rtfw_extension_resource_v1 {</span>
+<span id="L126"><a href="#L126">  126</a>     uint32_t struct_size;</span>
+<span id="L127"><a href="#L127">  127</a>     uint32_t abi_version;</span>
+<span id="L128"><a href="#L128">  128</a>     char name[RTFW_EXTENSION_IDENTIFIER_CAPACITY];</span>
+<span id="L129"><a href="#L129">  129</a>     uint64_t reserved[4];</span>
+<span id="L130"><a href="#L130">  130</a> } rtfw_extension_resource_v1;</span>
+<span id="L131"><a href="#L131">  131</a> </span>
+<span id="L132"><a href="#L132">  132</a> typedef struct rtfw_extension_relationship_v1 {</span>
+<span id="L133"><a href="#L133">  133</a>     uint32_t struct_size;</span>
+<span id="L134"><a href="#L134">  134</a>     uint32_t abi_version;</span>
+<span id="L135"><a href="#L135">  135</a>     uint32_t kind;</span>
+<span id="L136"><a href="#L136">  136</a>     uint32_t access;</span>
+<span id="L137"><a href="#L137">  137</a>     rtfw_extension_handle_v1 first;</span>
+<span id="L138"><a href="#L138">  138</a>     rtfw_extension_handle_v1 second;</span>
+<span id="L139"><a href="#L139">  139</a>     uint64_t reserved[4];</span>
+<span id="L140"><a href="#L140">  140</a> } rtfw_extension_relationship_v1;</span>
+<span id="L141"><a href="#L141">  141</a> </span>
+<span id="L142"><a href="#L142">  142</a> struct rtfw_extension_host_api_v1;</span>
+<span id="L143"><a href="#L143">  143</a> </span>
+<span id="L144"><a href="#L144">  144</a> typedef rtfw_status (RTFW_EXTENSION_CALL *rtfw_extension_stage_phase_fn)(</span>
+<span id="L145"><a href="#L145">  145</a>     void* context,</span>
+<span id="L146"><a href="#L146">  146</a>     const rtfw_extension_phase_v1* phase,</span>
+<span id="L147"><a href="#L147">  147</a>     rtfw_extension_handle_v1* out_phase);</span>
+<span id="L148"><a href="#L148">  148</a> typedef rtfw_status (RTFW_EXTENSION_CALL *rtfw_extension_stage_backend_fn)(</span>
+<span id="L149"><a href="#L149">  149</a>     void* context,</span>
+<span id="L150"><a href="#L150">  150</a>     const rtfw_extension_backend_v1* backend,</span>
+<span id="L151"><a href="#L151">  151</a>     rtfw_extension_handle_v1* out_backend);</span>
+<span id="L152"><a href="#L152">  152</a> typedef rtfw_status (RTFW_EXTENSION_CALL *rtfw_extension_stage_service_fn)(</span>
+<span id="L153"><a href="#L153">  153</a>     void* context,</span>
+<span id="L154"><a href="#L154">  154</a>     const rtfw_extension_service_v1* service,</span>
+<span id="L155"><a href="#L155">  155</a>     rtfw_extension_handle_v1* out_service);</span>
+<span id="L156"><a href="#L156">  156</a> typedef rtfw_status (RTFW_EXTENSION_CALL *rtfw_extension_stage_resource_fn)(</span>
+<span id="L157"><a href="#L157">  157</a>     void* context,</span>
+<span id="L158"><a href="#L158">  158</a>     const rtfw_extension_resource_v1* resource,</span>
+<span id="L159"><a href="#L159">  159</a>     rtfw_extension_handle_v1* out_resource);</span>
+<span id="L160"><a href="#L160">  160</a> typedef rtfw_status (RTFW_EXTENSION_CALL *rtfw_extension_stage_relationship_fn)(</span>
+<span id="L161"><a href="#L161">  161</a>     void* context,</span>
+<span id="L162"><a href="#L162">  162</a>     const rtfw_extension_relationship_v1* relationship);</span>
+<span id="L163"><a href="#L163">  163</a> </span>
+<span id="L164"><a href="#L164">  164</a> typedef struct rtfw_extension_host_api_v1 {</span>
+<span id="L165"><a href="#L165">  165</a>     uint32_t struct_size;</span>
+<span id="L166"><a href="#L166">  166</a>     uint32_t current_abi_version;</span>
+<span id="L167"><a href="#L167">  167</a>     uint32_t min_compatible_abi_version;</span>
+<span id="L168"><a href="#L168">  168</a>     uint32_t reserved0;</span>
+<span id="L169"><a href="#L169">  169</a>     void* context;</span>
+<span id="L170"><a href="#L170">  170</a>     uint64_t phase_capacity;</span>
+<span id="L171"><a href="#L171">  171</a>     uint64_t backend_capacity;</span>
+<span id="L172"><a href="#L172">  172</a>     uint64_t service_capacity;</span>
+<span id="L173"><a href="#L173">  173</a>     uint64_t resource_capacity;</span>
+<span id="L174"><a href="#L174">  174</a>     uint64_t relationship_capacity;</span>
+<span id="L175"><a href="#L175">  175</a>     rtfw_extension_stage_phase_fn stage_phase;</span>
+<span id="L176"><a href="#L176">  176</a>     rtfw_extension_stage_backend_fn stage_backend;</span>
+<span id="L177"><a href="#L177">  177</a>     rtfw_extension_stage_service_fn stage_service;</span>
+<span id="L178"><a href="#L178">  178</a>     rtfw_extension_stage_resource_fn stage_resource;</span>
+<span id="L179"><a href="#L179">  179</a>     rtfw_extension_stage_relationship_fn stage_relationship;</span>
+<span id="L180"><a href="#L180">  180</a>     uint64_t reserved[4];</span>
+<span id="L181"><a href="#L181">  181</a> } rtfw_extension_host_api_v1;</span>
+<span id="L182"><a href="#L182">  182</a> </span>
+<span id="L183"><a href="#L183">  183</a> typedef struct rtfw_extension_descriptor_v1 {</span>
+<span id="L184"><a href="#L184">  184</a>     uint32_t struct_size;</span>
+<span id="L185"><a href="#L185">  185</a>     uint32_t current_abi_version;</span>
+<span id="L186"><a href="#L186">  186</a>     uint32_t min_compatible_abi_version;</span>
+<span id="L187"><a href="#L187">  187</a>     uint32_t reserved0;</span>
+<span id="L188"><a href="#L188">  188</a>     char name[RTFW_EXTENSION_IDENTIFIER_CAPACITY];</span>
+<span id="L189"><a href="#L189">  189</a>     char version[RTFW_EXTENSION_IDENTIFIER_CAPACITY];</span>
+<span id="L190"><a href="#L190">  190</a>     uint64_t phase_count;</span>
+<span id="L191"><a href="#L191">  191</a>     uint64_t backend_count;</span>
+<span id="L192"><a href="#L192">  192</a>     uint64_t service_count;</span>
+<span id="L193"><a href="#L193">  193</a>     uint64_t resource_count;</span>
+<span id="L194"><a href="#L194">  194</a>     uint64_t relationship_count;</span>
+<span id="L195"><a href="#L195">  195</a>     uint64_t reserved[4];</span>
+<span id="L196"><a href="#L196">  196</a> } rtfw_extension_descriptor_v1;</span>
+<span id="L197"><a href="#L197">  197</a> </span>
+<span id="L198"><a href="#L198">  198</a> typedef rtfw_status (RTFW_EXTENSION_CALL *rtfw_extension_entry_fn_v1)(</span>
+<span id="L199"><a href="#L199">  199</a>     const rtfw_extension_host_api_v1* host,</span>
+<span id="L200"><a href="#L200">  200</a>     rtfw_extension_descriptor_v1* descriptor);</span>
+<span id="L201"><a href="#L201">  201</a> </span>
+<span id="L202"><a href="#L202">  202</a> #define RTFW_EXTENSION_PHASE_V1_REQUIRED_SIZE \</span>
+<span id="L203"><a href="#L203">  203</a>     ((uint32_t)sizeof(rtfw_extension_phase_v1))</span>
+<span id="L204"><a href="#L204">  204</a> #define RTFW_EXTENSION_BACKEND_V1_REQUIRED_SIZE \</span>
+<span id="L205"><a href="#L205">  205</a>     ((uint32_t)sizeof(rtfw_extension_backend_v1))</span>
+<span id="L206"><a href="#L206">  206</a> #define RTFW_EXTENSION_SERVICE_API_V1_REQUIRED_SIZE \</span>
+<span id="L207"><a href="#L207">  207</a>     ((uint32_t)sizeof(rtfw_extension_service_api_v1))</span>
+<span id="L208"><a href="#L208">  208</a> #define RTFW_EXTENSION_SERVICE_V1_REQUIRED_SIZE \</span>
+<span id="L209"><a href="#L209">  209</a>     ((uint32_t)sizeof(rtfw_extension_service_v1))</span>
+<span id="L210"><a href="#L210">  210</a> #define RTFW_EXTENSION_SERVICE_STATUS_V1_REQUIRED_SIZE \</span>
+<span id="L211"><a href="#L211">  211</a>     ((uint32_t)sizeof(rtfw_extension_service_status_v1))</span>
+<span id="L212"><a href="#L212">  212</a> #define RTFW_EXTENSION_RESOURCE_V1_REQUIRED_SIZE \</span>
+<span id="L213"><a href="#L213">  213</a>     ((uint32_t)sizeof(rtfw_extension_resource_v1))</span>
+<span id="L214"><a href="#L214">  214</a> #define RTFW_EXTENSION_RELATIONSHIP_V1_REQUIRED_SIZE \</span>
+<span id="L215"><a href="#L215">  215</a>     ((uint32_t)sizeof(rtfw_extension_relationship_v1))</span>
+<span id="L216"><a href="#L216">  216</a> #define RTFW_EXTENSION_HOST_API_V1_REQUIRED_SIZE \</span>
+<span id="L217"><a href="#L217">  217</a>     ((uint32_t)sizeof(rtfw_extension_host_api_v1))</span>
+<span id="L218"><a href="#L218">  218</a> #define RTFW_EXTENSION_DESCRIPTOR_V1_REQUIRED_SIZE \</span>
+<span id="L219"><a href="#L219">  219</a>     ((uint32_t)sizeof(rtfw_extension_descriptor_v1))</span>
+<span id="L220"><a href="#L220">  220</a> </span>
+<span id="L221"><a href="#L221">  221</a> #ifdef __cplusplus</span>
+<span id="L222"><a href="#L222">  222</a> }</span>
+<span id="L223"><a href="#L223">  223</a> #endif</span></pre></html>

@@ -170,3 +170,6 @@ if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8
         endforeach()
     endif()
 endif()
+
+# Installed recipes reuse the unchanged public-package conformance sources.
+add_subdirectory(recipes)

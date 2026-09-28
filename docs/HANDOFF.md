@@ -1,3 +1,20 @@
+# M25-06 installed documentation and recipes
+
+M25-05 merged as PR273 at98ecca5a6572dd83d59e26063716f6d76b7a5d4f.
+Canonical control PR541 merged atd385731eb44762e73596e830d4f99a8534bc5bf5,
+blobac12e901ec4c12d945d83beda7535d5e84defc22. The active scope adds an offline manual,
+reproducible source-linked API reference and executable public-package recipes
+in actual CPack archives. See the [manual](sdk/generated/README.md) and
+[M25-06 evidence](evidence/M25-06-2026-09-28.md); final local/hosted and integration
+results are retained in the implementation PR and canonical closure.
+
+After this batch all six M25 software batches are delivered. Independent
+unfamiliar-consumer acceptance remains UNPERFORMED. Six M26 full-system batches,
+physical CUDA/XDMA/HIL, RT1/RT2, controlled performance, Unreal and signing/
+release/deployment remain separate. Do not activate M26 in this batch.
+
+## Historical M25-05 checkpoint
+
 # M25-05 independent host-adapter reference
 
 M25-04 merged as PR272 at2c431a40f450aba06b721dd0929f467fd12652b4.

@@ -536,3 +536,13 @@ See [benchmarking](docs/benchmarking.md) for build, install, provider and artifa
 ## CPU benchmarks (M23-02)
 
 M23-02 adds the optional `rtfw.cpu` source provider with 51 graph, executor, memory, queue-pressure and lifecycle cases. Each executes public Runtime operations with independent correctness checks; real timings remain portable characterization. The default build and SDK remain unchanged.
+
+## Installed SDK manual and recipes
+
+The [offline SDK manual](docs/sdk/generated/README.md) ships in ordinary CPack
+archives with a generated source-linked API reference, relevant guides and
+[executable recipes](docs/sdk/generated/recipes.md). The reference covers all
+default public headers and labels optional components explicitly. Docs generation
+is a developer check; installing or building the default SDK needs no generator.
+M25 software delivery does not establish independent novice review, M26, physical/RT,
+Unreal or release qualification.

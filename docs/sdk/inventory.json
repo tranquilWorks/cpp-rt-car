@@ -1,0 +1,301 @@
+{
+  "schema_version": 1,
+  "repository_revision": "98ecca5a6572dd83d59e26063716f6d76b7a5d4f",
+  "headers": [
+    {
+      "include": "core/units.hpp",
+      "source": "core/include/core/units.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/c_api.h",
+      "source": "rt/include/rt/c_api.h",
+      "component": "default"
+    },
+    {
+      "include": "rt/canonical_bytes.hpp",
+      "source": "rt/include/rt/canonical_bytes.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/config.hpp",
+      "source": "rt/include/rt/config.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/cuda_backend.hpp",
+      "source": "rt/include/rt/cuda_backend.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/device.hpp",
+      "source": "rt/include/rt/device.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/device_abi.h",
+      "source": "rt/include/rt/device_abi.h",
+      "component": "default"
+    },
+    {
+      "include": "rt/extension_abi.h",
+      "source": "rt/include/rt/extension_abi.h",
+      "component": "default"
+    },
+    {
+      "include": "rt/graph.hpp",
+      "source": "rt/include/rt/graph.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/loopback_backend.hpp",
+      "source": "rt/include/rt/loopback_backend.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/live_control.hpp",
+      "source": "rt/include/rt/live_control.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/sdk.hpp",
+      "source": "rt/include/rt/sdk.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/mock_device.hpp",
+      "source": "rt/include/rt/mock_device.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/observability_export.hpp",
+      "source": "rt/include/rt/observability_export.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/profile.hpp",
+      "source": "rt/include/rt/profile.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/runtime.hpp",
+      "source": "rt/include/rt/runtime.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/status.hpp",
+      "source": "rt/include/rt/status.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/version.hpp",
+      "source": "rt/include/rt/version.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rt/xdma_backend.hpp",
+      "source": "rt/include/rt/xdma_backend.hpp",
+      "component": "default"
+    },
+    {
+      "include": "rtfw/version.h",
+      "source": "include/rtfw/version.h",
+      "component": "default"
+    },
+    {
+      "include": "rt/cuda_driver.hpp",
+      "source": "rt/include/rt/cuda_driver.hpp",
+      "component": "cuda_driver"
+    },
+    {
+      "include": "rt/xdma_linux.hpp",
+      "source": "rt/include/rt/xdma_linux.hpp",
+      "component": "xdma_linux"
+    },
+    {
+      "include": "rtfw/benchmark.hpp",
+      "source": "bench/include/rtfw/benchmark.hpp",
+      "component": "benchmark"
+    }
+  ],
+  "entries": [
+    {
+      "header": "rt/runtime.hpp",
+      "label": "rt::Runtime",
+      "pattern": "^class Runtime \\{",
+      "note": "Configure and finalize before start; keep borrowed owners alive until checked stop succeeds."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "Runtime::configure",
+      "pattern": "\\bStatus configure\\(",
+      "note": "Control-plane configuration; validate capacities and policy before finalization."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "Runtime::finalize",
+      "pattern": "\\bStatus finalize\\(",
+      "note": "Compile and reserve resources; inspect failure before admitting frames."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "Runtime::start",
+      "pattern": "\\bStatus start\\(",
+      "note": "Startup must complete before frame admission; borrowed owners already exist."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "Runtime::step",
+      "pattern": "\\bStatus step\\(",
+      "note": "Explicit frame context, bounded callbacks and checked status; failure may leave application effects."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "Runtime::stop",
+      "pattern": "\\bStatus stop\\(",
+      "note": "Retain unresolved borrowed resources on failure and retry; destruction is not recovery."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "HostExecutorAdapter",
+      "pattern": "^struct HostExecutorAdapter \\{",
+      "note": "Copied accepted jobs execute exactly once; opaque completion/scratch identities remain borrowed."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "RuntimeClock",
+      "pattern": "^class RuntimeClock \\{",
+      "note": "A monotonic clock remains host-owned and outlives Runtime."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "RateExecutionPolicy",
+      "pattern": "^struct RateExecutionPolicy \\{",
+      "note": "Explicit finite release/dispatch capacities; logical rates are not physical deadlines."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "LiveControlPolicy",
+      "pattern": "^struct LiveControlPolicy \\{",
+      "note": "Fixed mailbox/producer/record/payload budgets; application apply and side-effect recovery remain external."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "SampledIoChannelRegistration",
+      "pattern": "^struct SampledIoChannelRegistration \\{",
+      "note": "Declared encoding, clock, freshness and safety policy; accepted submission is not an acknowledged safe state."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "Runtime::checkpoint_size",
+      "pattern": "\\bStatus checkpoint_size\\(",
+      "note": "Size caller-owned storage before writing; registered state is not an arbitrary process snapshot."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "Runtime::replay_active",
+      "pattern": "\\bStatus replay_active\\(",
+      "note": "Use a compatible trusted artifact and deterministic mock/loopback providers."
+    },
+    {
+      "header": "rt/runtime.hpp",
+      "label": "Runtime::replay_live_control",
+      "pattern": "\\bStatus replay_live_control\\(",
+      "note": "Payload-bearing artifacts are explicitly trusted; v2 is opt-in for admission history."
+    },
+    {
+      "header": "rt/config.hpp",
+      "label": "RuntimeConfig",
+      "pattern": "^struct RuntimeConfig \\{",
+      "note": "All capacities are explicit; portable defaults do not establish RT qualification."
+    },
+    {
+      "header": "rt/config.hpp",
+      "label": "MemoryProvider",
+      "pattern": "^struct MemoryProvider \\{",
+      "note": "Provider tokens and arenas remain live through failed rollback/stop; report truthful observations."
+    },
+    {
+      "header": "rt/device.hpp",
+      "label": "HalV2BackendApi",
+      "pattern": "^struct HalV2BackendApi \\{",
+      "note": "Capability and lifecycle contract; optional extensions do not imply physical support."
+    },
+    {
+      "header": "rt/status.hpp",
+      "label": "Status",
+      "pattern": "^enum class Status :",
+      "note": "Check every lifecycle and frame result; status_message supplies stable human-readable categories."
+    },
+    {
+      "header": "rt/sdk.hpp",
+      "label": "ConfigBuilder",
+      "pattern": "^class ConfigBuilder final",
+      "note": "Optional helpers delegate to raw validation; no implicit capacity or hidden Runtime lifetime."
+    },
+    {
+      "header": "rt/sdk.hpp",
+      "label": "GraphBuilder",
+      "pattern": "^class GraphBuilder final",
+      "note": "Typed registration remains bounded and explicit."
+    },
+    {
+      "header": "rt/sdk.hpp",
+      "label": "CheckedStopGuard",
+      "pattern": "^class CheckedStopGuard final",
+      "note": "Explicit checked stop/retry is required; unresolved destructor cleanup terminates."
+    }
+  ],
+  "guides": [
+    "README.md",
+    "docs/getting_started.md",
+    "docs/build_tooling.md",
+    "docs/host_runtime.md",
+    "docs/compiled_graph.md",
+    "docs/executor.md",
+    "docs/memory_plan.md",
+    "docs/time_platform.md",
+    "docs/rate_telemetry.md",
+    "docs/sampled_io.md",
+    "docs/live_controls.md",
+    "docs/live_control_sdk.md",
+    "docs/device_backend.md",
+    "docs/backend_authoring.md",
+    "docs/cuda_physics.md",
+    "docs/cuda_pipeline.md",
+    "docs/cuda_lifetime.md",
+    "docs/cuda_benchmarking.md",
+    "docs/xdma_backend.md",
+    "docs/cil_shared_memory.md",
+    "docs/host_adapter.md",
+    "docs/benchmarking.md",
+    "docs/benchmark_analysis.md",
+    "docs/determinism_replay.md",
+    "docs/c_abi.md",
+    "docs/typed_runtime.md",
+    "docs/runtime_profiles.md",
+    "docs/release_policy.md"
+  ],
+  "consumer_sources": [
+    "tests/package_consumer/c_consumer.c",
+    "tests/package_consumer/cpp_consumer.cpp",
+    "tests/package_consumer/profile_consumer.cpp",
+    "tests/package_consumer/mixed_rate_consumer.cpp",
+    "tests/package_consumer/live_control_consumer.cpp",
+    "tests/package_consumer/live_control_replay_consumer.cpp",
+    "tests/package_consumer/cuda_consumer.cpp",
+    "tests/package_consumer/xdma_consumer.cpp",
+    "tests/package_consumer/benchmark_consumer.cpp"
+  ],
+  "support_sources": [
+    "tests/mixed_rate_conformance.hpp"
+  ],
+  "kits": [
+    "hello_runtime",
+    "typed_runtime",
+    "backend_authoring",
+    "cil_shared_memory",
+    "host_adapter",
+    "cuda_physics"
+  ]
+}

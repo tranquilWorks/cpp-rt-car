@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>rt/cuda_driver.hpp — RTFW 1.2.1</title>
+<style>body{font:16px system-ui;margin:2rem}pre{font:13px monospace;overflow:auto}pre a{color:#555}a{color:#0758a5}</style>
+<h1>rt/cuda_driver.hpp</h1><p>Optional cuda_driver component; this reference does not imply the header/library is installed or qualified. Version 1.2.1.</p>
+<p>Source: rt/include/rt/cuda_driver.hpp; SHA-256: 53e88f03743e587803f2f9fa617409a95dd18a4f57ad5bb7467c0dbd6c5343ac. Exact declaration/comment source; private/detail content is not a supported API promise.</p>
+<p><a href="index.html">API index</a> · <a href="../README.md">Manual</a></p><pre><span id="L1"><a href="#L1">    1</a> #pragma once</span>
+<span id="L2"><a href="#L2">    2</a> </span>
+<span id="L3"><a href="#L3">    3</a> #include &lt;rt/cuda_backend.hpp&gt;</span>
+<span id="L4"><a href="#L4">    4</a> </span>
+<span id="L5"><a href="#L5">    5</a> namespace rt {</span>
+<span id="L6"><a href="#L6">    6</a> </span>
+<span id="L7"><a href="#L7">    7</a> #if defined(RTFW_CUDA_DRIVER_AVAILABLE)</span>
+<span id="L8"><a href="#L8">    8</a> /*</span>
+<span id="L9"><a href="#L9">    9</a>  * Production adapter backed by the CUDA Driver API. The host remains</span>
+<span id="L10"><a href="#L10">   10</a>  * responsible for cuInit(), context/stream creation, module lifetime, and</span>
+<span id="L11"><a href="#L11">   11</a>  * destroying those resources after CudaDeviceBackend::shutdown().</span>
+<span id="L12"><a href="#L12">   12</a>  */</span>
+<span id="L13"><a href="#L13">   13</a> [[nodiscard]] CudaDriverApi cuda_driver_api() noexcept;</span>
+<span id="L14"><a href="#L14">   14</a> #endif</span>
+<span id="L15"><a href="#L15">   15</a> </span>
+<span id="L16"><a href="#L16">   16</a> } // namespace rt</span></pre></html>

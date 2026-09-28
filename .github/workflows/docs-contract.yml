@@ -24,6 +24,13 @@ jobs:
         run: python3 tools/check_release_contract.py
       - name: Test release tooling
         run: python3 tests/test_release_tools.py
+      - name: Validate generated SDK docs and negative controls
+        run: |
+          python3 tools/generate_sdk_docs.py --check
+          python3 tools/check_sdk_docs.py
+          python3 -m unittest discover -s tests/installed_docs -p 'test_*.py'
+      - name: Verify archived manual and executable recipes
+        run: python3 tests/installed_docs/verify_package.py --work-directory build-installed-docs
       - name: Run installed SDK first use
         run: |
           cmake -S . -B build-sdk -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF -DRTFW_BUILD_EXAMPLES=OFF -DRTFW_BUILD_RUNTIME_DEMO=OFF -DRTFW_BUILD_EXPERIMENTAL=OFF

@@ -48,7 +48,7 @@ pass; file presence or a passing smoke test is not sufficient.
 | M22 | Complete | M22-01 through M22-04 merged; typed controls, replay and stress closure at portable RT0 |
 | M23 | Complete | M23-01 through M23-05 merged, including offline analysis and the extension source kit; physical/controlled evidence remains separate |
 | M24 | Portable closure | Runtime CUDA model, oracle, failure/lifetime, benchmarks, host correlations and capability coverage40/44 with37/37 critical; final hosted/integration evidence is retained in the M24-04 PR; physical M18 gates remain |
-| M25 | In progress | M25-01 merged; M25-02 typed SDK verification/integration active; backend kit, external CIL, independent host adapter and full installed docs remain |
+| M25 | Software delivery | M25-01 through M25-05 merged; M25-06 adds installed docs/API/recipes with final gates retained in its PR/closure. Independent novice acceptance remains unperformed |
 | M26 | Planned | Golden full-system scenario, fault/benchmark/replay/documentation and final software audit |
 
 ## M0 — Product contract and truth reset

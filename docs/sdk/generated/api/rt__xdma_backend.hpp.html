@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>rt/xdma_backend.hpp — RTFW 1.2.1</title>
+<style>body{font:16px system-ui;margin:2rem}pre{font:13px monospace;overflow:auto}pre a{color:#555}a{color:#0758a5}</style>
+<h1>rt/xdma_backend.hpp</h1><p>Default installed header. Version 1.2.1.</p>
+<p>Source: rt/include/rt/xdma_backend.hpp; SHA-256: 8db4b2ff0a8e666b5ae8e79f1b4886a2edbf925f665254855f77458d6dbd2ebd. Exact declaration/comment source; private/detail content is not a supported API promise.</p>
+<p><a href="index.html">API index</a> · <a href="../README.md">Manual</a></p><pre><span id="L1"><a href="#L1">    1</a> #pragma once</span>
+<span id="L2"><a href="#L2">    2</a> </span>
+<span id="L3"><a href="#L3">    3</a> #include &lt;cstddef&gt;</span>
+<span id="L4"><a href="#L4">    4</a> #include &lt;cstdint&gt;</span>
+<span id="L5"><a href="#L5">    5</a> #include &lt;cstring&gt;</span>
+<span id="L6"><a href="#L6">    6</a> #include &lt;memory&gt;</span>
+<span id="L7"><a href="#L7">    7</a> #include &lt;string_view&gt;</span>
+<span id="L8"><a href="#L8">    8</a> #include &lt;type_traits&gt;</span>
+<span id="L9"><a href="#L9">    9</a> </span>
+<span id="L10"><a href="#L10">   10</a> #include &lt;rt/device.hpp&gt;</span>
+<span id="L11"><a href="#L11">   11</a> </span>
+<span id="L12"><a href="#L12">   12</a> namespace rt {</span>
+<span id="L13"><a href="#L13">   13</a> </span>
+<span id="L14"><a href="#L14">   14</a> inline constexpr std::uint32_t xdma_driver_api_version_1 = 1;</span>
+<span id="L15"><a href="#L15">   15</a> inline constexpr std::uint32_t xdma_driver_api_version_2 = 2;</span>
+<span id="L16"><a href="#L16">   16</a> inline constexpr std::uint32_t xdma_driver_api_version =</span>
+<span id="L17"><a href="#L17">   17</a>     xdma_driver_api_version_1;</span>
+<span id="L18"><a href="#L18">   18</a> inline constexpr std::uint32_t xdma_driver_api_v1_size = 120;</span>
+<span id="L19"><a href="#L19">   19</a> inline constexpr std::uint32_t xdma_control_aperture_max_bytes = 262144;</span>
+<span id="L20"><a href="#L20">   20</a> inline constexpr std::uint32_t xdma_user_event_capacity = 16;</span>
+<span id="L21"><a href="#L21">   21</a> </span>
+<span id="L22"><a href="#L22">   22</a> enum class XdmaDirection : std::uint32_t {</span>
+<span id="L23"><a href="#L23">   23</a>     host_to_card = 1,</span>
+<span id="L24"><a href="#L24">   24</a>     card_to_host = 2,</span>
+<span id="L25"><a href="#L25">   25</a> };</span>
+<span id="L26"><a href="#L26">   26</a> </span>
+<span id="L27"><a href="#L27">   27</a> enum class XdmaDriverResult : std::int32_t {</span>
+<span id="L28"><a href="#L28">   28</a>     success = 0,</span>
+<span id="L29"><a href="#L29">   29</a>     invalid_value = 1,</span>
+<span id="L30"><a href="#L30">   30</a>     resource_exhausted = 2,</span>
+<span id="L31"><a href="#L31">   31</a>     timeout = 3,</span>
+<span id="L32"><a href="#L32">   32</a>     io_error = 4,</span>
+<span id="L33"><a href="#L33">   33</a>     device_lost = 5,</span>
+<span id="L34"><a href="#L34">   34</a>     reset_required = 6,</span>
+<span id="L35"><a href="#L35">   35</a>     error = 7,</span>
+<span id="L36"><a href="#L36">   36</a> };</span>
+<span id="L37"><a href="#L37">   37</a> </span>
+<span id="L38"><a href="#L38">   38</a> struct XdmaTransferResult {</span>
+<span id="L39"><a href="#L39">   39</a>     XdmaDriverResult result = XdmaDriverResult::error;</span>
+<span id="L40"><a href="#L40">   40</a>     std::uint64_t bytes_transferred = 0;</span>
+<span id="L41"><a href="#L41">   41</a> };</span>
+<span id="L42"><a href="#L42">   42</a> </span>
+<span id="L43"><a href="#L43">   43</a> struct XdmaControlReadResult {</span>
+<span id="L44"><a href="#L44">   44</a>     XdmaDriverResult result = XdmaDriverResult::error;</span>
+<span id="L45"><a href="#L45">   45</a>     std::uint32_t value = 0;</span>
+<span id="L46"><a href="#L46">   46</a> };</span>
+<span id="L47"><a href="#L47">   47</a> </span>
+<span id="L48"><a href="#L48">   48</a> struct XdmaUserEventResult {</span>
+<span id="L49"><a href="#L49">   49</a>     XdmaDriverResult result = XdmaDriverResult::error;</span>
+<span id="L50"><a href="#L50">   50</a>     std::uint32_t value = 0;</span>
+<span id="L51"><a href="#L51">   51</a> };</span>
+<span id="L52"><a href="#L52">   52</a> </span>
+<span id="L53"><a href="#L53">   53</a> /*</span>
+<span id="L54"><a href="#L54">   54</a>  * Blocking transfer belongs exclusively to fixed backend I/O workers.</span>
+<span id="L55"><a href="#L55">   55</a>  * submit() and poll() never call it. The production adapter implements this</span>
+<span id="L56"><a href="#L56">   56</a>  * surface with pread()/pwrite() on the official Xilinx XDMA AXI-MM character</span>
+<span id="L57"><a href="#L57">   57</a>  * devices; tests inject a driver without needing hardware or kernel headers.</span>
+<span id="L58"><a href="#L58">   58</a>  */</span>
+<span id="L59"><a href="#L59">   59</a> struct XdmaDriverApi {</span>
+<span id="L60"><a href="#L60">   60</a>     /* The default and the complete positional prefix remain version 1. */</span>
+<span id="L61"><a href="#L61">   61</a>     std::uint32_t struct_size = xdma_driver_api_v1_size;</span>
+<span id="L62"><a href="#L62">   62</a>     std::uint32_t api_version = xdma_driver_api_version;</span>
+<span id="L63"><a href="#L63">   63</a>     void* user_data = nullptr;</span>
+<span id="L64"><a href="#L64">   64</a> </span>
+<span id="L65"><a href="#L65">   65</a>     /*</span>
+<span id="L66"><a href="#L66">   66</a>      * A non-success initialize result may still represent partial driver</span>
+<span id="L67"><a href="#L67">   67</a>      * ownership. The backend makes one immediate shutdown rollback attempt;</span>
+<span id="L68"><a href="#L68">   68</a>      * shutdown must therefore be safe after any initialize call. A shutdown</span>
+<span id="L69"><a href="#L69">   69</a>      * result of success or invalid_value proves that no ownership remains.</span>
+<span id="L70"><a href="#L70">   70</a>      * Any other result must remain retryable by a later shutdown call.</span>
+<span id="L71"><a href="#L71">   71</a>      */</span>
+<span id="L72"><a href="#L72">   72</a>     XdmaDriverResult (*initialize)(void* user_data) noexcept = nullptr;</span>
+<span id="L73"><a href="#L73">   73</a>     XdmaTransferResult (*transfer)(</span>
+<span id="L74"><a href="#L74">   74</a>         void* user_data,</span>
+<span id="L75"><a href="#L75">   75</a>         XdmaDirection direction,</span>
+<span id="L76"><a href="#L76">   76</a>         std::uint32_t channel,</span>
+<span id="L77"><a href="#L77">   77</a>         std::uint64_t device_offset,</span>
+<span id="L78"><a href="#L78">   78</a>         void* host_data,</span>
+<span id="L79"><a href="#L79">   79</a>         std::uint64_t bytes) noexcept = nullptr;</span>
+<span id="L80"><a href="#L80">   80</a>     XdmaDriverResult (*reset)(void* user_data) noexcept = nullptr;</span>
+<span id="L81"><a href="#L81">   81</a>     XdmaDriverResult (*shutdown)(void* user_data) noexcept = nullptr;</span>
+<span id="L82"><a href="#L82">   82</a>     std::uint64_t (*monotonic_time_ns)(void* user_data) noexcept = nullptr;</span>
+<span id="L83"><a href="#L83">   83</a> </span>
+<span id="L84"><a href="#L84">   84</a>     std::uint64_t reserved[8]{};</span>
+<span id="L85"><a href="#L85">   85</a> </span>
+<span id="L86"><a href="#L86">   86</a>     /* Version-2 tail. Version 1 ignores an entirely zero tail. */</span>
+<span id="L87"><a href="#L87">   87</a>     XdmaControlReadResult (*control_read32)(</span>
+<span id="L88"><a href="#L88">   88</a>         void* user_data,</span>
+<span id="L89"><a href="#L89">   89</a>         std::uint32_t offset) noexcept = nullptr;</span>
+<span id="L90"><a href="#L90">   90</a>     XdmaDriverResult (*control_write32)(</span>
+<span id="L91"><a href="#L91">   91</a>         void* user_data,</span>
+<span id="L92"><a href="#L92">   92</a>         std::uint32_t offset,</span>
+<span id="L93"><a href="#L93">   93</a>         std::uint32_t value) noexcept = nullptr;</span>
+<span id="L94"><a href="#L94">   94</a>     XdmaUserEventResult (*wait_user_event)(</span>
+<span id="L95"><a href="#L95">   95</a>         void* user_data,</span>
+<span id="L96"><a href="#L96">   96</a>         std::uint32_t event_index,</span>
+<span id="L97"><a href="#L97">   97</a>         std::uint64_t timeout_ns) noexcept = nullptr;</span>
+<span id="L98"><a href="#L98">   98</a>     XdmaDriverResult (*request_stop)(void* user_data) noexcept = nullptr;</span>
+<span id="L99"><a href="#L99">   99</a>     std::uint64_t reserved_v2[4]{};</span>
+<span id="L100"><a href="#L100">  100</a> };</span>
+<span id="L101"><a href="#L101">  101</a> </span>
+<span id="L102"><a href="#L102">  102</a> static_assert(offsetof(XdmaDriverApi, control_read32) ==</span>
+<span id="L103"><a href="#L103">  103</a>               xdma_driver_api_v1_size);</span>
+<span id="L104"><a href="#L104">  104</a> </span>
+<span id="L105"><a href="#L105">  105</a> struct XdmaBackendConfig {</span>
+<span id="L106"><a href="#L106">  106</a>     std::size_t queue_capacity = 64;</span>
+<span id="L107"><a href="#L107">  107</a>     std::size_t buffer_capacity = 64;</span>
+<span id="L108"><a href="#L108">  108</a>     std::size_t worker_count = 1;</span>
+<span id="L109"><a href="#L109">  109</a>     std::uint32_t h2c_channel_count = 1;</span>
+<span id="L110"><a href="#L110">  110</a>     std::uint32_t c2h_channel_count = 1;</span>
+<span id="L111"><a href="#L111">  111</a>     std::uint64_t max_transfer_bytes = 4u * 1024u * 1024u;</span>
+<span id="L112"><a href="#L112">  112</a>     std::uint64_t max_buffer_bytes = 1024u * 1024u * 1024u;</span>
+<span id="L113"><a href="#L113">  113</a>     std::uint64_t transfer_alignment = 1;</span>
+<span id="L114"><a href="#L114">  114</a>     std::uint32_t control_aperture_bytes = 0;</span>
+<span id="L115"><a href="#L115">  115</a>     std::uint32_t user_event_count = 0;</span>
+<span id="L116"><a href="#L116">  116</a> };</span>
+<span id="L117"><a href="#L117">  117</a> </span>
+<span id="L118"><a href="#L118">  118</a> inline constexpr std::uint32_t xdma_device_opcode_host_to_card = 0x5844&#x27;0001u;</span>
+<span id="L119"><a href="#L119">  119</a> inline constexpr std::uint32_t xdma_device_opcode_card_to_host = 0x5844&#x27;0002u;</span>
+<span id="L120"><a href="#L120">  120</a> inline constexpr std::uint32_t xdma_device_opcode_control_read_base =</span>
+<span id="L121"><a href="#L121">  121</a>     0x5848&#x27;0000u;</span>
+<span id="L122"><a href="#L122">  122</a> inline constexpr std::uint32_t xdma_device_opcode_control_write_base =</span>
+<span id="L123"><a href="#L123">  123</a>     0x5849&#x27;0000u;</span>
+<span id="L124"><a href="#L124">  124</a> inline constexpr std::uint32_t xdma_device_opcode_user_event_base =</span>
+<span id="L125"><a href="#L125">  125</a>     0x584A&#x27;0000u;</span>
+<span id="L126"><a href="#L126">  126</a> </span>
+<span id="L127"><a href="#L127">  127</a> struct XdmaTransfer {</span>
+<span id="L128"><a href="#L128">  128</a>     std::uint64_t device_offset = 0;</span>
+<span id="L129"><a href="#L129">  129</a>     std::uint32_t channel = 0;</span>
+<span id="L130"><a href="#L130">  130</a>     std::uint32_t reserved0 = 0;</span>
+<span id="L131"><a href="#L131">  131</a>     std::uint64_t reserved[2]{};</span>
+<span id="L132"><a href="#L132">  132</a> };</span>
+<span id="L133"><a href="#L133">  133</a> </span>
+<span id="L134"><a href="#L134">  134</a> static_assert(std::is_trivially_copyable_v&lt;XdmaTransfer&gt;);</span>
+<span id="L135"><a href="#L135">  135</a> static_assert(sizeof(XdmaTransfer) &lt;= RTFW_DEVICE_INLINE_PAYLOAD_CAPACITY);</span>
+<span id="L136"><a href="#L136">  136</a> </span>
+<span id="L137"><a href="#L137">  137</a> inline void set_xdma_transfer(</span>
+<span id="L138"><a href="#L138">  138</a>     rtfw_device_submission&amp; submission,</span>
+<span id="L139"><a href="#L139">  139</a>     XdmaDirection direction,</span>
+<span id="L140"><a href="#L140">  140</a>     const XdmaTransfer&amp; transfer) noexcept {</span>
+<span id="L141"><a href="#L141">  141</a>     submission.opcode =</span>
+<span id="L142"><a href="#L142">  142</a>         direction == XdmaDirection::host_to_card</span>
+<span id="L143"><a href="#L143">  143</a>         ? xdma_device_opcode_host_to_card</span>
+<span id="L144"><a href="#L144">  144</a>         : xdma_device_opcode_card_to_host;</span>
+<span id="L145"><a href="#L145">  145</a>     submission.payload_size = sizeof(transfer);</span>
+<span id="L146"><a href="#L146">  146</a>     std::memcpy(submission.payload, &amp;transfer, sizeof(transfer));</span>
+<span id="L147"><a href="#L147">  147</a> }</span>
+<span id="L148"><a href="#L148">  148</a> </span>
+<span id="L149"><a href="#L149">  149</a> [[nodiscard]] inline bool set_xdma_control_read(</span>
+<span id="L150"><a href="#L150">  150</a>     DeviceCommand&amp; command,</span>
+<span id="L151"><a href="#L151">  151</a>     std::uint32_t offset,</span>
+<span id="L152"><a href="#L152">  152</a>     const HalV2BufferReference&amp; output) noexcept {</span>
+<span id="L153"><a href="#L153">  153</a>     if ((offset &amp; 3u) != 0 || offset &gt;= xdma_control_aperture_max_bytes) {</span>
+<span id="L154"><a href="#L154">  154</a>         return false;</span>
+<span id="L155"><a href="#L155">  155</a>     }</span>
+<span id="L156"><a href="#L156">  156</a>     command = {};</span>
+<span id="L157"><a href="#L157">  157</a>     command.kind = static_cast&lt;std::uint32_t&gt;(HalV2CommandKind::dispatch);</span>
+<span id="L158"><a href="#L158">  158</a>     command.opcode = xdma_device_opcode_control_read_base | (offset / 4u);</span>
+<span id="L159"><a href="#L159">  159</a>     command.buffer_count = 1;</span>
+<span id="L160"><a href="#L160">  160</a>     command.buffers[0] = output;</span>
+<span id="L161"><a href="#L161">  161</a>     return true;</span>
+<span id="L162"><a href="#L162">  162</a> }</span>
+<span id="L163"><a href="#L163">  163</a> </span>
+<span id="L164"><a href="#L164">  164</a> [[nodiscard]] inline bool set_xdma_control_write(</span>
+<span id="L165"><a href="#L165">  165</a>     DeviceCommand&amp; command,</span>
+<span id="L166"><a href="#L166">  166</a>     std::uint32_t offset,</span>
+<span id="L167"><a href="#L167">  167</a>     std::uint32_t value) noexcept {</span>
+<span id="L168"><a href="#L168">  168</a>     if ((offset &amp; 3u) != 0 || offset &gt;= xdma_control_aperture_max_bytes) {</span>
+<span id="L169"><a href="#L169">  169</a>         return false;</span>
+<span id="L170"><a href="#L170">  170</a>     }</span>
+<span id="L171"><a href="#L171">  171</a>     command = {};</span>
+<span id="L172"><a href="#L172">  172</a>     command.kind = static_cast&lt;std::uint32_t&gt;(HalV2CommandKind::dispatch);</span>
+<span id="L173"><a href="#L173">  173</a>     command.opcode = xdma_device_opcode_control_write_base | (offset / 4u);</span>
+<span id="L174"><a href="#L174">  174</a>     command.payload_size = sizeof(value);</span>
+<span id="L175"><a href="#L175">  175</a>     command.payload[0] = static_cast&lt;std::uint8_t&gt;(value);</span>
+<span id="L176"><a href="#L176">  176</a>     command.payload[1] = static_cast&lt;std::uint8_t&gt;(value &gt;&gt; 8u);</span>
+<span id="L177"><a href="#L177">  177</a>     command.payload[2] = static_cast&lt;std::uint8_t&gt;(value &gt;&gt; 16u);</span>
+<span id="L178"><a href="#L178">  178</a>     command.payload[3] = static_cast&lt;std::uint8_t&gt;(value &gt;&gt; 24u);</span>
+<span id="L179"><a href="#L179">  179</a>     return true;</span>
+<span id="L180"><a href="#L180">  180</a> }</span>
+<span id="L181"><a href="#L181">  181</a> </span>
+<span id="L182"><a href="#L182">  182</a> [[nodiscard]] inline bool set_xdma_user_event_wait(</span>
+<span id="L183"><a href="#L183">  183</a>     DeviceCommand&amp; command,</span>
+<span id="L184"><a href="#L184">  184</a>     std::uint32_t event_index,</span>
+<span id="L185"><a href="#L185">  185</a>     const HalV2BufferReference&amp; output) noexcept {</span>
+<span id="L186"><a href="#L186">  186</a>     if (event_index &gt;= xdma_user_event_capacity) {</span>
+<span id="L187"><a href="#L187">  187</a>         return false;</span>
+<span id="L188"><a href="#L188">  188</a>     }</span>
+<span id="L189"><a href="#L189">  189</a>     command = {};</span>
+<span id="L190"><a href="#L190">  190</a>     command.kind = static_cast&lt;std::uint32_t&gt;(HalV2CommandKind::dispatch);</span>
+<span id="L191"><a href="#L191">  191</a>     command.opcode = xdma_device_opcode_user_event_base | event_index;</span>
+<span id="L192"><a href="#L192">  192</a>     command.buffer_count = 1;</span>
+<span id="L193"><a href="#L193">  193</a>     command.buffers[0] = output;</span>
+<span id="L194"><a href="#L194">  194</a>     return true;</span>
+<span id="L195"><a href="#L195">  195</a> }</span>
+<span id="L196"><a href="#L196">  196</a> </span>
+<span id="L197"><a href="#L197">  197</a> class XdmaDeviceBackend final {</span>
+<span id="L198"><a href="#L198">  198</a> public:</span>
+<span id="L199"><a href="#L199">  199</a>     XdmaDeviceBackend(</span>
+<span id="L200"><a href="#L200">  200</a>         const XdmaDriverApi&amp; driver,</span>
+<span id="L201"><a href="#L201">  201</a>         const XdmaBackendConfig&amp; config);</span>
+<span id="L202"><a href="#L202">  202</a>     ~XdmaDeviceBackend();</span>
+<span id="L203"><a href="#L203">  203</a> </span>
+<span id="L204"><a href="#L204">  204</a>     XdmaDeviceBackend(XdmaDeviceBackend&amp;&amp;) noexcept;</span>
+<span id="L205"><a href="#L205">  205</a>     XdmaDeviceBackend&amp; operator=(XdmaDeviceBackend&amp;&amp;) noexcept;</span>
+<span id="L206"><a href="#L206">  206</a> </span>
+<span id="L207"><a href="#L207">  207</a>     XdmaDeviceBackend(const XdmaDeviceBackend&amp;) = delete;</span>
+<span id="L208"><a href="#L208">  208</a>     XdmaDeviceBackend&amp; operator=(const XdmaDeviceBackend&amp;) = delete;</span>
+<span id="L209"><a href="#L209">  209</a> </span>
+<span id="L210"><a href="#L210">  210</a>     [[nodiscard]] rtfw_device_backend_api api() noexcept;</span>
+<span id="L211"><a href="#L211">  211</a>     [[nodiscard]] HalV2BackendRegistration hal_v2_registration(</span>
+<span id="L212"><a href="#L212">  212</a>         std::string_view name) noexcept;</span>
+<span id="L213"><a href="#L213">  213</a> </span>
+<span id="L214"><a href="#L214">  214</a> private:</span>
+<span id="L215"><a href="#L215">  215</a>     struct Impl;</span>
+<span id="L216"><a href="#L216">  216</a>     std::unique_ptr&lt;Impl&gt; impl_;</span>
+<span id="L217"><a href="#L217">  217</a> };</span>
+<span id="L218"><a href="#L218">  218</a> </span>
+<span id="L219"><a href="#L219">  219</a> } // namespace rt</span></pre></html>

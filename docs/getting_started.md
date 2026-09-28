@@ -161,3 +161,12 @@ The shipped typed kit uses the same public Runtime and preserves caller ownershi
 The installed source-only `backend_authoring` kit includes a minimal HAL-v2 copy
 backend, reusable conformance and native/v1 Runtime example. See [the guide](backend_authoring.md) for build commands,
 fixed storage, lifetime rules and failure/cleanup retry.
+
+## Next: installed reference and recipes
+
+The [offline SDK manual](sdk/generated/README.md) is installed under the data
+directory at `rtfw/manual`. It provides generated header/source references,
+lifecycle/error/migration guidance and executable public-package recipes. The
+adjacent `examples/recipes` project runs from an extracted CPack archive or by
+source embedding. Its CUDA/XDMA boundary checks are explicitly distinguished
+from real-device execution.
