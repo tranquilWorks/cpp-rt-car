@@ -24,7 +24,11 @@ class Memory {
         std::array<std::byte, 65536> bytes{};
         std::size_t used = 0;
         bool live = false, applied = false;
+        // Keep the page-aligned stride explicit: MSVC /W4 diagnoses implicit
+        // alignment padding. No warning suppression or storage-layout change.
+        std::array<std::byte, 4096 - sizeof(std::size_t) - 2 * sizeof(bool)> padding{};
     };
+    static_assert(sizeof(Slot) == 65536 + 4096 && alignof(Slot) == 4096);
     std::array<Slot, 3> slots_{};
     Slot* find(void* token) noexcept {
         for (auto& slot : slots_) if (&slot == token && slot.live) return &slot;
