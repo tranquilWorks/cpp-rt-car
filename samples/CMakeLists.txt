@@ -132,3 +132,23 @@ if(RTFW_BUILD_TESTS)
             -P "${CMAKE_CURRENT_SOURCE_DIR}/backend_authoring/check_output.cmake")
     set_tests_properties(backend_authoring_output PROPERTIES TIMEOUT 30)
 endif()
+
+# Optional source reference: OS mapping dependencies never reach rtfw::runtime.
+if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8
+   AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+    foreach(role plant controller)
+        add_executable(sample_cil_${role} cil_shared_memory/${role}.cpp)
+        target_link_libraries(sample_cil_${role} PRIVATE rtfw::runtime)
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            target_link_libraries(sample_cil_${role} PRIVATE rt)
+        endif()
+        rtfw_enable_project_warnings(sample_cil_${role})
+    endforeach()
+    if(RTFW_BUILD_TESTS)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME cil_shared_memory_processes
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/cil_shared_memory/runner.py"
+                --plant "$<TARGET_FILE:sample_cil_plant>" --controller "$<TARGET_FILE:sample_cil_controller>")
+        set_tests_properties(cil_shared_memory_processes PROPERTIES TIMEOUT 90)
+    endif()
+endif()

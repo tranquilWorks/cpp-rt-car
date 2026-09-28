@@ -370,3 +370,14 @@ authoring source kit, bounded conformance, integration and package guide.
 Preserve production, SDK headers, ABI and prior evidence. All32 target checks
 remain required. Standing scoped publication/integration authority persists.
 Do not activate M25-04; hardware/RT and release remain separate.
+
+## M25-04 activation (2026-09-28)
+
+M25-03 merged as PR271 at315b04b25dd41acbd3a21313a093cf90b19c95ac.
+Canonical control PR530 merged at6927945598352edb25ec27759f6fd633a3b6f4de,
+blob e0e7d67c81ca110f18762425402899273311403a. Implement only the optional
+shared-memory source kit, actual external controller/Runtime plant, protocol,
+reconnect/ownership tests and installed guide. Preserve compiled production,
+SDK headers/targets, ABIs and prior source/evidence bindings. All32 target
+checks remain required. Standing scoped publication/integration authority
+persists. Do not activate M25-05; no hardware/RT or release promotion.
