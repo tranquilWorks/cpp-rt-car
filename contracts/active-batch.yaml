@@ -1,28 +1,27 @@
 schema_version: 1
 batch:
-  id: M25-02
-  title: Typed builder, RAII, and diagnostics
-  goal: Ship optional allocation-free typed source helpers over the raw Runtime with explicit configuration,
-    ownership, capacity and checked shutdown.
+  id: M25-03
+  title: Backend authoring kit and conformance
+  goal: Ship a minimal fixed-storage HAL-v2 backend template, reusable bounded conformance harness, real
+    Runtime consumer and complete ownership/failure guide using installed public artifacts.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
   - products/cpp-rt-car/PRD.md#cap-m25--consumer-sdk-and-integration-experience
   - products/cpp-rt-car/acceptance.yaml#CAP-M25
-  milestone: products/cpp-rt-car/milestones/M25.md#m25-02--typed-builder-raii-and-diagnostics
-  baseline_commit: d3052a0f7f17a0cd68334123aea3869fcae2094a
+  milestone: products/cpp-rt-car/milestones/M25.md#m25-03--backend-authoring-kit-and-conformance
+  baseline_commit: e562ab164162b67d009171b5c8f53e9b04866285
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M25-02.yaml
-  predecessor: M25-01 PR269 merged after all32 exact-head checks; preserve raw hello and all production
-    repairs.
-  owner_scope: Owner requested m252. Standing scoped planning, implementation, publication and integration
-    authorization applies. Merge canonical planning first; do not activate M25-03.
-  control_plane_revision: ad159304c00151e248ffe2b7f5699c341a8b5361
-  canonical_revision: ad159304c00151e248ffe2b7f5699c341a8b5361
-  canonical_blob_sha: d598ea817902036ebdf85cb1407e6cb78043ca08
+  control_plane_path: products/cpp-rt-car/batches/M25-03.yaml
+  predecessor: M25-02 PR270 merged after all32 exact-head checks; tested/merged tree e2dc960d402881623a8369099f71a22c440cc226.
+  owner_scope: Owner requested 03 now. Standing scoped planning, implementation, publication and integration
+    authorization persists. Merge canonical planning before target activation; do not activate M25-04.
+  control_plane_revision: 7585342836adf7d5e90cd62acb8d4237dc802f22
+  canonical_revision: 7585342836adf7d5e90cd62acb8d4237dc802f22
+  canonical_blob_sha: d65ec3071611b480748f3a92eca937160a5ea8d7
 dependencies:
-- M25-01
-- M22-04
+- M25-02
+- M21-05
 scope:
   allowed_paths:
   - AGENTS.md
@@ -30,34 +29,27 @@ scope:
   - contracts/active-batch.yaml
   - contracts/verification.yaml
   - contracts/verification.commands
-  - rt/include/rt/sdk.hpp
   - CMakeLists.txt
   - samples/CMakeLists.txt
   - samples/README.md
-  - samples/typed_runtime/**
+  - samples/backend_authoring/**
   - tests/CMakeLists.txt
-  - tests/typed_runtime/**
+  - tests/backend_authoring/**
   - tests/package_consumer/CMakeLists.txt
-  - tests/package_consumer/package_contract.cmake
-  - docs/typed_runtime.md
+  - docs/backend_authoring.md
   - docs/getting_started.md
   - docs/product_contract.md
   - docs/architecture.md
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
   - docs/roadmap.md
-  - docs/evidence/M25-02-*
-  - docs/cuda_capabilities.json
-  - docs/cuda_capabilities.md
+  - docs/evidence/M25-03-*
   - tools/check_release_contract.py
   - tools/static_analysis_sources.txt
   - .github/workflows/docs-contract.yml
   - release/rtfw-release-contract.json
   forbidden_paths:
-  - rt/src/
-  - rt/include/rt/runtime.hpp
-  - rt/include/rt/config.hpp
-  - rt/include/rt/live_control.hpp
+  - rt/
   - core/
   - abi/
   - hal/
@@ -70,14 +62,21 @@ scope:
   - qualification/
   - bench/
   - samples/hello_runtime/
+  - samples/typed_runtime/
   - samples/cuda_physics/
   - tests/hello_runtime/
+  - tests/typed_runtime/
   - tests/cuda_physics/
   - tests/test_cuda_backend.cpp
   - tests/test_command_batch.cpp
+  - tests/package_consumer/package_contract.cmake
   - tools/check_cuda_capabilities.py
+  - docs/cuda_capabilities.json
+  - docs/cuda_capabilities.md
   - docs/evidence/M24-*
   - docs/evidence/M23-*
+  - docs/evidence/M25-01-*
+  - docs/evidence/M25-02-*
   - .github/workflows/ci.yml
   - .github/workflows/release.yml
   - .github/workflows/cuda-qualification.yml
@@ -89,63 +88,69 @@ scope:
   - CHANGELOG.md
   - SECURITY.md
 acceptance:
-- Add optional public header rt/sdk.hpp using only public headers and standard C++20. Typed callback trampolines
-  require noexcept and exact CallbackResult at compile time, borrow named lvalue state and support no
-  hidden captures, allocation or global registry. Existing raw API remains usable unchanged.
-- Provide explicit config and graph builders delegating validation and finalization to the raw Runtime
-  and returning its exact statuses. Expose ordinary RuntimeConfig and handles, do not auto-start, silently
-  resize, swallow failures or imply multi-operation rollback. Failed declarations and finalization remain
-  inspectable and repairable according to raw semantics. Verify raw-versus-helper compiled graph and memory-plan
-  parity.
-- Provide checked capacity arithmetic for aligned phase/task scratch and native executor queue slots with
-  overflow and invalid-input detection; make partial estimates distinct from the authoritative finalized
-  MemoryPlan and explicitly reject unsupported host-adapter estimates. Preserve raw limits and statuses
-  through Runtime validation.
-- Provide non-owning noncopyable checked-stop guard with explicit status-returning close, retained arming
-  on cleanup failure and bounded fail-closed destructor behavior. Runtime and borrowed callback/backend/provider
-  state must outlive guard. Verify successful fallback, explicit close, cleanup failure/retry and destructor
-  failure in an isolated process; never silently release failed ownership or loop indefinitely.
-- Provide fixed caller-buffer diagnostic rendering of operation, raw status, Runtime detail and actionable
-  recovery advice. Report required extent and truncation deterministically, including empty/tiny buffers
-  and unknown statuses. No heap, exceptions or I/O in helpers or callbacks; diagnostics do not imply retry
-  is always safe.
-- Ship a complete typed graph source kit and ownership/capacity/error guide. Compile/run root and installed
-  find_package consumers plus add_subdirectory embedding. Exercise relocated archive with removed original
-  prefix, custom paths with spaces and exact additive SDK header/source inventory. Preserve all raw C/C++
-  consumers and hello unchanged.
-- Add focused real Runtime parity, invalid config/handles/cycles/conflicts/capacity, failure recovery,
-  multiple-instance isolation, compile-time callback constraints and steady-state allocation tests. Run
-  strict full suites, ASan/UBSan/leaks, TSan, ABI and static analysis. Additive package/docs CI coverage
-  must retain all32 exact-head check records.
-- Preserve all compiled production sources, ABI v8/70 exports/fingerprint, SONAME8, device ABIv1, release1.2.1
-  portableRT0 and dependency boundaries. Extend exact SDK header inventory only for sdk.hpp. Revalidate
-  existing CUDA source/package gates and add truthful new evidence/source bindings for the additive header/package-contract
-  change; retain all prior M24 evidence, rows, criticality, thresholds, source hashes and physical NOT
-  RUN states without weakening its checker.
-- Record canonical revision/blob, baseline, acceptance mapping, commands/results, retained failures, self-review,
-  rollback and residual gates. Integrate only M25-02 after required checks; backend/CIL/host/full docs,
-  independent novice review, hardware/RT/performance/Unreal/release remain separate.
+- Ship a small source-only HAL-v2 core backend template under samples/backend_authoring, independent of
+  private Runtime headers and vendor libraries. Implement all ten required table operations, complete
+  size/version/reserved validation and truthful capabilities using fixed caller-owned/backend-owned storage,
+  explicit negotiated capacities, nonzero stale-safe buffer tokens and one bounded copy command. Unsupported
+  extensions remain absent; no production HAL/runtime repair or public header/export change.
+- Handle concurrent submit/poll with bounded nonblocking atomic ownership and no spin wait, heap allocation,
+  hidden threads, locks or I/O. Bound copies and queue/registry scans; reject saturation before ownership
+  transfer. Match accepted submission IDs exactly once; never write payload after failure/cancel/retirement.
+  Report health/generation/counters and retain borrowed buffers until work is quiescent. Explain single-slot
+  throughput limits and control-thread-only lifecycle operations.
+- Provide explicit deterministic fault hooks for partial initialization, registration, completion error/timeout/loss
+  and cleanup failures as portable test fixtures. Successful reset and reinitialization must retire stale
+  work consistently. Failed unregister/shutdown must preserve ownership and permit bounded explicit retry;
+  report invalid_state after failed initialization only when no resource remains. Fault injection is not
+  hardware failure qualification.
+- Ship reusable framework-free conformance code accepting the public HAL table plus explicit command-profile/fault/ownership
+  hooks and caller-owned test storage. Exercise discovery, malformed input, negotiated queue/buffer saturation,
+  token/range/access validity, accepted completion content/count/identity, cancel, health/reset, failed-start
+  rollback, stop and cleanup retry. Keep a finite call budget and explicit result records, and keep caller
+  storage alive if cleanup remains unresolved. Do not present a copy-profile fixture as universal HAL
+  or vendor qualification.
+- Run the same reference backend through actual public Runtime register/finalize/start/device-phase/dependent-CPU/step/checked-stop
+  entry points. Independently verify copied bytes, sequencing, status propagation, resource conservation,
+  failure recovery and multiple-instance isolation. Demonstrate existing device-ABI-v1 compatibility with
+  public mock registration alongside native v2 and document their source/binary and optional native-driver
+  boundaries.
+- Add independent harness negative controls that detect deliberately defective capability/capacity, token/ownership,
+  completion identity/count/content, failure/reset and cleanup reporting. Exercise direct concurrent submit/poll,
+  repeated generations, malformed boundaries, zero steady-state allocation, strict compiler builds, ASan/UBSan/leaks
+  and TSan. Preserve earlier tests and evidence rather than deriving expectations from the backend implementation.
+- Install exact source/CMake/oracle/harness inventory and a self-contained authoring guide with capability
+  checklist, fixed-storage publication/retirement pattern, lifecycle/ownership table, failure matrix,
+  v1 translation guidance and extension/native-driver limits. Compile/run standalone installed find_package
+  and source embedding from a relocated archive with removed original prefix, custom paths/spaces and
+  public target only. Add package coverage through a separate additive consumer contract; preserve the
+  exact public SDK header/target inventory and all earlier raw/typed/CUDA consumers.
+- Run full local profiles, focused sanitizer/static/allocation gates, complete SDK and existing CUDA relocated/source
+  consumers, ABI and all32 exact-head target check records with unchanged name/multiplicity. Preserve
+  the complete M24 capability matrix/source/evidence bindings unchanged. Record canonical revision/blob,
+  acceptance mapping, retained failures, commands/results, self-review, rollback and residual/unperformed
+  gates. Close only M25-03; M25-04 and later remain separate.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh full
-  - python3 tests/typed_runtime/verify_package.py --work-directory build/m25-02-package
-  - python3 tests/cuda_physics/verify_package.py --work-directory build/m25-02-cuda-package
+  - python3 tests/backend_authoring/verify_package.py --work-directory build/m25-03-package
+  - python3 tests/cuda_physics/verify_package.py --work-directory build/m25-03-cuda-package
   - python3 tools/check_c_abi.py --library build/agent-quick/librtfw.so
-  - Local focused ASan/UBSan with leak detection, TSan and Clang14 static analysis.
+  - Focused strict backend/conformance/runtime/allocation tests; ASan/UBSan with leak detection, TSan
+    and Clang14 static analysis.
   - python3 tools/check_cuda_capabilities.py
   - git diff --check
   focused_tests_to_add:
-  - Raw/helper graph and memory-plan parity; exact status parity, compile-time noexcept constraints, overflow
-    and boundary capacities.
-  - Real lifecycle close/fallback, failed cleanup/retry and isolated fail-closed destructor; no steady-state
-    allocations and isolated concurrent Runtime instances.
-  - Fixed diagnostic rendering and truncation; installed-only archive relocation, embedding, exact inventory
-    and negative controls.
+  - Reusable public-table conformance with explicit caller storage and deterministic finite fault injection;
+    independent defective-backend negative controls.
+  - Actual Runtime native-v2 and adapted-v1 integration, failure/cleanup retry, generation and concurrent
+    instance isolation, zero allocations and direct submit/poll concurrency.
+  - Relocated installed source kit and embedded consumers; exact inventory/output/header isolation, missing
+    package/source and oracle negative controls.
   required_ci:
-  - All32 existing exact-head target check records with unchanged name/multiplicity inventory, no failing
-    gate or unresolved review thread.
-  - Existing compiler/FMA/MSVC/ASan, static, package and docs gates gain optional helper coverage without
+  - All32 existing exact-head target check records with predecessor name/multiplicity inventory, all successful
+    and no unresolved review thread.
+  - Existing compiler/FMA/MSVC/ASan, static, package and docs gates gain backend source kit coverage without
     removing prior checks.
   manual:
   - Independent first-use walkthrough by an unfamiliar human remains UNPERFORMED.
@@ -153,21 +158,22 @@ validation:
 risk:
   class: moderate
   hazards:
-  - Borrowed typed state or Runtime outlives its owner; destructor hides failed cleanup.
-  - Convenience defaults silently alter raw configuration, capacity, statuses or graph identity.
-  - Capacity estimate masquerades as full memory accounting; header/package bindings obscure historical
-    evidence.
+  - Backend example teaches unsafe publication, buffer retirement or cleanup-success assumptions.
+  - Conformance harness relies on implementation internals or reports success for malformed/unfinished
+    ownership.
+  - A minimal mock source kit is mistaken for a production driver, all HAL extensions or hardware/RT qualification.
   stop_conditions:
   - A production or forbidden path change is needed; retain reproducer and plan a separate repair.
   - A mandatory test would need weakening or canonical planning has not integrated.
 rollback:
-  strategy: Revert additive SDK header, sample, tests, docs and inventory additions; restore previous
-    package and capability bindings without modifying protected production implementation or historical
-    evidence.
+  strategy: Revert only the additive backend source kit, conformance tests, documentation and package
+    wiring; preserve compiled production, SDK headers/exports, M23/M24/M25 predecessor implementation
+    and evidence.
 evidence:
   output:
-  - docs/evidence/M25-02-<date>.md
-  - Exact canonical/head/tree/check identities, package and compatibility evidence, retained failures
-    and negative controls.
-  claim_boundary: Portable optional C++ SDK only. No M25 milestone closure, independent novice review,
-    hardware/RT, controlled performance, Unreal or signing/release/deployment claim.
+  - docs/evidence/M25-03-<date>.md
+  - Exact canonical/head/tree/check identities, conformance and negative-control results, package transcripts
+    and retained failures.
+  claim_boundary: Portable HAL-v2 core copy-profile authoring and integration only. No universal conformance,
+    physical hardware/RT/performance, independent novice review, M25 milestone closure, Unreal or signing/release/deployment
+    claim.

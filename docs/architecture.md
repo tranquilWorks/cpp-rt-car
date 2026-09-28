@@ -1,5 +1,12 @@
 # Architecture
 
+M25-03 ships a source-only [backend authoring kit](backend_authoring.md): a
+fixed-storage HAL-v2 core copy backend, reusable bounded conformance harness,
+native-v2/adapted-v1 Runtime consumer and explicit ownership/failure guide.
+The kit installs under the data examples directory; SDK headers, exported targets,
+compiled production and all previous capability/evidence bindings are unchanged.
+Its claim is portable single-slot copy-profile integration, not vendor qualification.
+
 M25-02 adds optional `<rt/sdk.hpp>` source helpers above the unchanged raw API.
 Typed callbacks borrow explicit state; builders delegate validation, capacity
 arithmetic is partial, and checked-stop guards terminate on unresolved destructor

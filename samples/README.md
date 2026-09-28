@@ -19,3 +19,9 @@ research code and is not a consumer quick start.
 
 The optional [typed Runtime kit](typed_runtime/) adds noexcept callbacks, explicit
 builders, checked-stop guards and fixed diagnostics. See [the guide](../docs/typed_runtime.md).
+
+## Backend authors
+
+The installed source-only `backend_authoring` kit includes a minimal HAL-v2 copy
+backend, reusable conformance and native/v1 Runtime example. See [the guide](../docs/backend_authoring.md) for build commands,
+fixed storage, lifetime rules and failure/cleanup retry.

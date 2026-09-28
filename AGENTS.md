@@ -360,3 +360,13 @@ capacity arithmetic, guard, diagnostics and shipped consumer scope. Preserve
 compiled production and historical evidence. All32 target checks remain required.
 Standing scoped publication/integration authorization persists. Do not activate
 M25-03; hardware/RT, independent review, performance and release remain separate.
+
+## M25-03 activation (2026-09-28)
+
+M25-02 merged as PR270 at e562ab164162b67d009171b5c8f53e9b04866285.
+Canonical control PR527 merged at 7585342836adf7d5e90cd62acb8d4237dc802f22,
+blob d65ec3071611b480748f3a92eca937160a5ea8d7. Implement only the backend
+authoring source kit, bounded conformance, integration and package guide.
+Preserve production, SDK headers, ABI and prior evidence. All32 target checks
+remain required. Standing scoped publication/integration authority persists.
+Do not activate M25-04; hardware/RT and release remain separate.

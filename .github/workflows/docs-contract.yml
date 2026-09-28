@@ -45,6 +45,10 @@ jobs:
         run: python3 tests/typed_runtime/verify_package.py --work-directory build-typed-package
       - name: Analyze typed SDK source
         run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/typed_runtime/main.cpp tests/typed_runtime/test_sdk.cpp
+      - name: Verify relocated backend authoring kit
+        run: python3 tests/backend_authoring/verify_package.py --work-directory build-backend-package
+      - name: Analyze backend authoring source
+        run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/backend_authoring/main.cpp tests/backend_authoring/test_backend.cpp
       - name: Run README contributor build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF -DSIM_WERROR=OFF

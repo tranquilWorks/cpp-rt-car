@@ -145,3 +145,9 @@ and the complete installed API/recipe catalog are separate M25 batches.
 After the raw hello graph, see [typed Runtime](typed_runtime.md) for optional
 noexcept callbacks, explicit builders, checked capacities, shutdown and diagnostics.
 The shipped typed kit uses the same public Runtime and preserves caller ownership.
+
+## Backend authors
+
+The installed source-only `backend_authoring` kit includes a minimal HAL-v2 copy
+backend, reusable conformance and native/v1 Runtime example. See [the guide](backend_authoring.md) for build commands,
+fixed storage, lifetime rules and failure/cleanup retry.

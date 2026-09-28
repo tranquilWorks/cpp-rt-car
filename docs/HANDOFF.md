@@ -1,3 +1,19 @@
+# M25-03 backend authoring kit
+
+M25-02 merged as PR270 at e562ab164162b67d009171b5c8f53e9b04866285.
+Canonical control PR527 merged at 7585342836adf7d5e90cd62acb8d4237dc802f22,
+blob d65ec3071611b480748f3a92eca937160a5ea8d7. The active batch adds the
+source-only backend, reusable copy-profile conformance, Runtime integration,
+installed consumer and ownership guide. Verification/integration are in progress;
+see [M25-03 evidence](evidence/M25-03-2026-09-28.md).
+
+After this batch, three M25 software batches remain: external shared-memory CIL,
+independent host adapter, and installed API/docs/recipes. M26 has six full-system
+batches. Independent novice review, hardware/RT, controlled performance, Unreal
+and signing/release/deployment remain separate. Do not activate M25-04 here.
+
+## Historical M25-02 checkpoint
+
 # M25-02 optional typed Runtime SDK
 
 M25-01 merged as PR269 at d3052a0f7f17a0cd68334123aea3869fcae2094a.

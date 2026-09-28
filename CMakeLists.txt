@@ -1301,3 +1301,11 @@ install(FILES samples/typed_runtime/main.cpp samples/typed_runtime/CMakeLists.tx
     samples/typed_runtime/check_output.cmake
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/typed_runtime)
 install(FILES docs/typed_runtime.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+
+# Source-only authoring kit: no SDK header or exported-target additions.
+install(FILES samples/backend_authoring/main.cpp samples/backend_authoring/CMakeLists.txt
+    samples/backend_authoring/check_output.cmake samples/backend_authoring/backend.hpp
+    samples/backend_authoring/profile.hpp samples/backend_authoring/conformance.hpp
+    samples/backend_authoring/runtime_example.hpp
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/backend_authoring)
+install(FILES docs/backend_authoring.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)

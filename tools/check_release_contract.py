@@ -51,6 +51,18 @@ PINNED_ACTIONS = {
 
 HASHED_CONTRACT_PATHS = {
     'rt/include/rt/sdk.hpp',
+    'docs/backend_authoring.md',
+    'samples/backend_authoring/CMakeLists.txt',
+    'samples/backend_authoring/backend.hpp',
+    'samples/backend_authoring/check_output.cmake',
+    'samples/backend_authoring/conformance.hpp',
+    'samples/backend_authoring/main.cpp',
+    'samples/backend_authoring/profile.hpp',
+    'samples/backend_authoring/runtime_example.hpp',
+    'tests/backend_authoring/CMakeLists.txt',
+    'tests/backend_authoring/package_contract.cmake',
+    'tests/backend_authoring/test_backend.cpp',
+    'tests/backend_authoring/verify_package.py',
     'docs/typed_runtime.md',
     'samples/typed_runtime/CMakeLists.txt',
     'samples/typed_runtime/check_output.cmake',
