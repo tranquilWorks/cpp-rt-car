@@ -62,6 +62,12 @@ class CoverageTests(unittest.TestCase):
         self.reject(lambda m: m['gates']['benchmark']['evidence'].update({'docs/evidence/absent.txt': '0'*64}))
         self.reject(lambda m: m['gates']['benchmark']['sources'].update({'../outside': '0'*64}))
 
+    def test_underlying_runtime_and_backend_changes_invalidate_evidence(self):
+        path = 'rt/src/cuda_backend.cpp'
+        self.reject(lambda m: m['product_sources'].update({path: '0'*64}))
+        self.reject(lambda m: m['product_sources'].pop('rt/src/device_manager.hpp'))
+        self.reject(lambda m: m['product_sources'].update({'rt/src/invented.cpp': '0'*64}))
+
     def test_crosswalk_and_schema_drift(self):
         self.reject(lambda m: m.update(version=2))
         self.reject(lambda m: m.update(extra=True))

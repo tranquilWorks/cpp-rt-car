@@ -55,6 +55,12 @@ GATE_SOURCES = {
 }
 
 
+def product_sources(root):
+    # Bind the implementation behind the sample, not just its tests/wrappers.
+    return {str(path.relative_to(root)) for directory in ('rt', 'core/include')
+            for path in (root/directory).rglob('*') if path.suffix in ('.cpp', '.hpp', '.h')}
+
+
 def require(condition, message):
     if not condition:
         raise ValueError(message)
@@ -93,9 +99,12 @@ def validate_measurements(root):
 
 
 def validate(matrix, root=ROOT):
-    require(set(matrix) == {'version', 'rows', 'gates', 'm23_crosswalk'}, 'unknown/missing top-level field')
+    require(set(matrix) == {'version', 'rows', 'gates', 'm23_crosswalk', 'product_sources'}, 'unknown/missing top-level field')
     require(type(matrix['version']) is int and matrix['version'] == 1, 'version')
     require(type(matrix['rows']) is list, 'rows')
+    require(isinstance(matrix['product_sources'], dict) and set(matrix['product_sources']) == product_sources(root), 'product source inventory')
+    for path, sha in matrix['product_sources'].items():
+        require(digest(root/path) == sha, f'stale product implementation: {path}')
     ids = [r['id'] for r in matrix['rows']]
     require(len(ids) == len(set(ids)) and set(ids) == set(CRITICAL+NONCRITICAL+PHYSICAL), 'fixed v1 row inventory')
     require(set(matrix['gates']) == GATES, 'gate inventory')
