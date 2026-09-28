@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "evidence_class": "portable_characterization",
+  "workload": "4096 entities, frame, two workers, seed1, seven steps; two warmup and five measured",
+  "pairs": 3,
+  "raw_ns": {
+    "kernel": [
+      698903,
+      1026948,
+      3954281,
+      244305,
+      6416400,
+      256458,
+      260788,
+      270146,
+      261347,
+      299130,
+      369182,
+      309747,
+      338381,
+      289073,
+      294522
+    ],
+    "graph": [
+      285861,
+      404312,
+      436160,
+      367784,
+      306254,
+      239906,
+      219930,
+      288445,
+      249544,
+      228451,
+      400401,
+      328604,
+      333842,
+      310864,
+      332096
+    ]
+  },
+  "median_ns": {
+    "kernel": 299130,
+    "graph": 310864
+  },
+  "candidate": "pre-instantiated-graph",
+  "baseline": "direct-kernel",
+  "selected_default": "unchanged-graph-example-default",
+  "decision": "Retain both dispatch paths. Simulated driver timings cannot select a physical CUDA optimization.",
+  "limitations": [
+    "Host noise, no affinity or controlled thresholds",
+    "No GPU timings or profiler capture",
+    "Different case identities are intentionally ineligible for same-case M23 baseline comparison"
+  ],
+  "correctness": "All fifteen measured per-step checksums agree; independent nine-field CPU oracle passed",
+  "source_sha256": {
+    "samples/cuda_physics/benchmark/provider.cpp": "3f5febd8de469bdb93d126765d0fb772d28b79cf374688eb62fe61a8f6012e3f",
+    "samples/cuda_physics/benchmark/provider.hpp": "d6ee2d598ce07eb54f07720d9426a968d85e8c4f90a235ea03172482c35b3db4",
+    "samples/cuda_physics/benchmark/main.cpp": "75e0bd56a18ffbd70f7b44f49d3cb086ee12650e399ecafd9690c5052bac3552",
+    "samples/cuda_physics/pipeline/scenario.hpp": "b7a3c002b8db9f8eaeafb1d65469f66c5f81dccc05ce2971000e3487537098c2",
+    "samples/cuda_physics/pipeline/simulated_driver.hpp": "5c1febf0697f1d3a48cf3990d02550af1a318418929a164d5d1abd2f9ecc4d7d",
+    "samples/cuda_physics/model.hpp": "09915949901a19c246918061fe74b1e11dff4af6d47832f1f6f2208c26e4c6bb"
+  },
+  "median_entity_updates_per_second": {
+    "kernel": 13693043,
+    "graph": 13176179
+  }
+}

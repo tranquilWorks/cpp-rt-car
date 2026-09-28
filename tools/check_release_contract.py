@@ -50,6 +50,17 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'samples/cuda_physics/benchmark/provider.hpp',
+    'samples/cuda_physics/benchmark/provider.cpp',
+    'samples/cuda_physics/benchmark/main.cpp',
+    'tests/test_cuda_benchmark.cpp',
+    'tests/cuda_physics/test_benchmark.py',
+    'tests/cuda_physics/test_capabilities.py',
+    'tools/check_cuda_capabilities.py',
+    'docs/cuda_benchmarking.md',
+    'docs/cuda_capabilities.json',
+    'docs/cuda_capabilities.md',
+
     'samples/cuda_physics/lifetime/protocol.hpp',
     'samples/cuda_physics/lifetime/conformance.hpp',
     'samples/cuda_physics/lifetime/main.cpp',
@@ -2219,6 +2230,10 @@ def main(argv: list[str] | None = None) -> int:
         write_hashes(root)
 
     errors = validate_repository(root)
+    coverage = subprocess.run([sys.executable, str(root / "tools/check_cuda_capabilities.py")],
+                              capture_output=True, text=True, check=False)
+    if coverage.returncode:
+        errors.append("CUDA capability coverage: " + coverage.stdout + coverage.stderr)
     if args.tag:
         expected_tag = f"v{load_text(root, 'VERSION.txt', errors).strip()}"
         if args.tag != expected_tag:

@@ -1,3 +1,24 @@
+# M24-04 benchmark and maturity closure
+
+M24-03 merged as #265 at `74e59e8850ccb24d71a0fdbedfe4305971e773df` with all32
+checks. Canonical M24-04 control #516 is integrated at
+`ff8e989a5c9da0204082d9e03394d06ac900496d`, blob
+`ee197e588a00c81d8bd6afab4085af9ec16b84e9`. The optional M23 particle provider
+adds20 finite cases, fixed host timeline correlations and installed consumers.
+The capability gate retains40 software and4 physical rows, with evidence/source
+bindings and unchanged M23 workload crosswalk. Local verification is complete: quick43/full47, strict portable59,
+ASan/UBSan11 and TSan11 plus final boundary checks, source consumers11+11 and
+default SDK20. Coverage is40/44 (90.91%) and37/37 critical. The scoped target PR
+records exact final hosted checks and integration; see
+[evidence](evidence/M24-04-2026-09-27.md). Physical rows remain M18 NOT RUN.
+
+M25 consumer/SDK work (six batches), M26 full-system reference (six batches),
+physical CUDA/RT, controlled performance, independent review and signing/release
+remain separate. Standing scoped publication/integration authorization persists.
+Earlier checkpoints below are historical; do not reopen merged repairs.
+
+## Historical M24-03 checkpoint
+
 # M24-03 final conformance verification
 
 M24-03 is active under merged control #514

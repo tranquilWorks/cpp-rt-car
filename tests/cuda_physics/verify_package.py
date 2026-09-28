@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,7 +26,7 @@ def main():
     original = work / "original-prefix"
     run("cmake", "-S", ROOT, "-B", source_build, "-DCMAKE_BUILD_TYPE=Release",
         "-DENABLE_TESTS=OFF", "-DRTFW_BUILD_EXAMPLES=OFF", "-DRTFW_BUILD_EXPERIMENTAL=OFF",
-        "-DRTFW_BUILD_RUNTIME_DEMO=OFF", "-DRTFW_BUILD_BENCHMARKS=OFF", "-DSIM_SANITIZERS=", "-DSIM_WERROR=ON",
+        "-DRTFW_BUILD_RUNTIME_DEMO=OFF", "-DRTFW_BUILD_BENCHMARKS=ON", "-DSIM_SANITIZERS=", "-DSIM_WERROR=ON",
         "-DCMAKE_INSTALL_DATADIR=custom/data")
     run("cmake", "--build", source_build, "--config", "Release", "--parallel", "2")
     run("cmake", "--install", source_build, "--config", "Release", "--prefix", original)
@@ -37,9 +38,12 @@ def main():
         kit = relocated / "custom/data/rtfw/examples/cuda_physics"
         consumer = Path(temporary) / "consumer"
         run("cmake", "-S", kit, "-B", consumer, "-DCMAKE_BUILD_TYPE=Release",
-            f"-DCMAKE_PREFIX_PATH={relocated}", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON")
+            f"-DCMAKE_PREFIX_PATH={relocated}", "-DPHYSICS_BENCHMARKS=ON", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON")
         run("cmake", "--build", consumer, "--config", "Release", "--parallel", "2")
         run("ctest", "--test-dir", consumer, "-C", "Release", "--output-on-failure")
+        validator = relocated / "custom/data/rtfw/tools/check_benchmark_artifact.py"
+        for mode in ("kernel", "graph"):
+            run(sys.executable, validator, "--artifact-root", consumer / f"benchmark-{mode}")
         commands = consumer / "compile_commands.json"
         if commands.exists():
             for entry in json.loads(commands.read_text()):
@@ -48,9 +52,11 @@ def main():
         # Same shipped files, explicitly embedded through public targets.
         embedded = Path(temporary) / "embedded"
         run("cmake", "-S", kit, "-B", embedded, "-DCMAKE_BUILD_TYPE=Release",
-            f"-DPHYSICS_RTFW_SOURCE={ROOT}", "-DSIM_SANITIZERS=", "-DSIM_WERROR=ON")
+            f"-DPHYSICS_RTFW_SOURCE={ROOT}", "-DPHYSICS_BENCHMARKS=ON", "-DSIM_SANITIZERS=", "-DSIM_WERROR=ON")
         run("cmake", "--build", embedded, "--config", "Release", "--parallel", "2")
         run("ctest", "--test-dir", embedded, "-C", "Release", "--output-on-failure")
+        for mode in ("kernel", "graph"):
+            run(sys.executable, validator, "--artifact-root", embedded / f"benchmark-{mode}")
     print("PASS: shipped-source relocated and embedded consumers")
 
 

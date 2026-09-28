@@ -201,3 +201,21 @@ if (RTFW_BUILD_EXPERIMENTAL)
     add_executable(bench_aosoa_vs_soa bench_aosoa_vs_soa.cpp)
     target_link_libraries(bench_aosoa_vs_soa PRIVATE simcore_platform)
 endif()
+
+# M24 source-owned particle provider; never a dependency of Runtime.
+add_library(rtfw_cuda_particle_benchmark STATIC
+    "${RTFW_PROJECT_SOURCE_DIR}/samples/cuda_physics/benchmark/provider.cpp")
+target_link_libraries(rtfw_cuda_particle_benchmark PUBLIC rtfw::benchmark rtfw::runtime rtfw::cuda_backend)
+rtfw_enable_project_warnings(rtfw_cuda_particle_benchmark)
+add_executable(rtfw-bench-cuda-physics "${RTFW_PROJECT_SOURCE_DIR}/samples/cuda_physics/benchmark/main.cpp")
+target_link_libraries(rtfw-bench-cuda-physics PRIVATE rtfw_cuda_particle_benchmark)
+rtfw_enable_project_warnings(rtfw-bench-cuda-physics)
+if(RTFW_BUILD_TESTS)
+    add_executable(rtfw_cuda_benchmark_tests "${RTFW_PROJECT_SOURCE_DIR}/tests/test_cuda_benchmark.cpp")
+    target_link_libraries(rtfw_cuda_benchmark_tests PRIVATE rtfw_cuda_particle_benchmark)
+    rtfw_enable_project_warnings(rtfw_cuda_benchmark_tests)
+    add_test(NAME m24_cuda_benchmark COMMAND rtfw_cuda_benchmark_tests)
+    add_test(NAME m24_cuda_benchmark_cli COMMAND "${Python3_EXECUTABLE}"
+        "${RTFW_PROJECT_SOURCE_DIR}/tests/cuda_physics/test_benchmark.py" --cli $<TARGET_FILE:rtfw-bench-cuda-physics>)
+    set_tests_properties(m24_cuda_benchmark m24_cuda_benchmark_cli PROPERTIES TIMEOUT 120)
+endif()

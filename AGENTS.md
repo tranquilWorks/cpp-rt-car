@@ -329,3 +329,14 @@ Concurrent fixture setup stays on the control thread; accepted execution/fault
 isolation and the actual 512 KiB CLI gate remain. Retain all earlier TSan,
 stack and timeout failures. Then report remaining M24-04 and broader/manual
 work. Standing scoped publication/integration authority continues.
+
+## M24-04 activation
+
+M24-03 merged as #265 at74e59e8850ccb24d71a0fdbedfe4305971e773df with all32
+checks passing. Canonical M24-04 control #516 merged at
+`ff8e989a5c9da0204082d9e03394d06ac900496d`. Implement only the optional benchmark,
+host profiler-correlation and capability closure kit. Preserve all prior Runtime,
+backend, CUDA model/test and benchmark source and repair evidence. Standing scoped
+publication/integration authority persists; all target gates remain required.
+Physical, controlled-performance, independent review, M25/M26 and release gates
+remain separate. Earlier checkpoint paragraphs are historical.

@@ -533,3 +533,7 @@ if(TARGET sample_cuda_lifetime)
         ${CMAKE_CURRENT_SOURCE_DIR}/cuda_physics/test_lifetime_cli.py --cli $<TARGET_FILE:sample_cuda_lifetime>)
     set_tests_properties(m24_cuda_lifetime_cli PROPERTIES TIMEOUT 120)
 endif()
+
+add_test(NAME m24_cuda_capabilities COMMAND ${RTFW_PYTHON_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cuda_physics/test_capabilities.py)
+set_tests_properties(m24_cuda_capabilities PROPERTIES TIMEOUT 60)
