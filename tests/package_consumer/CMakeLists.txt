@@ -210,3 +210,5 @@ if (RTFW_TEST_BENCHMARK)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/../hello_runtime/package_contract.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../typed_runtime/package_contract.cmake")

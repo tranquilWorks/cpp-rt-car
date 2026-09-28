@@ -1,3 +1,24 @@
+# M25-02 optional typed Runtime SDK
+
+M25-01 merged as PR269 at d3052a0f7f17a0cd68334123aea3869fcae2094a.
+Canonical control PR524 at ad159304c00151e248ffe2b7f5699c341a8b5361 activates
+M25-02, blob d598ea817902036ebdf85cb1407e6cb78043ca08. Optional public
+`rt/sdk.hpp` adds noexcept typed callbacks, raw-validated config/graph builders,
+checked partial storage arithmetic, retryable checked-stop guards and fixed
+caller-buffer diagnostics. The typed source kit and guide ship with the SDK.
+Compiled Runtime/backend sources, stable ABIs and raw hello are unchanged.
+
+Local verification passed portable49/strict53, SDK22, source1+1, seven negative
+controls, ASan/UBSan3, TSan3, CUDA11+11, static, ABI and contract checks.
+Exact-head hosted verification and integration are tracked in
+[evidence](evidence/M25-02-2026-09-28.md). No later batch is activated.
+After this batch, four M25 software batches remain: backend authoring/conformance,
+external shared-memory CIL, independent host adapter and installed API/docs/recipes.
+M26 has six full-system batches. Independent novice review, hardware/RT,
+controlled performance, Unreal and signing/release/deployment remain separate.
+
+## Historical M25-01 checkpoint
+
 # M25-01 consumer installation and hello Runtime
 
 M24 portable software merged as PR268 at facc42d4a09d1dab398d75dc92000a05fb08c396.

@@ -139,3 +139,9 @@ legacy research experiments, not the installed SDK entry path. Larger raw C
 and C++ embedding, live-control, sampled-I/O and CUDA references remain
 available; helper builders, backend authoring, external CIL, a full host adapter
 and the complete installed API/recipe catalog are separate M25 batches.
+
+## Optional typed helpers
+
+After the raw hello graph, see [typed Runtime](typed_runtime.md) for optional
+noexcept callbacks, explicit builders, checked capacities, shutdown and diagnostics.
+The shipped typed kit uses the same public Runtime and preserves caller ownership.

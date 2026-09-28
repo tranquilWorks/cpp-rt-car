@@ -16,3 +16,6 @@ SimCore experiments, built only with `RTFW_BUILD_EXPERIMENTAL=ON`. They do not
 use the supported Runtime graph or establish SDK, CUDA or RT qualification.
 The separate [examples directory](../examples/README.md) holds more legacy
 research code and is not a consumer quick start.
+
+The optional [typed Runtime kit](typed_runtime/) adds noexcept callbacks, explicit
+builders, checked-stop guards and fixed diagnostics. See [the guide](../docs/typed_runtime.md).
