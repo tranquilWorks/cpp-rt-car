@@ -19,7 +19,7 @@ class DocumentationNegatives(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
             expected = {'api.html': '<span id="L1">declaration</span>\n'}
-            (path / 'api.html').write_text(expected['api.html'])
+            (path / 'api.html').write_bytes(expected['api.html'].encode())
             gen.verify_outputs(path, expected)
             (path / 'api.html').write_text('stale declaration')
             with self.assertRaisesRegex(ValueError, 'stale'):

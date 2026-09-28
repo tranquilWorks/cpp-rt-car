@@ -20,11 +20,11 @@ def digest(data):
 
 
 def inventory(root):
-    data = json.loads((root / 'docs/sdk/inventory.json').read_text())
+    data = json.loads((root / 'docs/sdk/inventory.json').read_text(encoding='utf-8'))
     if data['schema_version'] != 1:
         raise ValueError('unsupported SDK inventory schema')
     # Independent default-header contract already enforced by all package gates.
-    contract = (root / 'tests/package_consumer/package_contract.cmake').read_text()
+    contract = (root / 'tests/package_consumer/package_contract.cmake').read_text(encoding='utf-8')
     expected = re.search(r'set\(expected_headers\n(.*?)\)', contract, re.S).group(1).split()
     actual = [h['include'] for h in data['headers'] if h['component'] == 'default']
     if sorted(expected) != sorted(actual) or len(set(actual)) != len(actual):
@@ -105,7 +105,7 @@ def rewrite_markdown(text, source, destination, mapping, root, revision):
 
 def render(root=ROOT):
     data = inventory(root)
-    version = (root / 'VERSION.txt').read_text().strip()
+    version = (root / 'VERSION.txt').read_text(encoding='utf-8').strip()
     mapping = {h['source']: 'manual/' + page_name(h['include']) for h in data['headers']}
     mapping.update({s: 'manual/' + guide_name(s) for s in data['guides']})
     mapping.update({p.relative_to(root).as_posix(): dst for dst, p in shipped_files(root, data).items()})
@@ -132,7 +132,7 @@ def render(root=ROOT):
             raise ValueError('duplicate API entry label')
         labels.add(entry['label'])
         header = next(h for h in data['headers'] if h['include'] == entry['header'])
-        line = entry_line((root / header['source']).read_text(), entry['pattern'])
+        line = entry_line((root / header['source']).read_text(encoding='utf-8'), entry['pattern'])
         link = Path(page_name(entry['header'])).name + '#L' + str(line)
         rows.append(f'<li><a href="{link}">{html.escape(entry["label"])}</a> — {html.escape(entry["note"])}</li>')
     header_links = ''.join(f'<li><a href="{Path(page_name(h["include"])).name}">{h["include"]}</a> ({h["component"]})</li>' for h in data['headers'])
@@ -143,10 +143,10 @@ def render(root=ROOT):
     for source in data['guides']:
         name = guide_name(source)
         outputs[name] = ('[Manual](../README.md) · [Recipes](../recipes.md) · [API reference](../api/index.html)\n\n'
-            '> Archived authoritative guide. Local links open shipped material; HTTPS links identify repository-only or external material. Commands requiring a checkout, optional component or real device retain those prerequisites. Historical evidence is not new qualification.\n\n' + rewrite_markdown((root / source).read_text(), source, 'manual/' + name, mapping, root, data['repository_revision']))
-    transcript = json.loads((root / 'samples/recipes/transcripts.json').read_text())
+            '> Archived authoritative guide. Local links open shipped material; HTTPS links identify repository-only or external material. Commands requiring a checkout, optional component or real device retain those prerequisites. Historical evidence is not new qualification.\n\n' + rewrite_markdown((root / source).read_text(encoding='utf-8'), source, 'manual/' + name, mapping, root, data['repository_revision']))
+    transcript = json.loads((root / 'samples/recipes/transcripts.json').read_text(encoding='utf-8'))
     block = '\n\nEach line below is an argv array, not a shell string. Replace `{kit}`, `{build}`, `{prefix}`, `{source}` (empty for installed mode) and `{benchmark}` (`OFF` or `ON`) with explicit paths/options.\n\n```json\n' + json.dumps(transcript['commands'], indent=2) + '\n```\n'
-    recipes = (root / 'docs/sdk/recipes.md').read_text()
+    recipes = (root / 'docs/sdk/recipes.md').read_text(encoding='utf-8')
     if recipes.count('<!-- generated-transcript -->') != 1:
         raise ValueError('recipe transcript marker missing or duplicated')
     outputs['recipes.md'] = rewrite_markdown(recipes.replace('<!-- generated-transcript -->', block), 'docs/sdk/recipes.md', 'manual/recipes.md', mapping, root, data['repository_revision'])
