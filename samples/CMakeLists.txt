@@ -152,3 +152,21 @@ if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8
         set_tests_properties(cil_shared_memory_processes PROPERTIES TIMEOUT 90)
     endif()
 endif()
+
+# Source-only independent host; platform observation stays off the SDK graph.
+if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+    add_executable(sample_host_adapter host_adapter/main.cpp)
+    target_link_libraries(sample_host_adapter PRIVATE rtfw::runtime)
+    if(WIN32)
+        target_link_libraries(sample_host_adapter PRIVATE psapi)
+    endif()
+    rtfw_enable_project_warnings(sample_host_adapter)
+    if(RTFW_BUILD_TESTS)
+        foreach(mode native host)
+            add_test(NAME host_adapter_${mode} COMMAND ${CMAKE_COMMAND}
+                -DHOST_EXECUTABLE=$<TARGET_FILE:sample_host_adapter> -DHOST_MODE=${mode}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/host_adapter/check_output.cmake")
+            set_tests_properties(host_adapter_${mode} PROPERTIES TIMEOUT 40)
+        endforeach()
+    endif()
+endif()

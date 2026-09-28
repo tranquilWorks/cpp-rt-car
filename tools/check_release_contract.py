@@ -51,6 +51,17 @@ PINNED_ACTIONS = {
 
 HASHED_CONTRACT_PATHS = {
     'rt/include/rt/sdk.hpp',
+    'docs/host_adapter.md',
+    'samples/host_adapter/CMakeLists.txt',
+    'samples/host_adapter/check_output.cmake',
+    'samples/host_adapter/host.hpp',
+    'samples/host_adapter/jobs.hpp',
+    'samples/host_adapter/main.cpp',
+    'samples/host_adapter/memory.hpp',
+    'tests/host_adapter/CMakeLists.txt',
+    'tests/host_adapter/package_contract.cmake',
+    'tests/host_adapter/test_host.cpp',
+    'tests/host_adapter/verify_package.py',
     'docs/cil_shared_memory.md',
     'samples/cil_shared_memory/CMakeLists.txt',
     'samples/cil_shared_memory/channel.hpp',

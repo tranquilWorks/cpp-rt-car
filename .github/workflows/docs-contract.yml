@@ -53,6 +53,10 @@ jobs:
         run: python3 tests/cil_shared_memory/verify_package.py --work-directory build-cil-package
       - name: Analyze external CIL source
         run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/cil_shared_memory/plant.cpp samples/cil_shared_memory/controller.cpp tests/cil_shared_memory/test_cil.cpp
+      - name: Verify relocated independent host kit
+        run: python3 tests/host_adapter/verify_package.py --work-directory build-host-package
+      - name: Analyze independent host source
+        run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/host_adapter/main.cpp tests/host_adapter/test_host.cpp
       - name: Run README contributor build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF -DSIM_WERROR=OFF

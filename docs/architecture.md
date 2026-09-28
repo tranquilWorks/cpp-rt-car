@@ -1,5 +1,10 @@
 # Architecture
 
+M25-05 adds the optional [independent headless host](host_adapter.md): fixed-capacity
+jobs and memory provider, host clock/frame loop, two Runtime instances, bounded
+telemetry and checked stop/detach in native and host-adapter modes. It uses public
+SDK artifacts and preserves compiled production, SDK inventory and qualification claims.
+
 M25-04 adds the optional source-only [external shared-memory CIL reference](cil_shared_memory.md):
 separate controller and public Runtime plant, bounded versioned channels, explicit
 hold/reconnect/ownership policy and installed process tests on Linux/Windows x86-64.

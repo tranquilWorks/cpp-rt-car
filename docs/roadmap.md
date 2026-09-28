@@ -1,9 +1,9 @@
 # RTFW Completion Roadmap
 
-M21 through M24 portable software and M25-01/02/03 are merged. M25-04 external
-shared-memory CIL is active; its evidence tracks verification/integration.
-M25-05 and M25-06 remain separate. Software feature completion remains M26-06;
-physical, controlled-host and independent first-use evidence remain separate.
+M21 through M24 portable software and M25-01 through M25-04 are merged. M25-05
+independent host integration is active; its evidence tracks verification/integration.
+M25-06 remains separate. Software feature completion remains M26-06; physical,
+controlled-host and independent first-use evidence remain separate.
 
 The roadmap converts the [product contract](product_contract.md) into
 dependency-ordered milestones. A milestone is complete only when its exit gates
