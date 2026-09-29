@@ -54,6 +54,15 @@ if(TARGET sample_golden_xdma)
     if(TARGET rtfw_determinism_artifact)
         add_custom_target(golden_xdma_determinism_check COMMAND $<TARGET_FILE:test_golden_xdma>
             DEPENDS test_golden_xdma VERBATIM)
+        # Keep complete prior checks, but avoid running their busy native
+        # workers concurrently with this kit's unchanged 8-ms safe ACK bound.
+        # Ordering is local to the new target; workloads/timeouts stay intact.
+        if(TARGET golden_determinism_check)
+            add_dependencies(golden_xdma_determinism_check golden_determinism_check)
+        endif()
+        if(TARGET golden_cuda_determinism_check)
+            add_dependencies(golden_xdma_determinism_check golden_cuda_determinism_check)
+        endif()
         add_dependencies(rtfw_determinism_artifact golden_xdma_determinism_check)
     endif()
 endif()
