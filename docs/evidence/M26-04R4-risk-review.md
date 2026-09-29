@@ -48,3 +48,12 @@ visibility, and releases all ownership after actual terminal collection.
 Initial checked-retry fixture change alone did not resolve the underlying
 Runtime issue; those aborts remain retained. Original native sources stay intact.
 Fresh complete gates are required for both private production changes.
+
+## Completed local review
+
+Combined correction passes full111+115, focused123/new13, ASan/UBSan/leaks13,
+TSan13, three allocation controls, production static36 plus final DeviceManager
+delta and public fixture analysis, relocated CPack56 SDK/embedding/negatives,
+ABI/default MemoryPlan and exact checkpoint/active bytes. No unresolved
+production finding remains in the scoped diff. Final-head full/all32 and
+clean/head/base/review/fetched-tree integration guards remain required.
