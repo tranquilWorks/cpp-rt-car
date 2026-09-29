@@ -469,3 +469,25 @@ native backends and all repair/prior tests and evidence remain protected. Finish
 all CUDA feature acceptance with fresh local/all32 hosted gates before integration.
 M26-04..06 remain inactive; standing scoped publication/merge authority persists.
 Historical activation/checkpoint text above does not reopen completed repairs.
+
+## M26-04 XDMA sampled-I/O activation
+
+Owner requested M26-04 after target277 merged at b0564fef90ce9cc3537e2814e8e972c4e32cc168
+with all32 final checks and canonical closure557. Canonical plan558 merged at
+71307ba6379a9209da43f4b6b5e31fb282129ca9, blob 04a4073dfab4f22374c7509d8c35f97ff66b9489.
+Implement only the new XDMA/combined golden source kit under this contract, using
+actual Runtime sampled channels, native backend operations, owned simulation,
+acknowledged safe outputs and bounded failure/recovery/replay. Preserve frozen
+logical scenario, all prior kits/tests/evidence, native Runtime/backend/ABI and
+protected ci.yml. All32 target gates and standing scoped publication/merge
+authority persist. Known M23 timeout-fixture submission assumption remains
+separate benchmark follow-up. M26-05/M26-06 remain inactive; no human/physical/RT/
+Unreal/controlled-performance/release promotion. Earlier activation text is history.
+
+Canonical header-description correction560 merged at da7e8563c3aba6c427cfec5de17f716a8fc96b82,
+blob b4cf895e418b76598ab124875e0894867f46822c: both preserved application and public sampled
+headers are120 bytes with different semantics. The first M26-04 graph exposes
+a separate blocker: frozen ring4 versus Runtime fixed2. Feature implementation
+is incomplete and retained as a draft checkpoint. No Runtime repair is active;
+see docs/evidence/M26-04-repair-proposal.md. Never ship the ring2 diagnostic as
+golden acceptance. Obtain the bounded repair decision before forbidden edits.

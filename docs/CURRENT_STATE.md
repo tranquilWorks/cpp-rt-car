@@ -1,3 +1,37 @@
+# M26-04 checkpoint: four-slot sampled storage blocked
+
+The first XDMA graph compiles but fails Runtime finalization: frozen scenario
+ring capacity4 conflicts with the existing fixed2 implementation. The isolated
+same-graph ring2 diagnostic finalizes without starting a device; it is not
+scenario or safety evidence. Runtime, prior kits/tests and frozen scenario are
+unchanged. See [the concrete repair proposal](evidence/M26-04-repair-proposal.md)
+and [retained evidence](evidence/M26-04-2026-09-29.md).
+
+Canonical header-description correction560 is merged; no Runtime repair is
+activated. M26-04 acceptance is incomplete, pending a separately scoped repair
+and then all feature/local/hosted/package/integration work. M26-05/M26-06 remain
+inactive. No physical/human/RT/Unreal/performance/release promotion.
+
+## Earlier activation checkpoint
+
+# M26-04 XDMA HAL HIL-loopback implementation
+
+M26-03 is merged as [target277](https://github.com/tranquilWorks/cpp-rt-car/pull/277)
+at b0564fef90ce9cc3537e2814e8e972c4e32cc168 with all32 final target checks.
+Canonical [M26-04 plan558](https://github.com/tranquilWorks/portfolio-control/pull/558)
+is merged at 71307ba6379a9209da43f4b6b5e31fb282129ca9, blob 04a4073dfab4f22374c7509d8c35f97ff66b9489.
+
+Only M26-04 is active: new public-SDK sampled-I/O/XDMA and combined CUDA+XDMA
+source kit, explicit host staging, safe acknowledgements, faults/recovery/replay
+and installed/process evidence. Implementation and acceptance are in progress;
+activation is not completed functionality. Preserve all existing CPU/CUDA kits,
+immutable scenario, Runtime/native backends, ABI and earlier failure evidence.
+The known M23 timing-sensitive benchmark fixture remains separate follow-up.
+M26-05 showcase and M26-06 final audit remain inactive; human/physical/RT/Unreal/
+controlled-performance/release gates remain separate.
+
+## Historical M26-03 completion
+
 # M26-03 CUDA golden physics
 
 The [CUDA source kit](golden_cuda.md) implements CPU fallback and actual Runtime

@@ -1,0 +1,9 @@
+Retained initial compiler diagnostic excerpts from tool output (not full logs):
+1. Exit1: rt/include/rt/runtime.hpp:15:10: fatal error: core/units.hpp: No such file or directory.
+   Initial command provided only -Irt/include -Ibuild/agent-quick/generated.
+   Corrected by using actual public include roots rt/include, core/include, include.
+2. Exit1: samples/golden_xdma/io.hpp:185:71: error: const class rt::RateReleaseView has no member named substep_count.
+   Corrected the sample calculation to domain_release_sequence+1 because every frozen domain has exactly one substep. No Runtime or public header changed.
+3. Compile PASS with public include roots and unchanged Runtime/XDMA libraries.
+   Four-slot scenario then fails finalize; see vertical and ring comparison logs.
+4. Final checkpoint compile PASS with -std=c++20 -O1 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror -pthread; no diagnostics. Runtime execution still FAIL at finalize.
