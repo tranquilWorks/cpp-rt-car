@@ -110,6 +110,7 @@ if (SIM_GTEST_AVAILABLE)
     list(APPEND TEST_SOURCES
         test_extension_registration.cpp
         test_command_batch.cpp
+        test_device_rate_simulation.cpp
         test_heterogeneous_memory.cpp
         test_hal_v2.cpp
         test_cross_rate_data.cpp
@@ -549,3 +550,13 @@ add_subdirectory(cil_shared_memory)
 add_subdirectory(host_adapter)
 
 add_subdirectory(golden_system)
+
+# M26-03R: mandatory existing host/sanitizer filters include allocation checks.
+add_executable(rtfw_simulation_timing_noalloc device_rate_simulation/noalloc.cpp)
+target_link_libraries(rtfw_simulation_timing_noalloc PRIVATE rtfw::runtime)
+rtfw_enable_project_warnings(rtfw_simulation_timing_noalloc)
+add_test(NAME host_adapter_simulation_timing_noalloc COMMAND rtfw_simulation_timing_noalloc)
+set_tests_properties(host_adapter_simulation_timing_noalloc PROPERTIES TIMEOUT 60)
+if(TARGET rtfw_host_adapter_tests)
+    add_dependencies(rtfw_host_adapter_tests rtfw_simulation_timing_noalloc)
+endif()

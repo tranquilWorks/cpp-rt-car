@@ -1,3 +1,7 @@
+M26-03R is the separately owner-approved simulator timing prerequisite for
+blocked M26-03 feature277. All32 target gates remain required; M26-04..06 stay
+inactive. This does not close M26-03 or CAP-M26.
+
 # M26-02 portable golden reference
 
 The [golden source kit](golden_system.md) implements the frozen M26-01 scenario

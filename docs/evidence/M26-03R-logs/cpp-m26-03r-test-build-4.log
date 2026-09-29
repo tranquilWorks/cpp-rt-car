@@ -1,0 +1,38 @@
+[  2%] Built target test_extension_fixture_bad
+[ 42%] Built target rtfw_runtime
+[ 46%] Built target rtfw_cuda_backend
+[ 48%] Built target rtfw_xdma_backend
+[ 51%] Built target gtest
+[ 53%] Built target test_extension_fixture
+[ 55%] Built target gmock
+[ 57%] Built target gtest_main
+[ 57%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_device_rate_simulation.cpp.o
+[ 57%] Linking CXX executable simcore_tests
+[100%] Built target simcore_tests
+[ 94%] Built target rtfw_runtime
+[100%] Building CXX object tests/CMakeFiles/rtfw_simulation_timing_noalloc.dir/device_rate_simulation/noalloc.cpp.o
+In file included from /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/device_rate_simulation/noalloc.cpp:1:
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/device_rate_simulation/../cuda_physics/allocation_guard.hpp: In function ‘void* rtfw_physics_allocation::allocate_aligned(std::size_t, std::size_t)’:
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/device_rate_simulation/../cuda_physics/allocation_guard.hpp:32:50: error: ‘max_align_t’ is not a member of ‘std’; did you mean ‘max_align_t’?
+   32 |     alignment = std::max(alignment, alignof(std::max_align_t));
+      |                                                  ^~~~~~~~~~~
+In file included from /usr/include/c++/12/bits/cxxabi_init_exception.h:38,
+                 from /usr/include/c++/12/bits/exception_ptr.h:38,
+                 from /usr/include/c++/12/exception:168,
+                 from /usr/include/c++/12/stdexcept:38,
+                 from /usr/include/c++/12/system_error:41,
+                 from /usr/include/c++/12/bits/std_mutex.h:39,
+                 from /usr/include/c++/12/bits/atomic_wait.h:49,
+                 from /usr/include/c++/12/bits/atomic_base.h:41,
+                 from /usr/include/c++/12/atomic:41,
+                 from /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/device_rate_simulation/../cuda_physics/allocation_guard.hpp:3:
+/usr/lib/gcc/x86_64-linux-gnu/12/include/stddef.h:435:3: note: ‘max_align_t’ declared here
+  435 | } max_align_t;
+      |   ^~~~~~~~~~~
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/device_rate_simulation/../cuda_physics/allocation_guard.hpp:32:37: warning: ISO C++ does not allow ‘alignof’ with a non-type [-Wpedantic]
+   32 |     alignment = std::max(alignment, alignof(std::max_align_t));
+      |                                     ^~~~~~~
+gmake[3]: *** [tests/CMakeFiles/rtfw_simulation_timing_noalloc.dir/build.make:76: tests/CMakeFiles/rtfw_simulation_timing_noalloc.dir/device_rate_simulation/noalloc.cpp.o] Error 1
+gmake[2]: *** [CMakeFiles/Makefile2:1715: tests/CMakeFiles/rtfw_simulation_timing_noalloc.dir/all] Error 2
+gmake[1]: *** [CMakeFiles/Makefile2:1722: tests/CMakeFiles/rtfw_simulation_timing_noalloc.dir/rule] Error 2
+gmake: *** [Makefile:849: rtfw_simulation_timing_noalloc] Error 2

@@ -160,6 +160,13 @@ struct DeviceRateCompletion {
     bool terminal_slot_owned = false;
 };
 
+struct DeviceRateSimulationTiming {
+  std::uint64_t host_watchdog_ns = 0;
+  RuntimeClock *logical_clock =
+      nullptr; // Null only for recorded active replay.
+  std::uint64_t logical_deadline_ns = 0;
+};
+
 class DeviceManager final {
 public:
     DeviceManager(
@@ -201,15 +208,13 @@ public:
         const DeviceSubmission& submission,
         std::uint64_t& out_submission_id) noexcept;
     [[nodiscard]] Status submit_batch(
-        std::size_t backend_index,
-        std::size_t phase_index,
-        std::size_t worker_index,
-        std::uint64_t frame_index,
-        const DeviceCommandBatch& batch,
-        const DeviceCommandBatch& declaration,
-        std::uint64_t& out_batch_id,
-        const DeviceRateReleaseIdentity* rate_identity = nullptr,
-        DeviceRateTicket* rate_ticket = nullptr) noexcept;
+        std::size_t backend_index, std::size_t phase_index,
+        std::size_t worker_index, std::uint64_t frame_index,
+        const DeviceCommandBatch &batch, const DeviceCommandBatch &declaration,
+        std::uint64_t &out_batch_id,
+        const DeviceRateReleaseIdentity *rate_identity = nullptr,
+        DeviceRateTicket *rate_ticket = nullptr,
+        const DeviceRateSimulationTiming *simulation = nullptr) noexcept;
     [[nodiscard]] Status wait_rate_batch(
         const DeviceRateTicket& ticket,
         DeviceRateCompletion& completion) noexcept;
@@ -292,7 +297,10 @@ private:
         std::atomic<bool> graph_released{false};
         std::atomic<bool> cancellation_requested{false};
         std::uint64_t sequence = 0;
-        std::uint64_t deadline_ns = 0;
+        std::atomic<std::uint64_t> deadline_ns{0};
+        std::atomic<bool> simulation_timing{false};
+        RuntimeClock *logical_clock = nullptr;
+        std::uint64_t logical_deadline_ns = 0;
         std::uint32_t backend_index = 0;
         std::uint32_t phase_index = 0;
         std::uint64_t frame_index = 0;

@@ -173,6 +173,30 @@ submit, poll, and timeout cancellation. A vendor-owned timeout becomes one
 terminal quarantined slot; late completion cannot publish timeline progress or
 convert it to success, and checked shutdown is the reuse boundary.
 
+M26-03R adds an explicit `DeviceRatePhaseBinding::simulation` opt-in. Its
+`DeviceRateSimulationPolicy::host_watchdog_ns` must be positive and at most
+`device_rate_simulation_watchdog_limit_ns` (60 seconds). Only a backend whose
+copied core capability declares `deterministic_mock` can use it. Binding and
+replacement copy/validate the value; `CompiledDeviceRatePhase::simulation`
+exposes the finalized value. Missing policy preserves the existing path;
+explicit zero is invalid. Native CUDA does not become deterministic.
+
+For this policy, the unchanged logical completion budget still drives admission
+and clamps the unchanged backend command timeout. The device slot uses the
+separate steady-clock watchdog for host liveness. Before successful timeline or
+payload publication, the service lane checks the Runtime logical deadline as
+well as the watchdog; a timestamp from an uncorrelated backend domain is never
+used for this comparison. The borrowed Runtime clock must support bounded,
+monotonic concurrent `now_ns()` reads. A pending backend with no completion is
+bounded by the host watchdog even when the logical clock remains frozen.
+
+The watchdog also covers queued work and the early-completion/submission-return
+handshake. An unsent timeout has no vendor owner; accepted work remains
+quarantined until checked cleanup. It does not preempt a vendor callback that
+violates the existing bounded/nonblocking HAL contract. Stop/reset ownership,
+ordinary command batches and default/native deadlines retain their contracts.
+This is portable simulator behavior, not physical deadline qualification.
+
 A device phase has two distinct moments in ordinary graph execution:
 
 - the command provider is a normal bounded CPU phase and ends when submission

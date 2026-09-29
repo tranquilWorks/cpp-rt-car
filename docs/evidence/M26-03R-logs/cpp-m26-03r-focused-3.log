@@ -1,0 +1,51 @@
+Running main() from /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/external/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = CommandBatch.Simulation*:MixedRateReplay.Simulation*
+[==========] Running 13 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 11 tests from CommandBatch
+[ RUN      ] CommandBatch.SimulationHostDelayPreservesLogicalBudget
+[       OK ] CommandBatch.SimulationHostDelayPreservesLogicalBudget (31 ms)
+[ RUN      ] CommandBatch.SimulationDefaultPathNegativeControlRetainsWallDeadline
+[       OK ] CommandBatch.SimulationDefaultPathNegativeControlRetainsWallDeadline (9 ms)
+[ RUN      ] CommandBatch.SimulationFrozenClockStillHasFiniteWatchdog
+[       OK ] CommandBatch.SimulationFrozenClockStillHasFiniteWatchdog (59 ms)
+[ RUN      ] CommandBatch.SimulationLogicalExpiryCannotPublishLateCompletion
+[       OK ] CommandBatch.SimulationLogicalExpiryCannotPublishLateCompletion (18 ms)
+[ RUN      ] CommandBatch.SimulationSubmittingAndEarlyCompletionRetainOwnership
+[       OK ] CommandBatch.SimulationSubmittingAndEarlyCompletionRetainOwnership (114 ms)
+[ RUN      ] CommandBatch.SimulationCleanupFailuresKeepOwnershipForRetry
+[       OK ] CommandBatch.SimulationCleanupFailuresKeepOwnershipForRetry (59 ms)
+[ RUN      ] CommandBatch.SimulationPolicyValidationReplacementAndFrozenMutation
+[       OK ] CommandBatch.SimulationPolicyValidationReplacementAndFrozenMutation (0 ms)
+[ RUN      ] CommandBatch.SimulationNativeCapabilityCannotOptIn
+[       OK ] CommandBatch.SimulationNativeCapabilityCannotOptIn (0 ms)
+[ RUN      ] CommandBatch.SimulationIndependentOwnersAndMemoryAccounting
+[       OK ] CommandBatch.SimulationIndependentOwnersAndMemoryAccounting (38 ms)
+[ RUN      ] CommandBatch.SimulationQueuedWatchdogExpiresBehindBlockedSubmit
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_device_rate_simulation.cpp:190: Failure
+Expected equality of these values:
+  f.runtime.finalize()
+    Which is: 4-byte object <FD-FF FF-FF>
+  rt::Status::ok
+    Which is: 4-byte object <00-00 00-00>
+device-rate timeline progress has multiple signal owners
+
+[  FAILED  ] CommandBatch.SimulationQueuedWatchdogExpiresBehindBlockedSubmit (0 ms)
+[ RUN      ] CommandBatch.SimulationFailedBackendCompletionCannotAdvanceTimeline
+[       OK ] CommandBatch.SimulationFailedBackendCompletionCannotAdvanceTimeline (8 ms)
+[----------] 11 tests from CommandBatch (340 ms total)
+
+[----------] 2 tests from MixedRateReplay
+[ RUN      ] MixedRateReplay.SimulationPolicyIdentityRejectsForeignCheckpointBeforeMutation
+[       OK ] MixedRateReplay.SimulationPolicyIdentityRejectsForeignCheckpointBeforeMutation (15 ms)
+[ RUN      ] MixedRateReplay.SimulationReplayUsesRecordedTimeAndKeepsHostWatchdog
+[       OK ] MixedRateReplay.SimulationReplayUsesRecordedTimeAndKeepsHostWatchdog (61 ms)
+[----------] 2 tests from MixedRateReplay (76 ms total)
+
+[----------] Global test environment tear-down
+[==========] 13 tests from 2 test suites ran. (417 ms total)
+[  PASSED  ] 12 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] CommandBatch.SimulationQueuedWatchdogExpiresBehindBlockedSubmit
+
+ 1 FAILED TEST

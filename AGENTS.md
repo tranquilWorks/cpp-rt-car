@@ -427,3 +427,19 @@ Canonical amendment PR548 merged at ab889ba70d768b73eb9c209d6aaa57f8febe92b0, bl
 Active replay is originating-owner bound; verify same-owner trusted replay,
 explicit cross-owner rejection and fresh-owner paired-checkpoint recovery.
 Preserve Runtime and the frozen M26-01 scenario without artifact identity rewriting.
+
+## M26-03R simulator timing activation
+
+Owner approved the proposed simulator timing policy by answering go03. Canonical
+control PR553 merged at f547500aeff2a65611c640a2731e17832d0fc529,
+blob 13ff06d2169c04835b16363f6f4f5ade0c8d9a78. Implement only the additive opt-in policy and bounded
+Runtime enforcement/regressions under the active contract from merged M26-02.
+Preserve feature draft277 at494a7cd and all failures. No default/native deadline
+weakening or frozen scenario change. All32 exact-head gates remain required.
+After repair integration canonically reactivate and finish M26-03; later batches
+remain inactive. Standing scoped publication/integration authority persists.
+
+Canonical source-binding amendment PR554 merged at 3c3cc89254961726b1e0970109d9c30c35d1bf1a,
+blob 89008db136e5c4d23f6888b76503f19d629ef29c. Refresh only current product_sources hashes
+in docs/cuda_capabilities.json; preserve every historical gate/source/evidence
+binding, capability row, denominator and prior checker/test. Rerun all gates.
