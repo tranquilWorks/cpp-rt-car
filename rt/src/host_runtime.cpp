@@ -1435,6 +1435,11 @@ struct Runtime::Impl {
                 hash_u64(hash, phase.domain.index());
                 hash_u64(hash, phase.completion_budget_ns);
                 hash_u64(hash, phase.maximum_in_flight);
+                if (phase.simulation) {
+                  // Conditional marker preserves every default-path identity.
+                  hash_u64(hash, 0x4d32362d73696d31ull);
+                  hash_u64(hash, phase.simulation->host_watchdog_ns);
+                }
                 hash_u64(hash, phase.payload_reference_count);
                 const auto end = phase.first_payload_reference_index +
                     phase.payload_reference_count;
@@ -5858,6 +5863,7 @@ struct Runtime::Impl {
                 const auto active_rate = self.active_reference_index !=
                     invalid_reference_release_index;
                 detail::DeviceRateReleaseIdentity identity;
+                detail::DeviceRateSimulationTiming simulation_timing;
                 bool dispatch_ready = true;
                 if (active_rate) {
                     if (!detail::batch_matches_declaration(
@@ -5907,6 +5913,18 @@ struct Runtime::Impl {
                                 const auto& release = self
                                     .compiled_rate_plan.releases[
                                         self.active_reference_index];
+                                const auto &simulation =
+                                    self.compiled_device_rate_plan
+                                        .phases[device_phase_index]
+                                        .simulation;
+                                if (simulation) {
+                                  simulation_timing = {
+                                      simulation->host_watchdog_ns,
+                                      self.active_replay_view ? nullptr
+                                                              : self.clock,
+                                      now + materialized_batch.timeout_ns,
+                                  };
+                                }
                                 identity = {
                                     self.active_reference_index,
                                     release.domain,
@@ -5933,14 +5951,16 @@ struct Runtime::Impl {
                     }
                 }
                 if (dispatch_ready) {
-                    status = self.devices->submit_batch(
-                        callback.device_backend_index, index,
-                        task_context.worker_index(),
-                        self.active_frame->frame_index, materialized_batch,
-                        materialized_declaration, batch_id,
-                        active_rate ? &identity : nullptr,
-                        active_rate ? &self.active_device_ticket : nullptr);
-                    pending = status == Status::ok && !active_rate;
+                  status = self.devices->submit_batch(
+                      callback.device_backend_index, index,
+                      task_context.worker_index(),
+                      self.active_frame->frame_index, materialized_batch,
+                      materialized_declaration, batch_id,
+                      active_rate ? &identity : nullptr,
+                      active_rate ? &self.active_device_ticket : nullptr,
+                      simulation_timing.host_watchdog_ns ? &simulation_timing
+                                                         : nullptr);
+                  pending = status == Status::ok && !active_rate;
                 }
             }
             if (self.mixed_rate_actions &&
@@ -7941,10 +7961,18 @@ Status Runtime::bind_device_phase_to_rate_domain(
             Status::invalid_argument,
             "active device-rate admission requires a HAL-v2 command-batch phase");
     }
-    if (binding.completion_budget_ns == 0 ||
-        binding.maximum_in_flight == 0) {
-        return impl_->fail(Status::invalid_argument,
-                           "device-rate completion budget and in-flight demand must be positive");
+    if (binding.completion_budget_ns == 0 || binding.maximum_in_flight == 0 ||
+        !detail::valid_simulation_policy(binding.simulation)) {
+      return impl_->fail(Status::invalid_argument,
+                         "device-rate completion budget and in-flight demand "
+                         "must be positive");
+    }
+    if (binding.simulation &&
+        impl_->device_backends[callback.device_backend_index]
+                .capabilities.deterministic_mock == 0) {
+      return impl_->fail(
+          Status::invalid_config,
+          "simulation timing requires a deterministic mock backend");
     }
     std::size_t reference_count = 0;
     for (std::size_t index = 0;
@@ -7984,8 +8012,9 @@ Status Runtime::bind_device_phase_to_rate_domain(
             binding.domain,
             binding.completion_budget_ns,
             binding.maximum_in_flight,
-            std::vector<DeviceRatePayloadRole>(
-                binding.payload_roles.begin(), binding.payload_roles.end()),
+            std::vector<DeviceRatePayloadRole>(binding.payload_roles.begin(),
+                                               binding.payload_roles.end()),
+            binding.simulation,
         });
         impl_->rate_bindings.swap(rate_bindings);
         impl_->device_rate_bindings.swap(device_bindings);
@@ -8014,10 +8043,18 @@ Status Runtime::replace_device_rate_binding(
         !impl_->valid_rate_domain(binding.domain) ||
         impl_->callbacks[binding.phase.index()].kind !=
             Impl::PhaseKind::device_batch ||
-        binding.completion_budget_ns == 0 ||
-        binding.maximum_in_flight == 0) {
-        return impl_->fail(Status::invalid_argument,
-                           "replacement device-rate binding is malformed");
+        binding.completion_budget_ns == 0 || binding.maximum_in_flight == 0 ||
+        !detail::valid_simulation_policy(binding.simulation)) {
+      return impl_->fail(Status::invalid_argument,
+                         "replacement device-rate binding is malformed");
+    }
+    if (binding.simulation &&
+        impl_->device_backends[impl_->callbacks[binding.phase.index()]
+                                   .device_backend_index]
+                .capabilities.deterministic_mock == 0) {
+      return impl_->fail(
+          Status::invalid_config,
+          "simulation timing requires a deterministic mock backend");
     }
     const auto existing = std::find_if(
         impl_->device_rate_bindings.begin(),
@@ -8048,24 +8085,25 @@ Status Runtime::replace_device_rate_binding(
                            "replacement payload roles do not cover the copied declaration");
     }
     try {
-        detail::DeviceRateBindingSpec replacement{
-            binding.phase,
-            binding.domain,
-            binding.completion_budget_ns,
-            binding.maximum_in_flight,
-            std::vector<DeviceRatePayloadRole>(
-                binding.payload_roles.begin(), binding.payload_roles.end()),
-        };
-        auto rate_bindings = impl_->rate_bindings;
-        auto device_bindings = impl_->device_rate_bindings;
-        rate_bindings[static_cast<std::size_t>(
-            rate_existing - impl_->rate_bindings.begin())].domain =
-            binding.domain;
-        device_bindings[static_cast<std::size_t>(
-            existing - impl_->device_rate_bindings.begin())] =
-            std::move(replacement);
-        impl_->rate_bindings.swap(rate_bindings);
-        impl_->device_rate_bindings.swap(device_bindings);
+      detail::DeviceRateBindingSpec replacement{
+          binding.phase,
+          binding.domain,
+          binding.completion_budget_ns,
+          binding.maximum_in_flight,
+          std::vector<DeviceRatePayloadRole>(binding.payload_roles.begin(),
+                                             binding.payload_roles.end()),
+          binding.simulation,
+      };
+      auto rate_bindings = impl_->rate_bindings;
+      auto device_bindings = impl_->device_rate_bindings;
+      rate_bindings[static_cast<std::size_t>(rate_existing -
+                                             impl_->rate_bindings.begin())]
+          .domain = binding.domain;
+      device_bindings[static_cast<std::size_t>(
+          existing - impl_->device_rate_bindings.begin())] =
+          std::move(replacement);
+      impl_->rate_bindings.swap(rate_bindings);
+      impl_->device_rate_bindings.swap(device_bindings);
     } catch (const std::bad_alloc&) {
         return impl_->fail(Status::resource_exhausted, nullptr);
     } catch (...) {
@@ -8985,6 +9023,8 @@ Status Runtime::finalize() noexcept {
                  index < impl_->device_backends.size(); ++index) {
                 const auto& backend = impl_->device_backends[index];
                 detail::DeviceRateBackendSource source;
+                source.deterministic_mock =
+                    backend.capabilities.deterministic_mock != 0;
                 source.backend = DeviceBackendHandle{
                     impl_->graph_owner, static_cast<std::uint32_t>(index)};
                 if (backend.command_state) {

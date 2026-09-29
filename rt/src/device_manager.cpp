@@ -1026,7 +1026,8 @@ Status DeviceManager::submit_batch(
     const DeviceCommandBatch& declaration,
     std::uint64_t& out_batch_id,
     const DeviceRateReleaseIdentity* rate_identity,
-    DeviceRateTicket* rate_ticket) noexcept {
+    DeviceRateTicket* rate_ticket,
+    const DeviceRateSimulationTiming* simulation) noexcept {
     out_batch_id = 0;
     if (rate_ticket) {
         *rate_ticket = {};
@@ -1042,16 +1043,23 @@ Status DeviceManager::submit_batch(
          (rate_identity->reference_index ==
               std::numeric_limits<std::size_t>::max() ||
           !rate_identity->domain.valid() || !rate_identity->phase.valid() ||
-          rate_identity->phase.index() != phase_index))) {
+          rate_identity->phase.index() != phase_index)) ||
+        (simulation &&
+         (!rate_identity || simulation->host_watchdog_ns == 0 ||
+          simulation->host_watchdog_ns > device_rate_simulation_watchdog_limit_ns ||
+          backends_[backend_index].capabilities.deterministic_mock == 0))) {
         return Status::invalid_argument;
     }
     const auto& capabilities =
         backends_[backend_index].command_state->capabilities;
+    const auto simulation_start_ns = simulation ? monotonic_now_ns() : 0;
     if (requested.command_count > capabilities.max_commands_per_batch ||
         requested.wait_count > capabilities.max_wait_points ||
         requested.signal_count > capabilities.max_signal_points ||
         requested.timeout_ns >
-            std::numeric_limits<std::uint64_t>::max() - monotonic_now_ns()) {
+            std::numeric_limits<std::uint64_t>::max() - monotonic_now_ns() ||
+        (simulation && simulation->host_watchdog_ns >
+            std::numeric_limits<std::uint64_t>::max() - simulation_start_ns)) {
         return Status::invalid_argument;
     }
     auto& control = batch_backends_[backend_index];
@@ -1320,7 +1328,12 @@ Status DeviceManager::submit_batch(
     slot->frame_index = frame_index;
     slot->sequence = control.next_sequence.fetch_add(
         1, std::memory_order_relaxed);
-    slot->deadline_ns = monotonic_now_ns() + requested.timeout_ns;
+    slot->deadline_ns = simulation
+        ? simulation_start_ns + simulation->host_watchdog_ns
+        : monotonic_now_ns() + requested.timeout_ns;
+    slot->simulation_timing = simulation != nullptr;
+    slot->logical_clock = simulation ? simulation->logical_clock : nullptr;
+    slot->logical_deadline_ns = simulation ? simulation->logical_deadline_ns : 0;
     slot->early_completion = {};
     slot->early_completion_valid = false;
     slot->cancellation_requested.store(false, std::memory_order_relaxed);
@@ -1529,6 +1542,21 @@ void DeviceManager::finish_batch_slot(
     Status status,
     bool publish_timeline,
     const HalV2BatchCompletion* completion) noexcept {
+    // This caller owns the slot. Validate simulator deadlines before either
+    // timeline or payload success, without interpreting backend timestamps as
+    // Runtime-clock timestamps.
+    if (slot.simulation_timing.load(std::memory_order_relaxed)) {
+        if (status == Status::ok &&
+            (monotonic_now_ns() >=
+                 slot.deadline_ns.load(std::memory_order_relaxed) ||
+             (slot.logical_clock &&
+              slot.logical_clock->now_ns() >= slot.logical_deadline_ns))) {
+            status = Status::device_timeout;
+        }
+        if (status != Status::ok) {
+            publish_timeline = false;
+        }
+    }
     if (publish_timeline) {
         for (std::size_t index = 0; index < slot.batch.signal_count; ++index) {
             const auto handle = DeviceTimelineHandle{
@@ -1564,7 +1592,8 @@ void DeviceManager::finish_batch_slot(
     if (slot.rate_owned) {
         slot.graph_released.store(true, std::memory_order_release);
         slot.terminal_status = status;
-        if (status == Status::ok && completion) {
+        if (completion && (status == Status::ok ||
+                           slot.simulation_timing.load(std::memory_order_relaxed))) {
             slot.early_completion = *completion;
             slot.early_completion_valid = true;
         }
@@ -2135,16 +2164,25 @@ void DeviceManager::service_loop() noexcept {
             for (std::size_t offset = 0; offset < control.slot_count; ++offset) {
                 auto& slot = batch_slots_[control.slot_offset + offset];
                 const auto state = slot.state.load(std::memory_order_acquire);
+                const bool simulator = slot.simulation_timing.load(
+                    std::memory_order_relaxed);
                 if ((state == kBatchSubmitted ||
-                     (state == kBatchSubmitting && slot.rate_owned)) &&
+                     (state == kBatchSubmitting && slot.rate_owned) ||
+                     (simulator && (state == kBatchQueued ||
+                                    state == kBatchEarlyReady))) &&
                     monotonic_now_ns() >= slot.deadline_ns) {
                     auto expected = state;
-                    const auto target = slot.rate_owned
+                    const auto target = slot.rate_owned && state != kBatchQueued
                         ? kBatchRateQuarantineOwned
                         : kBatchOwned;
                     if (!slot.state.compare_exchange_strong(
                             expected, target, std::memory_order_acq_rel,
                             std::memory_order_relaxed)) {
+                        continue;
+                    }
+                    if (state == kBatchQueued) {
+                        // No vendor callback owns an unsent batch.
+                        finish_batch_slot(slot, Status::device_timeout, false);
                         continue;
                     }
                     if (!slot.cancellation_requested.exchange(

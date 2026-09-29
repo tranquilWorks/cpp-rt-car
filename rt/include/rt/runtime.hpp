@@ -1574,12 +1574,29 @@ enum class DeviceRatePayloadRole : std::uint8_t {
     input_output = 3,
 };
 
+// Explicit deterministic-simulator policy; never inferred from the backend.
+// The logical completion budget and backend command timeout remain unchanged.
+// The host watchdog independently bounds lane liveness. HAL callbacks must
+// still be bounded/nonblocking; this policy cannot preempt vendor code.
+inline constexpr std::uint64_t device_rate_simulation_watchdog_limit_ns =
+    60'000'000'000ull;
+
+struct DeviceRateSimulationPolicy {
+  // Present zero is invalid. Absence of the policy retains native semantics.
+  std::uint64_t host_watchdog_ns = 0;
+};
+
 struct DeviceRatePhaseBinding {
     PhaseHandle phase{};
     RateDomainHandle domain{};
     std::uint64_t completion_budget_ns = 0;
     std::uint32_t maximum_in_flight = 0;
     std::span<const DeviceRatePayloadRole> payload_roles{};
+    // Requires deterministic_mock and a bounded, monotonic RuntimeClock that
+    // permits concurrent now_ns() reads on Runtime device lanes. Active replay
+    // uses recorded logical decisions, not the current clock; its independent
+    // host watchdog and the deterministic backend command timeout still apply.
+    std::optional<DeviceRateSimulationPolicy> simulation{};
 };
 
 enum class DeviceRateReferenceKind : std::uint8_t {
@@ -1610,6 +1627,7 @@ struct CompiledDeviceRatePhase {
     std::size_t first_timeline_reference_index = 0;
     std::size_t timeline_reference_count = 0;
     std::uint64_t completion_timestamp_domain_identity = 0;
+    std::optional<DeviceRateSimulationPolicy> simulation{};
 };
 
 struct CompiledDeviceRateCommand {

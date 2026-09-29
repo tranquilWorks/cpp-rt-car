@@ -600,3 +600,14 @@ See [benchmarking](benchmarking.md) for build, install, provider and artifact co
 ## CPU benchmarks (M23-02)
 
 M23-02 adds a non-exported CPU fixture library and installed example sources. Only that provider and the CLI link Runtime; the `rtfw::benchmark` dependency boundary remains unchanged. Runtime dies before its borrowed queue, memory and callback owners. Metadata discovery executes no workload or policy operation.
+
+### Opt-in simulator device-rate clock policy
+
+M26-03R copies an optional finite simulator host watchdog with each device-rate
+binding, validates deterministic-mock capability, exposes the compiled policy,
+and conditionally includes it in graph/configuration identity. Existing lanes
+and preallocated slots enforce it; no new executor, thread, allocation or clock
+correlation is introduced. Slot-owned terminal validation checks logical expiry
+before success, and the independent wall watchdog bounds pending work. Active
+replay retains recorded logical decisions. Absent policy leaves default/native
+semantics and artifact identities unchanged. See [device backend](device_backend.md).

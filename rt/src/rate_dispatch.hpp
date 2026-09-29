@@ -75,6 +75,7 @@ struct DeviceRateBackendSource {
     HalV2CommandTimelineCapabilities capabilities{};
     std::uint64_t completion_timestamp_domain_identity = 0;
     bool completion_timestamp_domain_valid = false;
+    bool deterministic_mock = false;
 };
 
 struct DeviceRateBufferSource {

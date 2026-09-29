@@ -1,0 +1,83 @@
+Running main() from /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/external/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = CommandBatch.Simulation*:MixedRateReplay.Simulation*
+[==========] Running 11 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 9 tests from CommandBatch
+[ RUN      ] CommandBatch.SimulationHostDelayPreservesLogicalBudget
+[       OK ] CommandBatch.SimulationHostDelayPreservesLogicalBudget (35 ms)
+[ RUN      ] CommandBatch.SimulationDefaultPathNegativeControlRetainsWallDeadline
+[       OK ] CommandBatch.SimulationDefaultPathNegativeControlRetainsWallDeadline (11 ms)
+[ RUN      ] CommandBatch.SimulationFrozenClockStillHasFiniteWatchdog
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_device_rate_simulation.cpp:60: Failure
+Expected equality of these values:
+  f.backend.registered.load()
+    Which is: 0
+  1u
+    Which is: 1
+
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_device_rate_simulation.cpp:63: Failure
+Expected equality of these values:
+  f.backend.unregistered.load()
+    Which is: 0
+  1u
+    Which is: 1
+
+[  FAILED  ] CommandBatch.SimulationFrozenClockStillHasFiniteWatchdog (58 ms)
+[ RUN      ] CommandBatch.SimulationLogicalExpiryCannotPublishLateCompletion
+[       OK ] CommandBatch.SimulationLogicalExpiryCannotPublishLateCompletion (16 ms)
+[ RUN      ] CommandBatch.SimulationSubmittingAndEarlyCompletionRetainOwnership
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_device_rate_simulation.cpp:88: Failure
+Expected equality of these values:
+  f.backend.unregistered.load()
+    Which is: 0
+  1u
+    Which is: 1
+
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_device_rate_simulation.cpp:88: Failure
+Expected equality of these values:
+  f.backend.unregistered.load()
+    Which is: 0
+  1u
+    Which is: 1
+
+[  FAILED  ] CommandBatch.SimulationSubmittingAndEarlyCompletionRetainOwnership (115 ms)
+[ RUN      ] CommandBatch.SimulationCleanupFailuresKeepOwnershipForRetry
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_device_rate_simulation.cpp:96: Failure
+Expected: (f.runtime.stop()) != (rt::Status::ok), actual: 4-byte object <00-00 00-00> vs 4-byte object <00-00 00-00>
+
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_device_rate_simulation.cpp:99: Failure
+Expected equality of these values:
+  f.backend.unregistered.load()
+    Which is: 0
+  1u
+    Which is: 1
+
+[  FAILED  ] CommandBatch.SimulationCleanupFailuresKeepOwnershipForRetry (59 ms)
+[ RUN      ] CommandBatch.SimulationPolicyValidationReplacementAndFrozenMutation
+[       OK ] CommandBatch.SimulationPolicyValidationReplacementAndFrozenMutation (0 ms)
+[ RUN      ] CommandBatch.SimulationNativeCapabilityCannotOptIn
+[       OK ] CommandBatch.SimulationNativeCapabilityCannotOptIn (0 ms)
+[ RUN      ] CommandBatch.SimulationIndependentOwnersAndMemoryAccounting
+[       OK ] CommandBatch.SimulationIndependentOwnersAndMemoryAccounting (21 ms)
+[----------] 9 tests from CommandBatch (318 ms total)
+
+[----------] 2 tests from MixedRateReplay
+[ RUN      ] MixedRateReplay.SimulationPolicyIdentityRejectsForeignCheckpointBeforeMutation
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_device_rate_simulation.cpp:154: Failure
+Expected: (x.config_id) != (y.config_id), actual: 9886921744750687941 vs 9886921744750687941
+
+[  FAILED  ] MixedRateReplay.SimulationPolicyIdentityRejectsForeignCheckpointBeforeMutation (20 ms)
+[ RUN      ] MixedRateReplay.SimulationReplayUsesRecordedTimeAndKeepsHostWatchdog
+[       OK ] MixedRateReplay.SimulationReplayUsesRecordedTimeAndKeepsHostWatchdog (57 ms)
+[----------] 2 tests from MixedRateReplay (77 ms total)
+
+[----------] Global test environment tear-down
+[==========] 11 tests from 2 test suites ran. (396 ms total)
+[  PASSED  ] 7 tests.
+[  FAILED  ] 4 tests, listed below:
+[  FAILED  ] CommandBatch.SimulationFrozenClockStillHasFiniteWatchdog
+[  FAILED  ] CommandBatch.SimulationSubmittingAndEarlyCompletionRetainOwnership
+[  FAILED  ] CommandBatch.SimulationCleanupFailuresKeepOwnershipForRetry
+[  FAILED  ] MixedRateReplay.SimulationPolicyIdentityRejectsForeignCheckpointBeforeMutation
+
+ 4 FAILED TESTS

@@ -1,3 +1,18 @@
+# M26-03R simulator timing repair
+
+Owner approved the explicit simulator timing policy; canonical control PR553
+and source-binding amendment PR554 are merged; active canonical revision
+3c3cc89254961726b1e0970109d9c30c35d1bf1a. Repair implementation is
+isolated from M26-02 main; preserve M26-03 feature draft277 and all timeout
+failures. The additive policy keeps logical budgets/backend command timeouts
+and all default/native semantics while bounding simulator host liveness.
+No repair or M26-03 completion is claimed before full local and all32 exact-head
+hosted checks and separate integration. After repair merge, canonically
+reactivate and finish feature277. M26-04..06 remain inactive; human/physical/RT,
+Unreal and release/signing/deployment remain separate.
+
+## Prior M26-02 checkpoint
+
 # M26-02 portable golden reference
 
 M26-01 merged as PR275 at11fce253dc601824eeadbce519b8135bc778815c.

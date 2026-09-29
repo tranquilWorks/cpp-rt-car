@@ -34,7 +34,15 @@ struct DeviceRateBindingSpec {
     std::uint64_t completion_budget_ns = 0;
     std::uint32_t maximum_in_flight = 0;
     std::vector<DeviceRatePayloadRole> payload_roles;
+    std::optional<DeviceRateSimulationPolicy> simulation{};
 };
+
+inline bool valid_simulation_policy(
+    const std::optional<DeviceRateSimulationPolicy> &policy) noexcept {
+  return !policy ||
+         (policy->host_watchdog_ns != 0 &&
+          policy->host_watchdog_ns <= device_rate_simulation_watchdog_limit_ns);
+}
 
 struct CompiledRatePlan {
     std::uint64_t supercycle_ns = 0;
