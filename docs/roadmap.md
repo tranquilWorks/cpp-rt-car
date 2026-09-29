@@ -1,3 +1,15 @@
+# M26-04 feature resumed after sampled recovery repair
+
+Repair282 is merged at f5402b9a646a6d7adfbb54f5eca2170a69a6e292; all32 final checks and local full110+114,
+sanitizers11+11, allocation/static/full55SDK/default artifact checks pass.
+Canonical reactivation 1a2c1ee989319ffcd6c2d1874f13e1ed0f82bccb, blob e45d19649894bbc4f4abb92645730b812afc986f, is merged.
+Complete retained feature279: all original execution/parity/safety/replay/fault,
+installed-kit, artifact, documentation and fresh local/all32 gates remain binding.
+Preserve all repaired Runtime/native sources and prior tests/evidence.
+M26-05/M26-06 remain inactive; physical/manual/RT/Unreal/release gates stay separate.
+
+## Historical checkpoints
+
 # M26-04 XDMA feature resumed after storage repair
 
 Repair target281 is merged at 242793be0cb1ff75b56c74e5b89d0f6e8a21fd76; all32 final checks, full109+113,
@@ -85,6 +97,33 @@ M26-05 showcase and M26-06 final audit remain inactive; human/physical/RT/Unreal
 controlled-performance/release gates remain separate.
 
 ## Historical M26-03 completion
+
+# M26-04R3 local verification complete; integration required
+
+Sampled cleanup/checkpoint repair passes full110+114, focused110 including11
+new tests, ASan/UBSan/leaks11, TSan11, zero-allocation controls,36TU static,
+relocated full55 SDK and exact default MemoryPlan/checkpoint/active bytes.
+See evidence/M26-04R3-2026-09-29.md and PR282 for final-head integration evidence.
+Require all32 exact-head successful checks and guarded merge; then canonically
+reactivate and FINISH feature279. M26-05/M26-06 remain inactive.
+No physical/HIL/RT/human/release claim. Earlier checkpoint notes are history.
+
+## Earlier activation and history
+
+# M26-04R3 sampled lifecycle and checkpoint repair active
+
+Control567 merged 0284c417e74c43742b96ffdc1ad025752d34559e, canonical blob e16883d10d151fc8873bfc1069cfaf290aae5fc9.
+Baseline target242793be0cb1ff75b56c74e5b89d0f6e8a21fd76 includes both prior repairs.
+New independent public-SDK/native-XDMA consumer proves old-order cleanup retry
+returns invalid_state and intermediate produced checkpoint read returns not_ready.
+Repair private lifecycle stage retention and validated sampled provenance, keeping
+exact public/default bytes and MemoryPlan. No new public policy or format.
+Retain feature279 at e9d7d025552c61379c4d4530888ce512a31b266a, integrate this
+repair only after all local and exact32 gates, then canonically reactivate and
+finish every original M26-04 acceptance. M26-05/M26-06 stay inactive.
+No physical/human/HIL/RT/Unreal/performance/release claim.
+
+## Earlier checkpoint
 
 # M26-04R2 locally complete; exact-head integration required
 

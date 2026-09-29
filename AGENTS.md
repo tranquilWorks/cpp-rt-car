@@ -547,3 +547,27 @@ backends and all prior/repair tests/evidence remain protected. Complete every
 original feature acceptance and fresh local/all32 gates before integration.
 M26-05/M26-06 remain inactive; standing scoped publication/merge authority persists.
 Earlier blocked checkpoints are historical; no physical/human/RT/release claim.
+
+## M26-04R3 sampled lifecycle/recovery prerequisite
+
+Canonical control567 merged at 0284c417e74c43742b96ffdc1ad025752d34559e, blob e16883d10d151fc8873bfc1069cfaf290aae5fc9.
+The owner requested repair and finish. Scope this necessary private Runtime
+correction separately under that authorization, preserving public formats,
+default bytes/MemoryPlan, native backends and every prior repair/test/evidence.
+Feature279 is retained at e9d7d025552c61379c4d4530888ce512a31b266a.
+Require both unchanged-baseline negatives, full local/sanitizer/static/package
+and exact32 gates; integrate, canonically reactivate and complete the feature.
+No public format/design expansion without a separate explicit decision.
+M26-05/M26-06 inactive; standing scoped publication/integration persists.
+Earlier feature checkpoints are historical, not closure.
+
+## M26-04 resumed after sampled recovery repair
+
+Repair282 merged at f5402b9a646a6d7adfbb54f5eca2170a69a6e292 after all32 exact-head checks and full110+114,
+sanitizers11+11, allocation/static/full55SDK/default-byte verification.
+Canonical reactivation 1a2c1ee989319ffcd6c2d1874f13e1ed0f82bccb, blob e45d19649894bbc4f4abb92645730b812afc986f, is merged.
+Finish preserved feature279 under the complete original M26-04 acceptance.
+Preserve every Runtime/native/repair source, prior test and failed evidence.
+Frozen ring4, native CUDA1/XDMA2 with combined aggregate3, safe8ms remain fixed.
+M26-05/M26-06 stay inactive. Standing scoped publication/merge authority persists.
+No physical/HIL/RT/human/Unreal/performance/release claim. Earlier notes are history.
