@@ -422,3 +422,17 @@ and XDMA batches complete independently. A CPU dependency phase copies a fixed
 extent between disjoint host regions only after the CUDA download completes;
 no cross-backend timeline, fence, registration, coherency, or direct peer DMA
 is created. Injected protocol behavior is not physical device evidence.
+
+## Explicit four-slot sampled storage
+
+The existing sampled-I/O `ring_capacity` accepts 2 or 4. Four selects a real
+bounded four-slot cross-rate snapshot store for that channel. It does not
+increase the device phase's declared maximum in flight, backend queue size or
+device staging envelope. Ordinary channels and the default two-slot constant
+remain unchanged. Invalid counts and inconsistent frame geometry fail before
+four-slot storage allocation; existing global byte and Runtime budgets apply.
+
+No native capability, timeout, sampled safe acknowledgement, public structure
+layout or artifact schema changes. Existing ring capacity identity makes two-
+and four-slot checkpoints/replay incompatible before state changes. See
+[memory accounting](docs__memory_plan.md) for the exact reconciled counts.

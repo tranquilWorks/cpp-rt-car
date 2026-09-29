@@ -228,3 +228,8 @@ target_link_libraries(rtfw_device_rate_simulation_consumer PRIVATE rtfw::runtime
 add_test(NAME device_rate_simulation_package_consumer COMMAND rtfw_device_rate_simulation_consumer)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/../golden_cuda/package_contract.cmake")
+
+add_executable(rtfw_sampled_storage_consumer sampled_io_storage_consumer.cpp)
+target_link_libraries(rtfw_sampled_storage_consumer PRIVATE rtfw::runtime)
+add_test(NAME sampled_storage_package_consumer COMMAND rtfw_sampled_storage_consumer)
+add_test(NAME sampled_storage_default_package_consumer COMMAND rtfw_sampled_storage_consumer --two)

@@ -172,6 +172,7 @@ struct CrossRateCompileDiagnostic {
     const CompiledDeviceRatePlan* device_rate_plan,
     std::span<const CrossRateDeviceBufferSource> device_buffers,
     CompiledCrossRatePlan& output,
-    CrossRateCompileDiagnostic& diagnostic) noexcept;
+    CrossRateCompileDiagnostic& diagnostic,
+    std::span<const std::size_t> snapshot_slot_counts = {}) noexcept;
 
 } // namespace rt::detail

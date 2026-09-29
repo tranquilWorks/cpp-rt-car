@@ -137,6 +137,74 @@ bool sampled_io_frame_valid(
     return header.payload_checksum == sampled_io_payload_checksum(payload);
 }
 
+Status sampled_io_snapshot_slots(
+    std::uint32_t graph_owner,
+    std::span<const SampledIoChannelSpec> specifications,
+    std::span<const CrossRateChannelSpec> cross_rate_specs,
+    std::span<std::size_t> slot_counts,
+    SampledIoCompileDiagnostic& diagnostic) noexcept {
+    diagnostic = {};
+    if (cross_rate_specs.size() > cross_rate_channel_capacity ||
+        specifications.size() > sampled_io_channel_capacity ||
+        slot_counts.size() != cross_rate_specs.size()) {
+        diagnostic = {Status::capacity_exceeded,
+                      "sampled-I/O storage capacity exceeded", {}};
+        return diagnostic.status;
+    }
+    std::array<std::size_t, cross_rate_channel_capacity> candidate{};
+    candidate.fill(cross_rate_snapshot_slot_count);
+    std::array<bool, cross_rate_channel_capacity> seen{};
+    for (std::size_t index = 0; index < specifications.size(); ++index) {
+        const auto& spec = specifications[index];
+        if (!spec.channel.valid() || spec.channel.owner() != graph_owner ||
+            spec.channel.index() >= cross_rate_specs.size() ||
+            spec.channel_identity == 0 ||
+            (spec.ring_capacity != 2 && spec.ring_capacity != 4) ||
+            seen[spec.channel.index()]) {
+            diagnostic = {Status::invalid_argument,
+                          "sampled-I/O storage request is invalid", spec.channel};
+            return diagnostic.status;
+        }
+        for (std::size_t prior = 0; prior < index; ++prior) {
+            if (specifications[prior].channel_identity == spec.channel_identity) {
+                diagnostic = {Status::invalid_argument,
+                              "sampled-I/O storage identity is duplicated", spec.channel};
+                return diagnostic.status;
+            }
+        }
+        // Four-slot geometry must be proven before allocating the larger store.
+        // Existing two-slot validation and its diagnostic ordering stay intact.
+        if (spec.ring_capacity == 4) {
+            const auto width = sampled_io_encoding_bytes(spec.encoding);
+            std::size_t values = 0, payload = 0, bytes = 0;
+            if (!width || !spec.element_count || !spec.samples_per_frame ||
+                !enum_valid(spec.direction)) {
+                diagnostic = {Status::invalid_argument,
+                              "sampled-I/O storage geometry is invalid", spec.channel};
+                return diagnostic.status;
+            }
+            if (!checked_multiply_size(spec.element_count, spec.samples_per_frame, values) ||
+                !checked_multiply_size(values, width, payload) ||
+                !checked_add_size(sizeof(SampledIoFrameHeader), payload, bytes) ||
+                bytes > cross_rate_payload_capacity) {
+                diagnostic = {Status::capacity_exceeded,
+                              "sampled-I/O storage geometry overflows", spec.channel};
+                return diagnostic.status;
+            }
+            const auto& cross = cross_rate_specs[spec.channel.index()];
+            if (bytes != cross.payload_size || spec.initial_frame != cross.initial_sample) {
+                diagnostic = {Status::invalid_argument,
+                              "sampled-I/O storage shape disagrees with channel", spec.channel};
+                return diagnostic.status;
+            }
+        }
+        seen[spec.channel.index()] = true;
+        candidate[spec.channel.index()] = spec.ring_capacity;
+    }
+    std::copy_n(candidate.begin(), slot_counts.size(), slot_counts.begin());
+    return Status::ok;
+}
+
 Status compile_sampled_io(
     std::uint32_t graph_owner,
     std::span<const SampledIoChannelSpec> specifications,
@@ -180,8 +248,7 @@ Status compile_sampled_io(
                 spec.timestamp_domain_identity == 0 ||
                 spec.clock_domain_identity == 0 ||
                 !enum_valid(spec.trigger_mode) || spec.trigger_identity == 0 ||
-                spec.ring_capacity == 0 ||
-                spec.ring_capacity > cross_rate_snapshot_slot_count ||
+                (spec.ring_capacity != 2 && spec.ring_capacity != 4) ||
                 spec.initial_sequence == 0 ||
                 !enum_valid(spec.stale_policy) ||
                 !enum_valid(spec.overrun_policy) ||
