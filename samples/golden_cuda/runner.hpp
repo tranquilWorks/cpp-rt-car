@@ -1,11 +1,12 @@
 #pragma once
-// Derived from the M26-02 CLI; shared CPU model, controls and replay remain authoritative.
-#include "physics.hpp"
+// Derived from the M26-02 CLI; shared CPU model, controls and replay remain
+// authoritative.
 #include "../golden_system/oracle.hpp"
 #include "../golden_system/peer.hpp"
-#include "../golden_system/replay.hpp"
 #include "../golden_system/session.hpp"
-#include "../golden_system/telemetry.hpp"
+#include "owner.hpp"
+#include "replay.hpp"
+#include "telemetry.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -30,13 +31,18 @@ bool arguments(int argc, char **argv, Arguments &a) {
     std::string_view value = argv[++i];
     std::uint64_t number = 0;
     if (key == "--dispatch") {
-      if (value != "cpu" && value != "kernel" && value != "graph") return false;
+      if (value != "cpu" && value != "kernel" && value != "graph")
+        return false;
       a.dispatch = value;
     } else if (key == "--fault") {
-      if (value == "none") a.fault = Fault::none;
-      else if (value == "device_loss") a.fault = Fault::device_loss;
-      else if (value == "reset_failure") a.fault = Fault::reset_failure;
-      else return false;
+      if (value == "none")
+        a.fault = Fault::none;
+      else if (value == "device_loss")
+        a.fault = Fault::device_loss;
+      else if (value == "reset_failure")
+        a.fault = Fault::reset_failure;
+      else
+        return false;
     } else if (key == "--mode") {
       if (value != "native" && value != "host")
         return false;
@@ -71,7 +77,10 @@ bool arguments(int argc, char **argv, Arguments &a) {
     }
   }
   return a.scenario.valid() &&
-         (a.fault == Fault::none || (a.dispatch != "cpu" && !a.scenario.external && a.scenario.campaign == Campaign::nominal && a.scenario.ticks >= 19)) &&
+         (a.fault == Fault::none ||
+          (a.dispatch != "cpu" && !a.scenario.external &&
+           a.scenario.campaign == Campaign::nominal &&
+           a.scenario.ticks >= 19)) &&
          (!a.scenario.external ||
           (cil::valid_key(a.peer.key) && a.peer.generation &&
            a.peer.timeout_ms >= 100 && a.peer.timeout_ms <= 5000)) &&
@@ -85,12 +94,6 @@ bool write(const fs::path &path, std::span<const std::byte> bytes) {
   return !f.fail();
 }
 int execute(const Arguments &a) {
-  // This retained prototype is blocked on the separately reviewed timing policy.
-  // Never emit successful artifacts for campaigns not yet integrated here.
-  if (a.fault != Fault::none || a.scenario.campaign == Campaign::overload) {
-    std::cerr << "M26-03 prototype: fault/recovery runner integration is incomplete\n";
-    return 2;
-  }
   const auto o = a.scenario;
 #if defined(_WIN32)
   const auto process_id = GetCurrentProcessId();
@@ -99,26 +102,70 @@ int execute(const Arguments &a) {
 #endif
   const auto session_identity =
       std::to_string(cil::now_ns()) + "-" + std::to_string(process_id);
-  auto memory = std::make_unique<Memory>();
-  auto jobs = std::make_unique<Jobs>();
-  if (o.host && jobs->start(o.workers) != rt::Status::ok)
-    return 1;
-  auto driver = std::make_unique<SimulatedDriver>(o.count);
-  auto physics = std::make_unique<CudaPhysics>(*driver, a.dispatch == "graph");
   const bool device = a.dispatch != "cpu";
-  auto s = std::make_unique<Session>(o, o.host ? jobs.get() : nullptr, *memory, device ? physics.get() : nullptr);
-  auto status = s->prepare();
+  const auto dispatch = a.dispatch == "cpu"      ? Dispatch::cpu
+                        : a.dispatch == "kernel" ? Dispatch::kernel
+                                                 : Dispatch::graph;
+  auto owner = std::make_unique<Owner>(o, dispatch);
+  auto *s = owner->session.get();
+  auto status = owner->prepare();
   if (status != rt::Status::ok) {
     std::cerr << "prepare " << s->runtime->last_error() << '\n';
     return 1;
   }
+  struct Totals {
+    std::uint64_t providers = 0, publications = 0, uploads = 0, copies = 0,
+                  downloads = 0, kernels = 0, graphs = 0, records = 0,
+                  registrations = 0, unregistrations = 0, event_creates = 0,
+                  event_destroys = 0, backend_allocations = 0,
+                  backend_frees = 0, faults = 0, jobs_accepted = 0,
+                  jobs_completed = 0, acquisitions = 0, releases = 0;
+    bool protocol_ok = true;
+    bool close(Owner &v) {
+      if (v.physics) {
+        providers += v.physics->providers;
+        publications += v.physics->publications;
+      }
+      if (v.close() != rt::Status::ok)
+        return false;
+      if (v.driver) {
+        auto &d = *v.driver;
+#define GOLDEN_SUM(field) field += d.field.load()
+        GOLDEN_SUM(uploads);
+        GOLDEN_SUM(copies);
+        GOLDEN_SUM(downloads);
+        GOLDEN_SUM(kernels);
+        GOLDEN_SUM(graphs);
+        GOLDEN_SUM(records);
+        GOLDEN_SUM(registrations);
+        GOLDEN_SUM(unregistrations);
+        GOLDEN_SUM(event_creates);
+        GOLDEN_SUM(event_destroys);
+        GOLDEN_SUM(backend_allocations);
+        GOLDEN_SUM(backend_frees);
+        GOLDEN_SUM(faults);
+#undef GOLDEN_SUM
+        protocol_ok = protocol_ok && d.protocol_ok && d.clean();
+      }
+      jobs_accepted += v.jobs->accepted.load();
+      jobs_completed += v.jobs->completed.load();
+      acquisitions += v.memory->acquisitions;
+      releases += v.memory->releases;
+      return protocol_ok && jobs_accepted == jobs_completed &&
+             acquisitions == releases;
+    }
+  } totals;
+  std::int32_t fault_status = 0, reset_status = 0, retry_status = 0,
+               stop_status = 0;
+  std::uint64_t fault_health = 0, fault_outstanding = 0,
+                prior_device_failures = 0;
   std::unique_ptr<Peer> peer;
   if (o.external) {
     peer = std::make_unique<Peer>(a.peer);
     if (!peer->start())
       return 2;
   }
-  Replay replay(o.ticks, o.external);
+  OwnedReplay replay(o.ticks, o.external);
   if (!replay.begin(*s) || !s->controls())
     return 1;
   Oracle oracle(o);
@@ -128,30 +175,93 @@ int execute(const Arguments &a) {
   std::size_t recoveries = 0;
   std::vector<std::byte> recovery;
   for (std::size_t t = 0; t < o.ticks; ++t) {
-    if (o.campaign == Campaign::overload && t == 6) {
+    if ((o.campaign == Campaign::overload || a.fault != Fault::none) &&
+        t == 6) {
       recovery = s->checkpoint(5);
-      if (recovery.empty() || s->step(t, true) != rt::Status::callback_failed ||
-          s->world.calls[0] != 6 ||
+      if (recovery.empty())
+        return 1;
+      const bool loss = a.fault == Fault::device_loss;
+      const auto expected = a.fault == Fault::none ? rt::Status::callback_failed
+                            : loss                 ? rt::Status::device_lost
+                                   : rt::Status::device_reset_required;
+      if (a.fault != Fault::none) {
+        telemetry.expected_device_failure = expected;
+        if (loss)
+          owner->driver->lose_query = true;
+        else
+          owner->driver->fail_query = true;
+      }
+      const auto plant = s->world.plant;
+      status = s->step(t, a.fault == Fault::none);
+      fault_status = static_cast<std::int32_t>(status);
+      if (status != expected || s->world.calls[1] != 6 ||
+          s->world.calls[2] != 6 || s->world.plant.position != plant.position ||
+          s->world.plant.velocity != plant.velocity ||
+          s->world.plant.acceleration != plant.acceleration ||
           telemetry.drain(*s->runtime) != rt::Status::ok ||
-          telemetry.deadline_failures != 1)
+          telemetry.deadline_failures != (a.fault == Fault::none ? 1u : 0u) ||
+          telemetry.device_failures != (a.fault == Fault::none ? 0u : 1u))
         return 1;
-      if (s->close() != rt::Status::ok)
+      if (a.fault != Fault::none) {
+        rt::DeviceHealth health = rt::make_device_health(),
+                         after = rt::make_device_health();
+        rt::DeviceTimelineInfo timeline;
+        if (owner->driver->faults != 1 || owner->physics->providers != 7 ||
+            owner->physics->publications != 6 ||
+            !owner->physics->timeline(timeline) ||
+            timeline.completed_value != 6 ||
+            owner->physics->health(health) != rt::Status::ok ||
+            health.outstanding != 1)
+          return 1;
+        fault_health = health.state;
+        fault_outstanding = health.outstanding;
+        if (loss) {
+          reset_status = static_cast<std::int32_t>(owner->physics->reset());
+          if (health.state != RTFW_DEVICE_HEALTH_LOST || health.losses != 1 ||
+              reset_status != fault_status)
+            return 1;
+        } else {
+          if (health.state != RTFW_DEVICE_HEALTH_RESET_REQUIRED)
+            return 1;
+          owner->driver->fail_stream_sync = true;
+          reset_status = static_cast<std::int32_t>(owner->physics->reset());
+          if (!reset_status || owner->driver->faults != 2 ||
+              owner->driver->clean() || owner->memory->live_count() != 3)
+            return 1;
+          retry_status = static_cast<std::int32_t>(owner->physics->reset());
+          if (retry_status || owner->physics->health(after) != rt::Status::ok ||
+              after.state != RTFW_DEVICE_HEALTH_HEALTHY || after.outstanding ||
+              after.resets != health.resets + 1 ||
+              after.generation <= health.generation)
+            return 1;
+        }
+        owner->driver->fail_unregister = true;
+        stop_status = static_cast<std::int32_t>(owner->close());
+        if (!stop_status || !owner->session || !owner->physics ||
+            owner->driver->clean() || owner->memory->live_count() != 3)
+          return 1;
+      }
+      if (!totals.close(*owner))
         return 1;
-      s.reset();
-      s = std::make_unique<Session>(o, o.host ? jobs.get() : nullptr, *memory);
-      if (s->prepare() != rt::Status::ok ||
+      owner.reset();
+      owner = std::make_unique<Owner>(o, dispatch);
+      s = owner->session.get();
+      if (owner->prepare() != rt::Status::ok ||
           s->runtime->restore_checkpoint(recovery) != rt::Status::ok ||
           !s->world.decode())
         return 1;
       prior_events = telemetry.events;
       prior_actions = telemetry.action_records;
       prior_failures = telemetry.deadline_failures;
+      prior_device_failures = telemetry.device_failures;
       Telemetry resumed;
       if (!resumed.resume(*s->runtime, telemetry))
         return 1;
       telemetry = resumed;
-      replay = Replay(o.ticks, false, 6);
+      replay = OwnedReplay(o.ticks, false, 6);
       replay.initial = s->checkpoint(5);
+      if (replay.initial.empty())
+        return 1;
       ++recoveries;
     }
     if (peer && t % 3 == 0)
@@ -190,14 +300,10 @@ int execute(const Arguments &a) {
     std::cerr << "replay " << s->runtime->last_error() << '\n';
     return 1;
   }
-  const auto providers = physics->providers, publications = physics->publications;
   rt::DeviceTimelineInfo timeline;
-  if (device && !physics->timeline(timeline)) return 1;
-  if (s->close() != rt::Status::ok) return 1;
-  s.reset();
-  physics.reset();
-  if (!driver->close()) return 1;
-  if (o.host && jobs->close() != rt::Status::ok)
+  if (device && !owner->physics->timeline(timeline))
+    return 1;
+  if (!totals.close(*owner))
     return 1;
   if (peer)
     (void)peer->close();
@@ -205,7 +311,7 @@ int execute(const Arguments &a) {
              peer_cleanup = peer ? peer->cleanup : cil::Code::ok;
   const auto sample_bytes =
       sizeof(Session) + sizeof(Memory) + sizeof(Jobs) + sizeof(Oracle) +
-      sizeof(Replay) + sizeof(Telemetry) + 3 * sizeof(StateBytes) +
+      sizeof(OwnedReplay) + sizeof(Telemetry) + 3 * sizeof(StateBytes) +
       sizeof(SimulatedDriver) + sizeof(CudaPhysics) + 2 * sizeof(Storage) +
       (peer ? sizeof(Peer) + sizeof(cil::Region) : 0) +
       replay.initial.capacity() + replay.active.capacity() +
@@ -222,16 +328,35 @@ int execute(const Arguments &a) {
         !write(a.output / "trusted.bin", replay.trusted))
       return 1;
     std::ofstream f(a.output / "execution.json");
-    f << "{\"dispatch\":\"" << a.dispatch << "\",\"variant\":\"" << (device ? "sim_cuda" : "cpu")
-      << "\",\"device_providers\":" << providers << ",\"device_publications\":" << publications
-      << ",\"device_uploads\":" << driver->uploads << ",\"device_copies\":" << driver->copies
-      << ",\"device_downloads\":" << driver->downloads << ",\"device_kernels\":" << driver->kernels
-      << ",\"device_graphs\":" << driver->graphs << ",\"device_events\":" << driver->records
-      << ",\"device_registrations\":" << driver->registrations << ",\"device_unregistrations\":" << driver->unregistrations
-      << ",\"event_creates\":" << driver->event_creates << ",\"event_destroys\":" << driver->event_destroys
+    f << "{\"dispatch\":\"" << a.dispatch << "\",\"variant\":\""
+      << (device ? "sim_cuda" : "cpu")
+      << "\",\"device_providers\":" << totals.providers
+      << ",\"device_publications\":" << totals.publications
+      << ",\"device_uploads\":" << totals.uploads
+      << ",\"device_copies\":" << totals.copies
+      << ",\"device_downloads\":" << totals.downloads
+      << ",\"device_kernels\":" << totals.kernels
+      << ",\"device_graphs\":" << totals.graphs
+      << ",\"device_events\":" << totals.records
+      << ",\"device_registrations\":" << totals.registrations
+      << ",\"device_unregistrations\":" << totals.unregistrations
+      << ",\"event_creates\":" << totals.event_creates
+      << ",\"event_destroys\":" << totals.event_destroys
       << ",\"device_timeline\":" << timeline.completed_value
-      << ",\"device_protocol\":" << (driver->protocol_ok.load() ? "true" : "false")
-      << ",\"device_allocations\":" << driver->backend_allocations << ",\"device_frees\":" << driver->backend_frees
+      << ",\"device_protocol\":" << (totals.protocol_ok ? "true" : "false")
+      << ",\"device_allocations\":" << totals.backend_allocations
+      << ",\"device_frees\":" << totals.backend_frees << ",\"fault\":\""
+      << (a.fault == Fault::none          ? "none"
+          : a.fault == Fault::device_loss ? "device_loss"
+                                          : "reset_failure")
+      << "\",\"fault_status\":" << fault_status
+      << ",\"reset_status\":" << reset_status
+      << ",\"reset_retry_status\":" << retry_status
+      << ",\"stop_status\":" << stop_status
+      << ",\"fault_health\":" << fault_health
+      << ",\"fault_outstanding\":" << fault_outstanding
+      << ",\"device_faults\":" << totals.faults << ",\"device_failures\":"
+      << prior_device_failures + telemetry.device_failures
       << ",\"schema\":1,\"contract_sha256\":\"" << fixed::contract_sha256
       << "\",\"mode\":\"" << (o.host ? "host" : "native")
       << "\",\"count\":" << o.count << ",\"ticks\":" << o.ticks
@@ -262,10 +387,10 @@ int execute(const Arguments &a) {
       << ",\"replay_actions\":" << replay.result.actions_compared
       << ",\"replay_generations\":" << replay.result.generations_compared
       << ",\"recoveries\":" << recoveries
-      << ",\"jobs_accepted\":" << jobs->accepted.load()
-      << ",\"jobs_completed\":" << jobs->completed.load()
-      << ",\"memory_acquired\":" << memory->acquisitions
-      << ",\"memory_released\":" << memory->releases
+      << ",\"jobs_accepted\":" << totals.jobs_accepted
+      << ",\"jobs_completed\":" << totals.jobs_completed
+      << ",\"memory_acquired\":" << totals.acquisitions
+      << ",\"memory_released\":" << totals.releases
       << ",\"cleanup\":true,\"peer_status\":\"" << cil::name(peer_result)
       << "\",\"peer_cleanup\":\"" << cil::name(peer_cleanup)
       << "\",\"peer_responses\":" << (peer ? peer->responses : 0) << "}\n";
@@ -283,7 +408,9 @@ int portable_main(int argc, char **argv) {
   try {
     Arguments a;
     if (!arguments(argc, argv, a)) {
-      std::cerr << "usage: golden_cuda [--dispatch cpu|kernel|graph] [--fault none|device_loss|reset_failure] [--mode native|host] [--count 1..256] "
+      std::cerr << "usage: golden_cuda [--dispatch cpu|kernel|graph] [--fault "
+                   "none|device_loss|reset_failure] [--mode native|host] "
+                   "[--count 1..256] "
                    "[--ticks 1..1024] [--workers 1..3] [--grain 1|4|16|64] "
                    "[--campaign NAME] [--output DIRECTORY] [--peer NAME "
                    "--generation N --timeout-ms N]\n";

@@ -226,3 +226,5 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../golden_system/package_contract.cmake")
 add_executable(rtfw_device_rate_simulation_consumer device_rate_simulation_consumer.cpp)
 target_link_libraries(rtfw_device_rate_simulation_consumer PRIVATE rtfw::runtime)
 add_test(NAME device_rate_simulation_package_consumer COMMAND rtfw_device_rate_simulation_consumer)
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../golden_cuda/package_contract.cmake")

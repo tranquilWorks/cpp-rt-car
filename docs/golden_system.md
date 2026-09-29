@@ -363,3 +363,6 @@ The old owner drains its prefix and failed attempt before stop; the fresh owner'
 cursors start at its inspected restored boundary, checked against that drained
 prefix, before it executes. Starting a fresh mixed-action cursor at zero would
 incorrectly request the prior owner's history and is rejected as a gap.
+
+The separately scoped [CUDA physics variant](golden_cuda.md) shares this frozen
+scenario and adds explicit injected-driver kernel/Graph execution.
