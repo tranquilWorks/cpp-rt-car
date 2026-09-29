@@ -1,14 +1,16 @@
 # Golden scenario and lever contract
 
-M26-01 defines the **planned** `rtfw.golden.vehicle.v1` reference. The
-[machine-readable contract](../samples/golden_system/contract.json) is frozen
-before implementation. The [validator](../tools/check_golden_contract.py) and
-[mutation tests](../tests/golden_system/test_contract.py) check its shape,
-identities, numerical feasibility, scheduling relationships and claim limits.
-They do not run a Runtime scenario, compile the future graph, establish its
-actual memory admission or measure performance. M26-02 must demonstrate those
-properties through the installed SDK. No golden executable, benchmark result,
-package installation change or hardware qualification is delivered here.
+M26-01 freezes the `rtfw.golden.vehicle.v1`
+[machine-readable contract](../samples/golden_system/contract.json). M26-02 adds
+the [portable execution kit](#m26-02-portable-execution-kit), installed public-SDK
+consumers and actual run/state/replay evidence. CUDA/XDMA, benchmarks and the final
+audit remain later batches. No physical or real-time qualification is implied.
+
+The original [design validator](../tools/check_golden_contract.py) and
+[mutation tests](../tests/golden_system/test_contract.py) continue to check frozen
+shape, identities, numerical feasibility, scheduling relationships and claim limits.
+Those offline checks do not execute Runtime or prove memory admission/performance;
+the separate M26-02 executable tests provide portable execution evidence.
 
 This is a vehicle-like integer workload for framework composition, not a
 vehicle dynamics model or general physics engine. Its state and codecs belong
@@ -181,7 +183,7 @@ no portable claim that arbitrary C++ atomics are process-shared is added.
 
 ## Faults, tuning and artifacts
 
-All eleven faults are planned, with injection phase/tick, a one-affected-release
+The frozen JSON plans eleven faults, with injection phase/tick, a one-affected-release
 detection bound, observable outcome, recovery action and delivery batch in JSON.
 The bound is logical, not a wall-clock deadline. Independent campaigns start
 from fresh owners; faults are not all injected into one run.
@@ -221,8 +223,9 @@ successful artifacts only after validation and checked cleanup; retain failures.
 ## Variants and remaining gates
 
 CPU/native/independent-host and optional external CIL are M26-02; simulated CUDA
-is M26-03; simulated XDMA and combined staged execution are M26-04. Every variant
-is currently **planned**. A real CUDA or XDMA run is **NOT RUN**, requires explicit
+is M26-03; simulated XDMA and combined staged execution are M26-04. The immutable
+M26-01 file retains its original planned statuses; M26-02 execution and later
+unimplemented variants are distinguished below. A real CUDA or XDMA run is **NOT RUN**, requires explicit
 resources and named M18 tuple evidence, and cannot fall back to simulated success.
 Unreal is a separate M19 host/lifecycle gate, not a portable completion prerequisite.
 M26-05 implements the benchmark/fault/lever showcase; M26-06 performs the living
@@ -351,3 +354,12 @@ thread stacks. Host jobs are conserved, borrowed providers outlive Runtime,
 and steady steps/replay are allocation-instrumented. Portable manual-clock runs
 establish logical behavior, not WCET or real-time latency. Local/hosted verification
 and retained failures are recorded in the M26-02 evidence file when closed.
+
+Rate, mixed-rate and live-control action streams are drained alongside global
+trace events. The portable oracle checks exact rate/mixed action counts and zero
+gaps; overload additionally requires the actual tick6 deadline-late failure record.
+Checkpoint restoration restores action sequence positions, not old action bytes.
+The old owner drains its prefix and failed attempt before stop; the fresh owner's
+cursors start at its inspected restored boundary, checked against that drained
+prefix, before it executes. Starting a fresh mixed-action cursor at zero would
+incorrectly request the prior owner's history and is rejected as a gap.

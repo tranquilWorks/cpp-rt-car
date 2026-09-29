@@ -48,7 +48,7 @@ def mutations(directory,provenance):
             for p,b in originals.items():p.write_bytes(b)
     def edit_json(name,key,value):
         p=directory/name;d=json.loads(p.read_text());d[key]=value;p.write_text(json.dumps(d))
-    for name,key,value in [('run.json','cleanup',False),('run.json','source_commit','0'*40),('run.json','phase_calls',[0]*8),('run.json','state_digest','0'*64),('replay.json','gap_count',1),('replay.json','replay_status','NOT_RUN'),('execution.json','control_accepted',99),('execution.json','oracle',False),('execution.json','replay_frames',23),('execution.json','peer_responses',7)]:
+    for name,key,value in [('run.json','cleanup',False),('run.json','source_commit','0'*40),('run.json','phase_calls',[0]*8),('run.json','state_digest','0'*64),('replay.json','gap_count',1),('replay.json','replay_status','NOT_RUN'),('execution.json','control_accepted',99),('execution.json','oracle',False),('execution.json','replay_frames',23),('execution.json','peer_responses',7),('execution.json','action_gaps',1),('execution.json','deadline_failures',1)]:
         reject(lambda n=name,k=key,v=value:edit_json(n,k,v))
     for name in artifacts.FILES:
         reject(lambda n=name:(directory/n).unlink())
@@ -68,6 +68,15 @@ def suite(a):
         for mode in ('native','host'):
             output=work/mode;h,c,ho,co=run.pair(a.plant,a.controller,output,mode)
             artifacts.require(h==c==0,ho+co);artifacts.validate(output,a.provenance,True);mutations(output,a.provenance)
+        for mode in ('native','host'):
+            for campaign in artifacts.CAMPAIGNS[1:]:
+                output=work/(mode+'-'+campaign)
+                run.command([a.plant,'--mode',mode,'--campaign',campaign,'--output',output])
+                artifacts.validate(output,a.provenance,True)
+        for campaign in ('stale_input','control_rejected','control_replaced','peer_missing'):
+            output=work/('external-'+campaign)
+            h,c,ho,co=run.pair(a.plant,a.controller,output,'host',extra=('--campaign',campaign))
+            artifacts.require(h==c==0,ho+co);artifacts.validate(output,a.provenance,True)
         expected={'schema':('schema',0,0),'generation':('generation',0,0),'sequence':('sequence',0,0),'future':('future',0,0),'expired':('expired',1,0),'correlation':('correlation',0,0),'replay':('sequence',1,0),'crash':('timeout',0,77),'partial':('timeout',0,78),'no_ack':('ok',8,0),'hold':('timeout',0,0)}
         for fixture,(status,responses,exitcode) in expected.items():
             output=work/fixture;h,c,ho,co=run.pair(a.plant,a.controller,output,fixture=fixture,timeout=1000)

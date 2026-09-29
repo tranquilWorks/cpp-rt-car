@@ -98,14 +98,17 @@ int execute(const Arguments &a) {
     return 1;
   Oracle oracle(o);
   Telemetry telemetry;
-  std::uint64_t prior_events = 0;
+  std::uint64_t prior_events = 0, prior_failures = 0;
+  std::array<std::uint64_t, 3> prior_actions{};
   std::size_t recoveries = 0;
   std::vector<std::byte> recovery;
   for (std::size_t t = 0; t < o.ticks; ++t) {
     if (o.campaign == Campaign::overload && t == 6) {
       recovery = s->checkpoint(5);
-      if (recovery.empty() || s->step(t, true) == rt::Status::ok ||
-          s->world.calls[0] != 6)
+      if (recovery.empty() || s->step(t, true) != rt::Status::callback_failed ||
+          s->world.calls[0] != 6 ||
+          telemetry.drain(*s->runtime) != rt::Status::ok ||
+          telemetry.deadline_failures != 1)
         return 1;
       if (s->close() != rt::Status::ok)
         return 1;
@@ -116,7 +119,12 @@ int execute(const Arguments &a) {
           !s->world.decode())
         return 1;
       prior_events = telemetry.events;
-      telemetry = {};
+      prior_actions = telemetry.action_records;
+      prior_failures = telemetry.deadline_failures;
+      Telemetry resumed;
+      if (!resumed.resume(*s->runtime, telemetry))
+        return 1;
+      telemetry = resumed;
       replay = Replay(o.ticks, false, 6);
       replay.initial = s->checkpoint(5);
       ++recoveries;
@@ -129,9 +137,15 @@ int execute(const Arguments &a) {
       std::cerr << "step " << t << ' ' << s->runtime->last_error() << '\n';
       return 1;
     }
-    if (!oracle.step(t, s->world) ||
-        telemetry.drain(*s->runtime) != rt::Status::ok) {
-      std::cerr << "oracle/trace " << t << '\n';
+    if (!oracle.step(t, s->world)) {
+      std::cerr << "oracle " << t << '\n';
+      return 1;
+    }
+    const auto trace_status = telemetry.drain(*s->runtime);
+    if (trace_status != rt::Status::ok) {
+      std::cerr << "telemetry tick=" << t << " stream=" << telemetry.last_stream
+                << " status=" << static_cast<int>(trace_status)
+                << " gaps=" << telemetry.action_gaps << '\n';
       return 1;
     }
   }
@@ -193,6 +207,13 @@ int execute(const Arguments &a) {
       f << (i ? "," : "") << calls[i];
     f << "],\"oracle\":true,\"trace_events\":"
       << telemetry.events + prior_events << ",\"trace_lost\":" << telemetry.lost
+      << ",\"rate_actions\":" << prior_actions[0] + telemetry.action_records[0]
+      << ",\"mixed_actions\":" << prior_actions[1] + telemetry.action_records[1]
+      << ",\"control_actions\":"
+      << prior_actions[2] + telemetry.action_records[2]
+      << ",\"action_gaps\":" << telemetry.action_gaps
+      << ",\"deadline_failures\":"
+      << prior_failures + telemetry.deadline_failures
       << ",\"control_accepted\":" << mailbox.accepted
       << ",\"control_invalid\":" << mailbox.invalid
       << ",\"control_replaced\":" << commit.replaced

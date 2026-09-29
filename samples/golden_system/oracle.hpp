@@ -73,9 +73,9 @@ public:
       missing_ += absent ? 1 : 0;
       for (std::size_t a = 0; a < 3; ++a)
         for (std::size_t i = 0; i < options_.count; ++i) {
-          const auto velocity = options_.external
-                                    ? old_sensor[a][i]
-                                    : (stale ? 0 : sample_v_[a][i]);
+          const auto velocity =
+              stale ? 0
+                    : (options_.external ? old_sensor[a][i] : sample_v_[a][i]);
           const auto demand =
               static_cast<std::int64_t>(gain_) * (target_ - velocity);
           actuator_[a][i] =

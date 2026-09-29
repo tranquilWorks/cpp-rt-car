@@ -42,6 +42,10 @@ public:
     request.issued_tick = tick;
     request.expiry_tick = tick + 1;
     request.values = world.sensor.velocity;
+    // This declared fault substitutes the initial sensor before the off-lane
+    // request. The callback still detects the backdated application frame.
+    if (world.options.campaign == Campaign::stale_input && tick == 6)
+      request.values = {};
     request.target = tick >= 1 ? 16 : 8;
     request.gain = tick >= 3 ? 2 : 1;
     if (tick >= 6 && world.options.campaign == Campaign::control_replaced)

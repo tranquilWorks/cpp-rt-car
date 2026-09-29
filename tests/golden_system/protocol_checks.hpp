@@ -78,6 +78,10 @@ bool concurrent_owners() {
     CHECK(a->step(i) == Status::ok && oa.step(i, a->world));
     CHECK(b->step(i) == Status::ok && ob.step(i, b->world));
   }
+  ma->fail_rollback = 1;
+  CHECK(a->close() != Status::ok && ma->live_count() > 0 &&
+        jobs->owners() == 2);
+  CHECK(jobs->close() == Status::invalid_state);
   CHECK(a->close() == Status::ok);
   a.reset();
   CHECK(jobs->owners() == 1);

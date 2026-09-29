@@ -10,6 +10,9 @@ inline constexpr std::size_t state_header_bytes = 512,
 using StateBytes = std::array<std::byte, state_bytes>;
 struct World {
   Options options;
+  // Explicit storage gaps preserve required 64-byte SoA alignment on MSVC.
+  // They are never part of the canonical state or channel bytes.
+  std::array<std::byte, 64 - sizeof(Options)> options_padding{};
   Plant plant{};
   alignas(64) Vector command{};
   Sensor sensor{};
@@ -26,6 +29,7 @@ struct World {
   // belong to host control; callback copies these fixed arrays once.
   Vector external_command{};
   bool external_ready = false;
+  std::array<std::byte, 39> storage_padding{};
   explicit World(Options value)
       : options(value), plant(initial(value.count)),
         command(plant.acceleration) {
@@ -123,8 +127,8 @@ struct World {
         get(canonical, 12, 4) != options.ticks ||
         get(canonical, 16, 4) != options.workers ||
         get(canonical, 20, 4) != options.grain ||
-        get(canonical, 24, 4) != options.host ||
-        get(canonical, 28, 4) != options.external ||
+        get(canonical, 24, 4) != static_cast<std::uint64_t>(options.host) ||
+        get(canonical, 28, 4) != static_cast<std::uint64_t>(options.external) ||
         get(canonical, 32, 4) != static_cast<unsigned>(options.campaign) ||
         get(canonical, 56, 8) > options.ticks)
       return false;
@@ -339,6 +343,8 @@ struct World {
     return true;
   }
 };
+static_assert(offsetof(World, plant) == 64);
+static_assert(offsetof(World, external_ready) + 1 + 39 == sizeof(World));
 struct Binding {
   World *world;
   std::size_t phase;

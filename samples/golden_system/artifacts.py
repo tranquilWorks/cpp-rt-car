@@ -100,7 +100,7 @@ def reference(e):
             missing += absent
             for a in range(3):
                 for i in range(n):
-                    measured = old_sensor[a][i] if e['external'] else (0 if expired else sensor_v[a][i])
+                    measured = 0 if expired else (old_sensor[a][i] if e['external'] else sensor_v[a][i])
                     actuator[a][i] = 0 if absent else max(-4,min(4,gain*(target-measured)))
         if t % 6 == 0:
             sums = [sum(row) for rows in (x,v) for row in rows]
@@ -114,19 +114,22 @@ def inspect(directory):
         require(type(e[key]) is int and lo <= e[key] <= hi, 'configuration '+key)
     require(e['grain'] in (1,4,16,64) and e['mode'] in ('native','host') and type(e['external']) is bool and e['campaign'] in CAMPAIGNS, 'configuration enum')
     require(e['campaign'] == 'nominal' or e['ticks'] >= 19, 'fault horizon')
-    numeric=('schema','runtime_id','runtime_planned_bytes','sample_owned_bytes','trace_events','trace_lost','control_accepted','control_invalid','control_replaced','control_committed','replay_frames','replay_actions','replay_generations','recoveries','jobs_accepted','jobs_completed','memory_acquired','memory_released','peer_responses')
+    numeric=('schema','runtime_id','runtime_planned_bytes','sample_owned_bytes','trace_events','trace_lost','control_accepted','control_invalid','control_replaced','control_committed','replay_frames','replay_actions','replay_generations','recoveries','jobs_accepted','jobs_completed','memory_acquired','memory_released','peer_responses','rate_actions','mixed_actions','control_actions','action_gaps','deadline_failures')
     for key in numeric:require(type(e[key]) is int and 0 <= e[key] < 2**64, 'execution integer '+key)
     require(isinstance(e['session_identity'],str) and re.fullmatch('[1-9][0-9]*-[1-9][0-9]*',e['session_identity']), 'session identity')
     require(isinstance(e['phase_calls'],list) and all(type(x) is int for x in e['phase_calls']), 'phase integer counts')
     require(e['schema'] == 1 and e['contract_sha256'] == FROZEN, 'execution identity')
     require(e['oracle'] is True and e['cleanup'] is True and e['trace_lost'] == 0 and e['trace_events'] > 0, 'execution/cleanup/telemetry')
     require(0 < e['runtime_planned_bytes'] <= d['execution']['runtime_budget_bytes'] and 0 < e['sample_owned_bytes'] <= d['execution']['sample_budget_bytes'], 'memory budgets')
+    require(e['action_gaps']==0 and e['deadline_failures']==(1 if e['campaign']=='overload' else 0) and all(e[k]>0 for k in ('rate_actions','mixed_actions','control_actions')), 'action telemetry')
     require(e['memory_acquired'] == e['memory_released'] == (6 if e['campaign']=='overload' else 3), 'memory conservation')
     require(e['jobs_accepted'] == e['jobs_completed'] and (e['mode'] != 'host' or e['jobs_accepted'] > 0), 'job conservation')
     ticks=e['ticks'];t=ticks-1
     require(e['phase_calls'] == [t//p+1 for p in (1,1,1,2,3,3,6,6)], 'phase counts')
     require(e['recoveries'] == (1 if e['campaign']=='overload' else 0) and e['replay_frames'] == ticks-(6 if e['campaign']=='overload' else 0), 'replay/recovery count')
     require(e['control_invalid'] == (1 if e['campaign']=='control_rejected' else 0) and e['control_replaced'] == (1 if e['campaign']=='control_replaced' else 0), 'admission outcomes')
+    releases=sum(t//period+1 for period in (1,2,3,3,6))+e['recoveries']
+    require(e['rate_actions']==releases and e['mixed_actions']==releases, 'exact rate/mixed action counts')
     controls = sum(ticks>b for b in (1,2,3,12,18))+(e['campaign'] in ('stale_input','peer_missing','control_replaced'))
     require(e['control_committed'] == controls and e['control_accepted'] == controls+e['control_replaced'], 'control counts')
     require(e['replay_generations'] == (2 if e['campaign']=='overload' else controls) and e['replay_actions'] > 0, 'replay transcript')
