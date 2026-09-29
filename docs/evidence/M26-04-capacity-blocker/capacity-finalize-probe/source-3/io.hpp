@@ -118,14 +118,14 @@ public:
   static void limits(rt::RuntimeConfig &c, bool combined) noexcept {
     c.device_backend_capacity = combined ? 2 : 1;
     c.device_buffer_capacity = combined ? 8 : 6;
-    c.device_outstanding_capacity = combined ? 3 : 2;
-    c.device_completion_batch = combined ? 3 : 2;
+    c.device_outstanding_capacity = 3;
+    c.device_completion_batch = 3;
   }
   rt::Status configure(rt::Runtime &r, World &w) noexcept {
     runtime_ = &r;
     world_ = &w;
     rt::XdmaBackendConfig c;
-    c.queue_capacity = 2;
+    c.queue_capacity = 3;
     c.buffer_capacity = 6;
     c.worker_count = 2;
     c.h2c_channel_count = c.c2h_channel_count = 2;

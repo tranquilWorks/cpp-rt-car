@@ -512,3 +512,16 @@ backends and all prior/repair tests/evidence remain protected. Complete every
 original feature acceptance and fresh local/all32 gates before integration.
 M26-05/M26-06 remain inactive; standing scoped publication/merge authority persists.
 Earlier blocked checkpoints are historical; no physical/human/RT/release claim.
+
+## M26-04 second prerequisite: capacity policy decision
+
+Storage repair280 and reactivation562 are merged. Actual XDMA-only24-tick
+native/host parity and trusted replay pass with zero allocations. Combined
+CUDA1/XDMA2 fails because Runtime global admission3 is also imposed as each
+backend's required capacity. Retain all new evidence and the original ring failure.
+The proposed M26-04R2 explicit per-backend capacity policy is not approved yet;
+do not change Runtime/native backends, inflate XDMA slots, weaken deadlines or
+merge incomplete feature279. See docs/evidence/M26-04-capacity-repair-proposal.md.
+M26-05/M26-06 remain inactive. The original storage approval does not silently
+approve this new C++ Runtime policy. Preserve the verified storage repair and
+all prior source/tests/evidence while the owner reviews the concrete proposal.

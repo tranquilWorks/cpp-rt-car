@@ -1,3 +1,31 @@
+# M26-04 resumed: storage repaired; combined capacity decision pending
+
+The approved four-slot repair is merged as target280 at
+ e8caf4396cd5987d9aa4a4bf3dad9a178cf2ded7 (all32 exact-head checks PASS).
+Canonical reactivation562 is merged at3af5a3db321a51fa61b7fb18f133ddbdd3eed689.
+The unchanged original24-tick XDMA probe now passes through native transfers.
+New count9/ticks24 native and independent host-job XDMA-only parity and trusted
+replay pass against actual CPU canonical state, with zero counted steady/replay
+allocations and a detected positive control. These are partial prototype results.
+
+Combined CUDA/XDMA exposes a separate Runtime capacity mismatch: aggregate
+admission requires3 reservations, while registration/initialization require every
+backend to support that global count. The intended native capacities areCUDA1 and
+XDMA2. Isolated1/2/3 diagnostics and the failed startup variant are retained.
+See [the bounded second-repair proposal](evidence/M26-04-capacity-repair-proposal.md).
+Owner approval is pending for the new explicit opt-in capacity policy; no Runtime,
+native backend or frozen contract change has been made. Do not enlarge native
+XDMA capacity or weaken gates as a workaround.
+
+Feature279 remains incomplete and must not merge. Combined execution, the full
+parity matrix, faults/recovery, installed CLI/kit/artifacts and fresh feature
+sanitizer/static/local/all32 gates remain outstanding. M26-05/M26-06 stay inactive.
+The existing M23 benchmark follow-up and human/physical/RT/Unreal/performance/
+release gates remain separate. Standing authority covers current checkpoint
+publication; the new Runtime/C++ policy requires its own approved canonical batch.
+
+## Historical reactivation and checkpoints
+
 # M26-04 XDMA feature resumed after storage repair
 
 Repair target280 is merged at e8caf4396cd5987d9aa4a4bf3dad9a178cf2ded7; all32 final checks, full108+112,

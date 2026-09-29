@@ -118,8 +118,8 @@ public:
   static void limits(rt::RuntimeConfig &c, bool combined) noexcept {
     c.device_backend_capacity = combined ? 2 : 1;
     c.device_buffer_capacity = combined ? 8 : 6;
-    c.device_outstanding_capacity = combined ? 3 : 2;
-    c.device_completion_batch = combined ? 3 : 2;
+    c.device_outstanding_capacity = 2;
+    c.device_completion_batch = 2;
   }
   rt::Status configure(rt::Runtime &r, World &w) noexcept {
     runtime_ = &r;

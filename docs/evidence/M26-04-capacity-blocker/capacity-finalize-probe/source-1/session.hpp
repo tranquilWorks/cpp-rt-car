@@ -259,7 +259,7 @@ public:
         plan.trace_storage_bytes > Memory::region_capacity)
       return rt::Status::internal_error;
     GOLDEN_TRY(r.live_control_producer_handle(2601, 2601, producer));
-    GOLDEN_TRY(r.start());
+    // Diagnostic only: stop after actual finalization; no device initialization.
 #undef GOLDEN_TRY
     return rt::Status::ok;
   }
