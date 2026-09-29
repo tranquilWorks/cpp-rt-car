@@ -1338,3 +1338,41 @@ install(FILES tests/package_consumer/c_consumer.c tests/package_consumer/cpp_con
     tests/package_consumer/cuda_consumer.cpp tests/package_consumer/xdma_consumer.cpp
     tests/package_consumer/benchmark_consumer.cpp
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/recipes/package_consumer)
+
+# M26-02: complete optional public-SDK source kit, preserving SDK exports.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+execute_process(COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/golden_system/provenance.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/golden-provenance.json"
+    RESULT_VARIABLE golden_provenance_result)
+if(NOT golden_provenance_result EQUAL 0)
+    message(FATAL_ERROR "Golden source provenance generation failed")
+endif()
+install(FILES
+    samples/golden_system/CMakeLists.txt
+    samples/golden_system/README.md
+    samples/golden_system/artifacts.py
+    samples/golden_system/channel.hpp
+    samples/golden_system/common.hpp
+    samples/golden_system/contract.json
+    samples/golden_system/controller.cpp
+    samples/golden_system/controls.hpp
+    samples/golden_system/fixed.hpp
+    samples/golden_system/jobs.hpp
+    samples/golden_system/main.cpp
+    samples/golden_system/mapping.hpp
+    samples/golden_system/memory.hpp
+    samples/golden_system/model.hpp
+    samples/golden_system/oracle.hpp
+    samples/golden_system/peer.hpp
+    samples/golden_system/provenance.py
+    samples/golden_system/replay.hpp
+    samples/golden_system/run.py
+    samples/golden_system/session.hpp
+    samples/golden_system/telemetry.hpp
+    samples/golden_system/wire.hpp
+    samples/golden_system/world.hpp
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_system)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/golden-provenance.json"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_system RENAME provenance.json)
+install(FILES docs/golden_system.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)

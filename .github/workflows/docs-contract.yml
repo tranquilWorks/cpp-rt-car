@@ -23,6 +23,7 @@ jobs:
       - name: Validate golden scenario specification and negative controls
         run: |
           python3 tools/check_golden_contract.py
+          python3 tools/generate_golden_config.py --check
           python3 -m unittest discover -s tests/golden_system -p 'test_*.py'
       - name: Validate portable release contract
         run: python3 tools/check_release_contract.py
@@ -81,3 +82,7 @@ jobs:
             echo "runtime demo accepted an unknown option" >&2
             exit 1
           fi
+      - name: Verify CPack portable golden source kit
+        run: python3 tests/golden_system/verify_package.py --work-directory build-golden-package
+      - name: Analyze golden public source and tests
+        run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/golden_system/main.cpp samples/golden_system/controller.cpp tests/golden_system/test_system.cpp

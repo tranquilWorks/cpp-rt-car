@@ -3305,6 +3305,9 @@ def main() -> int:
         check_golden_contract.validate(check_golden_contract.read())
     except (OSError, ValueError) as exc:
         fail(f"golden scenario design contract: {exc}")
+    import generate_golden_config
+    if read("samples/golden_system/fixed.hpp") != generate_golden_config.render():
+        fail("compiled golden constants differ from the frozen contract")
     import check_sdk_docs
     try:
         check_sdk_docs.verify()

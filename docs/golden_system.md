@@ -1,14 +1,16 @@
 # Golden scenario and lever contract
 
-M26-01 defines the **planned** `rtfw.golden.vehicle.v1` reference. The
-[machine-readable contract](../samples/golden_system/contract.json) is frozen
-before implementation. The [validator](../tools/check_golden_contract.py) and
-[mutation tests](../tests/golden_system/test_contract.py) check its shape,
-identities, numerical feasibility, scheduling relationships and claim limits.
-They do not run a Runtime scenario, compile the future graph, establish its
-actual memory admission or measure performance. M26-02 must demonstrate those
-properties through the installed SDK. No golden executable, benchmark result,
-package installation change or hardware qualification is delivered here.
+M26-01 freezes the `rtfw.golden.vehicle.v1`
+[machine-readable contract](../samples/golden_system/contract.json). M26-02 adds
+the [portable execution kit](#m26-02-portable-execution-kit), installed public-SDK
+consumers and actual run/state/replay evidence. CUDA/XDMA, benchmarks and the final
+audit remain later batches. No physical or real-time qualification is implied.
+
+The original [design validator](../tools/check_golden_contract.py) and
+[mutation tests](../tests/golden_system/test_contract.py) continue to check frozen
+shape, identities, numerical feasibility, scheduling relationships and claim limits.
+Those offline checks do not execute Runtime or prove memory admission/performance;
+the separate M26-02 executable tests provide portable execution evidence.
 
 This is a vehicle-like integer workload for framework composition, not a
 vehicle dynamics model or general physics engine. Its state and codecs belong
@@ -181,7 +183,7 @@ no portable claim that arbitrary C++ atomics are process-shared is added.
 
 ## Faults, tuning and artifacts
 
-All eleven faults are planned, with injection phase/tick, a one-affected-release
+The frozen JSON plans eleven faults, with injection phase/tick, a one-affected-release
 detection bound, observable outcome, recovery action and delivery batch in JSON.
 The bound is logical, not a wall-clock deadline. Independent campaigns start
 from fresh owners; faults are not all injected into one run.
@@ -221,8 +223,9 @@ successful artifacts only after validation and checked cleanup; retain failures.
 ## Variants and remaining gates
 
 CPU/native/independent-host and optional external CIL are M26-02; simulated CUDA
-is M26-03; simulated XDMA and combined staged execution are M26-04. Every variant
-is currently **planned**. A real CUDA or XDMA run is **NOT RUN**, requires explicit
+is M26-03; simulated XDMA and combined staged execution are M26-04. The immutable
+M26-01 file retains its original planned statuses; M26-02 execution and later
+unimplemented variants are distinguished below. A real CUDA or XDMA run is **NOT RUN**, requires explicit
 resources and named M18 tuple evidence, and cannot fall back to simulated success.
 Unreal is a separate M19 host/lifecycle gate, not a portable completion prerequisite.
 M26-05 implements the benchmark/fault/lever showcase; M26-06 performs the living
@@ -234,3 +237,129 @@ deployment remain unperformed or separately gated. Future implementation may
 expose a needed contract amendment; resolve it explicitly before changing frozen
 semantics, without weakening earlier assertions or claiming this design checker
 proved runtime admission, zero allocation, package execution or hardware behavior.
+
+## M26-02 portable execution kit
+
+M26-02 implements the CPU scenario in `samples/golden_system`. The frozen JSON
+above remains a specification: its historical `planned` tags do not serve as
+execution evidence. The kit supplies actual native workers, an independent host
+job system, five active rate domains, five CPU cross-rate channels, typed controls,
+checkpoint recovery, originating-owner replay and an optional separate controller
+process. CUDA, XDMA, the lever/benchmark showcase and final capability audit remain
+M26-03 through M26-06. No physical device or RT qualification is established.
+
+After installing the SDK, build, run and validate the shipped source with:
+
+```sh
+python3 /path/to/sdk/share/rtfw/examples/golden_system/run.py \
+  --prefix /path/to/sdk --build ./golden-build --output ./golden-evidence --mode external
+```
+
+Use `--mode native` or `--mode host` for internal control. CMake source embedding
+uses `-DGOLDEN_RTFW_SOURCE=/path/to/checkout`; installed consumption links only
+`rtfw::runtime` and the application's OS libraries. The source kit includes its
+contract, generated constants, complete codecs, runner, independent validator and
+configure-time provenance. No private Runtime headers are used.
+
+The frozen rate budgets are **per-domain release envelopes**. Runtime's
+`budget_wcet_ns` is charged once per phase, so the kit divides each envelope by
+its phase count: plant uses three 1,000,000 ns estimates, observe uses two
+500,000 ns estimates, and the other domains each use 1,000,000 ns. Their sums
+preserve the contract budgets. Passing the entire plant envelope to each phase
+was rejected by actual mandatory admission; that failed probe is retained.
+Deadlines equal domain periods. Active execution selects the existing D0
+unspecified tier; M21 replay compares registered canonical application state.
+It does not claim support for the separate D1 scheduling tier on active plans.
+
+The numerical oracle checks every active and inactive lane after every step,
+using closed-form constant-acceleration segments independently of the integrator.
+It also checks all phase/publication/selection counts, selected generations, ages,
+and six aggregate sums. A separate scalar Python oracle validates the final
+binary state. The canonical state header carries configuration, control-generation
+identity, counters, source-release metadata, the frozen contract digest and a
+checksum. Native padding, pointers and retained callback views are never encoded.
+
+Control updates use five fixed typed schemas, 16 slots and 64-byte payload
+strides. First-cycle updates target exact input/sensor/controller releases;
+later updates target host frames. Generation identities are opaque hashes, not
+ordinal counts. Replacement, malformed admission, stale handles and per-kind
+application latches are exercised through public APIs. The stale-input campaign
+backdates the application frame at sensor tick6; controller tick6 substitutes the
+initial sensor values. Ordinary Runtime CPU cross-rate selection remains fresh;
+this is explicitly application protocol validation, not sampled HAL evidence.
+Missing peer input produces zero effort. Overload advances the manual clock past
+a mandatory deadline at tick6, stops the failed owner, restores the last successful
+paired checkpoint into a fresh owner and resumes. Runtime generation rollback
+alone never restores application state.
+
+Active replay artifacts bind their originating Runtime identity. The kit verifies
+same-owner M21 active/trusted M22 lossless-v2 replay and rejects cross-owner active
+artifacts before application mutation. Checkpoint restore is a separate supported
+fresh-owner path. After recovery, a new checkpoint is written with the restored
+owner's handles before exporting its subsequent replay segment. Artifact identities
+are never rewritten. The original failed owner is never restarted.
+
+### Vector CIL protocol and supervision
+
+The optional external path uses actual OS shared memory and a separate executable,
+with a new `G6L1` wire protocol. It derives mapping, publication and host ownership
+patterns from the unchanged M25 kits; it does not reuse their scalar wire schema.
+The supported platform family is little-endian x86-64 Linux and Windows. The
+8,192-byte mapping has a 64-byte control header and two 3,264-byte SPSC slots;
+each slot has a 64-byte publication word area and a 3,200-byte record.
+
+| Record offset | Canonical little-endian field |
+| ---: | --- |
+| 0 / 4 / 8 / 12 | magic / version1 / extent3200 / request1 or command2, uint32 |
+| 16 / 20 / 24 / 28 | count uint32 / target int32 / gain int32 / logical clock domain1 |
+| 32 / 40 | generation / sequence, uint64 |
+| 48 / 56 / 64 | issue tick / exclusive expiry tick / request correlation, uint64 |
+| 72 | FNV-1a64 over the complete record with this word zeroed |
+| 80–127 | zero reserved bytes |
+| 128–3199 | three axis-major arrays of 256 int32 values; inactive entries zero |
+
+The creator exclusively owns the mapping name, and a one-time controller claim
+establishes one writer per direction. Full slots reject overwrite. Decode and
+acceptance validate extent, reserved bytes, ranges, count, identity, exact sequence,
+age and correlation transactionally. Invalid records never advance receive state.
+A reconnect requires a new mapping name and generation; an old mapped writer cannot
+alias the new session. Checksums detect accidental corruption, not malicious peers.
+
+At each controller release, host control requests a command using the **last
+completed sensor snapshot** and that boundary's validated target/gain. This makes
+the external pipeline delay explicit: a sensor release at the same logical tick
+cannot round-trip through another process during the Runtime callback. Bounded
+peer waits and OS access occur before `step`; the callback reads one copied fixed
+snapshot, with zero effort for missing or expired input. Replay records the copied
+external commands as explicit input. The independent oracle accounts for this
+pipeline delay instead of requiring internal and external numerical trajectories
+to coincide. Stop acknowledgement precedes ordinary unmapping; missing ack remains
+a failed outcome even when local OS cleanup succeeds.
+
+### Evidence and limits
+
+`run.py` creates `run.json`, `state.bin` and `replay.json` only after actual
+execution, replay, independent validation and checked cleanup. Raw Runtime
+checkpoint, active and trusted artifacts remain alongside `execution.json`.
+The manifests bind configuration, frozen contract, source commit/tree, explicit
+dirty-source status and every shipped source digest. Failed protocol campaigns
+retain `FAIL` reports; they cannot be promoted by changing a summary field.
+The source tree identity names the committed tree; a dirty run is additionally
+bound to its exact source-file digest inventory and is never labelled clean.
+
+The 128 MiB Runtime budget is checked against the full requested MemoryPlan;
+reported sample storage is bounded by 32 MiB. These are requested application
+storage/accounting limits, not a bound on process RSS, allocator overhead or OS
+thread stacks. Host jobs are conserved, borrowed providers outlive Runtime,
+and steady steps/replay are allocation-instrumented. Portable manual-clock runs
+establish logical behavior, not WCET or real-time latency. Local/hosted verification
+and retained failures are recorded in the M26-02 evidence file when closed.
+
+Rate, mixed-rate and live-control action streams are drained alongside global
+trace events. The portable oracle checks exact rate/mixed action counts and zero
+gaps; overload additionally requires the actual tick6 deadline-late failure record.
+Checkpoint restoration restores action sequence positions, not old action bytes.
+The old owner drains its prefix and failed attempt before stop; the fresh owner's
+cursors start at its inspected restored boundary, checked against that drained
+prefix, before it executes. Starting a fresh mixed-action cursor at zero would
+incorrectly request the prior owner's history and is rejected as a gap.

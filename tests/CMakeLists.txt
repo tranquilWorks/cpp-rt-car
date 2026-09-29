@@ -547,3 +547,5 @@ add_subdirectory(backend_authoring)
 add_subdirectory(cil_shared_memory)
 
 add_subdirectory(host_adapter)
+
+add_subdirectory(golden_system)
