@@ -50,6 +50,12 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'tests/test_device_rate_simulation.cpp',
+    'tests/device_rate_simulation/fixture.hpp',
+    'tests/device_rate_simulation/noalloc.cpp',
+    'tests/device_rate_simulation/default_identity.cpp',
+    'tests/device_rate_simulation/old_path_probe.cpp',
+    'tests/package_consumer/device_rate_simulation_consumer.cpp',
     'samples/golden_system/CMakeLists.txt',
     'samples/golden_system/artifacts.py',
     'samples/golden_system/channel.hpp',

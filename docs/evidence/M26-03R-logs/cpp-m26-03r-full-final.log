@@ -1,0 +1,612 @@
+repository=/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r
+mode=full
+started=2026-09-29T06:20:48+00:00
+head=439b32e7d942f34253b976e31c54b1988c153ccd
+
+>>> [contract] git diff --check
+
+>>> [contract] python3 tools/check_docs_contract.py
+PASS: SDK manual/API/source inventory and local fragments (116 files)
+Documentation contract OK
+
+>>> [contract] python3 tools/generate_golden_config.py --check
+PASS: compiled golden constants match frozen contract
+
+>>> [contract] python3 -m unittest discover -s tests/golden_system -p "test_*.py"
+.........................
+----------------------------------------------------------------------
+Ran 25 tests in 0.283s
+
+OK
+
+>>> [contract] python3 -m unittest discover -s tests/installed_docs -p "test_*.py"
+.....+ ["/usr/bin/python3", "-c", "import sys;print(sys.argv[1])", "path with spaces $(never-execute) `literal`"]
+path with spaces $(never-execute) `literal`
+.+ ["/usr/bin/python3", "-c", "raise SystemExit(3)"]
++ ["/usr/bin/python3", "-c", "print(\"actual\")"]
+actual
+.
+----------------------------------------------------------------------
+Ran 7 tests in 0.066s
+
+OK
+
+>>> [contract] python3 tools/check_release_contract.py
+Release contract OK
+
+>>> [contract] python3 tests/test_release_tools.py
+...................................
+----------------------------------------------------------------------
+Ran 35 tests in 0.978s
+
+OK
+
+>>> [contract] python3 tools/check_c_abi.py
+C ABI v8 verified: 70 symbols, fingerprint 0xd0e7a5a14bf35f97
+
+>>> [contract] python3 tools/sbom.py verify-dependencies --policy tools/sbom_expected.json
+{"dependencies": [{"identity": "7e17b15f1547bb8dd9c2fed91043b7af3437387f", "license": "BSD-3-Clause", "name": "googletest", "purpose": "build/test only"}, {"identity": "6e8dadfdafa3a74eabb52ead87f8787f72eccd0b", "license": "BSD-2-Clause", "name": "rapidcheck", "purpose": "build/test only"}, {"identity": "3f7e1436a0b11806abbddce274164a491091223e", "license": "MIT", "name": "vcpkg", "purpose": "build input only"}], "identity_only": true, "schema_version": 1, "vulnerability_clearance": false, "workflow_actions": [{"commit": "11d5960a326750d5838078e36cf38b85af677262", "name": "actions/checkout"}, {"commit": "2031cfc080254a8a887f58cffee85186f0e49e48", "name": "actions/dependency-review-action"}, {"commit": "d3f86a106a0bac45b974a628896c90dbdf5c8093", "name": "actions/download-artifact"}, {"commit": "a26af69be951a213d495a4c3e4e4022e16d87065", "name": "actions/setup-python"}, {"commit": "ea165f8d65b6e75b540449e92b4886f43607fa02", "name": "actions/upload-artifact"}, {"commit": "e22c389904149dbc22b58101806040fa8d37a610", "name": "anchore/sbom-action"}]}
+
+>>> [contract] python3 tools/provenance.py verify-fixture --repo-root . --policy release/portable-assurance-policy.json
+{"cryptographic_fixture_verified": true, "current_revocation_checked": false, "key_id": "b1833d5789db9754f9af98125ca2320e7fcbf69d5b57fc300a782485e3612ccf", "schema_version": 1, "target_authenticated": false}
+
+>>> [quick] cmake -S . -B build/agent-quick -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF -DSIM_WERROR=OFF
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/build/agent-quick
+
+>>> [quick] cmake --build build/agent-quick --parallel 2
+[  2%] Built target rtfw_cuda_backend
+[  3%] Built target rtfw_xdma_backend
+[ 21%] Built target rtfw_runtime
+[ 22%] Built target gtest
+[ 23%] Built target recipe_cuda_boundary
+[ 24%] Built target recipe_xdma_boundary
+[ 25%] Built target test_extension_fixture_bad
+[ 26%] Built target test_extension_fixture
+[ 27%] Linking CXX executable rtfw_cuda_physics_tests
+[ 27%] Linking CXX executable rtfw_cpu_gpu_fpga_cpu_sample_tests
+[ 27%] Built target rtfw_cuda_physics_tests
+[ 27%] Linking CXX executable test_golden_system
+[ 28%] Built target rtfw_cpu_gpu_fpga_cpu_sample_tests
+[ 29%] Built target rtfw_simulation_timing_noalloc
+[ 29%] Linking CXX executable test_host_adapter
+[ 30%] Built target test_golden_system
+[ 31%] Linking CXX executable rtfw_runtime_profile_tests
+[ 32%] Built target test_host_adapter
+[ 33%] Built target rtfw_xdma_backend_tests
+[ 34%] Linking CXX executable rtfw_cuda_pipeline_tests
+[ 34%] Built target rtfw_runtime_profile_tests
+[ 35%] Linking CXX executable rtfw_cuda_lifetime_tests
+[ 35%] Built target rtfw_cuda_pipeline_tests
+[ 36%] Building CXX object tests/hello_runtime/CMakeFiles/hello_capacity_failure.dir/capacity.cpp.o
+[ 36%] Linking CXX executable hello_capacity_failure
+[ 36%] Built target rtfw_cuda_lifetime_tests
+[ 37%] Building CXX object tests/hello_runtime/CMakeFiles/hello_step_failure.dir/step.cpp.o
+[ 37%] Linking CXX executable hello_step_failure
+[ 37%] Built target hello_capacity_failure
+[ 38%] Linking CXX executable test_typed_sdk
+[ 38%] Built target hello_step_failure
+[ 39%] Linking CXX executable test_backend_authoring
+[ 40%] Built target test_typed_sdk
+[ 41%] Linking CXX executable test_cil_shared_memory
+[ 42%] Built target test_backend_authoring
+[ 43%] Built target simcore_rt
+[ 43%] Linking CXX shared library librtfw.so
+[ 43%] Built target test_cil_shared_memory
+[ 44%] Built target rtfw_static
+[ 45%] Linking CXX executable rtfw_runtime_demo
+[ 46%] Built target rtfw_shared
+[ 47%] Built target gmock
+[ 48%] Built target gtest_main
+[ 48%] Linking CXX executable sample_cuda_pipeline
+[ 48%] Built target rtfw_runtime_demo
+[ 48%] Linking CXX executable sample_cuda_physics
+[ 49%] Built target sample_cuda_pipeline
+[ 50%] Linking C executable sample_embed_c
+[ 51%] Built target sample_embed_c
+[ 52%] Linking CXX executable sample_embed_c_static
+[ 53%] Built target sample_cuda_physics
+[ 54%] Linking CXX executable sample_embed_cpp
+[ 54%] Built target sample_embed_c_static
+[ 54%] Linking CXX executable sample_device_mock
+[ 54%] Built target sample_embed_cpp
+[ 55%] Linking CXX executable sample_cpu_gpu_fpga_cpu
+[ 56%] Built target sample_device_mock
+[ 56%] Linking CXX executable sample_live_control_typed
+[ 57%] Built target sample_live_control_typed
+[ 57%] Built target sample_cpu_gpu_fpga_cpu
+[ 58%] Linking CXX executable sample_cuda_lifetime
+[ 58%] Linking CXX executable sample_hello_runtime
+[ 58%] Built target sample_cuda_lifetime
+[ 59%] Built target sample_hello_runtime
+[ 60%] Linking CXX executable sample_typed_runtime
+[ 60%] Linking CXX executable sample_backend_authoring
+[ 61%] Built target sample_backend_authoring
+[ 63%] Linking CXX executable sample_cil_plant
+[ 63%] Built target sample_typed_runtime
+[ 64%] Linking CXX executable sample_cil_controller
+[ 65%] Built target sample_cil_controller
+[ 65%] Linking CXX executable sample_host_adapter
+[ 65%] Built target sample_cil_plant
+[ 66%] Linking CXX executable sample_golden_system
+[ 67%] Built target sample_host_adapter
+[ 68%] Linking CXX executable sample_golden_controller
+[ 68%] Built target sample_golden_controller
+[ 69%] Linking CXX executable recipe_raw_c
+[ 69%] Built target sample_golden_system
+[ 70%] Linking CXX executable recipe_raw_cpp
+[ 70%] Built target recipe_raw_c
+[ 70%] Built target recipe_raw_cpp
+[ 71%] Linking CXX executable recipe_profile
+[ 72%] Linking CXX executable recipe_mixed_rate
+[ 72%] Built target recipe_profile
+[ 72%] Built target recipe_mixed_rate
+[ 73%] Linking CXX executable recipe_live_control
+[ 73%] Linking CXX executable recipe_replay
+[ 74%] Built target recipe_replay
+[ 75%] Built target recipe_live_control
+[ 94%] Built target simcore_tests
+[ 94%] Linking CXX executable rtfw_thread_policy_rollback_test
+[ 95%] Built target rtfw_thread_policy_rollback_test
+[ 96%] Built target test_cabi_dlopen
+[ 96%] Linking CXX executable rtfw_host_adapter_tests
+[ 97%] Built target rtfw_host_adapter_tests
+[ 98%] Built target gmock_main
+golden state, controls, replay, recovery, allocation: PASS
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+PASS: portable golden run/state/replay; hardware and RT qualification not performed
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+PASS: portable golden run/state/replay; hardware and RT qualification not performed
+[ 98%] Built target golden_determinism_check
+[ 98%] Linking CXX executable rtfw_determinism_artifact
+[100%] Built target rtfw_determinism_artifact
+
+>>> [quick] ctest --test-dir build/agent-quick --output-on-failure
+Internal ctest changing into directory: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/build/agent-quick
+Test project /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/build/agent-quick
+      Start  1: sample_cuda_pipeline
+ 1/72 Test  #1: sample_cuda_pipeline .....................   Passed    0.02 sec
+      Start  2: sample_cuda_physics
+ 2/72 Test  #2: sample_cuda_physics ......................   Passed    0.02 sec
+      Start  3: sample_embed_c
+ 3/72 Test  #3: sample_embed_c ...........................   Passed    0.02 sec
+      Start  4: sample_embed_c_static
+ 4/72 Test  #4: sample_embed_c_static ....................   Passed    0.02 sec
+      Start  5: sample_embed_cpp
+ 5/72 Test  #5: sample_embed_cpp .........................   Passed    0.02 sec
+      Start  6: sample_device_mock
+ 6/72 Test  #6: sample_device_mock .......................   Passed    0.01 sec
+      Start  7: sample_live_control_typed
+ 7/72 Test  #7: sample_live_control_typed ................   Passed    0.01 sec
+      Start  8: sample_cpu_gpu_fpga_cpu
+ 8/72 Test  #8: sample_cpu_gpu_fpga_cpu ..................   Passed    0.01 sec
+      Start  9: sample_cuda_lifetime
+ 9/72 Test  #9: sample_cuda_lifetime .....................   Passed   21.09 sec
+      Start 10: hello_runtime_output
+10/72 Test #10: hello_runtime_output .....................   Passed    0.03 sec
+      Start 11: typed_runtime_output
+11/72 Test #11: typed_runtime_output .....................   Passed    0.02 sec
+      Start 12: backend_authoring_output
+12/72 Test #12: backend_authoring_output .................   Passed    0.02 sec
+      Start 13: cil_shared_memory_processes
+13/72 Test #13: cil_shared_memory_processes ..............   Passed   15.31 sec
+      Start 14: host_adapter_native
+14/72 Test #14: host_adapter_native ......................   Passed    0.04 sec
+      Start 15: host_adapter_host
+15/72 Test #15: host_adapter_host ........................   Passed    0.02 sec
+      Start 16: recipe_raw_c
+16/72 Test #16: recipe_raw_c .............................   Passed    0.01 sec
+      Start 17: recipe_raw_cpp
+17/72 Test #17: recipe_raw_cpp ...........................   Passed    0.01 sec
+      Start 18: recipe_profile
+18/72 Test #18: recipe_profile ...........................   Passed    0.00 sec
+      Start 19: recipe_mixed_rate
+19/72 Test #19: recipe_mixed_rate ........................   Passed    0.02 sec
+      Start 20: recipe_live_control
+20/72 Test #20: recipe_live_control ......................   Passed    0.01 sec
+      Start 21: recipe_replay
+21/72 Test #21: recipe_replay ............................   Passed    0.01 sec
+      Start 22: recipe_replay_replaced
+22/72 Test #22: recipe_replay_replaced ...................   Passed    0.01 sec
+      Start 23: recipe_replay_rejected
+23/72 Test #23: recipe_replay_rejected ...................   Passed    0.01 sec
+      Start 24: recipe_cuda_boundary
+24/72 Test #24: recipe_cuda_boundary .....................   Passed    0.00 sec
+      Start 25: recipe_xdma_boundary
+25/72 Test #25: recipe_xdma_boundary .....................   Passed    0.00 sec
+      Start 26: simcore_all
+26/72 Test #26: simcore_all ..............................   Passed   14.44 sec
+      Start 27: m22_live_control_mailbox
+27/72 Test #27: m22_live_control_mailbox .................   Passed    0.42 sec
+      Start 28: m22_live_control_sdk
+28/72 Test #28: m22_live_control_sdk .....................   Passed    0.01 sec
+      Start 29: m22_live_control_stress
+29/72 Test #29: m22_live_control_stress ..................   Passed    0.28 sec
+      Start 30: m19_extension_registration
+30/72 Test #30: m19_extension_registration ...............   Passed    0.03 sec
+      Start 31: m17_command_batch_timeline
+31/72 Test #31: m17_command_batch_timeline ...............   Passed    1.51 sec
+      Start 32: m17_hal_v2_compatibility
+32/72 Test #32: m17_hal_v2_compatibility .................   Passed    0.20 sec
+      Start 33: m17_heterogeneous_memory_topology
+33/72 Test #33: m17_heterogeneous_memory_topology ........   Passed    0.09 sec
+      Start 34: m17_cuda_graph
+34/72 Test #34: m17_cuda_graph ...........................   Passed   10.21 sec
+      Start 35: m17_xdma_control
+35/72 Test #35: m17_xdma_control .........................   Passed    0.02 sec
+      Start 36: m16_rate_timeline
+36/72 Test #36: m16_rate_timeline ........................   Passed    0.07 sec
+      Start 37: m21_device_rate_model
+37/72 Test #37: m21_device_rate_model ....................   Passed    0.02 sec
+      Start 38: m21_cross_rate_payload
+38/72 Test #38: m21_cross_rate_payload ...................   Passed    0.02 sec
+      Start 39: m16_rate_dispatch
+39/72 Test #39: m16_rate_dispatch ........................   Passed    0.09 sec
+      Start 40: m16_shedding_telemetry
+40/72 Test #40: m16_shedding_telemetry ...................   Passed    0.04 sec
+      Start 41: m16_cross_rate_data
+41/72 Test #41: m16_cross_rate_data ......................   Passed    0.07 sec
+      Start 42: m15_accounting_closure
+42/72 Test #42: m15_accounting_closure ...................   Passed    0.03 sec
+      Start 43: m15_stack_lifecycle
+43/72 Test #43: m15_stack_lifecycle ......................   Passed    0.02 sec
+      Start 44: m15_cross_category_rollback
+44/72 Test #44: m15_cross_category_rollback ..............   Passed    0.02 sec
+      Start 45: thread_policy_rollback
+45/72 Test #45: thread_policy_rollback ...................   Passed    0.01 sec
+      Start 46: thread_policy_recovery
+46/72 Test #46: thread_policy_recovery ...................   Passed    0.07 sec
+      Start 47: sbom_dependencies
+47/72 Test #47: sbom_dependencies ........................   Passed    0.07 sec
+      Start 48: m24_cuda_physics
+48/72 Test #48: m24_cuda_physics .........................   Passed    0.33 sec
+      Start 49: m24_cuda_physics_cli
+49/72 Test #49: m24_cuda_physics_cli .....................   Passed    0.46 sec
+      Start 50: m17_cpu_gpu_fpga_cpu_sample
+50/72 Test #50: m17_cpu_gpu_fpga_cpu_sample ..............   Passed    0.22 sec
+      Start 51: cabi_dlopen
+51/72 Test #51: cabi_dlopen ..............................   Passed    0.02 sec
+      Start 52: host_adapter
+52/72 Test #52: host_adapter .............................   Passed    0.01 sec
+      Start 53: runtime_profile
+53/72 Test #53: runtime_profile ..........................   Passed    0.02 sec
+      Start 54: xdma_backend
+54/72 Test #54: xdma_backend .............................   Passed    0.01 sec
+      Start 55: m24_cuda_pipeline
+55/72 Test #55: m24_cuda_pipeline ........................   Passed    1.57 sec
+      Start 56: m24_cuda_pipeline_cli
+56/72 Test #56: m24_cuda_pipeline_cli ....................   Passed    0.60 sec
+      Start 57: m24_cuda_lifetime
+57/72 Test #57: m24_cuda_lifetime ........................   Passed   21.17 sec
+      Start 58: m24_cuda_lifetime_cli
+58/72 Test #58: m24_cuda_lifetime_cli ....................   Passed   20.32 sec
+      Start 59: m24_cuda_capabilities
+59/72 Test #59: m24_cuda_capabilities ....................   Passed    0.59 sec
+      Start 60: host_adapter_simulation_timing_noalloc
+60/72 Test #60: host_adapter_simulation_timing_noalloc ...   Passed    0.05 sec
+      Start 61: hello_capacity_failure
+61/72 Test #61: hello_capacity_failure ...................   Passed    0.01 sec
+      Start 62: hello_step_failure
+62/72 Test #62: hello_step_failure .......................   Passed    0.02 sec
+      Start 63: typed_sdk
+63/72 Test #63: typed_sdk ................................   Passed    0.04 sec
+      Start 64: typed_sdk_stop_failure
+64/72 Test #64: typed_sdk_stop_failure ...................   Passed    0.02 sec
+      Start 65: backend_authoring_conformance
+65/72 Test #65: backend_authoring_conformance ............   Passed    0.11 sec
+      Start 66: cil_shared_memory_contract
+66/72 Test #66: cil_shared_memory_contract ...............   Passed    0.05 sec
+      Start 67: host_adapter_contract
+67/72 Test #67: host_adapter_contract ....................   Passed    0.05 sec
+      Start 68: host_adapter_golden_system_contract
+68/72 Test #68: host_adapter_golden_system_contract ......   Passed    2.01 sec
+      Start 69: host_adapter_golden_system_native
+69/72 Test #69: host_adapter_golden_system_native ........   Passed    0.21 sec
+      Start 70: host_adapter_golden_system_host
+70/72 Test #70: host_adapter_golden_system_host ..........   Passed    0.12 sec
+      Start 71: host_adapter_golden_system_external
+71/72 Test #71: host_adapter_golden_system_external ......   Passed    0.15 sec
+      Start 72: host_adapter_golden_system_process
+72/72 Test #72: host_adapter_golden_system_process .......   Passed   13.66 sec
+
+100% tests passed, 0 tests failed out of 72
+
+Total Test time (real) = 126.37 sec
+
+>>> [quick] ./build/agent-quick/rtfw_runtime_demo --config configs/default_safe.json --run 20ms --rt --metrics-json-interval
+{"ok":true,"profile_schema_version":1,"profile_id":"autotune.c9006976199ff4d9","runtime_config_schema":7,"runtime_version":"1.2.1","config_id":4514517619591334796,"seed":1,"self_paced":true,"worker_override":false,"frames":20,"period_ns":1000000,"p50_frame_ms":0.116426,"p95_frame_ms":0.132489,"p99_frame_ms":0.205194,"mean_frame_ms":0.122851,"stdev_frame_ms":0.020184,"missed_frames":0,"watchdog_trips":0,"trace_events_dropped":0,"log_drops":0,"queue_rejections":0,"checksum":407893.106650,"phases":{"frame":{"p50_ms":0.116426,"p95_ms":0.132489,"p99_ms":0.205194}},"counters":{"missed_frames":0,"watchdog_trips":0,"trace.events_dropped":0,"log_drops":0,"executor.queue_rejections":0},"executor":{"policy":"static_deterministic","worker_count":1,"queue_capacity":128,"submitted_tasks":1380,"successful_steals":0}}
+
+>>> [quick] test "$(./build/agent-quick/rtfw_runtime_demo --version)" = "$(cat VERSION.txt)"
+
+>>> [quick] if ./build/agent-quick/rtfw_runtime_demo --definitely-not-an-option >/dev/null 2>&1; then echo "runtime demo accepted an unknown option" >&2; exit 1; fi
+
+>>> [full] cmake -S . -B build/agent-full -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=ON -DENABLE_RAPIDCHECK=ON -DSIM_SANITIZERS= -DSIM_WERROR=ON
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/build/agent-full
+
+>>> [full] cmake --build build/agent-full --parallel 2
+[  1%] Built target simcore_platform
+[  1%] Built target rtfw_cuda_backend
+[  2%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/device_manager.cpp.o
+[  3%] Built target rtfw_xdma_backend
+[  4%] Built target trace_dump
+[  5%] Built target gtest
+[ 16%] Built target rapidcheck
+[ 17%] Built target sample_particles
+[ 17%] Built target sample_tyre_belt
+[ 18%] Built target sample_async_gpu
+[ 19%] Built target recipe_cuda_boundary
+[ 20%] Built target recipe_xdma_boundary
+[ 21%] Built target test_incompatible_plugin
+[ 22%] Built target test_extension_fixture
+[ 23%] Built target test_extension_fixture_bad
+[ 23%] Built target test_sample_plugin
+[ 23%] Built target rtfw_xdma_backend_tests
+[ 23%] Built target gmock
+[ 23%] Built target gtest_main
+[ 24%] Built target gmock_main
+[ 24%] Linking CXX static library librtfw_runtime.a
+[ 33%] Built target rtfw_runtime
+[ 34%] Built target simcore_rt
+[ 35%] Linking CXX shared library librtfw.so
+[ 36%] Built target rtfw_static
+[ 37%] Linking CXX executable rtfw_demo
+[ 37%] Built target simcore_app
+[ 37%] Linking CXX executable rtfw_runtime_demo
+[ 37%] Built target rtfw_shared
+[ 37%] Linking CXX executable sample_cuda_pipeline
+[ 37%] Built target rtfw_runtime_demo
+[ 38%] Linking CXX executable sample_cuda_physics
+[ 38%] Built target sample_cuda_pipeline
+[ 39%] Linking C executable sample_embed_c
+[ 39%] Built target sample_embed_c
+[ 39%] Linking CXX executable sample_embed_c_static
+[ 39%] Built target sample_cuda_physics
+[ 39%] Linking CXX executable sample_embed_cpp
+[ 40%] Built target sample_embed_cpp
+[ 40%] Linking CXX executable sample_device_mock
+[ 40%] Built target sample_embed_c_static
+[ 41%] Linking CXX executable sample_cpu_gpu_fpga_cpu
+[ 42%] Built target sample_device_mock
+[ 42%] Linking CXX executable sample_live_control_typed
+[ 42%] Built target sample_cpu_gpu_fpga_cpu
+[ 42%] Linking CXX executable sample_cuda_lifetime
+[ 42%] Built target sample_live_control_typed
+[ 42%] Linking CXX executable sample_hello_runtime
+[ 42%] Built target sample_cuda_lifetime
+[ 43%] Linking CXX executable sample_typed_runtime
+[ 44%] Built target sample_hello_runtime
+[ 45%] Linking CXX executable sample_backend_authoring
+[ 45%] Built target sample_typed_runtime
+[ 45%] Linking CXX executable sample_cil_plant
+[ 45%] Built target sample_backend_authoring
+[ 45%] Linking CXX executable sample_cil_controller
+[ 46%] Built target sample_cil_plant
+[ 47%] Linking CXX executable sample_host_adapter
+[ 47%] Built target sample_cil_controller
+[ 47%] Linking CXX executable sample_golden_system
+[ 47%] Built target sample_golden_system
+[ 48%] Linking CXX executable sample_golden_controller
+[ 48%] Built target sample_host_adapter
+[ 48%] Linking CXX executable recipe_raw_c
+[ 48%] Built target sample_golden_controller
+[ 49%] Linking CXX executable recipe_raw_cpp
+[ 49%] Built target recipe_raw_c
+[ 50%] Linking CXX executable recipe_profile
+[ 50%] Built target recipe_raw_cpp
+[ 50%] Linking CXX executable recipe_mixed_rate
+[ 50%] Built target recipe_profile
+[ 50%] Linking CXX executable recipe_live_control
+[ 51%] Built target recipe_mixed_rate
+[ 51%] Linking CXX executable recipe_replay
+[ 51%] Built target recipe_live_control
+[ 51%] Linking CXX executable rtfw_thread_policy_rollback_test
+[ 51%] Built target recipe_replay
+[ 52%] Linking CXX executable rtfw_cuda_physics_tests
+[ 52%] Built target rtfw_cuda_physics_tests
+[ 53%] Linking CXX executable rtfw_cpu_gpu_fpga_cpu_sample_tests
+[ 54%] Built target rtfw_thread_policy_rollback_test
+[ 54%] Linking CXX executable test_golden_system
+[ 54%] Built target rtfw_cpu_gpu_fpga_cpu_sample_tests
+[ 54%] Built target test_golden_system
+[ 55%] Built target test_cabi_dlopen
+[ 55%] Linking CXX executable rtfw_simulation_timing_noalloc
+[ 55%] Linking CXX executable test_host_adapter
+[ 55%] Built target rtfw_simulation_timing_noalloc
+[ 55%] Linking CXX executable rtfw_runtime_profile_tests
+[ 56%] Built target test_host_adapter
+[ 56%] Linking CXX executable rtfw_cuda_pipeline_tests
+[ 57%] Built target rtfw_runtime_profile_tests
+[ 57%] Linking CXX executable rtfw_cuda_lifetime_tests
+[ 57%] Built target rtfw_cuda_pipeline_tests
+[ 58%] Building CXX object tests/hello_runtime/CMakeFiles/hello_capacity_failure.dir/capacity.cpp.o
+[ 58%] Linking CXX executable hello_capacity_failure
+[ 59%] Built target rtfw_cuda_lifetime_tests
+[ 59%] Building CXX object tests/hello_runtime/CMakeFiles/hello_step_failure.dir/step.cpp.o
+[ 59%] Built target hello_capacity_failure
+[ 60%] Linking CXX executable hello_step_failure
+[ 60%] Linking CXX executable test_typed_sdk
+[ 60%] Built target hello_step_failure
+[ 60%] Linking CXX executable test_backend_authoring
+[ 61%] Built target test_typed_sdk
+[ 61%] Linking CXX executable test_cil_shared_memory
+[ 62%] Built target test_backend_authoring
+[ 63%] Built target rtfw_experimental
+[ 63%] Built target test_cil_shared_memory
+[ 63%] Linking CXX executable rtfw_host_adapter_tests
+[ 64%] Built target rtfw_host_adapter_tests
+[ 65%] Linking CXX executable simcore_tests
+golden state, controls, replay, recovery, allocation: PASS
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+PASS: portable golden run/state/replay; hardware and RT qualification not performed
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+PASS: portable golden run/state/replay; hardware and RT qualification not performed
+[ 65%] Built target golden_determinism_check
+[ 65%] Linking CXX executable rtfw_determinism_artifact
+[ 66%] Built target rtfw_determinism_artifact
+[100%] Built target simcore_tests
+
+>>> [full] ctest --test-dir build/agent-full --output-on-failure
+Internal ctest changing into directory: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/build/agent-full
+Test project /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/build/agent-full
+      Start  1: sample_cuda_pipeline
+ 1/76 Test  #1: sample_cuda_pipeline .....................   Passed    0.02 sec
+      Start  2: sample_cuda_physics
+ 2/76 Test  #2: sample_cuda_physics ......................   Passed    0.02 sec
+      Start  3: sample_particles
+ 3/76 Test  #3: sample_particles .........................   Passed    0.00 sec
+      Start  4: sample_tyre_belt
+ 4/76 Test  #4: sample_tyre_belt .........................   Passed    0.00 sec
+      Start  5: sample_async_gpu
+ 5/76 Test  #5: sample_async_gpu .........................   Passed    0.00 sec
+      Start  6: sample_embed_c
+ 6/76 Test  #6: sample_embed_c ...........................   Passed    0.02 sec
+      Start  7: sample_embed_c_static
+ 7/76 Test  #7: sample_embed_c_static ....................   Passed    0.02 sec
+      Start  8: sample_embed_cpp
+ 8/76 Test  #8: sample_embed_cpp .........................   Passed    0.02 sec
+      Start  9: sample_device_mock
+ 9/76 Test  #9: sample_device_mock .......................   Passed    0.02 sec
+      Start 10: sample_live_control_typed
+10/76 Test #10: sample_live_control_typed ................   Passed    0.02 sec
+      Start 11: sample_cpu_gpu_fpga_cpu
+11/76 Test #11: sample_cpu_gpu_fpga_cpu ..................   Passed    0.02 sec
+      Start 12: sample_cuda_lifetime
+12/76 Test #12: sample_cuda_lifetime .....................   Passed   21.14 sec
+      Start 13: hello_runtime_output
+13/76 Test #13: hello_runtime_output .....................   Passed    0.03 sec
+      Start 14: typed_runtime_output
+14/76 Test #14: typed_runtime_output .....................   Passed    0.03 sec
+      Start 15: backend_authoring_output
+15/76 Test #15: backend_authoring_output .................   Passed    0.03 sec
+      Start 16: cil_shared_memory_processes
+16/76 Test #16: cil_shared_memory_processes ..............   Passed   15.33 sec
+      Start 17: host_adapter_native
+17/76 Test #17: host_adapter_native ......................   Passed    0.04 sec
+      Start 18: host_adapter_host
+18/76 Test #18: host_adapter_host ........................   Passed    0.02 sec
+      Start 19: recipe_raw_c
+19/76 Test #19: recipe_raw_c .............................   Passed    0.01 sec
+      Start 20: recipe_raw_cpp
+20/76 Test #20: recipe_raw_cpp ...........................   Passed    0.01 sec
+      Start 21: recipe_profile
+21/76 Test #21: recipe_profile ...........................   Passed    0.00 sec
+      Start 22: recipe_mixed_rate
+22/76 Test #22: recipe_mixed_rate ........................   Passed    0.02 sec
+      Start 23: recipe_live_control
+23/76 Test #23: recipe_live_control ......................   Passed    0.01 sec
+      Start 24: recipe_replay
+24/76 Test #24: recipe_replay ............................   Passed    0.01 sec
+      Start 25: recipe_replay_replaced
+25/76 Test #25: recipe_replay_replaced ...................   Passed    0.01 sec
+      Start 26: recipe_replay_rejected
+26/76 Test #26: recipe_replay_rejected ...................   Passed    0.01 sec
+      Start 27: recipe_cuda_boundary
+27/76 Test #27: recipe_cuda_boundary .....................   Passed    0.00 sec
+      Start 28: recipe_xdma_boundary
+28/76 Test #28: recipe_xdma_boundary .....................   Passed    0.00 sec
+      Start 29: simcore_all
+29/76 Test #29: simcore_all ..............................   Passed   46.96 sec
+      Start 30: m22_live_control_mailbox
+30/76 Test #30: m22_live_control_mailbox .................   Passed    0.37 sec
+      Start 31: m22_live_control_sdk
+31/76 Test #31: m22_live_control_sdk .....................   Passed    0.01 sec
+      Start 32: m22_live_control_stress
+32/76 Test #32: m22_live_control_stress ..................   Passed    0.19 sec
+      Start 33: m19_extension_registration
+33/76 Test #33: m19_extension_registration ...............   Passed    0.03 sec
+      Start 34: m17_command_batch_timeline
+34/76 Test #34: m17_command_batch_timeline ...............   Passed    1.44 sec
+      Start 35: m17_hal_v2_compatibility
+35/76 Test #35: m17_hal_v2_compatibility .................   Passed    0.25 sec
+      Start 36: m17_heterogeneous_memory_topology
+36/76 Test #36: m17_heterogeneous_memory_topology ........   Passed    0.08 sec
+      Start 37: m17_cuda_graph
+37/76 Test #37: m17_cuda_graph ...........................   Passed   10.22 sec
+      Start 38: m17_xdma_control
+38/76 Test #38: m17_xdma_control .........................   Passed    0.02 sec
+      Start 39: m16_rate_timeline
+39/76 Test #39: m16_rate_timeline ........................   Passed    0.12 sec
+      Start 40: m21_device_rate_model
+40/76 Test #40: m21_device_rate_model ....................   Passed    0.03 sec
+      Start 41: m21_cross_rate_payload
+41/76 Test #41: m21_cross_rate_payload ...................   Passed    0.03 sec
+      Start 42: m16_rate_dispatch
+42/76 Test #42: m16_rate_dispatch ........................   Passed    0.07 sec
+      Start 43: m16_shedding_telemetry
+43/76 Test #43: m16_shedding_telemetry ...................   Passed    0.05 sec
+      Start 44: m16_cross_rate_data
+44/76 Test #44: m16_cross_rate_data ......................   Passed    0.07 sec
+      Start 45: m15_accounting_closure
+45/76 Test #45: m15_accounting_closure ...................   Passed    0.03 sec
+      Start 46: m15_stack_lifecycle
+46/76 Test #46: m15_stack_lifecycle ......................   Passed    0.03 sec
+      Start 47: m15_cross_category_rollback
+47/76 Test #47: m15_cross_category_rollback ..............   Passed    0.03 sec
+      Start 48: thread_policy_rollback
+48/76 Test #48: thread_policy_rollback ...................   Passed    0.02 sec
+      Start 49: thread_policy_recovery
+49/76 Test #49: thread_policy_recovery ...................   Passed    0.06 sec
+      Start 50: sbom_dependencies
+50/76 Test #50: sbom_dependencies ........................   Passed    0.07 sec
+      Start 51: m24_cuda_physics
+51/76 Test #51: m24_cuda_physics .........................   Passed    0.35 sec
+      Start 52: m24_cuda_physics_cli
+52/76 Test #52: m24_cuda_physics_cli .....................   Passed    0.42 sec
+      Start 53: m17_cpu_gpu_fpga_cpu_sample
+53/76 Test #53: m17_cpu_gpu_fpga_cpu_sample ..............   Passed    0.21 sec
+      Start 54: cabi_dlopen
+54/76 Test #54: cabi_dlopen ..............................   Passed    0.02 sec
+      Start 55: host_adapter
+55/76 Test #55: host_adapter .............................   Passed    0.01 sec
+      Start 56: runtime_profile
+56/76 Test #56: runtime_profile ..........................   Passed    0.01 sec
+      Start 57: simcore_thread_violation_build
+57/76 Test #57: simcore_thread_violation_build ...........   Passed    4.25 sec
+      Start 58: xdma_backend
+58/76 Test #58: xdma_backend .............................   Passed    0.01 sec
+      Start 59: m24_cuda_pipeline
+59/76 Test #59: m24_cuda_pipeline ........................   Passed    1.49 sec
+      Start 60: m24_cuda_pipeline_cli
+60/76 Test #60: m24_cuda_pipeline_cli ....................   Passed    0.65 sec
+      Start 61: m24_cuda_lifetime
+61/76 Test #61: m24_cuda_lifetime ........................   Passed   21.12 sec
+      Start 62: m24_cuda_lifetime_cli
+62/76 Test #62: m24_cuda_lifetime_cli ....................   Passed   20.35 sec
+      Start 63: m24_cuda_capabilities
+63/76 Test #63: m24_cuda_capabilities ....................   Passed    0.64 sec
+      Start 64: host_adapter_simulation_timing_noalloc
+64/76 Test #64: host_adapter_simulation_timing_noalloc ...   Passed    0.02 sec
+      Start 65: hello_capacity_failure
+65/76 Test #65: hello_capacity_failure ...................   Passed    0.01 sec
+      Start 66: hello_step_failure
+66/76 Test #66: hello_step_failure .......................   Passed    0.02 sec
+      Start 67: typed_sdk
+67/76 Test #67: typed_sdk ................................   Passed    0.04 sec
+      Start 68: typed_sdk_stop_failure
+68/76 Test #68: typed_sdk_stop_failure ...................   Passed    0.04 sec
+      Start 69: backend_authoring_conformance
+69/76 Test #69: backend_authoring_conformance ............   Passed    0.13 sec
+      Start 70: cil_shared_memory_contract
+70/76 Test #70: cil_shared_memory_contract ...............   Passed    0.05 sec
+      Start 71: host_adapter_contract
+71/76 Test #71: host_adapter_contract ....................   Passed    0.05 sec
+      Start 72: host_adapter_golden_system_contract
+72/76 Test #72: host_adapter_golden_system_contract ......   Passed    1.93 sec
+      Start 73: host_adapter_golden_system_native
+73/76 Test #73: host_adapter_golden_system_native ........   Passed    0.14 sec
+      Start 74: host_adapter_golden_system_host
+74/76 Test #74: host_adapter_golden_system_host ..........   Passed    0.16 sec
+      Start 75: host_adapter_golden_system_external
+75/76 Test #75: host_adapter_golden_system_external ......   Passed    0.16 sec
+      Start 76: host_adapter_golden_system_process
+76/76 Test #76: host_adapter_golden_system_process .......   Passed   14.08 sec
+
+100% tests passed, 0 tests failed out of 76
+
+Total Test time (real) = 163.41 sec
+
+completed=2026-09-29T06:26:04+00:00
+log=/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/docs/evidence/local/verify-full-20260929T062048Z.log

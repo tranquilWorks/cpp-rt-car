@@ -465,3 +465,10 @@ backend/sample-owned and create no Runtime storage row or provider region.
 `device_control_bytes`, runtime-control accounting, twelve memory identities,
 three provider-capable regions, and runtime-stack reconciliation retain their
 existing formulas.
+
+M26-03R simulator timing metadata is included in the existing size-based device
+slot and compiled device-rate phase extents. The optional public policy adds no
+steady-state allocation, runtime thread, implicit buffer or separate memory
+region. Its actual control-storage increase is reported even when the policy is
+absent; admission budgets and default configuration/artifact identities do not
+encode this implementation layout.

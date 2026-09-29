@@ -1,9 +1,22 @@
-<!-- M26-03 prototype checkpoint -->
-M26-03 CUDA physics is active but incomplete: repeated ordinary runs expose the
-logical-time versus wall-completion constraint. See
-[retained evidence](evidence/M26-03-2026-09-29.md) and the
-[unapproved repair proposal](evidence/M26-03-timing-decision.md).
-M26-04 through M26-06 remain inactive; no CAP-M26 closure is claimed.
+# M26-03 CUDA physics reactivated
+
+The simulator timing prerequisite is merged as [target PR278](https://github.com/tranquilWorks/cpp-rt-car/pull/278)
+at c78075e2b30efba48db4f0ca8136110b1399baf5 after all32 exact-head checks,
+local quick72/full76, focused/sanitizers60, allocation, static, relocated SDK,
+ABI and unchanged default artifacts. Canonical [control PR555](https://github.com/tranquilWorks/portfolio-control/pull/555)
+merged at 7ce76ddfd4d3061b3b55bfffc88f6e8ca11e9548, blob ef229993dec359b6e35662100475473bb2760350.
+
+Reconcile and finish preserved [feature PR277](https://github.com/tranquilWorks/cpp-rt-car/pull/277).
+Its sample-owned deterministic driver alone selects a five-second host watchdog;
+the frozen one-millisecond logical budget and native/default semantics remain.
+The CUDA feature is still incomplete: finish parity/replay, fault/recovery,
+truthful artifacts, optional real-host compilation and installed-kit verification,
+then all local and32 exact-head hosted gates. Preserve [initial failures](evidence/M26-03-2026-09-29.md)
+and [repair evidence](evidence/M26-03R-2026-09-29.md).
+M26-04 XDMA, M26-05 showcase and M26-06 audit remain inactive. Human/physical/RT,
+Unreal, controlled performance and signing/release/deployment remain separate.
+
+## Historical M26-02 checkpoint
 
 # M26-02 portable golden reference
 

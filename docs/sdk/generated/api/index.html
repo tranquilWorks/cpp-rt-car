@@ -2,20 +2,20 @@
 <html lang="en"><meta charset="utf-8"><title>RTFW API reference</title>
 <h1>RTFW 1.2.1 public SDK source reference</h1><p><a href="../README.md">Manual</a> · <a href="../recipes.md">Recipes</a></p>
 <p>Selected entry points link to exact checked declarations. All default and named optional headers are reproduced with comments and line anchors. This is not a semantic C++ index; private/detail declarations remain unsupported internals.</p>
-<h2>Lifecycle, ownership and integration</h2><ul><li><a href="rt__runtime.hpp.html#L2472">rt::Runtime</a> — Configure and finalize before start; keep borrowed owners alive until checked stop succeeds.</li>
-<li><a href="rt__runtime.hpp.html#L2485">Runtime::configure</a> — Control-plane configuration; validate capacities and policy before finalization.</li>
-<li><a href="rt__runtime.hpp.html#L2598">Runtime::finalize</a> — Compile and reserve resources; inspect failure before admitting frames.</li>
-<li><a href="rt__runtime.hpp.html#L2599">Runtime::start</a> — Startup must complete before frame admission; borrowed owners already exist.</li>
-<li><a href="rt__runtime.hpp.html#L2600">Runtime::step</a> — Explicit frame context, bounded callbacks and checked status; failure may leave application effects.</li>
-<li><a href="rt__runtime.hpp.html#L2614">Runtime::stop</a> — Retain unresolved borrowed resources on failure and retry; destruction is not recovery.</li>
+<h2>Lifecycle, ownership and integration</h2><ul><li><a href="rt__runtime.hpp.html#L2490">rt::Runtime</a> — Configure and finalize before start; keep borrowed owners alive until checked stop succeeds.</li>
+<li><a href="rt__runtime.hpp.html#L2503">Runtime::configure</a> — Control-plane configuration; validate capacities and policy before finalization.</li>
+<li><a href="rt__runtime.hpp.html#L2616">Runtime::finalize</a> — Compile and reserve resources; inspect failure before admitting frames.</li>
+<li><a href="rt__runtime.hpp.html#L2617">Runtime::start</a> — Startup must complete before frame admission; borrowed owners already exist.</li>
+<li><a href="rt__runtime.hpp.html#L2618">Runtime::step</a> — Explicit frame context, bounded callbacks and checked status; failure may leave application effects.</li>
+<li><a href="rt__runtime.hpp.html#L2632">Runtime::stop</a> — Retain unresolved borrowed resources on failure and retry; destruction is not recovery.</li>
 <li><a href="rt__runtime.hpp.html#L174">HostExecutorAdapter</a> — Copied accepted jobs execute exactly once; opaque completion/scratch identities remain borrowed.</li>
 <li><a href="rt__runtime.hpp.html#L298">RuntimeClock</a> — A monotonic clock remains host-owned and outlives Runtime.</li>
 <li><a href="rt__runtime.hpp.html#L736">RateExecutionPolicy</a> — Explicit finite release/dispatch capacities; logical rates are not physical deadlines.</li>
 <li><a href="rt__runtime.hpp.html#L1141">LiveControlPolicy</a> — Fixed mailbox/producer/record/payload budgets; application apply and side-effect recovery remain external.</li>
-<li><a href="rt__runtime.hpp.html#L1882">SampledIoChannelRegistration</a> — Declared encoding, clock, freshness and safety policy; accepted submission is not an acknowledged safe state.</li>
-<li><a href="rt__runtime.hpp.html#L2866">Runtime::checkpoint_size</a> — Size caller-owned storage before writing; registered state is not an arbitrary process snapshot.</li>
-<li><a href="rt__runtime.hpp.html#L2890">Runtime::replay_active</a> — Use a compatible trusted artifact and deterministic mock/loopback providers.</li>
-<li><a href="rt__runtime.hpp.html#L2901">Runtime::replay_live_control</a> — Payload-bearing artifacts are explicitly trusted; v2 is opt-in for admission history.</li>
+<li><a href="rt__runtime.hpp.html#L1900">SampledIoChannelRegistration</a> — Declared encoding, clock, freshness and safety policy; accepted submission is not an acknowledged safe state.</li>
+<li><a href="rt__runtime.hpp.html#L2884">Runtime::checkpoint_size</a> — Size caller-owned storage before writing; registered state is not an arbitrary process snapshot.</li>
+<li><a href="rt__runtime.hpp.html#L2908">Runtime::replay_active</a> — Use a compatible trusted artifact and deterministic mock/loopback providers.</li>
+<li><a href="rt__runtime.hpp.html#L2919">Runtime::replay_live_control</a> — Payload-bearing artifacts are explicitly trusted; v2 is opt-in for admission history.</li>
 <li><a href="rt__config.hpp.html#L358">RuntimeConfig</a> — All capacities are explicit; portable defaults do not establish RT qualification.</li>
 <li><a href="rt__config.hpp.html#L326">MemoryProvider</a> — Provider tokens and arenas remain live through failed rollback/stop; report truthful observations.</li>
 <li><a href="rt__device.hpp.html#L170">HalV2BackendApi</a> — Capability and lifecycle contract; optional extensions do not imply physical support.</li>

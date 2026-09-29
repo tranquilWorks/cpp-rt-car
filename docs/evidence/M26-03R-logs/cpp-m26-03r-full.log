@@ -1,0 +1,2413 @@
+repository=/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r
+mode=full
+started=2026-09-29T06:02:52+00:00
+head=dbbab7a433a01459ed737cbb19d3b1a64a3ea1bf
+
+>>> [contract] git diff --check
+
+>>> [contract] python3 tools/check_docs_contract.py
+PASS: SDK manual/API/source inventory and local fragments (116 files)
+Documentation contract OK
+
+>>> [contract] python3 tools/generate_golden_config.py --check
+PASS: compiled golden constants match frozen contract
+
+>>> [contract] python3 -m unittest discover -s tests/golden_system -p "test_*.py"
+.........................
+----------------------------------------------------------------------
+Ran 25 tests in 0.310s
+
+OK
+
+>>> [contract] python3 -m unittest discover -s tests/installed_docs -p "test_*.py"
+.....+ ["/usr/bin/python3", "-c", "import sys;print(sys.argv[1])", "path with spaces $(never-execute) `literal`"]
+path with spaces $(never-execute) `literal`
+.+ ["/usr/bin/python3", "-c", "raise SystemExit(3)"]
++ ["/usr/bin/python3", "-c", "print(\"actual\")"]
+actual
+.
+----------------------------------------------------------------------
+Ran 7 tests in 0.079s
+
+OK
+
+>>> [contract] python3 tools/check_release_contract.py
+Release contract OK
+
+>>> [contract] python3 tests/test_release_tools.py
+...................................
+----------------------------------------------------------------------
+Ran 35 tests in 1.130s
+
+OK
+
+>>> [contract] python3 tools/check_c_abi.py
+C ABI v8 verified: 70 symbols, fingerprint 0xd0e7a5a14bf35f97
+
+>>> [contract] python3 tools/sbom.py verify-dependencies --policy tools/sbom_expected.json
+{"dependencies": [{"identity": "7e17b15f1547bb8dd9c2fed91043b7af3437387f", "license": "BSD-3-Clause", "name": "googletest", "purpose": "build/test only"}, {"identity": "6e8dadfdafa3a74eabb52ead87f8787f72eccd0b", "license": "BSD-2-Clause", "name": "rapidcheck", "purpose": "build/test only"}, {"identity": "3f7e1436a0b11806abbddce274164a491091223e", "license": "MIT", "name": "vcpkg", "purpose": "build input only"}], "identity_only": true, "schema_version": 1, "vulnerability_clearance": false, "workflow_actions": [{"commit": "11d5960a326750d5838078e36cf38b85af677262", "name": "actions/checkout"}, {"commit": "2031cfc080254a8a887f58cffee85186f0e49e48", "name": "actions/dependency-review-action"}, {"commit": "d3f86a106a0bac45b974a628896c90dbdf5c8093", "name": "actions/download-artifact"}, {"commit": "a26af69be951a213d495a4c3e4e4022e16d87065", "name": "actions/setup-python"}, {"commit": "ea165f8d65b6e75b540449e92b4886f43607fa02", "name": "actions/upload-artifact"}, {"commit": "e22c389904149dbc22b58101806040fa8d37a610", "name": "anchore/sbom-action"}]}
+
+>>> [contract] python3 tools/provenance.py verify-fixture --repo-root . --policy release/portable-assurance-policy.json
+{"cryptographic_fixture_verified": true, "current_revocation_checked": false, "key_id": "b1833d5789db9754f9af98125ca2320e7fcbf69d5b57fc300a782485e3612ccf", "schema_version": 1, "target_authenticated": false}
+
+>>> [quick] cmake -S . -B build/agent-quick -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF -DSIM_WERROR=OFF
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/build/agent-quick
+
+>>> [quick] cmake --build build/agent-quick --parallel 2
+[  2%] Built target rtfw_cuda_backend
+[  3%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/compiled_graph.cpp.o
+[  4%] Built target rtfw_xdma_backend
+[  5%] Built target gtest
+[  5%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/cross_rate_data.cpp.o
+[  6%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/device_manager.cpp.o
+[  6%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/executor.cpp.o
+[  7%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/extension_registration.cpp.o
+[  7%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/host_runtime.cpp.o
+[  8%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/live_control_actions.cpp.o
+[  8%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/live_control_mailbox.cpp.o
+[  9%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/live_control_replay.cpp.o
+[ 10%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/memory_policy.cpp.o
+[ 11%] Building CXX object samples/recipes/CMakeFiles/recipe_cuda_boundary.dir/__/__/tests/package_consumer/cuda_consumer.cpp.o
+[ 11%] Linking CXX executable recipe_cuda_boundary
+[ 11%] Built target recipe_cuda_boundary
+[ 12%] Building CXX object samples/recipes/CMakeFiles/recipe_xdma_boundary.dir/__/__/tests/package_consumer/xdma_consumer.cpp.o
+[ 12%] Linking CXX executable recipe_xdma_boundary
+[ 12%] Built target recipe_xdma_boundary
+[ 13%] Built target test_extension_fixture_bad
+[ 14%] Built target test_extension_fixture
+[ 15%] Building CXX object tests/CMakeFiles/rtfw_xdma_backend_tests.dir/xdma_backend_tests.cpp.o
+[ 15%] Linking CXX executable rtfw_xdma_backend_tests
+[ 15%] Built target rtfw_xdma_backend_tests
+[ 15%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/mixed_rate_actions.cpp.o
+[ 16%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/mixed_rate_replay.cpp.o
+[ 17%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/native_platform_preflight.cpp.o
+[ 18%] Built target gmock
+[ 18%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/observability_export.cpp.o
+[ 19%] Built target gtest_main
+[ 19%] Building CXX object _deps/googletest/googlemock/CMakeFiles/gmock_main.dir/src/gmock_main.cc.o
+[ 20%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/rate_dispatch.cpp.o
+[ 21%] Linking CXX static library ../../../lib/libgmock_main.a
+[ 21%] Built target gmock_main
+[ 22%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/rate_telemetry.cpp.o
+[ 22%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/rate_timeline.cpp.o
+[ 23%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/resource_policy.cpp.o
+[ 23%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/runtime_compat.cpp.o
+[ 24%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/runtime_profile.cpp.o
+[ 24%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/sampled_io.cpp.o
+[ 25%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/loopback_backend.cpp.o
+[ 25%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/snapshot_codec.cpp.o
+[ 26%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/telemetry.cpp.o
+[ 27%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/thread_policy.cpp.o
+[ 27%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/watchdog_monitor.cpp.o
+[ 28%] Linking CXX static library librtfw_runtime.a
+[ 30%] Built target rtfw_runtime
+[ 31%] Building CXX object CMakeFiles/rtfw_shared.dir/src/c_abi.cpp.o
+[ 31%] Building CXX object CMakeFiles/simcore_rt.dir/rt/src/runtime.cpp.o
+[ 31%] Linking CXX shared library librtfw.so
+[ 31%] Built target rtfw_shared
+[ 32%] Building CXX object CMakeFiles/rtfw_static.dir/src/c_abi.cpp.o
+[ 32%] Linking CXX static library librtfw_static.a
+[ 32%] Built target rtfw_static
+[ 32%] Building CXX object CMakeFiles/rtfw_runtime_demo.dir/src/runtime_profile_demo.cpp.o
+[ 33%] Linking CXX executable rtfw_runtime_demo
+[ 33%] Built target rtfw_runtime_demo
+[ 34%] Building CXX object samples/CMakeFiles/sample_cuda_pipeline.dir/cuda_physics/pipeline/main.cpp.o
+[ 35%] Building CXX object CMakeFiles/simcore_rt.dir/rt/src/fiber_pool.cpp.o
+[ 35%] Linking CXX static library libsimcore_rt.a
+[ 35%] Built target simcore_rt
+[ 36%] Building CXX object samples/CMakeFiles/sample_cuda_physics.dir/cuda_physics/main.cpp.o
+[ 36%] Linking CXX executable sample_cuda_pipeline
+[ 36%] Built target sample_cuda_pipeline
+[ 37%] Building C object samples/CMakeFiles/sample_embed_c.dir/embed_c/mini_app.c.o
+[ 38%] Linking C executable sample_embed_c
+[ 38%] Built target sample_embed_c
+[ 38%] Building C object samples/CMakeFiles/sample_embed_c_static.dir/embed_c/mini_app.c.o
+[ 39%] Linking CXX executable sample_embed_c_static
+[ 39%] Linking CXX executable sample_cuda_physics
+[ 39%] Built target sample_embed_c_static
+[ 39%] Built target sample_cuda_physics
+[ 39%] Building CXX object samples/CMakeFiles/sample_embed_cpp.dir/embed_cpp/mini_app.cpp.o
+[ 40%] Building CXX object samples/CMakeFiles/sample_device_mock.dir/device_mock.cpp.o
+[ 41%] Linking CXX executable sample_embed_cpp
+[ 41%] Built target sample_embed_cpp
+[ 41%] Building CXX object samples/CMakeFiles/sample_cpu_gpu_fpga_cpu.dir/cpu_gpu_fpga_cpu.cpp.o
+[ 41%] Linking CXX executable sample_device_mock
+[ 41%] Built target sample_device_mock
+[ 42%] Building CXX object samples/CMakeFiles/sample_live_control_typed.dir/live_control_typed.cpp.o
+[ 43%] Linking CXX executable sample_cpu_gpu_fpga_cpu
+[ 43%] Built target sample_cpu_gpu_fpga_cpu
+[ 43%] Building CXX object samples/CMakeFiles/sample_cuda_lifetime.dir/cuda_physics/lifetime/main.cpp.o
+[ 43%] Linking CXX executable sample_live_control_typed
+[ 43%] Built target sample_live_control_typed
+[ 44%] Building CXX object samples/CMakeFiles/sample_hello_runtime.dir/hello_runtime/main.cpp.o
+[ 44%] Linking CXX executable sample_hello_runtime
+[ 44%] Built target sample_hello_runtime
+[ 45%] Building CXX object samples/CMakeFiles/sample_typed_runtime.dir/typed_runtime/main.cpp.o
+[ 46%] Linking CXX executable sample_cuda_lifetime
+[ 47%] Linking CXX executable sample_typed_runtime
+[ 47%] Built target sample_cuda_lifetime
+[ 48%] Building CXX object samples/CMakeFiles/sample_backend_authoring.dir/backend_authoring/main.cpp.o
+[ 48%] Built target sample_typed_runtime
+[ 48%] Building CXX object samples/CMakeFiles/sample_cil_plant.dir/cil_shared_memory/plant.cpp.o
+[ 49%] Linking CXX executable sample_cil_plant
+[ 49%] Linking CXX executable sample_backend_authoring
+[ 49%] Built target sample_cil_plant
+[ 50%] Building CXX object samples/CMakeFiles/sample_cil_controller.dir/cil_shared_memory/controller.cpp.o
+[ 50%] Built target sample_backend_authoring
+[ 51%] Building CXX object samples/CMakeFiles/sample_host_adapter.dir/host_adapter/main.cpp.o
+[ 52%] Linking CXX executable sample_cil_controller
+[ 52%] Built target sample_cil_controller
+[ 52%] Building CXX object samples/CMakeFiles/sample_golden_system.dir/golden_system/main.cpp.o
+[ 52%] Linking CXX executable sample_host_adapter
+[ 52%] Built target sample_host_adapter
+[ 52%] Building CXX object samples/CMakeFiles/sample_golden_controller.dir/golden_system/controller.cpp.o
+[ 53%] Linking CXX executable sample_golden_controller
+[ 53%] Built target sample_golden_controller
+[ 53%] Building C object samples/recipes/CMakeFiles/recipe_raw_c.dir/__/__/tests/package_consumer/c_consumer.c.o
+[ 54%] Linking CXX executable recipe_raw_c
+[ 54%] Built target recipe_raw_c
+[ 54%] Building CXX object samples/recipes/CMakeFiles/recipe_raw_cpp.dir/__/__/tests/package_consumer/cpp_consumer.cpp.o
+[ 55%] Linking CXX executable recipe_raw_cpp
+[ 55%] Built target recipe_raw_cpp
+[ 55%] Building CXX object samples/recipes/CMakeFiles/recipe_profile.dir/__/__/tests/package_consumer/profile_consumer.cpp.o
+[ 56%] Linking CXX executable recipe_profile
+[ 56%] Built target recipe_profile
+[ 56%] Building CXX object samples/recipes/CMakeFiles/recipe_mixed_rate.dir/__/__/tests/package_consumer/mixed_rate_consumer.cpp.o
+[ 57%] Linking CXX executable sample_golden_system
+[ 57%] Built target sample_golden_system
+[ 58%] Building CXX object samples/recipes/CMakeFiles/recipe_live_control.dir/__/__/tests/package_consumer/live_control_consumer.cpp.o
+[ 59%] Linking CXX executable recipe_live_control
+[ 60%] Linking CXX executable recipe_mixed_rate
+[ 60%] Built target recipe_live_control
+[ 61%] Building CXX object samples/recipes/CMakeFiles/recipe_replay.dir/__/__/tests/package_consumer/live_control_replay_consumer.cpp.o
+[ 61%] Built target recipe_mixed_rate
+[ 62%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_host_runtime.cpp.o
+[ 62%] Linking CXX executable recipe_replay
+[ 62%] Built target recipe_replay
+[ 63%] Building CXX object tests/CMakeFiles/rtfw_thread_policy_rollback_test.dir/test_thread_policy.cpp.o
+[ 63%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_periodic_runtime.cpp.o
+[ 63%] Linking CXX executable rtfw_thread_policy_rollback_test
+[ 63%] Built target rtfw_thread_policy_rollback_test
+[ 63%] Building CXX object tests/CMakeFiles/rtfw_cuda_physics_tests.dir/test_cuda_physics.cpp.o
+[ 64%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_platform_preflight.cpp.o
+[ 65%] Linking CXX executable rtfw_cuda_physics_tests
+[ 65%] Built target rtfw_cuda_physics_tests
+[ 66%] Building CXX object tests/CMakeFiles/rtfw_cpu_gpu_fpga_cpu_sample_tests.dir/test_cpu_gpu_fpga_cpu_sample.cpp.o
+[ 67%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_compiled_graph.cpp.o
+[ 67%] Linking CXX executable rtfw_cpu_gpu_fpga_cpu_sample_tests
+[ 67%] Built target rtfw_cpu_gpu_fpga_cpu_sample_tests
+[ 68%] Building CXX object tests/golden_system/CMakeFiles/test_golden_system.dir/test_system.cpp.o
+[ 68%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_executor.cpp.o
+[ 68%] Linking CXX executable test_golden_system
+[ 68%] Built target test_golden_system
+[ 68%] Building C object tests/CMakeFiles/test_cabi_dlopen.dir/test_cabi_dlopen.c.o
+[ 69%] Linking C executable test_cabi_dlopen
+[ 69%] Built target test_cabi_dlopen
+[ 70%] Building CXX object tests/CMakeFiles/rtfw_simulation_timing_noalloc.dir/device_rate_simulation/noalloc.cpp.o
+[ 70%] Linking CXX executable rtfw_simulation_timing_noalloc
+[ 70%] Built target rtfw_simulation_timing_noalloc
+[ 71%] Building CXX object tests/host_adapter/CMakeFiles/test_host_adapter.dir/test_host.cpp.o
+[ 72%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_memory_plan.cpp.o
+[ 72%] Linking CXX executable test_host_adapter
+[ 72%] Built target test_host_adapter
+[ 72%] Building CXX object tests/CMakeFiles/rtfw_runtime_profile_tests.dir/runtime_profile_tests.cpp.o
+[ 73%] Linking CXX executable rtfw_runtime_profile_tests
+[ 73%] Built target rtfw_runtime_profile_tests
+[ 73%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_observability.cpp.o
+[ 74%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_determinism_replay.cpp.o
+[ 74%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_device_runtime.cpp.o
+[ 75%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_cuda_backend.cpp.o
+[ 75%] Building CXX object tests/CMakeFiles/rtfw_cuda_pipeline_tests.dir/test_cuda_pipeline.cpp.o
+[ 75%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_vendor_hal_v2.cpp.o
+[ 76%] Linking CXX executable rtfw_cuda_pipeline_tests
+[ 76%] Built target rtfw_cuda_pipeline_tests
+[ 76%] Building CXX object tests/CMakeFiles/rtfw_cuda_lifetime_tests.dir/test_cuda_lifetime.cpp.o
+[ 77%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_extension_registration.cpp.o
+[ 78%] Linking CXX executable rtfw_cuda_lifetime_tests
+[ 78%] Built target rtfw_cuda_lifetime_tests
+[ 79%] Building CXX object tests/hello_runtime/CMakeFiles/hello_capacity_failure.dir/capacity.cpp.o
+[ 79%] Linking CXX executable hello_capacity_failure
+[ 79%] Built target hello_capacity_failure
+[ 80%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_command_batch.cpp.o
+[ 80%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_device_rate_simulation.cpp.o
+[ 81%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_heterogeneous_memory.cpp.o
+[ 81%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_hal_v2.cpp.o
+[ 82%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_cross_rate_data.cpp.o
+[ 83%] Building CXX object tests/hello_runtime/CMakeFiles/hello_step_failure.dir/step.cpp.o
+[ 83%] Linking CXX executable hello_step_failure
+[ 83%] Built target hello_step_failure
+[ 84%] Building CXX object tests/typed_runtime/CMakeFiles/test_typed_sdk.dir/test_sdk.cpp.o
+[ 85%] Linking CXX executable test_typed_sdk
+[ 85%] Built target test_typed_sdk
+[ 86%] Building CXX object tests/backend_authoring/CMakeFiles/test_backend_authoring.dir/test_backend.cpp.o
+[ 86%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rate_dispatch.cpp.o
+[ 87%] Linking CXX executable test_backend_authoring
+[ 87%] Built target test_backend_authoring
+[ 88%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rate_telemetry.cpp.o
+[ 89%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rate_timeline.cpp.o
+[ 89%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_sampled_io.cpp.o
+[ 89%] Building CXX object tests/cil_shared_memory/CMakeFiles/test_cil_shared_memory.dir/test_cil.cpp.o
+[ 90%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_loopback_backend.cpp.o
+[ 91%] Linking CXX executable test_cil_shared_memory
+[ 91%] Built target test_cil_shared_memory
+[ 91%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_mailbox.cpp.o
+[ 92%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_actions.cpp.o
+[ 92%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_sdk.cpp.o
+[ 93%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_stress.cpp.o
+golden state, controls, replay, recovery, allocation: PASS
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+PASS: portable golden run/state/replay; hardware and RT qualification not performed
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+PASS: portable golden run/state/replay; hardware and RT qualification not performed
+[ 93%] Built target golden_determinism_check
+[ 94%] Building CXX object tests/CMakeFiles/rtfw_host_adapter_tests.dir/host_adapter_tests.cpp.o
+[ 94%] Linking CXX executable rtfw_host_adapter_tests
+[ 94%] Built target rtfw_host_adapter_tests
+[ 95%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_active_replay.cpp.o
+[ 95%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_mixed_rate_actions.cpp.o
+[ 96%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_mixed_rate_replay.cpp.o
+[ 96%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_mixed_rate_conformance.cpp.o
+[ 97%] Building CXX object tests/CMakeFiles/rtfw_determinism_artifact.dir/determinism_artifact.cpp.o
+[ 97%] Linking CXX executable rtfw_determinism_artifact
+[ 97%] Built target rtfw_determinism_artifact
+[ 98%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_cpu_memory_policy.cpp.o
+[ 98%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_memory_policy.cpp.o
+[100%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_thread_policy.cpp.o
+[100%] Linking CXX executable simcore_tests
+[100%] Built target simcore_tests
+
+>>> [quick] ctest --test-dir build/agent-quick --output-on-failure
+Internal ctest changing into directory: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/build/agent-quick
+Test project /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/build/agent-quick
+      Start  1: sample_cuda_pipeline
+ 1/72 Test  #1: sample_cuda_pipeline .....................   Passed    0.03 sec
+      Start  2: sample_cuda_physics
+ 2/72 Test  #2: sample_cuda_physics ......................   Passed    0.02 sec
+      Start  3: sample_embed_c
+ 3/72 Test  #3: sample_embed_c ...........................   Passed    0.02 sec
+      Start  4: sample_embed_c_static
+ 4/72 Test  #4: sample_embed_c_static ....................   Passed    0.03 sec
+      Start  5: sample_embed_cpp
+ 5/72 Test  #5: sample_embed_cpp .........................   Passed    0.02 sec
+      Start  6: sample_device_mock
+ 6/72 Test  #6: sample_device_mock .......................   Passed    0.01 sec
+      Start  7: sample_live_control_typed
+ 7/72 Test  #7: sample_live_control_typed ................   Passed    0.02 sec
+      Start  8: sample_cpu_gpu_fpga_cpu
+ 8/72 Test  #8: sample_cpu_gpu_fpga_cpu ..................   Passed    0.03 sec
+      Start  9: sample_cuda_lifetime
+ 9/72 Test  #9: sample_cuda_lifetime .....................   Passed   21.01 sec
+      Start 10: hello_runtime_output
+10/72 Test #10: hello_runtime_output .....................   Passed    0.02 sec
+      Start 11: typed_runtime_output
+11/72 Test #11: typed_runtime_output .....................   Passed    0.03 sec
+      Start 12: backend_authoring_output
+12/72 Test #12: backend_authoring_output .................   Passed    0.03 sec
+      Start 13: cil_shared_memory_processes
+13/72 Test #13: cil_shared_memory_processes ..............   Passed   15.31 sec
+      Start 14: host_adapter_native
+14/72 Test #14: host_adapter_native ......................   Passed    0.04 sec
+      Start 15: host_adapter_host
+15/72 Test #15: host_adapter_host ........................   Passed    0.02 sec
+      Start 16: recipe_raw_c
+16/72 Test #16: recipe_raw_c .............................   Passed    0.01 sec
+      Start 17: recipe_raw_cpp
+17/72 Test #17: recipe_raw_cpp ...........................   Passed    0.01 sec
+      Start 18: recipe_profile
+18/72 Test #18: recipe_profile ...........................   Passed    0.00 sec
+      Start 19: recipe_mixed_rate
+19/72 Test #19: recipe_mixed_rate ........................   Passed    0.02 sec
+      Start 20: recipe_live_control
+20/72 Test #20: recipe_live_control ......................   Passed    0.01 sec
+      Start 21: recipe_replay
+21/72 Test #21: recipe_replay ............................   Passed    0.01 sec
+      Start 22: recipe_replay_replaced
+22/72 Test #22: recipe_replay_replaced ...................   Passed    0.01 sec
+      Start 23: recipe_replay_rejected
+23/72 Test #23: recipe_replay_rejected ...................   Passed    0.01 sec
+      Start 24: recipe_cuda_boundary
+24/72 Test #24: recipe_cuda_boundary .....................   Passed    0.00 sec
+      Start 25: recipe_xdma_boundary
+25/72 Test #25: recipe_xdma_boundary .....................   Passed    0.00 sec
+      Start 26: simcore_all
+26/72 Test #26: simcore_all ..............................   Passed   14.21 sec
+      Start 27: m22_live_control_mailbox
+27/72 Test #27: m22_live_control_mailbox .................   Passed    0.35 sec
+      Start 28: m22_live_control_sdk
+28/72 Test #28: m22_live_control_sdk .....................   Passed    0.01 sec
+      Start 29: m22_live_control_stress
+29/72 Test #29: m22_live_control_stress ..................   Passed    0.23 sec
+      Start 30: m19_extension_registration
+30/72 Test #30: m19_extension_registration ...............   Passed    0.04 sec
+      Start 31: m17_command_batch_timeline
+31/72 Test #31: m17_command_batch_timeline ...............   Passed    1.48 sec
+      Start 32: m17_hal_v2_compatibility
+32/72 Test #32: m17_hal_v2_compatibility .................   Passed    0.20 sec
+      Start 33: m17_heterogeneous_memory_topology
+33/72 Test #33: m17_heterogeneous_memory_topology ........   Passed    0.08 sec
+      Start 34: m17_cuda_graph
+34/72 Test #34: m17_cuda_graph ...........................   Passed   10.19 sec
+      Start 35: m17_xdma_control
+35/72 Test #35: m17_xdma_control .........................   Passed    0.02 sec
+      Start 36: m16_rate_timeline
+36/72 Test #36: m16_rate_timeline ........................   Passed    0.08 sec
+      Start 37: m21_device_rate_model
+37/72 Test #37: m21_device_rate_model ....................   Passed    0.03 sec
+      Start 38: m21_cross_rate_payload
+38/72 Test #38: m21_cross_rate_payload ...................   Passed    0.03 sec
+      Start 39: m16_rate_dispatch
+39/72 Test #39: m16_rate_dispatch ........................   Passed    0.08 sec
+      Start 40: m16_shedding_telemetry
+40/72 Test #40: m16_shedding_telemetry ...................   Passed    0.05 sec
+      Start 41: m16_cross_rate_data
+41/72 Test #41: m16_cross_rate_data ......................   Passed    0.07 sec
+      Start 42: m15_accounting_closure
+42/72 Test #42: m15_accounting_closure ...................   Passed    0.04 sec
+      Start 43: m15_stack_lifecycle
+43/72 Test #43: m15_stack_lifecycle ......................   Passed    0.03 sec
+      Start 44: m15_cross_category_rollback
+44/72 Test #44: m15_cross_category_rollback ..............   Passed    0.02 sec
+      Start 45: thread_policy_rollback
+45/72 Test #45: thread_policy_rollback ...................   Passed    0.01 sec
+      Start 46: thread_policy_recovery
+46/72 Test #46: thread_policy_recovery ...................   Passed    0.08 sec
+      Start 47: sbom_dependencies
+47/72 Test #47: sbom_dependencies ........................   Passed    0.08 sec
+      Start 48: m24_cuda_physics
+48/72 Test #48: m24_cuda_physics .........................   Passed    0.36 sec
+      Start 49: m24_cuda_physics_cli
+49/72 Test #49: m24_cuda_physics_cli .....................   Passed    0.49 sec
+      Start 50: m17_cpu_gpu_fpga_cpu_sample
+50/72 Test #50: m17_cpu_gpu_fpga_cpu_sample ..............   Passed    0.22 sec
+      Start 51: cabi_dlopen
+51/72 Test #51: cabi_dlopen ..............................   Passed    0.02 sec
+      Start 52: host_adapter
+52/72 Test #52: host_adapter .............................   Passed    0.01 sec
+      Start 53: runtime_profile
+53/72 Test #53: runtime_profile ..........................   Passed    0.01 sec
+      Start 54: xdma_backend
+54/72 Test #54: xdma_backend .............................   Passed    0.01 sec
+      Start 55: m24_cuda_pipeline
+55/72 Test #55: m24_cuda_pipeline ........................   Passed    1.67 sec
+      Start 56: m24_cuda_pipeline_cli
+56/72 Test #56: m24_cuda_pipeline_cli ....................   Passed    0.65 sec
+      Start 57: m24_cuda_lifetime
+57/72 Test #57: m24_cuda_lifetime ........................   Passed   21.11 sec
+      Start 58: m24_cuda_lifetime_cli
+58/72 Test #58: m24_cuda_lifetime_cli ....................   Passed   20.29 sec
+      Start 59: m24_cuda_capabilities
+59/72 Test #59: m24_cuda_capabilities ....................   Passed    0.69 sec
+      Start 60: host_adapter_simulation_timing_noalloc
+60/72 Test #60: host_adapter_simulation_timing_noalloc ...   Passed    0.02 sec
+      Start 61: hello_capacity_failure
+61/72 Test #61: hello_capacity_failure ...................   Passed    0.02 sec
+      Start 62: hello_step_failure
+62/72 Test #62: hello_step_failure .......................   Passed    0.02 sec
+      Start 63: typed_sdk
+63/72 Test #63: typed_sdk ................................   Passed    0.05 sec
+      Start 64: typed_sdk_stop_failure
+64/72 Test #64: typed_sdk_stop_failure ...................   Passed    0.04 sec
+      Start 65: backend_authoring_conformance
+65/72 Test #65: backend_authoring_conformance ............   Passed    0.13 sec
+      Start 66: cil_shared_memory_contract
+66/72 Test #66: cil_shared_memory_contract ...............   Passed    0.06 sec
+      Start 67: host_adapter_contract
+67/72 Test #67: host_adapter_contract ....................   Passed    0.05 sec
+      Start 68: host_adapter_golden_system_contract
+68/72 Test #68: host_adapter_golden_system_contract ......   Passed    1.80 sec
+      Start 69: host_adapter_golden_system_native
+69/72 Test #69: host_adapter_golden_system_native ........   Passed    0.14 sec
+      Start 70: host_adapter_golden_system_host
+70/72 Test #70: host_adapter_golden_system_host ..........   Passed    0.13 sec
+      Start 71: host_adapter_golden_system_external
+71/72 Test #71: host_adapter_golden_system_external ......   Passed    0.18 sec
+      Start 72: host_adapter_golden_system_process
+72/72 Test #72: host_adapter_golden_system_process .......   Passed   13.98 sec
+
+100% tests passed, 0 tests failed out of 72
+
+Total Test time (real) = 126.27 sec
+
+>>> [quick] ./build/agent-quick/rtfw_runtime_demo --config configs/default_safe.json --run 20ms --rt --metrics-json-interval
+{"ok":true,"profile_schema_version":1,"profile_id":"autotune.c9006976199ff4d9","runtime_config_schema":7,"runtime_version":"1.2.1","config_id":4514517619591334796,"seed":1,"self_paced":true,"worker_override":false,"frames":20,"period_ns":1000000,"p50_frame_ms":0.110559,"p95_frame_ms":0.242071,"p99_frame_ms":0.303880,"mean_frame_ms":0.147170,"stdev_frame_ms":0.059360,"missed_frames":0,"watchdog_trips":0,"trace_events_dropped":0,"log_drops":0,"queue_rejections":0,"checksum":407893.106650,"phases":{"frame":{"p50_ms":0.110559,"p95_ms":0.242071,"p99_ms":0.303880}},"counters":{"missed_frames":0,"watchdog_trips":0,"trace.events_dropped":0,"log_drops":0,"executor.queue_rejections":0},"executor":{"policy":"static_deterministic","worker_count":1,"queue_capacity":128,"submitted_tasks":1380,"successful_steals":0}}
+
+>>> [quick] test "$(./build/agent-quick/rtfw_runtime_demo --version)" = "$(cat VERSION.txt)"
+
+>>> [quick] if ./build/agent-quick/rtfw_runtime_demo --definitely-not-an-option >/dev/null 2>&1; then echo "runtime demo accepted an unknown option" >&2; exit 1; fi
+
+>>> [full] cmake -S . -B build/agent-full -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=ON -DENABLE_RAPIDCHECK=ON -DSIM_SANITIZERS= -DSIM_WERROR=ON
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/build/agent-full
+
+>>> [full] cmake --build build/agent-full --parallel 2
+[  0%] Building CXX object CMakeFiles/simcore_platform.dir/src/platform_init.cpp.o
+[  0%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/compiled_graph.cpp.o
+[  1%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/cross_rate_data.cpp.o
+[  1%] Building CXX object CMakeFiles/simcore_platform.dir/src/metrics.cpp.o
+[  1%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/command_batch.cpp.o
+[  1%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/hal_v2.cpp.o
+[  1%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/heterogeneous_memory.cpp.o
+[  2%] Linking CXX static library libsimcore_platform.a
+[  2%] Built target simcore_platform
+[  2%] Building CXX object CMakeFiles/rtfw_cuda_backend.dir/rt/src/cuda_backend.cpp.o
+[  3%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/device_manager.cpp.o
+[  3%] Linking CXX static library librtfw_cuda_backend.a
+[  3%] Built target rtfw_cuda_backend
+[  3%] Building CXX object CMakeFiles/rtfw_xdma_backend.dir/rt/src/xdma_backend.cpp.o
+[  4%] Linking CXX static library librtfw_xdma_backend.a
+[  4%] Built target rtfw_xdma_backend
+[  4%] Building CXX object CMakeFiles/trace_dump.dir/src/trace_dump.cpp.o
+[  4%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/executor.cpp.o
+[  5%] Linking CXX executable trace_dump
+[  5%] Built target trace_dump
+[  5%] Building CXX object _deps/googletest/googletest/CMakeFiles/gtest.dir/src/gtest-all.cc.o
+[  5%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/extension_registration.cpp.o
+[  6%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/host_runtime.cpp.o
+[  7%] Linking CXX static library ../../../lib/libgtest.a
+[  7%] Built target gtest
+[  7%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/live_control_actions.cpp.o
+[  7%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/live_control_mailbox.cpp.o
+[  7%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/BeforeMinimalTestCase.cpp.o
+[  7%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Check.cpp.o
+[  8%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Classify.cpp.o
+[  9%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/live_control_replay.cpp.o
+[  9%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/GenerationFailure.cpp.o
+[  9%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Log.cpp.o
+[  9%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/memory_policy.cpp.o
+[ 10%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Random.cpp.o
+[ 10%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Show.cpp.o
+[ 10%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/mixed_rate_actions.cpp.o
+[ 10%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Any.cpp.o
+[ 11%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Assertions.cpp.o
+[ 12%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/mixed_rate_replay.cpp.o
+[ 12%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Base64.cpp.o
+[ 12%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Configuration.cpp.o
+[ 12%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/mock_device.cpp.o
+[ 13%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/DefaultTestListener.cpp.o
+[ 13%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/native_platform_preflight.cpp.o
+[ 13%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/FrequencyMap.cpp.o
+[ 14%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/observability_export.cpp.o
+[ 14%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/ImplicitParam.cpp.o
+[ 15%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/LogTestListener.cpp.o
+[ 15%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/rate_dispatch.cpp.o
+[ 15%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/MapParser.cpp.o
+[ 15%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/MulticastTestListener.cpp.o
+[ 15%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/ParseException.cpp.o
+[ 16%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Platform.cpp.o
+[ 16%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Property.cpp.o
+[ 16%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/rate_telemetry.cpp.o
+[ 17%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/rate_timeline.cpp.o
+[ 17%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/PropertyContext.cpp.o
+[ 18%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/ReproduceListener.cpp.o
+[ 18%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/resource_policy.cpp.o
+[ 18%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Results.cpp.o
+[ 18%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Serialization.cpp.o
+[ 18%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/runtime_compat.cpp.o
+[ 19%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/StringSerialization.cpp.o
+[ 20%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/runtime_profile.cpp.o
+[ 20%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/TestMetadata.cpp.o
+[ 20%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/TestParams.cpp.o
+[ 21%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Testing.cpp.o
+[ 21%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/sampled_io.cpp.o
+[ 21%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/Numeric.cpp.o
+[ 21%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/loopback_backend.cpp.o
+[ 22%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/snapshot_codec.cpp.o
+[ 22%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/telemetry.cpp.o
+[ 22%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/Text.cpp.o
+[ 22%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/thread_policy.cpp.o
+[ 23%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/detail/ExecHandler.cpp.o
+[ 24%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/watchdog_monitor.cpp.o
+[ 24%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/detail/GenerationHandler.cpp.o
+[ 24%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/detail/Recipe.cpp.o
+[ 24%] Linking CXX static library librtfw_runtime.a
+[ 24%] Built target rtfw_runtime
+[ 25%] Building CXX object samples/CMakeFiles/sample_particles.dir/particles.cpp.o
+[ 26%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/detail/ScaleInteger.cpp.o
+[ 26%] Linking CXX executable sample_particles
+[ 26%] Built target sample_particles
+[ 26%] Building CXX object samples/CMakeFiles/sample_tyre_belt.dir/tyre_belt_kernel.cpp.o
+[ 26%] Linking CXX static library librapidcheck.a
+[ 26%] Built target rapidcheck
+[ 27%] Building CXX object samples/CMakeFiles/sample_async_gpu.dir/async_gpu_stub.cpp.o
+[ 27%] Linking CXX executable sample_tyre_belt
+[ 27%] Built target sample_tyre_belt
+[ 28%] Building CXX object samples/CMakeFiles/sample_embed_cpp.dir/embed_cpp/mini_app.cpp.o
+[ 28%] Linking CXX executable sample_async_gpu
+[ 28%] Built target sample_async_gpu
+[ 29%] Building CXX object samples/CMakeFiles/sample_device_mock.dir/device_mock.cpp.o
+[ 29%] Linking CXX executable sample_embed_cpp
+[ 29%] Built target sample_embed_cpp
+[ 29%] Building CXX object samples/CMakeFiles/sample_cpu_gpu_fpga_cpu.dir/cpu_gpu_fpga_cpu.cpp.o
+[ 29%] Linking CXX executable sample_device_mock
+[ 29%] Built target sample_device_mock
+[ 29%] Building CXX object samples/CMakeFiles/sample_live_control_typed.dir/live_control_typed.cpp.o
+[ 30%] Linking CXX executable sample_cpu_gpu_fpga_cpu
+[ 30%] Linking CXX executable sample_live_control_typed
+[ 30%] Built target sample_cpu_gpu_fpga_cpu
+[ 30%] Building CXX object samples/CMakeFiles/sample_cuda_lifetime.dir/cuda_physics/lifetime/main.cpp.o
+[ 30%] Built target sample_live_control_typed
+[ 31%] Building CXX object samples/CMakeFiles/sample_hello_runtime.dir/hello_runtime/main.cpp.o
+[ 31%] Linking CXX executable sample_hello_runtime
+[ 31%] Built target sample_hello_runtime
+[ 31%] Building CXX object samples/CMakeFiles/sample_typed_runtime.dir/typed_runtime/main.cpp.o
+[ 32%] Linking CXX executable sample_typed_runtime
+[ 32%] Built target sample_typed_runtime
+[ 32%] Building CXX object samples/CMakeFiles/sample_backend_authoring.dir/backend_authoring/main.cpp.o
+[ 32%] Linking CXX executable sample_cuda_lifetime
+[ 32%] Built target sample_cuda_lifetime
+[ 33%] Building CXX object samples/CMakeFiles/sample_cil_plant.dir/cil_shared_memory/plant.cpp.o
+[ 33%] Linking CXX executable sample_cil_plant
+[ 34%] Linking CXX executable sample_backend_authoring
+[ 34%] Built target sample_cil_plant
+[ 34%] Building CXX object samples/CMakeFiles/sample_cil_controller.dir/cil_shared_memory/controller.cpp.o
+[ 34%] Built target sample_backend_authoring
+[ 34%] Building CXX object samples/CMakeFiles/sample_host_adapter.dir/host_adapter/main.cpp.o
+[ 34%] Linking CXX executable sample_cil_controller
+[ 34%] Built target sample_cil_controller
+[ 34%] Building CXX object samples/CMakeFiles/sample_golden_system.dir/golden_system/main.cpp.o
+[ 35%] Linking CXX executable sample_host_adapter
+[ 35%] Built target sample_host_adapter
+[ 35%] Building CXX object samples/CMakeFiles/sample_golden_controller.dir/golden_system/controller.cpp.o
+[ 36%] Linking CXX executable sample_golden_controller
+[ 36%] Built target sample_golden_controller
+[ 36%] Building CXX object samples/recipes/CMakeFiles/recipe_raw_cpp.dir/__/__/tests/package_consumer/cpp_consumer.cpp.o
+[ 37%] Linking CXX executable recipe_raw_cpp
+[ 37%] Built target recipe_raw_cpp
+[ 37%] Building CXX object samples/recipes/CMakeFiles/recipe_profile.dir/__/__/tests/package_consumer/profile_consumer.cpp.o
+[ 38%] Linking CXX executable recipe_profile
+[ 38%] Built target recipe_profile
+[ 39%] Building CXX object samples/recipes/CMakeFiles/recipe_mixed_rate.dir/__/__/tests/package_consumer/mixed_rate_consumer.cpp.o
+[ 39%] Linking CXX executable sample_golden_system
+[ 39%] Built target sample_golden_system
+[ 39%] Building CXX object samples/recipes/CMakeFiles/recipe_live_control.dir/__/__/tests/package_consumer/live_control_consumer.cpp.o
+[ 39%] Linking CXX executable recipe_mixed_rate
+[ 39%] Built target recipe_mixed_rate
+[ 39%] Building CXX object samples/recipes/CMakeFiles/recipe_replay.dir/__/__/tests/package_consumer/live_control_replay_consumer.cpp.o
+[ 39%] Linking CXX executable recipe_live_control
+[ 39%] Built target recipe_live_control
+[ 39%] Building CXX object samples/recipes/CMakeFiles/recipe_cuda_boundary.dir/__/__/tests/package_consumer/cuda_consumer.cpp.o
+[ 40%] Linking CXX executable recipe_cuda_boundary
+[ 40%] Built target recipe_cuda_boundary
+[ 41%] Building CXX object samples/recipes/CMakeFiles/recipe_xdma_boundary.dir/__/__/tests/package_consumer/xdma_consumer.cpp.o
+[ 41%] Linking CXX executable recipe_replay
+[ 41%] Built target recipe_replay
+[ 41%] Building C object tests/CMakeFiles/test_incompatible_plugin.dir/sample_plugin_bad.c.o
+[ 42%] Linking C shared library libbad_plugin.so
+[ 42%] Built target test_incompatible_plugin
+[ 43%] Building C object tests/CMakeFiles/test_extension_fixture.dir/extension_fixture.c.o
+[ 43%] Linking C shared library libextension_fixture.so
+[ 43%] Built target test_extension_fixture
+[ 43%] Linking CXX executable recipe_xdma_boundary
+[ 43%] Building C object tests/CMakeFiles/test_extension_fixture_bad.dir/extension_fixture_bad.c.o
+[ 44%] Linking C shared library libextension_fixture_bad.so
+[ 44%] Built target recipe_xdma_boundary
+[ 44%] Built target test_extension_fixture_bad
+[ 44%] Building C object tests/CMakeFiles/test_sample_plugin.dir/sample_plugin.c.o
+[ 44%] Building CXX object tests/CMakeFiles/rtfw_cuda_physics_tests.dir/test_cuda_physics.cpp.o
+[ 44%] Linking C shared library libsample_plugin.so
+[ 44%] Built target test_sample_plugin
+[ 44%] Building CXX object tests/CMakeFiles/rtfw_cpu_gpu_fpga_cpu_sample_tests.dir/test_cpu_gpu_fpga_cpu_sample.cpp.o
+[ 45%] Linking CXX executable rtfw_cpu_gpu_fpga_cpu_sample_tests
+[ 45%] Built target rtfw_cpu_gpu_fpga_cpu_sample_tests
+[ 45%] Building CXX object tests/golden_system/CMakeFiles/test_golden_system.dir/test_system.cpp.o
+[ 46%] Linking CXX executable rtfw_cuda_physics_tests
+[ 46%] Built target rtfw_cuda_physics_tests
+[ 46%] Building CXX object tests/CMakeFiles/rtfw_simulation_timing_noalloc.dir/device_rate_simulation/noalloc.cpp.o
+[ 46%] Linking CXX executable rtfw_simulation_timing_noalloc
+[ 46%] Built target rtfw_simulation_timing_noalloc
+[ 47%] Building CXX object tests/host_adapter/CMakeFiles/test_host_adapter.dir/test_host.cpp.o
+[ 47%] Linking CXX executable test_host_adapter
+[ 47%] Linking CXX executable test_golden_system
+[ 47%] Built target test_host_adapter
+[ 48%] Building CXX object tests/CMakeFiles/rtfw_runtime_profile_tests.dir/runtime_profile_tests.cpp.o
+[ 48%] Built target test_golden_system
+[ 48%] Building CXX object tests/CMakeFiles/rtfw_xdma_backend_tests.dir/xdma_backend_tests.cpp.o
+[ 48%] Linking CXX executable rtfw_runtime_profile_tests
+[ 48%] Built target rtfw_runtime_profile_tests
+[ 48%] Building CXX object tests/CMakeFiles/rtfw_cuda_pipeline_tests.dir/test_cuda_pipeline.cpp.o
+[ 48%] Linking CXX executable rtfw_xdma_backend_tests
+[ 48%] Built target rtfw_xdma_backend_tests
+[ 49%] Building CXX object tests/CMakeFiles/rtfw_cuda_lifetime_tests.dir/test_cuda_lifetime.cpp.o
+[ 49%] Linking CXX executable rtfw_cuda_lifetime_tests
+[ 49%] Built target rtfw_cuda_lifetime_tests
+[ 50%] Building CXX object tests/hello_runtime/CMakeFiles/hello_capacity_failure.dir/capacity.cpp.o
+[ 50%] Linking CXX executable rtfw_cuda_pipeline_tests
+[ 50%] Built target rtfw_cuda_pipeline_tests
+[ 50%] Building CXX object tests/hello_runtime/CMakeFiles/hello_step_failure.dir/step.cpp.o
+[ 50%] Linking CXX executable hello_capacity_failure
+[ 50%] Built target hello_capacity_failure
+[ 51%] Building CXX object tests/typed_runtime/CMakeFiles/test_typed_sdk.dir/test_sdk.cpp.o
+[ 52%] Linking CXX executable hello_step_failure
+[ 52%] Built target hello_step_failure
+[ 53%] Building CXX object tests/backend_authoring/CMakeFiles/test_backend_authoring.dir/test_backend.cpp.o
+[ 53%] Linking CXX executable test_typed_sdk
+[ 53%] Built target test_typed_sdk
+[ 53%] Building CXX object tests/cil_shared_memory/CMakeFiles/test_cil_shared_memory.dir/test_cil.cpp.o
+[ 53%] Linking CXX executable test_backend_authoring
+[ 53%] Built target test_backend_authoring
+[ 53%] Building CXX object CMakeFiles/simcore_rt.dir/rt/src/runtime.cpp.o
+[ 53%] Linking CXX executable test_cil_shared_memory
+[ 53%] Built target test_cil_shared_memory
+[ 53%] Building CXX object CMakeFiles/rtfw_shared.dir/src/c_abi.cpp.o
+[ 54%] Linking CXX shared library librtfw.so
+[ 54%] Built target rtfw_shared
+[ 55%] Building CXX object CMakeFiles/rtfw_static.dir/src/c_abi.cpp.o
+[ 55%] Building CXX object CMakeFiles/simcore_rt.dir/rt/src/fiber_pool.cpp.o
+[ 55%] Linking CXX static library librtfw_static.a
+[ 55%] Built target rtfw_static
+[ 55%] Building CXX object CMakeFiles/rtfw_runtime_demo.dir/src/runtime_profile_demo.cpp.o
+[ 56%] Linking CXX static library libsimcore_rt.a
+[ 56%] Built target simcore_rt
+[ 56%] Building CXX object _deps/googletest/googlemock/CMakeFiles/gmock.dir/src/gmock-all.cc.o
+[ 56%] Linking CXX executable rtfw_runtime_demo
+[ 56%] Built target rtfw_runtime_demo
+[ 56%] Building CXX object _deps/googletest/googletest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o
+[ 56%] Linking CXX static library ../../../lib/libgtest_main.a
+[ 56%] Built target gtest_main
+[ 56%] Building CXX object samples/CMakeFiles/sample_cuda_pipeline.dir/cuda_physics/pipeline/main.cpp.o
+[ 56%] Linking CXX executable sample_cuda_pipeline
+[ 56%] Built target sample_cuda_pipeline
+[ 56%] Building CXX object samples/CMakeFiles/sample_cuda_physics.dir/cuda_physics/main.cpp.o
+[ 56%] Linking CXX static library ../../../lib/libgmock.a
+[ 56%] Built target gmock
+[ 56%] Building C object samples/CMakeFiles/sample_embed_c.dir/embed_c/mini_app.c.o
+[ 57%] Linking C executable sample_embed_c
+[ 57%] Built target sample_embed_c
+[ 57%] Building C object samples/CMakeFiles/sample_embed_c_static.dir/embed_c/mini_app.c.o
+[ 57%] Linking CXX executable sample_embed_c_static
+[ 57%] Built target sample_embed_c_static
+[ 57%] Building C object samples/recipes/CMakeFiles/recipe_raw_c.dir/__/__/tests/package_consumer/c_consumer.c.o
+[ 57%] Linking CXX executable recipe_raw_c
+[ 58%] Linking CXX executable sample_cuda_physics
+[ 58%] Built target recipe_raw_c
+[ 59%] Building CXX object tests/CMakeFiles/rtfw_thread_policy_rollback_test.dir/test_thread_policy.cpp.o
+[ 59%] Built target sample_cuda_physics
+golden state, controls, replay, recovery, allocation: PASS
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+PASS: portable golden run/state/replay; hardware and RT qualification not performed
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+PASS: portable golden run/state/replay; hardware and RT qualification not performed
+[ 59%] Built target golden_determinism_check
+[ 59%] Building C object tests/CMakeFiles/test_cabi_dlopen.dir/test_cabi_dlopen.c.o
+[ 60%] Linking C executable test_cabi_dlopen
+[ 60%] Built target test_cabi_dlopen
+[ 61%] Building CXX object tests/CMakeFiles/rtfw_host_adapter_tests.dir/host_adapter_tests.cpp.o
+[ 61%] Linking CXX executable rtfw_host_adapter_tests
+[ 61%] Built target rtfw_host_adapter_tests
+[ 61%] Building CXX object CMakeFiles/rtfw_experimental.dir/rt/src/plugin_manager.cpp.o
+[ 62%] Building CXX object CMakeFiles/rtfw_experimental.dir/rt/src/scheduler.cpp.o
+[ 62%] Linking CXX executable rtfw_thread_policy_rollback_test
+[ 62%] Built target rtfw_thread_policy_rollback_test
+[ 62%] Building CXX object CMakeFiles/simcore_app.dir/src/main.cpp.o
+[ 62%] Building CXX object CMakeFiles/rtfw_experimental.dir/rt/src/crashdump_posix.cpp.o
+[ 62%] Linking CXX static library librtfw_experimental.a
+[ 62%] Built target rtfw_experimental
+[ 63%] Building CXX object _deps/googletest/googlemock/CMakeFiles/gmock_main.dir/src/gmock_main.cc.o
+[ 63%] Linking CXX static library ../../../lib/libgmock_main.a
+[ 63%] Built target gmock_main
+[ 64%] Building CXX object tests/CMakeFiles/rtfw_determinism_artifact.dir/determinism_artifact.cpp.o
+[ 64%] Linking CXX executable rtfw_determinism_artifact
+[ 64%] Built target rtfw_determinism_artifact
+[ 65%] Linking CXX executable rtfw_demo
+[ 65%] Built target simcore_app
+[ 65%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_simcore_determinism.cpp.o
+[ 65%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_simcore_basic.cpp.o
+[ 66%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_logging.cpp.o
+[ 66%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_async_logger.cpp.o
+[ 66%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_logger_backpressure.cpp.o
+[ 67%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_profiler.cpp.o
+[ 67%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_adaptive_param.cpp.o
+[ 67%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_soa.cpp.o
+[ 68%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_sparse_set.cpp.o
+[ 68%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_soa_view.cpp.o
+[ 68%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_jobqueue.cpp.o
+[ 69%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_queue_metrics.cpp.o
+[ 69%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_metrics_json.cpp.o
+[ 69%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_jobqueue_perf.cpp.o
+[ 70%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_workerpool_priority.cpp.o
+[ 70%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_phase_graph.cpp.o
+[ 70%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_static_phase_graph.cpp.o
+[ 71%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_chunk_autotune.cpp.o
+[ 71%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_deterministic_reduce.cpp.o
+[ 71%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_differential_output.cpp.o
+[ 71%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_robust_fp.cpp.o
+[ 72%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_budget_monitor.cpp.o
+[ 72%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_fault_injection.cpp.o
+[ 72%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_simd.cpp.o
+[ 73%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_aosoa_autotune.cpp.o
+[ 73%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rt_pool.cpp.o
+[ 73%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rt_arena.cpp.o
+[ 74%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_arena_binding_assert.cpp.o
+[ 74%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rt_overflow_death.cpp.o
+[ 74%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_fiber_pool.cpp.o
+[ 75%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_fiber_pool_race.cpp.o
+[ 75%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_bintrace.cpp.o
+[ 75%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_budget_degrade.cpp.o
+[ 76%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_predictive_adaptive.cpp.o
+[ 76%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_small_array_balance.cpp.o
+[ 76%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_phase_telemetry.cpp.o
+[ 77%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_aligned_allocator.cpp.o
+[ 77%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_highres_clock.cpp.o
+[ 77%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_highres_clock_integration.cpp.o
+[ 78%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rate_governor.cpp.o
+[ 78%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_hazard_ptr.cpp.o
+[ 78%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_lockfree_queue.cpp.o
+[ 79%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_seqlock_config.cpp.o
+[ 79%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_backpressure.cpp.o
+[ 79%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_physics_integrators.cpp.o
+[ 80%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_constraint_solver.cpp.o
+[ 80%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_narrowphase.cpp.o
+[ 80%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_hal.cpp.o
+[ 80%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_gpu_stub.cpp.o
+[ 81%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_gpu_overlap.cpp.o
+[ 81%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_frame_graph.cpp.o
+[ 81%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_watchdog.cpp.o
+[ 82%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rt_watchdog.cpp.o
+[ 82%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_crashdump.cpp.o
+[ 82%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_numerics.cpp.o
+[ 83%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_prng_determinism.cpp.o
+[ 83%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_snapshot.cpp.o
+[ 83%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_trace_export.cpp.o
+[ 84%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_trace_noalloc.cpp.o
+[ 84%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_units.cpp.o
+[ 84%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_huge_page.cpp.o
+[ 85%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_thermal_limp.cpp.o
+[ 85%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_limp_mode.cpp.o
+[ 85%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_config_hot_reload.cpp.o
+[ 86%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_plugin_manager.cpp.o
+[ 86%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_sandbox.cpp.o
+[ 86%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_minidump_symbols.cpp.o
+[ 87%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_perf_artifacts.cpp.o
+[ 87%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_scheduler.cpp.o
+[ 87%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_host_runtime.cpp.o
+[ 88%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_periodic_runtime.cpp.o
+[ 88%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_platform_preflight.cpp.o
+[ 88%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_compiled_graph.cpp.o
+[ 89%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_executor.cpp.o
+[ 89%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_memory_plan.cpp.o
+[ 89%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_observability.cpp.o
+[ 89%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_determinism_replay.cpp.o
+[ 90%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_device_runtime.cpp.o
+[ 90%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_cuda_backend.cpp.o
+[ 90%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_vendor_hal_v2.cpp.o
+[ 91%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rt_pipeline.cpp.o
+[ 91%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_platform_gate.cpp.o
+[ 91%] Building CXX object tests/CMakeFiles/simcore_tests.dir/integration/test_determinism.cpp.o
+[ 92%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_extension_registration.cpp.o
+[ 92%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_command_batch.cpp.o
+[ 92%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_device_rate_simulation.cpp.o
+[ 93%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_heterogeneous_memory.cpp.o
+[ 93%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_hal_v2.cpp.o
+[ 93%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_cross_rate_data.cpp.o
+[ 94%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rate_dispatch.cpp.o
+[ 94%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rate_telemetry.cpp.o
+[ 94%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rate_timeline.cpp.o
+[ 95%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_sampled_io.cpp.o
+[ 95%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_loopback_backend.cpp.o
+[ 95%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_mailbox.cpp.o
+[ 96%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_actions.cpp.o
+[ 96%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_sdk.cpp.o
+[ 96%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_stress.cpp.o
+[ 97%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_active_replay.cpp.o
+[ 97%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_mixed_rate_actions.cpp.o
+[ 97%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_mixed_rate_replay.cpp.o
+[ 98%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_mixed_rate_conformance.cpp.o
+[ 98%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_cpu_memory_policy.cpp.o
+[ 98%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_memory_policy.cpp.o
+[ 98%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_thread_policy.cpp.o
+[ 99%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_affinity.cpp.o
+[ 99%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_numa_pool.cpp.o
+[ 99%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_numa_integration.cpp.o
+[100%] Linking CXX executable simcore_tests
+[100%] Built target simcore_tests
+
+>>> [full] ctest --test-dir build/agent-full --output-on-failure
+Internal ctest changing into directory: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/build/agent-full
+Test project /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/build/agent-full
+      Start  1: sample_cuda_pipeline
+ 1/76 Test  #1: sample_cuda_pipeline .....................   Passed    0.03 sec
+      Start  2: sample_cuda_physics
+ 2/76 Test  #2: sample_cuda_physics ......................   Passed    0.02 sec
+      Start  3: sample_particles
+ 3/76 Test  #3: sample_particles .........................   Passed    0.00 sec
+      Start  4: sample_tyre_belt
+ 4/76 Test  #4: sample_tyre_belt .........................   Passed    0.00 sec
+      Start  5: sample_async_gpu
+ 5/76 Test  #5: sample_async_gpu .........................   Passed    0.00 sec
+      Start  6: sample_embed_c
+ 6/76 Test  #6: sample_embed_c ...........................   Passed    0.02 sec
+      Start  7: sample_embed_c_static
+ 7/76 Test  #7: sample_embed_c_static ....................   Passed    0.02 sec
+      Start  8: sample_embed_cpp
+ 8/76 Test  #8: sample_embed_cpp .........................   Passed    0.02 sec
+      Start  9: sample_device_mock
+ 9/76 Test  #9: sample_device_mock .......................   Passed    0.01 sec
+      Start 10: sample_live_control_typed
+10/76 Test #10: sample_live_control_typed ................   Passed    0.01 sec
+      Start 11: sample_cpu_gpu_fpga_cpu
+11/76 Test #11: sample_cpu_gpu_fpga_cpu ..................   Passed    0.03 sec
+      Start 12: sample_cuda_lifetime
+12/76 Test #12: sample_cuda_lifetime .....................   Passed   21.17 sec
+      Start 13: hello_runtime_output
+13/76 Test #13: hello_runtime_output .....................   Passed    0.02 sec
+      Start 14: typed_runtime_output
+14/76 Test #14: typed_runtime_output .....................   Passed    0.02 sec
+      Start 15: backend_authoring_output
+15/76 Test #15: backend_authoring_output .................   Passed    0.04 sec
+      Start 16: cil_shared_memory_processes
+16/76 Test #16: cil_shared_memory_processes ..............   Passed   15.32 sec
+      Start 17: host_adapter_native
+17/76 Test #17: host_adapter_native ......................   Passed    0.05 sec
+      Start 18: host_adapter_host
+18/76 Test #18: host_adapter_host ........................   Passed    0.02 sec
+      Start 19: recipe_raw_c
+19/76 Test #19: recipe_raw_c .............................   Passed    0.01 sec
+      Start 20: recipe_raw_cpp
+20/76 Test #20: recipe_raw_cpp ...........................   Passed    0.01 sec
+      Start 21: recipe_profile
+21/76 Test #21: recipe_profile ...........................   Passed    0.00 sec
+      Start 22: recipe_mixed_rate
+22/76 Test #22: recipe_mixed_rate ........................   Passed    0.02 sec
+      Start 23: recipe_live_control
+23/76 Test #23: recipe_live_control ......................   Passed    0.01 sec
+      Start 24: recipe_replay
+24/76 Test #24: recipe_replay ............................   Passed    0.01 sec
+      Start 25: recipe_replay_replaced
+25/76 Test #25: recipe_replay_replaced ...................   Passed    0.01 sec
+      Start 26: recipe_replay_rejected
+26/76 Test #26: recipe_replay_rejected ...................   Passed    0.01 sec
+      Start 27: recipe_cuda_boundary
+27/76 Test #27: recipe_cuda_boundary .....................   Passed    0.00 sec
+      Start 28: recipe_xdma_boundary
+28/76 Test #28: recipe_xdma_boundary .....................   Passed    0.00 sec
+      Start 29: simcore_all
+29/76 Test #29: simcore_all ..............................***Failed   43.93 sec
+Running main() from /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/external/googletest/googletest/src/gtest_main.cc
+[==========] Running 518 tests from 111 test suites.
+[----------] Global test environment set-up.
+[----------] 1 test from SimCoreBasic
+[ RUN      ] SimCoreBasic.RunsExactFrames
+[       OK ] SimCoreBasic.RunsExactFrames (217 ms)
+[----------] 1 test from SimCoreBasic (217 ms total)
+
+[----------] 3 tests from Logger
+[ RUN      ] Logger.AsyncRingFileSinkFlushes
+[       OK ] Logger.AsyncRingFileSinkFlushes (52 ms)
+[ RUN      ] Logger.AsyncRingFileSinkDrops
+[       OK ] Logger.AsyncRingFileSinkDrops (120 ms)
+[ RUN      ] Logger.RespectsLevel
+[       OK ] Logger.RespectsLevel (0 ms)
+[----------] 3 tests from Logger (172 ms total)
+
+[----------] 3 tests from LoggerBackpressure
+[ RUN      ] LoggerBackpressure.FileSinkDropsUnderFloodWithoutBlocking
+[       OK ] LoggerBackpressure.FileSinkDropsUnderFloodWithoutBlocking (31 ms)
+[ RUN      ] LoggerBackpressure.KernelBypassDropsUnderFloodWithoutBlocking
+[       OK ] LoggerBackpressure.KernelBypassDropsUnderFloodWithoutBlocking (26 ms)
+[ RUN      ] LoggerBackpressure.LogDropsMetricIncreases
+[       OK ] LoggerBackpressure.LogDropsMetricIncreases (97 ms)
+[----------] 3 tests from LoggerBackpressure (154 ms total)
+
+[----------] 1 test from ProfilerIntegration
+[ RUN      ] ProfilerIntegration.CollectsPhaseAndFrame
+[       OK ] ProfilerIntegration.CollectsPhaseAndFrame (552 ms)
+[----------] 1 test from ProfilerIntegration (552 ms total)
+
+[----------] 1 test from AdaptiveParamTest
+[ RUN      ] AdaptiveParamTest.DriftBounded
+[       OK ] AdaptiveParamTest.DriftBounded (1525 ms)
+[----------] 1 test from AdaptiveParamTest (1525 ms total)
+
+[----------] 3 tests from CarSoA
+[ RUN      ] CarSoA.InsertRemove
+[       OK ] CarSoA.InsertRemove (0 ms)
+[ RUN      ] CarSoA.ContiguousStorage
+[       OK ] CarSoA.ContiguousStorage (0 ms)
+[ RUN      ] CarSoA.BranchlessLookup
+[       OK ] CarSoA.BranchlessLookup (0 ms)
+[----------] 3 tests from CarSoA (0 ms total)
+
+[----------] 2 tests from SparseSet
+[ RUN      ] SparseSet.InsertRemoveAligned
+[       OK ] SparseSet.InsertRemoveAligned (0 ms)
+[ RUN      ] SparseSet.GroupView
+[       OK ] SparseSet.GroupView (0 ms)
+[----------] 2 tests from SparseSet (0 ms total)
+
+[----------] 2 tests from SOAView
+[ RUN      ] SOAView.Access
+[       OK ] SOAView.Access (0 ms)
+[ RUN      ] SOAView.Axpy
+[       OK ] SOAView.Axpy (0 ms)
+[----------] 2 tests from SOAView (0 ms total)
+
+[----------] 4 tests from JobQueue
+[ RUN      ] JobQueue.ExecutesEveryJob
+[       OK ] JobQueue.ExecutesEveryJob (7 ms)
+[ RUN      ] JobQueue.BackpressureCapsOutstanding
+[       OK ] JobQueue.BackpressureCapsOutstanding (101 ms)
+[ RUN      ] JobQueue.SingleProducerFastPath
+[       OK ] JobQueue.SingleProducerFastPath (0 ms)
+[ RUN      ] JobQueue.ContentionTwoXThreads
+[       OK ] JobQueue.ContentionTwoXThreads (3 ms)
+[----------] 4 tests from JobQueue (112 ms total)
+
+[----------] 1 test from QueueMetrics
+[ RUN      ] QueueMetrics.PublishesDepthAndSteals
+[       OK ] QueueMetrics.PublishesDepthAndSteals (7 ms)
+[----------] 1 test from QueueMetrics (7 ms total)
+
+[----------] 2 tests from MetricsJson
+[ RUN      ] MetricsJson.EmitsPhaseStatsAndCounters
+[       OK ] MetricsJson.EmitsPhaseStatsAndCounters (76 ms)
+[ RUN      ] MetricsJson.IntervalResetsCounters
+[       OK ] MetricsJson.IntervalResetsCounters (76 ms)
+[----------] 2 tests from MetricsJson (153 ms total)
+
+[----------] 1 test from JobQueuePerf
+[ RUN      ] JobQueuePerf.MPMCvsMutex
+Lockfree queue: 5.32017 ms, mutex queue: 5.24942 ms
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_jobqueue_perf.cpp:84: Skipped
+Lock-free queue was not faster than mutex queue
+
+[  SKIPPED ] JobQueuePerf.MPMCvsMutex (10 ms)
+[----------] 1 test from JobQueuePerf (10 ms total)
+
+[----------] 3 tests from JobQueuePerfMix
+[ RUN      ] JobQueuePerfMix.SPSC
+SPSC time: 2.23709 ms
+[       OK ] JobQueuePerfMix.SPSC (2 ms)
+[ RUN      ] JobQueuePerfMix.SPMC
+SPMC time: 4.18532 ms
+[       OK ] JobQueuePerfMix.SPMC (4 ms)
+[ RUN      ] JobQueuePerfMix.MPMC
+MPMC time: 27.545 ms
+[       OK ] JobQueuePerfMix.MPMC (27 ms)
+[----------] 3 tests from JobQueuePerfMix (34 ms total)
+
+[----------] 3 tests from WorkerPoolSched
+[ RUN      ] WorkerPoolSched.HighPriorityRunsFirst
+[       OK ] WorkerPoolSched.HighPriorityRunsFirst (0 ms)
+[ RUN      ] WorkerPoolSched.WorkStealing
+[       OK ] WorkerPoolSched.WorkStealing (14 ms)
+[ RUN      ] WorkerPoolSched.TailLatencyUnderSkew
+[       OK ] WorkerPoolSched.TailLatencyUnderSkew (100 ms)
+[----------] 3 tests from WorkerPoolSched (114 ms total)
+
+[----------] 1 test from PhaseGraph
+[ RUN      ] PhaseGraph.EnforcesDepsAndRunsParallelFrontier
+[       OK ] PhaseGraph.EnforcesDepsAndRunsParallelFrontier (154 ms)
+[----------] 1 test from PhaseGraph (154 ms total)
+
+[----------] 3 tests from StaticPhaseGraph
+[ RUN      ] StaticPhaseGraph.RespectsCompileTimeEdges
+[       OK ] StaticPhaseGraph.RespectsCompileTimeEdges (0 ms)
+[ RUN      ] StaticPhaseGraph.DynamicOverlayAddsDependency
+[       OK ] StaticPhaseGraph.DynamicOverlayAddsDependency (0 ms)
+[ RUN      ] StaticPhaseGraph.AutoRWBarrier
+[       OK ] StaticPhaseGraph.AutoRWBarrier (0 ms)
+[----------] 3 tests from StaticPhaseGraph (0 ms total)
+
+[----------] 6 tests from ChunkAutoTune
+[ RUN      ] ChunkAutoTune.ManyElementsTargetsChunksPerThread
+[       OK ] ChunkAutoTune.ManyElementsTargetsChunksPerThread (62 ms)
+[ RUN      ] ChunkAutoTune.SmallArrayClampedByMinChunk
+[       OK ] ChunkAutoTune.SmallArrayClampedByMinChunk (63 ms)
+[ RUN      ] ChunkAutoTune.DisabledUsesFixedChunk
+[       OK ] ChunkAutoTune.DisabledUsesFixedChunk (62 ms)
+[ RUN      ] ChunkAutoTune.HintLatencyProducesMoreChunks
+[       OK ] ChunkAutoTune.HintLatencyProducesMoreChunks (130 ms)
+[ RUN      ] ChunkAutoTune.CachePinsPerMachine
+[       OK ] ChunkAutoTune.CachePinsPerMachine (166 ms)
+[ RUN      ] ChunkAutoTune.CusumDriftRetunes
+[       OK ] ChunkAutoTune.CusumDriftRetunes (164 ms)
+[----------] 6 tests from ChunkAutoTune (648 ms total)
+
+[----------] 1 test from DeterministicReduction
+[ RUN      ] DeterministicReduction.SumDoubleStableAcrossThreads
+[       OK ] DeterministicReduction.SumDoubleStableAcrossThreads (127 ms)
+[----------] 1 test from DeterministicReduction (127 ms total)
+
+[----------] 1 test from DifferentialKernelTest
+[ RUN      ] DifferentialKernelTest.DriftBelowThreshold
+[       OK ] DifferentialKernelTest.DriftBelowThreshold (0 ms)
+[----------] 1 test from DifferentialKernelTest (0 ms total)
+
+[----------] 5 tests from RobustFP
+[ RUN      ] RobustFP.SafeRsqrtFinite
+[       OK ] RobustFP.SafeRsqrtFinite (0 ms)
+[ RUN      ] RobustFP.KahanImprovesSumULP
+[       OK ] RobustFP.KahanImprovesSumULP (8 ms)
+[ RUN      ] RobustFP.FloatReductionMixedPrecision
+[       OK ] RobustFP.FloatReductionMixedPrecision (3 ms)
+[ RUN      ] RobustFP.KahanFloatReduction
+[       OK ] RobustFP.KahanFloatReduction (7 ms)
+[ RUN      ] RobustFP.ShadowArithmeticDetectsInstability
+[       OK ] RobustFP.ShadowArithmeticDetectsInstability (0 ms)
+[----------] 5 tests from RobustFP (19 ms total)
+
+[----------] 2 tests from BudgetMonitor
+[ RUN      ] BudgetMonitor.GracefulDegradeTriggers
+[       OK ] BudgetMonitor.GracefulDegradeTriggers (52 ms)
+[ RUN      ] BudgetMonitor.TriggersCatchupWhenOverBudget
+[       OK ] BudgetMonitor.TriggersCatchupWhenOverBudget (1266 ms)
+[----------] 2 tests from BudgetMonitor (1319 ms total)
+
+[----------] 1 test from FaultInjection
+[ RUN      ] FaultInjection.RandomDelaysStillRun
+[       OK ] FaultInjection.RandomDelaysStillRun (552 ms)
+[----------] 1 test from FaultInjection (552 ms total)
+
+[----------] 2 tests from SIMD
+[ RUN      ] SIMD.SoAAxpy3MatchesScalar
+[       OK ] SIMD.SoAAxpy3MatchesScalar (0 ms)
+[ RUN      ] SIMD.AoSoAAxpy3MatchesSoA
+N=1000 SoA=43us AoSoA=41us
+N=10000 SoA=194us AoSoA=191us
+N=100000 SoA=1297us AoSoA=1644us
+N=1000000 SoA=6527us AoSoA=9229us
+[       OK ] SIMD.AoSoAAxpy3MatchesSoA (286 ms)
+[----------] 2 tests from SIMD (286 ms total)
+
+[----------] 1 test from AoSoA
+[ RUN      ] AoSoA.AutotuneReturnsValidCandidate
+[       OK ] AoSoA.AutotuneReturnsValidCandidate (0 ms)
+[----------] 1 test from AoSoA (0 ms total)
+
+[----------] 1 test from RtPool
+[ RUN      ] RtPool.DeterministicBindingAndUse
+[       OK ] RtPool.DeterministicBindingAndUse (0 ms)
+[----------] 1 test from RtPool (0 ms total)
+
+[----------] 3 tests from RtArena
+[ RUN      ] RtArena.BasicAllocAndReset
+[       OK ] RtArena.BasicAllocAndReset (0 ms)
+[ RUN      ] RtArena.OverflowTriggersDegrade
+[RtArena] overflow: req=200 avail=128 cap=256 off=128
+[       OK ] RtArena.OverflowTriggersDegrade (0 ms)
+[ RUN      ] RtArena.FaultInjectedFallbackFailsGracefully
+[RtArena] overflow: req=256 avail=128 cap=128 off=0
+[       OK ] RtArena.FaultInjectedFallbackFailsGracefully (0 ms)
+[----------] 3 tests from RtArena (0 ms total)
+
+[----------] 1 test from FrameArenaBindingAssert
+[ RUN      ] FrameArenaBindingAssert.DeathBeforeBinding
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_arena_binding_assert.cpp:6: Skipped
+Debug-only arena binding assert disabled in release builds
+
+[  SKIPPED ] FrameArenaBindingAssert.DeathBeforeBinding (0 ms)
+[----------] 1 test from FrameArenaBindingAssert (0 ms total)
+
+[----------] 2 tests from FiberPool
+[ RUN      ] FiberPool.FenceStormSimCore
+[       OK ] FiberPool.FenceStormSimCore (118 ms)
+[ RUN      ] FiberPool.FenceStressNoDuplicateResumes
+[       OK ] FiberPool.FenceStressNoDuplicateResumes (271 ms)
+[----------] 2 tests from FiberPool (389 ms total)
+
+[----------] 1 test from BinaryTrace
+[ RUN      ] BinaryTrace.RecordsPhasesAndChunks
+[       OK ] BinaryTrace.RecordsPhasesAndChunks (152 ms)
+[----------] 1 test from BinaryTrace (152 ms total)
+
+[----------] 1 test from PredictiveAdaptive
+[ RUN      ] PredictiveAdaptive.PrestepsReduceReactiveCatchup
+[       OK ] PredictiveAdaptive.PrestepsReduceReactiveCatchup (6387 ms)
+[----------] 1 test from PredictiveAdaptive (6387 ms total)
+
+[----------] 2 tests from SmallArrayBalance
+[ RUN      ] SmallArrayBalance.SerialOnTinyArrays
+[       OK ] SmallArrayBalance.SerialOnTinyArrays (59 ms)
+[ RUN      ] SmallArrayBalance.ParallelWhenWorthIt
+[       OK ] SmallArrayBalance.ParallelWhenWorthIt (57 ms)
+[----------] 2 tests from SmallArrayBalance (117 ms total)
+
+[----------] 1 test from PhaseTelemetry
+[ RUN      ] PhaseTelemetry.EmitsMetrics
+[       OK ] PhaseTelemetry.EmitsMetrics (68 ms)
+[----------] 1 test from PhaseTelemetry (68 ms total)
+
+[----------] 1 test from AlignedAllocator
+[ RUN      ] AlignedAllocator.Allocates64ByteAligned
+[       OK ] AlignedAllocator.Allocates64ByteAligned (0 ms)
+[----------] 1 test from AlignedAllocator (0 ms total)
+
+[----------] 2 tests from HighResClock
+[ RUN      ] HighResClock.MonotonicMockedTSC
+[       OK ] HighResClock.MonotonicMockedTSC (50 ms)
+[ RUN      ] HighResClock.DriftDisablesTSC
+[       OK ] HighResClock.DriftDisablesTSC (100 ms)
+[----------] 2 tests from HighResClock (150 ms total)
+
+[----------] 1 test from HighResClockIntegration
+[ RUN      ] HighResClockIntegration.MonotonicSequence
+[       OK ] HighResClockIntegration.MonotonicSequence (70 ms)
+[----------] 1 test from HighResClockIntegration (70 ms total)
+
+[----------] 2 tests from RateGovernor
+[ RUN      ] RateGovernor.AdversarialBurstTriggersLadderAndRecovers
+[       OK ] RateGovernor.AdversarialBurstTriggersLadderAndRecovers (0 ms)
+[ RUN      ] RateGovernor.CountsEachBoundedRungOnce
+[       OK ] RateGovernor.CountsEachBoundedRungOnce (0 ms)
+[----------] 2 tests from RateGovernor (0 ms total)
+
+[----------] 2 tests from HazardPointer
+[ RUN      ] HazardPointer.StackCorrectness
+[       OK ] HazardPointer.StackCorrectness (18 ms)
+[ RUN      ] HazardPointer.SimultaneousGuardsRetainIndependentObjects
+[       OK ] HazardPointer.SimultaneousGuardsRetainIndependentObjects (0 ms)
+[----------] 2 tests from HazardPointer (18 ms total)
+
+[----------] 4 tests from LockFreeQueue
+[ RUN      ] LockFreeQueue.MultiProducerConsumer
+[       OK ] LockFreeQueue.MultiProducerConsumer (0 ms)
+[ RUN      ] LockFreeQueue.FifoEmptyAndReuse
+[       OK ] LockFreeQueue.FifoEmptyAndReuse (0 ms)
+[ RUN      ] LockFreeQueue.SimultaneousProducersConsumersDeliverEachValueOnce
+[       OK ] LockFreeQueue.SimultaneousProducersConsumersDeliverEachValueOnce (12 ms)
+[ RUN      ] LockFreeQueue.SuccessorLivesUntilInFlightValueCopyFinishes
+[       OK ] LockFreeQueue.SuccessorLivesUntilInFlightValueCopyFinishes (0 ms)
+[----------] 4 tests from LockFreeQueue (13 ms total)
+
+[----------] 1 test from SeqLock
+[ RUN      ] SeqLock.ConsistentReads
+[       OK ] SeqLock.ConsistentReads (0 ms)
+[----------] 1 test from SeqLock (0 ms total)
+
+[----------] 1 test from TokenBucket
+[ RUN      ] TokenBucket.RefillsOverTime
+[       OK ] TokenBucket.RefillsOverTime (150 ms)
+[----------] 1 test from TokenBucket (150 ms total)
+
+[----------] 2 tests from PhysicsIntegrators
+[ RUN      ] PhysicsIntegrators.EnergyInvariant
+[       OK ] PhysicsIntegrators.EnergyInvariant (0 ms)
+[ RUN      ] PhysicsIntegrators.StabilityDtSweep
+[       OK ] PhysicsIntegrators.StabilityDtSweep (0 ms)
+[----------] 2 tests from PhysicsIntegrators (0 ms total)
+
+[----------] 1 test from ConstraintSolver
+[ RUN      ] ConstraintSolver.WarmStartCaches
+[       OK ] ConstraintSolver.WarmStartCaches (0 ms)
+[----------] 1 test from ConstraintSolver (0 ms total)
+
+[----------] 1 test from IslandManager
+[ RUN      ] IslandManager.SleepingHeuristic
+[       OK ] IslandManager.SleepingHeuristic (0 ms)
+[----------] 1 test from IslandManager (0 ms total)
+
+[----------] 1 test from NarrowPhase
+[ RUN      ] NarrowPhase.ContactCaching
+[       OK ] NarrowPhase.ContactCaching (0 ms)
+[----------] 1 test from NarrowPhase (0 ms total)
+
+[----------] 1 test from CollisionPipeline
+[ RUN      ] CollisionPipeline.CCDHook
+[       OK ] CollisionPipeline.CCDHook (0 ms)
+[----------] 1 test from CollisionPipeline (0 ms total)
+
+[----------] 3 tests from HAL
+[ RUN      ] HAL.ThreadAndFence
+[       OK ] HAL.ThreadAndFence (0 ms)
+[ RUN      ] HAL.AllocFree
+[       OK ] HAL.AllocFree (0 ms)
+[ RUN      ] HAL.TimerElapsed
+[       OK ] HAL.TimerElapsed (10 ms)
+[----------] 3 tests from HAL (10 ms total)
+
+[----------] 1 test from GPUStub
+[ RUN      ] GPUStub.Overlap
+[       OK ] GPUStub.Overlap (107 ms)
+[----------] 1 test from GPUStub (107 ms total)
+
+[----------] 1 test from GPUOverlap
+[ RUN      ] GPUOverlap.FiberFenceAwaitYieldsWork
+[       OK ] GPUOverlap.FiberFenceAwaitYieldsWork (81 ms)
+[----------] 1 test from GPUOverlap (81 ms total)
+
+[----------] 2 tests from FrameGraph
+[ RUN      ] FrameGraph.TimelineAndResources
+[       OK ] FrameGraph.TimelineAndResources (1 ms)
+[ RUN      ] FrameGraph.MixedComputeStubs
+[       OK ] FrameGraph.MixedComputeStubs (0 ms)
+[----------] 2 tests from FrameGraph (2 ms total)
+
+[----------] 1 test from Watchdog
+[ RUN      ] Watchdog.TriggersCallback
+[       OK ] Watchdog.TriggersCallback (80 ms)
+[----------] 1 test from Watchdog (80 ms total)
+
+[----------] 1 test from RtWatchdog
+[ RUN      ] RtWatchdog.LimpModeOnStall
+[       OK ] RtWatchdog.LimpModeOnStall (160 ms)
+[----------] 1 test from RtWatchdog (160 ms total)
+
+[----------] 1 test from CrashDump
+[ RUN      ] CrashDump.WritesBacktrace
+[       OK ] CrashDump.WritesBacktrace (100 ms)
+[----------] 1 test from CrashDump (100 ms total)
+
+[----------] 5 tests from Numerics
+[ RUN      ] Numerics.InitFpEnvSetsTonearest
+[       OK ] Numerics.InitFpEnvSetsTonearest (0 ms)
+[ RUN      ] Numerics.FmaGateStable
+[       OK ] Numerics.FmaGateStable (0 ms)
+[ RUN      ] Numerics.InitFpEnvFlushesDenormals
+[       OK ] Numerics.InitFpEnvFlushesDenormals (0 ms)
+[ RUN      ] Numerics.FmaGateUlpStable
+[       OK ] Numerics.FmaGateUlpStable (0 ms)
+[ RUN      ] Numerics.FixedPointBasicOps
+[       OK ] Numerics.FixedPointBasicOps (0 ms)
+[----------] 5 tests from Numerics (0 ms total)
+
+[----------] 2 tests from PRNGDeterminism
+[ RUN      ] PRNGDeterminism.SameAcrossThreads
+[       OK ] PRNGDeterminism.SameAcrossThreads (108 ms)
+[ RUN      ] PRNGDeterminism.FmaOnOff
+[       OK ] PRNGDeterminism.FmaOnOff (107 ms)
+[----------] 2 tests from PRNGDeterminism (216 ms total)
+
+[----------] 1 test from SnapshotRollback
+[ RUN      ] SnapshotRollback.ReplayHashEquality
+[       OK ] SnapshotRollback.ReplayHashEquality (1384 ms)
+[----------] 1 test from SnapshotRollback (1385 ms total)
+
+[----------] 2 tests from SnapshotLegacyReader
+[ RUN      ] SnapshotLegacyReader.TruncatedScalarFailsClosed
+[       OK ] SnapshotLegacyReader.TruncatedScalarFailsClosed (0 ms)
+[ RUN      ] SnapshotLegacyReader.EncodedVectorLengthCannotForceAllocation
+[       OK ] SnapshotLegacyReader.EncodedVectorLengthCannotForceAllocation (0 ms)
+[----------] 2 tests from SnapshotLegacyReader (0 ms total)
+
+[----------] 3 tests from TraceExport
+[ RUN      ] TraceExport.GoldenJson
+[       OK ] TraceExport.GoldenJson (0 ms)
+[ RUN      ] TraceExport.GoldenEtw
+[       OK ] TraceExport.GoldenEtw (0 ms)
+[ RUN      ] TraceExport.GoldenEbpf
+[       OK ] TraceExport.GoldenEbpf (0 ms)
+[----------] 3 tests from TraceExport (0 ms total)
+
+[----------] 17 tests from TraceNoAlloc
+[ RUN      ] TraceNoAlloc.LogHotPathDoesNotAllocate
+[       OK ] TraceNoAlloc.LogHotPathDoesNotAllocate (1 ms)
+[ RUN      ] TraceNoAlloc.CompiledGraphFirstFrameDoesNotAllocate
+[       OK ] TraceNoAlloc.CompiledGraphFirstFrameDoesNotAllocate (13 ms)
+[ RUN      ] TraceNoAlloc.CheckpointAndInputCodecDoNotAllocate
+[       OK ] TraceNoAlloc.CheckpointAndInputCodecDoNotAllocate (1 ms)
+[ RUN      ] TraceNoAlloc.CompleteCpuFramesDoNotAllocate
+[       OK ] TraceNoAlloc.CompleteCpuFramesDoNotAllocate (23 ms)
+[ RUN      ] TraceNoAlloc.StaticCompleteCpuFramesDoNotAllocate
+[       OK ] TraceNoAlloc.StaticCompleteCpuFramesDoNotAllocate (14 ms)
+[ RUN      ] TraceNoAlloc.ProviderBackedCompleteCpuFramesDoNotAllocate
+[       OK ] TraceNoAlloc.ProviderBackedCompleteCpuFramesDoNotAllocate (16 ms)
+[ RUN      ] TraceNoAlloc.CompleteDeviceFramesDoNotAllocate
+[       OK ] TraceNoAlloc.CompleteDeviceFramesDoNotAllocate (7 ms)
+[ RUN      ] TraceNoAlloc.ProviderBackedCompleteDeviceFramesDoNotAllocate
+[       OK ] TraceNoAlloc.ProviderBackedCompleteDeviceFramesDoNotAllocate (7 ms)
+[ RUN      ] TraceNoAlloc.RatePlanCompleteDeviceFramesDoNotAllocate
+[       OK ] TraceNoAlloc.RatePlanCompleteDeviceFramesDoNotAllocate (7 ms)
+[ RUN      ] TraceNoAlloc.NativeHalV2FramesAndStopDoNotAllocateAfterStart
+[       OK ] TraceNoAlloc.NativeHalV2FramesAndStopDoNotAllocateAfterStart (6 ms)
+[ RUN      ] TraceNoAlloc.HeterogeneousInspectorsHealthAndStopDoNotAllocate
+[       OK ] TraceNoAlloc.HeterogeneousInspectorsHealthAndStopDoNotAllocate (5 ms)
+[ RUN      ] TraceNoAlloc.CudaSubmitAndPollDoNotAllocateAfterInitialization
+[       OK ] TraceNoAlloc.CudaSubmitAndPollDoNotAllocateAfterInitialization (0 ms)
+[ RUN      ] TraceNoAlloc.RatePlanInspectionAndCpuFramesDoNotAllocateCrossRate
+[       OK ] TraceNoAlloc.RatePlanInspectionAndCpuFramesDoNotAllocateCrossRate (2 ms)
+[ RUN      ] TraceNoAlloc.RateDispatchOnTimeAndLateDegradeDoNotAllocate
+[       OK ] TraceNoAlloc.RateDispatchOnTimeAndLateDegradeDoNotAllocate (3 ms)
+[ RUN      ] TraceNoAlloc.RateTelemetryShedRecoverInspectAndStopDoNotAllocate
+[       OK ] TraceNoAlloc.RateTelemetryShedRecoverInspectAndStopDoNotAllocate (3 ms)
+[ RUN      ] TraceNoAlloc.ExtensionExecuteInspectStopAndDetachDoNotAllocate
+[       OK ] TraceNoAlloc.ExtensionExecuteInspectStopAndDetachDoNotAllocate (3 ms)
+[ RUN      ] TraceNoAlloc.LiveControlAdmissionSettlementInspectionAndStopDoNotAllocate
+[       OK ] TraceNoAlloc.LiveControlAdmissionSettlementInspectionAndStopDoNotAllocate (6 ms)
+[----------] 17 tests from TraceNoAlloc (124 ms total)
+
+[----------] 6 tests from ExtensionRegistration
+[ RUN      ] ExtensionRegistration.CFixtureUsesDirectEntryAndOrdinaryGraph
+[       OK ] ExtensionRegistration.CFixtureUsesDirectEntryAndOrdinaryGraph (3 ms)
+[ RUN      ] ExtensionRegistration.MalformedLateOutputAndExceptionAreAtomic
+[       OK ] ExtensionRegistration.MalformedLateOutputAndExceptionAreAtomic (0 ms)
+[ RUN      ] ExtensionRegistration.NegotiationAndMalformedRecordsFailClosed
+[       OK ] ExtensionRegistration.NegotiationAndMalformedRecordsFailClosed (0 ms)
+[ RUN      ] ExtensionRegistration.FailedProvisionalGenerationCannotBeReused
+[       OK ] ExtensionRegistration.FailedProvisionalGenerationCannotBeReused (0 ms)
+[ RUN      ] ExtensionRegistration.ExistingNameAndCapacityConflictsStayAtomic
+[       OK ] ExtensionRegistration.ExistingNameAndCapacityConflictsStayAtomic (0 ms)
+[ RUN      ] ExtensionRegistration.AllocationFailurePublishesNothingAndRecovers
+[       OK ] ExtensionRegistration.AllocationFailurePublishesNothingAndRecovers (0 ms)
+[----------] 6 tests from ExtensionRegistration (3 ms total)
+
+[----------] 1 test from Units
+[ RUN      ] Units.Addition
+[       OK ] Units.Addition (0 ms)
+[----------] 1 test from Units (0 ms total)
+
+[----------] 1 test from MemoryDiscipline
+[ RUN      ] MemoryDiscipline.HugePagesAndPrefetch
+[       OK ] MemoryDiscipline.HugePagesAndPrefetch (0 ms)
+[----------] 1 test from MemoryDiscipline (0 ms total)
+
+[----------] 1 test from ThermalMonitor
+[ RUN      ] ThermalMonitor.LimpRungReducesSubsteps
+[       OK ] ThermalMonitor.LimpRungReducesSubsteps (52 ms)
+[----------] 1 test from ThermalMonitor (52 ms total)
+
+[----------] 1 test from LimpMode
+[ RUN      ] LimpMode.DisablesNonEssentialFeatures
+[       OK ] LimpMode.DisablesNonEssentialFeatures (54 ms)
+[----------] 1 test from LimpMode (54 ms total)
+
+[----------] 1 test from ConfigHotReload
+[ RUN      ] ConfigHotReload.ReloadsUpdatedFile
+[       OK ] ConfigHotReload.ReloadsUpdatedFile (2000 ms)
+[----------] 1 test from ConfigHotReload (2000 ms total)
+
+[----------] 2 tests from PluginManager
+[ RUN      ] PluginManager.LoadAndUnload
+[       OK ] PluginManager.LoadAndUnload (0 ms)
+[ RUN      ] PluginManager.VersionMismatch
+[       OK ] PluginManager.VersionMismatch (0 ms)
+[----------] 2 tests from PluginManager (0 ms total)
+
+[----------] 1 test from Sandbox
+[ RUN      ] Sandbox.EnableSandbox
+[       OK ] Sandbox.EnableSandbox (5 ms)
+[----------] 1 test from Sandbox (5 ms total)
+
+[----------] 1 test from Minidump
+[ RUN      ] Minidump.WritesSymbolPaths
+[       OK ] Minidump.WritesSymbolPaths (0 ms)
+[----------] 1 test from Minidump (0 ms total)
+
+[----------] 1 test from ReproBuild
+[ RUN      ] ReproBuild.StoresArtifactWithHash
+[       OK ] ReproBuild.StoresArtifactWithHash (47 ms)
+[----------] 1 test from ReproBuild (47 ms total)
+
+[----------] 2 tests from Scheduler
+[ RUN      ] Scheduler.EDFvsFixedFrame
+[       OK ] Scheduler.EDFvsFixedFrame (0 ms)
+[ RUN      ] Scheduler.AgingPreventsStarvation
+[       OK ] Scheduler.AgingPreventsStarvation (0 ms)
+[----------] 2 tests from Scheduler (0 ms total)
+
+[----------] 10 tests from HostRuntime
+[ RUN      ] HostRuntime.CrossRatePlanDoesNotChangeHostOrPeriodicDispatch
+[       OK ] HostRuntime.CrossRatePlanDoesNotChangeHostOrPeriodicDispatch (3 ms)
+[ RUN      ] HostRuntime.CrossRatePlanPreservesCompleteMockDeviceDispatch
+[       OK ] HostRuntime.CrossRatePlanPreservesCompleteMockDeviceDispatch (8 ms)
+[ RUN      ] HostRuntime.ReportsOnlyCompletedTargetPathCapabilities
+[       OK ] HostRuntime.ReportsOnlyCompletedTargetPathCapabilities (0 ms)
+[ RUN      ] HostRuntime.EnforcesLifecycleAndExecutesHostContext
+[       OK ] HostRuntime.EnforcesLifecycleAndExecutesHostContext (9 ms)
+[ RUN      ] HostRuntime.StrictConfigurationKeysMapToBehavior
+[       OK ] HostRuntime.StrictConfigurationKeysMapToBehavior (2 ms)
+[ RUN      ] HostRuntime.HostDrivenStepDoesNotPace
+[       OK ] HostRuntime.HostDrivenStepDoesNotPace (3 ms)
+[ RUN      ] HostRuntime.InstancesIsolateClockTraceNumericsAndScratch
+[       OK ] HostRuntime.InstancesIsolateClockTraceNumericsAndScratch (6 ms)
+[ RUN      ] HostRuntime.CallbackFailureIsContainedAndFailFast
+[       OK ] HostRuntime.CallbackFailureIsContainedAndFailFast (3 ms)
+[ RUN      ] HostRuntime.CallbackExceptionsDoNotCrossBoundary
+[       OK ] HostRuntime.CallbackExceptionsDoNotCrossBoundary (3 ms)
+[ RUN      ] HostRuntime.RejectsStopFromInsideCallback
+[       OK ] HostRuntime.RejectsStopFromInsideCallback (3 ms)
+[----------] 10 tests from HostRuntime (46 ms total)
+
+[----------] 7 tests from PeriodicRuntime
+[ RUN      ] PeriodicRuntime.UsesAbsoluteEpochBasedReleasesAndDeadlines
+[       OK ] PeriodicRuntime.UsesAbsoluteEpochBasedReleasesAndDeadlines (2 ms)
+[ RUN      ] PeriodicRuntime.LateFramesDoNotShiftTheReleaseEpoch
+[       OK ] PeriodicRuntime.LateFramesDoNotShiftTheReleaseEpoch (2 ms)
+[ RUN      ] PeriodicRuntime.WatchdogIsOneShotAndDegradesOnTheFrameThread
+[       OK ] PeriodicRuntime.WatchdogIsOneShotAndDegradesOnTheFrameThread (5 ms)
+[ RUN      ] PeriodicRuntime.WatchdogServiceDetectsExpiryWithoutRuntimeClockAdvance
+[       OK ] PeriodicRuntime.WatchdogServiceDetectsExpiryWithoutRuntimeClockAdvance (7 ms)
+[ RUN      ] PeriodicRuntime.PropagatesClockFailureWithoutExecutingAFrame
+[       OK ] PeriodicRuntime.PropagatesClockFailureWithoutExecutingAFrame (2 ms)
+[ RUN      ] PeriodicRuntime.RejectsInvalidAndOverflowingSchedules
+[       OK ] PeriodicRuntime.RejectsInvalidAndOverflowingSchedules (2 ms)
+[ RUN      ] PeriodicRuntime.RateTelemetrySummaryAndInspectionBoundaryAreExact
+[       OK ] PeriodicRuntime.RateTelemetrySummaryAndInspectionBoundaryAreExact (2 ms)
+[----------] 7 tests from PeriodicRuntime (27 ms total)
+
+[----------] 4 tests from PlatformPreflight
+[ RUN      ] PlatformPreflight.StrictModePassesOnlyACompleteUniqueReport
+[       OK ] PlatformPreflight.StrictModePassesOnlyACompleteUniqueReport (3 ms)
+[ RUN      ] PlatformPreflight.StrictFailureIsReportedBeforeWorkersStart
+[       OK ] PlatformPreflight.StrictFailureIsReportedBeforeWorkersStart (0 ms)
+[ RUN      ] PlatformPreflight.DuplicatePrerequisiteCannotPassStrictMode
+[       OK ] PlatformPreflight.DuplicatePrerequisiteCannotPassStrictMode (0 ms)
+[ RUN      ] PlatformPreflight.DisabledModeDoesNotProbeOrMutateTheHost
+[       OK ] PlatformPreflight.DisabledModeDoesNotProbeOrMutateTheHost (3 ms)
+[----------] 4 tests from PlatformPreflight (7 ms total)
+
+[----------] 8 tests from CompiledGraph
+[ RUN      ] CompiledGraph.CompilesAndExecutesDeterministicDependencyOrder
+[       OK ] CompiledGraph.CompilesAndExecutesDeterministicDependencyOrder (2 ms)
+[ RUN      ] CompiledGraph.RejectsCyclesBeforeStartWithPhaseDiagnostic
+[       OK ] CompiledGraph.RejectsCyclesBeforeStartWithPhaseDiagnostic (0 ms)
+[ RUN      ] CompiledGraph.RejectsInvalidAndForeignHandles
+[       OK ] CompiledGraph.RejectsInvalidAndForeignHandles (0 ms)
+[ RUN      ] CompiledGraph.RequiresDependencyPathsForConflictingResourceAccess
+[       OK ] CompiledGraph.RequiresDependencyPathsForConflictingResourceAccess (0 ms)
+[ RUN      ] CompiledGraph.AllowsUnorderedReadersAndRejectsDuplicateDeclarations
+[       OK ] CompiledGraph.AllowsUnorderedReadersAndRejectsDuplicateDeclarations (0 ms)
+[ RUN      ] CompiledGraph.OrdersWriteWriteConflictsExplicitly
+[       OK ] CompiledGraph.OrdersWriteWriteConflictsExplicitly (0 ms)
+[ RUN      ] CompiledGraph.FreezesEveryTopologyMutationAtFinalization
+[       OK ] CompiledGraph.FreezesEveryTopologyMutationAtFinalization (0 ms)
+[ RUN      ] CompiledGraph.RandomizedDagsAgreeWithReferenceExecutor
+[       OK ] CompiledGraph.RandomizedDagsAgreeWithReferenceExecutor (463 ms)
+[----------] 8 tests from CompiledGraph (469 ms total)
+
+[----------] 6 tests from UnifiedExecutor
+[ RUN      ] UnifiedExecutor.StaticAssignmentMetadataAndExecutionAreStable
+[       OK ] UnifiedExecutor.StaticAssignmentMetadataAndExecutionAreStable (15 ms)
+[ RUN      ] UnifiedExecutor.QueueFullSubmissionReturnsWithinBound
+[       OK ] UnifiedExecutor.QueueFullSubmissionReturnsWithinBound (5 ms)
+[ RUN      ] UnifiedExecutor.FailFrameEscalatesIgnoredQueueRejection
+[       OK ] UnifiedExecutor.FailFrameEscalatesIgnoredQueueRejection (2 ms)
+[ RUN      ] UnifiedExecutor.IndependentNestedWorkPassesStaticStress
+[       OK ] UnifiedExecutor.IndependentNestedWorkPassesStaticStress (20 ms)
+[ RUN      ] UnifiedExecutor.ThroughputUsesLocalQueuesAndSuccessfulSteals
+[       OK ] UnifiedExecutor.ThroughputUsesLocalQueuesAndSuccessfulSteals (21 ms)
+[ RUN      ] UnifiedExecutor.RejectsInvalidOrUndersizedQueuePlans
+[       OK ] UnifiedExecutor.RejectsInvalidOrUndersizedQueuePlans (0 ms)
+[----------] 6 tests from UnifiedExecutor (66 ms total)
+
+[----------] 12 tests from MemoryPlan
+[ RUN      ] MemoryPlan.CpuMemoryPolicyTwoRuntimeReportsAreIsolated
+[       OK ] MemoryPlan.CpuMemoryPolicyTwoRuntimeReportsAreIsolated (2 ms)
+[ RUN      ] MemoryPlan.CrossRateStorageIsExactlyInsideRateAndRuntimeControl
+[       OK ] MemoryPlan.CrossRateStorageIsExactlyInsideRateAndRuntimeControl (1 ms)
+[ RUN      ] MemoryPlan.ExtensionStorageIsAccountedInExistingControlRows
+[       OK ] MemoryPlan.ExtensionStorageIsAccountedInExistingControlRows (1 ms)
+[ RUN      ] MemoryPlan.HeterogeneousPayloadBytesRemainExternalAndControlIsExact
+[       OK ] MemoryPlan.HeterogeneousPayloadBytesRemainExternalAndControlIsExact (1 ms)
+[ RUN      ] MemoryPlan.ExactControlExtentLedgerRejectsMalformedInventories
+[       OK ] MemoryPlan.ExactControlExtentLedgerRejectsMalformedInventories (0 ms)
+[ RUN      ] MemoryPlan.FinalizedPlanMatchesConfigurationAndAlignment
+[       OK ] MemoryPlan.FinalizedPlanMatchesConfigurationAndAlignment (6 ms)
+[ RUN      ] MemoryPlan.NestedExecutionContextsOwnDistinctScratch
+[       OK ] MemoryPlan.NestedExecutionContextsOwnDistinctScratch (3 ms)
+[ RUN      ] MemoryPlan.RejectSubmissionReportsScratchExhaustion
+[       OK ] MemoryPlan.RejectSubmissionReportsScratchExhaustion (3 ms)
+[ RUN      ] MemoryPlan.FailFrameEscalatesIgnoredScratchExhaustion
+[       OK ] MemoryPlan.FailFrameEscalatesIgnoredScratchExhaustion (4 ms)
+[ RUN      ] MemoryPlan.RejectsInvalidOrUndersizedPlans
+[       OK ] MemoryPlan.RejectsInvalidOrUndersizedPlans (0 ms)
+[ RUN      ] MemoryPlan.RateTelemetryIsInsideRuntimeControlExactlyOnce
+[       OK ] MemoryPlan.RateTelemetryIsInsideRuntimeControlExactlyOnce (1 ms)
+[ RUN      ] MemoryPlan.RateStorageIsExactlyInsideRuntimeControl
+[       OK ] MemoryPlan.RateStorageIsExactlyInsideRuntimeControl (3 ms)
+[----------] 12 tests from MemoryPlan (29 ms total)
+
+[----------] 8 tests from Observability
+[ RUN      ] Observability.MetadataCarriesStableProvenance
+[       OK ] Observability.MetadataCarriesStableProvenance (15 ms)
+[ RUN      ] Observability.IntervalWindowsPartitionCumulativeCounters
+[       OK ] Observability.IntervalWindowsPartitionCumulativeCounters (6 ms)
+[ RUN      ] Observability.TraceCursorReportsOverwriteLossExactly
+[       OK ] Observability.TraceCursorReportsOverwriteLossExactly (6 ms)
+[ RUN      ] Observability.RuntimeInstancesRejectForeignCursors
+[       OK ] Observability.RuntimeInstancesRejectForeignCursors (11 ms)
+[ RUN      ] Observability.JsonExportIncludesSchemaAndIdentifiers
+[       OK ] Observability.JsonExportIncludesSchemaAndIdentifiers (5 ms)
+[ RUN      ] Observability.RejectsMalformedFreshCursors
+[       OK ] Observability.RejectsMalformedFreshCursors (4 ms)
+[ RUN      ] Observability.JsonExportCommitsCursorsOnlyAfterSuccess
+[       OK ] Observability.JsonExportCommitsCursorsOnlyAfterSuccess (5 ms)
+[ RUN      ] Observability.ContendedRingDropsInsteadOfWaiting
+[       OK ] Observability.ContendedRingDropsInsteadOfWaiting (1 ms)
+[----------] 8 tests from Observability (56 ms total)
+
+[----------] 15 tests from DeterminismReplay
+[ RUN      ] DeterminismReplay.CrossRateIdentityCoversEverySemanticAndInitialByte
+[       OK ] DeterminismReplay.CrossRateIdentityCoversEverySemanticAndInitialByte (13 ms)
+[ RUN      ] DeterminismReplay.D1RegisteredStateMatchesAcrossWorkerCounts
+[       OK ] DeterminismReplay.D1RegisteredStateMatchesAcrossWorkerCounts (25 ms)
+[ RUN      ] DeterminismReplay.D1CheckpointTransfersAcrossWorkerCounts
+[       OK ] DeterminismReplay.D1CheckpointTransfersAcrossWorkerCounts (19 ms)
+[ RUN      ] DeterminismReplay.D0RequiresExactResolvedConfiguration
+[       OK ] DeterminismReplay.D0RequiresExactResolvedConfiguration (16 ms)
+[ RUN      ] DeterminismReplay.CheckpointAndInputLogReproduceState
+[       OK ] DeterminismReplay.CheckpointAndInputLogReproduceState (13 ms)
+[ RUN      ] DeterminismReplay.CorruptCheckpointNeverMutatesState
+[       OK ] DeterminismReplay.CorruptCheckpointNeverMutatesState (6 ms)
+[ RUN      ] DeterminismReplay.ForeignStateSchemaAndGraphAreRejected
+[       OK ] DeterminismReplay.ForeignStateSchemaAndGraphAreRejected (14 ms)
+[ RUN      ] DeterminismReplay.InvalidInputLogIsRejectedBeforeRestore
+[       OK ] DeterminismReplay.InvalidInputLogIsRejectedBeforeRestore (4 ms)
+[ RUN      ] DeterminismReplay.ParserMutationCorpusStaysBounded
+[       OK ] DeterminismReplay.ParserMutationCorpusStaysBounded (10 ms)
+[ RUN      ] DeterminismReplay.D1RejectsTimingAndThroughputPolicies
+[       OK ] DeterminismReplay.D1RejectsTimingAndThroughputPolicies (0 ms)
+[ RUN      ] DeterminismReplay.StateAndArtifactStorageMustNotOverlap
+[       OK ] DeterminismReplay.StateAndArtifactStorageMustNotOverlap (3 ms)
+[ RUN      ] DeterminismReplay.InputLogRequiresStrictFrameOrder
+[       OK ] DeterminismReplay.InputLogRequiresStrictFrameOrder (3 ms)
+[ RUN      ] DeterminismReplay.ExtensionSemanticsParticipateWithoutPointers
+[       OK ] DeterminismReplay.ExtensionSemanticsParticipateWithoutPointers (1 ms)
+[ RUN      ] DeterminismReplay.HeterogeneousRegistrationIdentityIsSemanticOnly
+[       OK ] DeterminismReplay.HeterogeneousRegistrationIdentityIsSemanticOnly (2 ms)
+[ RUN      ] DeterminismReplay.RateIdentityRejectsSemanticallyDifferentPlanTransactionally
+[       OK ] DeterminismReplay.RateIdentityRejectsSemanticallyDifferentPlanTransactionally (1 ms)
+[----------] 15 tests from DeterminismReplay (135 ms total)
+
+[----------] 14 tests from DeviceRuntime
+[ RUN      ] DeviceRuntime.FailedTeardownRetainsOwnershipAndRetriesOnlyPendingWork
+[       OK ] DeviceRuntime.FailedTeardownRetainsOwnershipAndRetriesOnlyPendingWork (6 ms)
+[ RUN      ] DeviceRuntime.FailedStartRollbackRemainsRecoverableThroughStop
+[       OK ] DeviceRuntime.FailedStartRollbackRemainsRecoverableThroughStop (6 ms)
+[ RUN      ] DeviceRuntime.FailedInitializeWithoutOwnershipCanRestart
+[       OK ] DeviceRuntime.FailedInitializeWithoutOwnershipCanRestart (11 ms)
+[ RUN      ] DeviceRuntime.FailedRegistrationRollbackRemainsRecoverable
+[       OK ] DeviceRuntime.FailedRegistrationRollbackRemainsRecoverable (8 ms)
+[ RUN      ] DeviceRuntime.DeviceServicePolicyFailureRollsBackMemoryAfterJoinAndRetries
+[       OK ] DeviceRuntime.DeviceServicePolicyFailureRollsBackMemoryAfterJoinAndRetries (10 ms)
+[ RUN      ] DeviceRuntime.DeviceStackCleanupFailureDefersRollbackAndRetriesOnOwner
+[       OK ] DeviceRuntime.DeviceStackCleanupFailureDefersRollbackAndRetriesOnOwner (5 ms)
+[ RUN      ] DeviceRuntime.UnresolvedStackCleanupDestructionFailsClosed
+[       OK ] DeviceRuntime.UnresolvedStackCleanupDestructionFailsClosed (13 ms)
+[ RUN      ] DeviceRuntime.DelayedCompletionReleasesOnlyDependentSuccessors
+[       OK ] DeviceRuntime.DelayedCompletionReleasesOnlyDependentSuccessors (65 ms)
+[ RUN      ] DeviceRuntime.ConcurrentSubmissionsPreserveCausalPublication
+[       OK ] DeviceRuntime.ConcurrentSubmissionsPreserveCausalPublication (24 ms)
+[ RUN      ] DeviceRuntime.FaultsMapToStableRuntimeStatuses
+[       OK ] DeviceRuntime.FaultsMapToStableRuntimeStatuses (17 ms)
+[ RUN      ] DeviceRuntime.RejectsMalformedTablesAndAccountsMemory
+[       OK ] DeviceRuntime.RejectsMalformedTablesAndAccountsMemory (0 ms)
+[ RUN      ] DeviceRuntime.D1RejectsUndeclaredDeterministicBackend
+[       OK ] DeviceRuntime.D1RejectsUndeclaredDeterministicBackend (5 ms)
+[ RUN      ] DeviceRuntime.CrossInstanceDeviceStateIsIsolated
+[       OK ] DeviceRuntime.CrossInstanceDeviceStateIsIsolated (28 ms)
+[ RUN      ] DeviceRuntime.DestructionShutsBackendDown
+[       OK ] DeviceRuntime.DestructionShutsBackendDown (7 ms)
+[----------] 14 tests from DeviceRuntime (210 ms total)
+
+[----------] 1 test from DeviceMock
+[ RUN      ] DeviceMock.BoundedQueueSaturatesWithoutBlocking
+[       OK ] DeviceMock.BoundedQueueSaturatesWithoutBlocking (0 ms)
+[----------] 1 test from DeviceMock (0 ms total)
+
+[----------] 30 tests from CudaBackend
+[ RUN      ] CudaBackend.RejectsMalformedDriverAndSetup
+[       OK ] CudaBackend.RejectsMalformedDriverAndSetup (0 ms)
+[ RUN      ] CudaBackend.FailedInitializeCleanupRetriesOnlyUnresolvedEvents
+[       OK ] CudaBackend.FailedInitializeCleanupRetriesOnlyUnresolvedEvents (0 ms)
+[ RUN      ] CudaBackend.FailedInitializePopRequiresCleanupBeforeReuse
+[       OK ] CudaBackend.FailedInitializePopRequiresCleanupBeforeReuse (0 ms)
+[ RUN      ] CudaBackend.BoundedQueueSaturatesAndTimeoutQuarantinesUntilReady
+[       OK ] CudaBackend.BoundedQueueSaturatesAndTimeoutQuarantinesUntilReady (0 ms)
+[ RUN      ] CudaBackend.CopiesLaunchesKernelAndReturnsDeviceData
+[       OK ] CudaBackend.CopiesLaunchesKernelAndReturnsDeviceData (0 ms)
+[ RUN      ] CudaBackend.DeviceCopyAndMemsetValidateAndPreserveRanges
+[       OK ] CudaBackend.DeviceCopyAndMemsetValidateAndPreserveRanges (0 ms)
+[ RUN      ] CudaBackend.ExternalDeviceBindingRetainsCallerOwnership
+[       OK ] CudaBackend.ExternalDeviceBindingRetainsCallerOwnership (0 ms)
+[ RUN      ] CudaBackend.FailedRegistrationRetainsOwnershipForShutdown
+[       OK ] CudaBackend.FailedRegistrationRetainsOwnershipForShutdown (0 ms)
+[ RUN      ] CudaBackend.FailedEnqueueIsQuarantinedAndResetDrainsIt
+[       OK ] CudaBackend.FailedEnqueueIsQuarantinedAndResetDrainsIt (0 ms)
+[ RUN      ] CudaBackend.QueryFailureRequiresSuccessfulDrainBeforeReuse
+[       OK ] CudaBackend.QueryFailureRequiresSuccessfulDrainBeforeReuse (0 ms)
+[ RUN      ] CudaBackend.ShutdownDrainsOutstandingWorkBeforeFreeingBuffers
+[       OK ] CudaBackend.ShutdownDrainsOutstandingWorkBeforeFreeingBuffers (0 ms)
+[ RUN      ] CudaBackend.FailedShutdownRetainsResourcesAndCanBeRetried
+[       OK ] CudaBackend.FailedShutdownRetainsResourcesAndCanBeRetried (0 ms)
+[ RUN      ] CudaBackend.ContextLossCompletesAsLostAndCannotSoftReset
+[       OK ] CudaBackend.ContextLossCompletesAsLostAndCannotSoftReset (0 ms)
+[ RUN      ] CudaBackend.ConcurrentSubmissionsStayWithinFixedCapacity
+[       OK ] CudaBackend.ConcurrentSubmissionsStayWithinFixedCapacity (0 ms)
+[ RUN      ] CudaBackend.RuntimeGraphAcceptsCandidateBackendAtD0
+[       OK ] CudaBackend.RuntimeGraphAcceptsCandidateBackendAtD0 (8 ms)
+[ RUN      ] CudaBackend.DriverVersionsPreserveV1PrefixAndRequireCompleteV2
+[       OK ] CudaBackend.DriverVersionsPreserveV1PrefixAndRequireCompleteV2 (0 ms)
+[ RUN      ] CudaBackend.GraphRegistryIsBoundedUniqueCopiedAndFrozen
+[       OK ] CudaBackend.GraphRegistryIsBoundedUniqueCopiedAndFrozen (0 ms)
+[ RUN      ] CudaBackend.NativeRegistrationDiscoversTruthfulStagedMemory
+[       OK ] CudaBackend.NativeRegistrationDiscoversTruthfulStagedMemory (0 ms)
+[ RUN      ] CudaBackend.NativeStagedDomainDoesNotInventPinningWhenDisabled
+[       OK ] CudaBackend.NativeStagedDomainDoesNotInventPinningWhenDisabled (0 ms)
+[ RUN      ] CudaBackend.NativeGraphBatchExecutesCopyGraphCopyThenOneEvent
+[       OK ] CudaBackend.NativeGraphBatchExecutesCopyGraphCopyThenOneEvent (0 ms)
+[ RUN      ] CudaBackend.NativeGraphRejectsUnknownBindingAndLegacyBufferBeforeLaunch
+[       OK ] CudaBackend.NativeGraphRejectsUnknownBindingAndLegacyBufferBeforeLaunch (0 ms)
+[ RUN      ] CudaBackend.NativePathRejectsDuplicateDeviceV1Use
+[       OK ] CudaBackend.NativePathRejectsDuplicateDeviceV1Use (0 ms)
+[ RUN      ] CudaBackend.NativeGraphFailureQuarantinesUntilReset
+[       OK ] CudaBackend.NativeGraphFailureQuarantinesUntilReset (0 ms)
+[ RUN      ] CudaBackend.NativeGraphTimeoutRetainsUntilEventReadyAndStopIsIdempotent
+[       OK ] CudaBackend.NativeGraphTimeoutRetainsUntilEventReadyAndStopIsIdempotent (0 ms)
+[ RUN      ] CudaBackend.StoppedHalV2PendingUnregisterRetiresExactlyOnceAndRetries
+[       OK ] CudaBackend.StoppedHalV2PendingUnregisterRetiresExactlyOnceAndRetries (0 ms)
+[ RUN      ] CudaBackend.StoppedHalV2QuarantineAndLossRetainOnFailedSynchronization
+[       OK ] CudaBackend.StoppedHalV2QuarantineAndLossRetainOnFailedSynchronization (0 ms)
+[ RUN      ] CudaBackend.StoppedHalV2RuntimePipelineRetiresPendingAndLostBuffers
+[       OK ] CudaBackend.StoppedHalV2RuntimePipelineRetiresPendingAndLostBuffers (10134 ms)
+[ RUN      ] CudaBackend.StoppedHalV2UncertainRegistrationRollsBackAbsentOrResidualOwnership
+[       OK ] CudaBackend.StoppedHalV2UncertainRegistrationRollsBackAbsentOrResidualOwnership (0 ms)
+[ RUN      ] CudaBackend.StoppedHalV2ZeroTokenCannotReleaseSuccessfulRegistration
+[       OK ] CudaBackend.StoppedHalV2ZeroTokenCannotReleaseSuccessfulRegistration (0 ms)
+[ RUN      ] CudaBackend.StoppedHalV2RuntimeStartupFailureReleasesUncertainMemory
+[       OK ] CudaBackend.StoppedHalV2RuntimeStartupFailureReleasesUncertainMemory (42 ms)
+[----------] 30 tests from CudaBackend (10186 ms total)
+
+[----------] 7 tests from VendorHalV2
+[ RUN      ] VendorHalV2.ExistingDeviceAbiV1SurfaceRemainsExact
+[       OK ] VendorHalV2.ExistingDeviceAbiV1SurfaceRemainsExact (0 ms)
+[ RUN      ] VendorHalV2.ExistingConfigurationDefaultsRemainSourceCompatible
+[       OK ] VendorHalV2.ExistingConfigurationDefaultsRemainSourceCompatible (0 ms)
+[ RUN      ] VendorHalV2.VersionOnePositionalAggregatePrefixesRemainUsable
+[       OK ] VendorHalV2.VersionOnePositionalAggregatePrefixesRemainUsable (0 ms)
+[ RUN      ] VendorHalV2.XdmaControlHelpersEncodeStableLittleEndianCommands
+[       OK ] VendorHalV2.XdmaControlHelpersEncodeStableLittleEndianCommands (0 ms)
+[ RUN      ] VendorHalV2.CudaNativeRegistrationSuppliesAllFrozenHalTables
+[       OK ] VendorHalV2.CudaNativeRegistrationSuppliesAllFrozenHalTables (0 ms)
+[ RUN      ] VendorHalV2.XdmaNativeRegistrationSuppliesAllFrozenHalTables
+[       OK ] VendorHalV2.XdmaNativeRegistrationSuppliesAllFrozenHalTables (0 ms)
+[ RUN      ] VendorHalV2.NativeRuntimeRegistrationDiscoversBothCandidates
+[       OK ] VendorHalV2.NativeRuntimeRegistrationDiscoversBothCandidates (8 ms)
+[----------] 7 tests from VendorHalV2 (8 ms total)
+
+[----------] 1 test from RTPipeline
+[ RUN      ] RTPipeline.EndToEndSmokeTest
+[       OK ] RTPipeline.EndToEndSmokeTest (841 ms)
+[----------] 1 test from RTPipeline (841 ms total)
+
+[----------] 1 test from PlatformGate
+[ RUN      ] PlatformGate.EmitsTraceCrumb
+[       OK ] PlatformGate.EmitsTraceCrumb (82 ms)
+[----------] 1 test from PlatformGate (82 ms total)
+
+[----------] 1 test from DeterminismIntegration
+[ RUN      ] DeterminismIntegration.SnapshotReplayMatchesGolden
+Final pos0=1.99474
+Final pos0=1.99474
+Final pos0=1.99474
+[       OK ] DeterminismIntegration.SnapshotReplayMatchesGolden (636 ms)
+[----------] 1 test from DeterminismIntegration (636 ms total)
+
+[----------] 1 test from ExtensionAbi
+[ RUN      ] ExtensionAbi.VersionOneLayoutsAndConstantsAreFixed
+[       OK ] ExtensionAbi.VersionOneLayoutsAndConstantsAreFixed (0 ms)
+[----------] 1 test from ExtensionAbi (0 ms total)
+
+[----------] 5 tests from ExtensionLifecycle
+[ RUN      ] ExtensionLifecycle.ServicesBackendsRetryDetachAndStaleHandles
+[       OK ] ExtensionLifecycle.ServicesBackendsRetryDetachAndStaleHandles (4 ms)
+[ RUN      ] ExtensionLifecycle.OwnersAndGenerationsAreRuntimeLocal
+[       OK ] ExtensionLifecycle.OwnersAndGenerationsAreRuntimeLocal (0 ms)
+[ RUN      ] ExtensionLifecycle.ServiceStartupFailureRollsBackAndRecovers
+[       OK ] ExtensionLifecycle.ServiceStartupFailureRollsBackAndRecovers (7 ms)
+[ RUN      ] ExtensionLifecycle.RequestStopFailureRetainsFirstErrorAndRetriesOwner
+[       OK ] ExtensionLifecycle.RequestStopFailureRetainsFirstErrorAndRetriesOwner (6 ms)
+[ RUN      ] ExtensionLifecycle.ServiceShutdownFailureRetriesOnlyUnresolvedOwner
+[       OK ] ExtensionLifecycle.ServiceShutdownFailureRetriesOnlyUnresolvedOwner (7 ms)
+[----------] 5 tests from ExtensionLifecycle (27 ms total)
+
+[----------] 38 tests from CommandBatch
+[ RUN      ] CommandBatch.GraphPublicationObservesRetiredBatch
+[       OK ] CommandBatch.GraphPublicationObservesRetiredBatch (0 ms)
+[ RUN      ] CommandBatch.GraphPublicationCannotRetireTheNextOccupant
+[       OK ] CommandBatch.GraphPublicationCannotRetireTheNextOccupant (0 ms)
+[ RUN      ] CommandBatch.RetirementCapturesMetadataBeforeSlotReuse
+[       OK ] CommandBatch.RetirementCapturesMetadataBeforeSlotReuse (0 ms)
+[ RUN      ] CommandBatch.PreviouslyReleasedGraphStillRetiresOnce
+[       OK ] CommandBatch.PreviouslyReleasedGraphStillRetiresOnce (0 ms)
+[ RUN      ] CommandBatch.NotificationAfterEmptySelectionDoesNotParkWithQueuedWork
+[       OK ] CommandBatch.NotificationAfterEmptySelectionDoesNotParkWithQueuedWork (0 ms)
+[ RUN      ] CommandBatch.SubmissionSelectionAndStopDoNotPark
+[       OK ] CommandBatch.SubmissionSelectionAndStopDoNotPark (0 ms)
+[ RUN      ] CommandBatch.PublicConstantsLayoutsDefaultsAndAggregatePrefixAreExact
+[       OK ] CommandBatch.PublicConstantsLayoutsDefaultsAndAggregatePrefixAreExact (0 ms)
+[ RUN      ] CommandBatch.DeviceRateModelCompilesInspectsAccountsAndStarts
+[       OK ] CommandBatch.DeviceRateModelCompilesInspectsAccountsAndStarts (13 ms)
+[ RUN      ] CommandBatch.CpuToDeviceCrossRatePayloadIsCopiedBeforeProvider
+[       OK ] CommandBatch.CpuToDeviceCrossRatePayloadIsCopiedBeforeProvider (11 ms)
+[ RUN      ] CommandBatch.DeviceToCpuCrossRatePayloadPublishesOnlyOnCompletion
+[       OK ] CommandBatch.DeviceToCpuCrossRatePayloadPublishesOnlyOnCompletion (15 ms)
+[ RUN      ] CommandBatch.ActiveRateDispatchOverlapsIndependentDeviceReleases
+[       OK ] CommandBatch.ActiveRateDispatchOverlapsIndependentDeviceReleases (17 ms)
+[ RUN      ] CommandBatch.ActiveRateTimeoutIsCanceledOnceAndLateCompletionIsQuarantined
+[       OK ] CommandBatch.ActiveRateTimeoutIsCanceledOnceAndLateCompletionIsQuarantined (14 ms)
+[ RUN      ] CommandBatch.DeviceRateBindingRejectsLegacyAndSupportsCorrection
+[       OK ] CommandBatch.DeviceRateBindingRejectsLegacyAndSupportsCorrection (0 ms)
+[ RUN      ] CommandBatch.DeviceRateIdentityIsCanonicalAndIncludesAdmissionPolicy
+[       OK ] CommandBatch.DeviceRateIdentityIsCanonicalAndIncludesAdmissionPolicy (1 ms)
+[ RUN      ] CommandBatch.ExtensionDiscoveryRejectsMalformedAndPartialResults
+[       OK ] CommandBatch.ExtensionDiscoveryRejectsMalformedAndPartialResults (0 ms)
+[ RUN      ] CommandBatch.CapabilityDiscoverySeedsExactHeaderRejectsMalformedAndRetriesCleanly
+[       OK ] CommandBatch.CapabilityDiscoverySeedsExactHeaderRejectsMalformedAndRetriesCleanly (0 ms)
+[ RUN      ] CommandBatch.TimelineRegistrationIsBoundedFrozenAndInstanceIsolated
+[       OK ] CommandBatch.TimelineRegistrationIsBoundedFrozenAndInstanceIsolated (0 ms)
+[ RUN      ] CommandBatch.ResourceBoundsRejectSeventeenthTimelineAndNinthPhase
+[       OK ] CommandBatch.ResourceBoundsRejectSeventeenthTimelineAndNinthPhase (0 ms)
+[ RUN      ] CommandBatch.DispatchCompletesOnSubmissionAndServiceLanes
+[       OK ] CommandBatch.DispatchCompletesOnSubmissionAndServiceLanes (11 ms)
+[ RUN      ] CommandBatch.RepeatedSubmissionLifecyclesKeepIndependentOwnersDrained
+[       OK ] CommandBatch.RepeatedSubmissionLifecyclesKeepIndependentOwnersDrained (163 ms)
+[ RUN      ] CommandBatch.PriorAcceptedWaitMayAdvanceTheSameTimeline
+[       OK ] CommandBatch.PriorAcceptedWaitMayAdvanceTheSameTimeline (10 ms)
+[ RUN      ] CommandBatch.SubmitErrorsAndExceptionsProduceOneTerminalResult
+[       OK ] CommandBatch.SubmitErrorsAndExceptionsProduceOneTerminalResult (19 ms)
+[ RUN      ] CommandBatch.ProviderAndCompletionFailuresAreTerminalWithoutPublication
+[       OK ] CommandBatch.ProviderAndCompletionFailuresAreTerminalWithoutPublication (21 ms)
+[ RUN      ] CommandBatch.TimeoutCancelsAndBlockedSubmitIsReleasedByStopRequest
+[       OK ] CommandBatch.TimeoutCancelsAndBlockedSubmitIsReleasedByStopRequest (33 ms)
+[ RUN      ] CommandBatch.SaturationAcceptsOnlyTheFixedPrefixWithoutRetryOrSpill
+[       OK ] CommandBatch.SaturationAcceptsOnlyTheFixedPrefixWithoutRetryOrSpill (17 ms)
+[ RUN      ] CommandBatch.ExplicitFlushAndInvalidateOrderIsRequiredAndPreserved
+[       OK ] CommandBatch.ExplicitFlushAndInvalidateOrderIsRequiredAndPreserved (21 ms)
+[ RUN      ] CommandBatch.ActiveSubmitFailureRetiresWhileTimeoutLaneObserves
+[       OK ] CommandBatch.ActiveSubmitFailureRetiresWhileTimeoutLaneObserves (694 ms)
+[ RUN      ] CommandBatch.SimulationHostDelayPreservesLogicalBudget
+[       OK ] CommandBatch.SimulationHostDelayPreservesLogicalBudget (27 ms)
+[ RUN      ] CommandBatch.SimulationDefaultPathNegativeControlRetainsWallDeadline
+[       OK ] CommandBatch.SimulationDefaultPathNegativeControlRetainsWallDeadline (7 ms)
+[ RUN      ] CommandBatch.SimulationFrozenClockStillHasFiniteWatchdog
+[       OK ] CommandBatch.SimulationFrozenClockStillHasFiniteWatchdog (57 ms)
+[ RUN      ] CommandBatch.SimulationLogicalExpiryCannotPublishLateCompletion
+[       OK ] CommandBatch.SimulationLogicalExpiryCannotPublishLateCompletion (19 ms)
+[ RUN      ] CommandBatch.SimulationSubmittingAndEarlyCompletionRetainOwnership
+[       OK ] CommandBatch.SimulationSubmittingAndEarlyCompletionRetainOwnership (119 ms)
+[ RUN      ] CommandBatch.SimulationCleanupFailuresKeepOwnershipForRetry
+[       OK ] CommandBatch.SimulationCleanupFailuresKeepOwnershipForRetry (58 ms)
+[ RUN      ] CommandBatch.SimulationPolicyValidationReplacementAndFrozenMutation
+[       OK ] CommandBatch.SimulationPolicyValidationReplacementAndFrozenMutation (0 ms)
+[ RUN      ] CommandBatch.SimulationNativeCapabilityCannotOptIn
+[       OK ] CommandBatch.SimulationNativeCapabilityCannotOptIn (0 ms)
+[ RUN      ] CommandBatch.SimulationIndependentOwnersAndMemoryAccounting
+[       OK ] CommandBatch.SimulationIndependentOwnersAndMemoryAccounting (71 ms)
+[ RUN      ] CommandBatch.SimulationQueuedWatchdogExpiresBehindBlockedSubmit
+[       OK ] CommandBatch.SimulationQueuedWatchdogExpiresBehindBlockedSubmit (111 ms)
+[ RUN      ] CommandBatch.SimulationFailedBackendCompletionCannotAdvanceTimeline
+[       OK ] CommandBatch.SimulationFailedBackendCompletionCannotAdvanceTimeline (7 ms)
+[----------] 38 tests from CommandBatch (1553 ms total)
+
+[----------] 7 tests from MixedRateReplay
+[ RUN      ] MixedRateReplay.SimulationPolicyIdentityRejectsForeignCheckpointBeforeMutation
+[       OK ] MixedRateReplay.SimulationPolicyIdentityRejectsForeignCheckpointBeforeMutation (24 ms)
+[ RUN      ] MixedRateReplay.SimulationReplayUsesRecordedTimeAndKeepsHostWatchdog
+[       OK ] MixedRateReplay.SimulationReplayUsesRecordedTimeAndKeepsHostWatchdog (58 ms)
+[ RUN      ] MixedRateReplay.SimulationFailedCompletionRetainsBackendTimestamp
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_device_rate_simulation.cpp:356: Failure
+Expected equality of these values:
+  actions[i].timestamp_domain_identity
+    Which is: 0
+  201u
+    Which is: 201
+
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_device_rate_simulation.cpp:357: Failure
+Expected equality of these values:
+  actions[i].timestamp
+    Which is: 0
+  900'000'000'000ull
+    Which is: 900000000000
+
+[  FAILED  ] MixedRateReplay.SimulationFailedCompletionRetainsBackendTimestamp (37 ms)
+[ RUN      ] MixedRateReplay.WatchdogTransitionsPreserveActualPriorLevelAtSaturation
+[       OK ] MixedRateReplay.WatchdogTransitionsPreserveActualPriorLevelAtSaturation (28 ms)
+[ RUN      ] MixedRateReplay.LiveControlWatchdogReplayClosesSaturatedFrames
+[       OK ] MixedRateReplay.LiveControlWatchdogReplayClosesSaturatedFrames (45 ms)
+[ RUN      ] MixedRateReplay.ActiveArtifactRoundTripsAndDrivesTranscriptDecisions
+[       OK ] MixedRateReplay.ActiveArtifactRoundTripsAndDrivesTranscriptDecisions (3 ms)
+[ RUN      ] MixedRateReplay.ParserRejectsMutationTrailingBytesAndShortOutput
+[       OK ] MixedRateReplay.ParserRejectsMutationTrailingBytesAndShortOutput (4 ms)
+[----------] 7 tests from MixedRateReplay (203 ms total)
+
+[----------] 15 tests from HeterogeneousMemory
+[ RUN      ] HeterogeneousMemory.ConstantsEnumsDefaultsLayoutsAndReservedTailsAreExact
+[       OK ] HeterogeneousMemory.ConstantsEnumsDefaultsLayoutsAndReservedTailsAreExact (0 ms)
+[ RUN      ] HeterogeneousMemory.DiscoversSixKindsAndFreezesInspectorsAcrossLifecycle
+[       OK ] HeterogeneousMemory.DiscoversSixKindsAndFreezesInspectorsAcrossLifecycle (4 ms)
+[ RUN      ] HeterogeneousMemory.MalformedDiscoveryFailsWithoutPublication
+[       OK ] HeterogeneousMemory.MalformedDiscoveryFailsWithoutPublication (0 ms)
+[ RUN      ] HeterogeneousMemory.MalformedExtensionTableFailsWithoutDiscovery
+[       OK ] HeterogeneousMemory.MalformedExtensionTableFailsWithoutDiscovery (0 ms)
+[ RUN      ] HeterogeneousMemory.DiscoveryAndCorrelationExceptionsAreContained
+[       OK ] HeterogeneousMemory.DiscoveryAndCorrelationExceptionsAreContained (5 ms)
+[ RUN      ] HeterogeneousMemory.CoreOnlyNativeAndV1ExposeOnlyImplicitHost
+[       OK ] HeterogeneousMemory.CoreOnlyNativeAndV1ExposeOnlyImplicitHost (0 ms)
+[ RUN      ] HeterogeneousMemory.HeterogeneousHostOpaqueAndRejectionPathsAreTransactional
+[       OK ] HeterogeneousMemory.HeterogeneousHostOpaqueAndRejectionPathsAreTransactional (6 ms)
+[ RUN      ] HeterogeneousMemory.ForeignHandlesAndBackendCapabilitiesRejectBeforePublication
+[       OK ] HeterogeneousMemory.ForeignHandlesAndBackendCapabilitiesRejectBeforePublication (0 ms)
+[ RUN      ] HeterogeneousMemory.MixedRegistrationRollbackIsReverseAndRetryable
+[       OK ] HeterogeneousMemory.MixedRegistrationRollbackIsReverseAndRetryable (12 ms)
+[ RUN      ] HeterogeneousMemory.UncertainEmptyTokenBlocksShutdownAndRetriesOnlyUnresolved
+[       OK ] HeterogeneousMemory.UncertainEmptyTokenBlocksShutdownAndRetriesOnlyUnresolved (7 ms)
+[ RUN      ] HeterogeneousMemory.CorrelationSuccessUnsupportedAndMalformedAreObservable
+[       OK ] HeterogeneousMemory.CorrelationSuccessUnsupportedAndMalformedAreObservable (6 ms)
+[ RUN      ] HeterogeneousMemory.CorrelationRejectsAnActiveFrameWithoutEnteringTheBackend
+[       OK ] HeterogeneousMemory.CorrelationRejectsAnActiveFrameWithoutEnteringTheBackend (8 ms)
+[ RUN      ] HeterogeneousMemory.RuntimeHandlesSnapshotsAndTokensAreIsolated
+[       OK ] HeterogeneousMemory.RuntimeHandlesSnapshotsAndTokensAreIsolated (0 ms)
+[ RUN      ] HeterogeneousMemory.SemanticSnapshotFieldsParticipateInGraphIdentity
+[       OK ] HeterogeneousMemory.SemanticSnapshotFieldsParticipateInGraphIdentity (0 ms)
+[ RUN      ] HeterogeneousMemory.CoherentSubmissionTranslatesAndSyncRequiredRejects
+[       OK ] HeterogeneousMemory.CoherentSubmissionTranslatesAndSyncRequiredRejects (11 ms)
+[----------] 15 tests from HeterogeneousMemory (63 ms total)
+
+[----------] 9 tests from HalV2
+[ RUN      ] HalV2.ApiVersionDefaultsAndLayoutsAreExact
+[       OK ] HalV2.ApiVersionDefaultsAndLayoutsAreExact (0 ms)
+[ RUN      ] HalV2.NativeRegistrationAndOperationTranslationAreExact
+[       OK ] HalV2.NativeRegistrationAndOperationTranslationAreExact (5 ms)
+[ RUN      ] HalV2.MalformedTablesAndCapabilitiesFailTransactionally
+[       OK ] HalV2.MalformedTablesAndCapabilitiesFailTransactionally (0 ms)
+[ RUN      ] HalV2.NativeAndV1StatusesAndExceptionsAreEquivalent
+[       OK ] HalV2.NativeAndV1StatusesAndExceptionsAreEquivalent (5 ms)
+[ RUN      ] HalV2.DeviceAbiV1AdapterPreservesEveryCoreFieldAndFailsClosed
+[       OK ] HalV2.DeviceAbiV1AdapterPreservesEveryCoreFieldAndFailsClosed (0 ms)
+[ RUN      ] HalV2.NativeIdentityIsSeparateAndV1IdentityRemainsStable
+[       OK ] HalV2.NativeIdentityIsSeparateAndV1IdentityRemainsStable (0 ms)
+[ RUN      ] HalV2.NativeAndAdaptedV1RuntimeObservationsAreEquivalent
+[       OK ] HalV2.NativeAndAdaptedV1RuntimeObservationsAreEquivalent (11 ms)
+[ RUN      ] HalV2.AdaptedV1StorageIsExactInsideSixRowMemoryPlan
+[       OK ] HalV2.AdaptedV1StorageIsExactInsideSixRowMemoryPlan (1 ms)
+[ RUN      ] HalV2.AdaptedV1StorageSurvivesConfiguringGrowthAndIsIsolated
+[       OK ] HalV2.AdaptedV1StorageSurvivesConfiguringGrowthAndIsIsolated (5 ms)
+[----------] 9 tests from HalV2 (29 ms total)
+
+[----------] 11 tests from CrossRateData
+[ RUN      ] CrossRateData.PublicModelCopiesAndFreezesWithLifecycleInspectors
+[       OK ] CrossRateData.PublicModelCopiesAndFreezesWithLifecycleInspectors (3 ms)
+[ RUN      ] CrossRateData.SelectionMatchesIndependentCompleteSupercycle
+[       OK ] CrossRateData.SelectionMatchesIndependentCompleteSupercycle (1 ms)
+[ RUN      ] CrossRateData.SelectionAgreementCoversRateAndRegistrationPermutations
+[       OK ] CrossRateData.SelectionAgreementCoversRateAndRegistrationPermutations (3 ms)
+[ RUN      ] CrossRateData.SameTimestampVisibilityAndFreshnessBoundariesAreExact
+[       OK ] CrossRateData.SameTimestampVisibilityAndFreshnessBoundariesAreExact (3 ms)
+[ RUN      ] CrossRateData.ValidationIsOwnedBoundedTransactionalAndCorrectable
+[       OK ] CrossRateData.ValidationIsOwnedBoundedTransactionalAndCorrectable (0 ms)
+[ RUN      ] CrossRateData.AggregateCapacityFailsBeforeProviderAndCanBeCorrected
+[       OK ] CrossRateData.AggregateCapacityFailsBeforeProviderAndCanBeCorrected (0 ms)
+[ RUN      ] CrossRateData.DeviceEndpointIsRejectedBeforeOwnershipOrExecution
+[       OK ] CrossRateData.DeviceEndpointIsRejectedBeforeOwnershipOrExecution (0 ms)
+[ RUN      ] CrossRateData.SnapshotStoreIsExactBoundedAndNeverSubstitutes
+[       OK ] CrossRateData.SnapshotStoreIsExactBoundedAndNeverSubstitutes (0 ms)
+[ RUN      ] CrossRateData.SnapshotStoreSpscConcurrencyHasDeterministicBytes
+[       OK ] CrossRateData.SnapshotStoreSpscConcurrencyHasDeterministicBytes (6 ms)
+[ RUN      ] CrossRateData.SnapshotStoreSpscContentionPublishesCompleteGenerations
+[       OK ] CrossRateData.SnapshotStoreSpscContentionPublishesCompleteGenerations (9 ms)
+[ RUN      ] CrossRateData.TwoRuntimeHandlesSamplesAndStoresRemainIsolated
+[       OK ] CrossRateData.TwoRuntimeHandlesSamplesAndStoresRemainIsolated (3 ms)
+[----------] 11 tests from CrossRateData (35 ms total)
+
+[----------] 15 tests from RateDispatch
+[ RUN      ] RateDispatch.DeviceRateCyclicAdmissionModelsWrapAndHalfOpenCapacity
+[       OK ] RateDispatch.DeviceRateCyclicAdmissionModelsWrapAndHalfOpenCapacity (0 ms)
+[ RUN      ] RateDispatch.DeviceRateRejectsPayloadAndCompletionCapacityMismatch
+[       OK ] RateDispatch.DeviceRateRejectsPayloadAndCompletionCapacityMismatch (0 ms)
+[ RUN      ] RateDispatch.DeviceRateAllowsDistinctBackendOverlapAndRejectsWaitCycle
+[       OK ] RateDispatch.DeviceRateAllowsDistinctBackendOverlapAndRejectsWaitCycle (0 ms)
+[ RUN      ] RateDispatch.PolicyIsOptInCopiedFrozenAndLegacyDispatchIsExact
+[       OK ] RateDispatch.PolicyIsOptInCopiedFrozenAndLegacyDispatchIsExact (6 ms)
+[ RUN      ] RateDispatch.AdmissionRejectsMalformedAndInfeasibleActivePlans
+[       OK ] RateDispatch.AdmissionRejectsMalformedAndInfeasibleActivePlans (0 ms)
+[ RUN      ] RateDispatch.AdmissionMatchesIndependentCompleteSupercycleSimulation
+[       OK ] RateDispatch.AdmissionMatchesIndependentCompleteSupercycleSimulation (0 ms)
+[ RUN      ] RateDispatch.RejectsD1CrossDomainDependenciesAndSkipProducers
+[       OK ] RateDispatch.RejectsD1CrossDomainDependenciesAndSkipProducers (0 ms)
+[ RUN      ] RateDispatch.ExecutesExactHalfOpenWindowsAndReportsContextAndCaps
+[       OK ] RateDispatch.ExecutesExactHalfOpenWindowsAndReportsContextAndCaps (3 ms)
+[ RUN      ] RateDispatch.CallbackFailureRejectsEveryUnattemptedSubstep
+[       OK ] RateDispatch.CallbackFailureRejectsEveryUnattemptedSubstep (3 ms)
+[ RUN      ] RateDispatch.AppliesSkipCatchUpDegradeAndFailPolicies
+[       OK ] RateDispatch.AppliesSkipCatchUpDegradeAndFailPolicies (14 ms)
+[ RUN      ] RateDispatch.PublishesCopiesHoldsAndRejectsDuplicateOrMissingPayloads
+[       OK ] RateDispatch.PublishesCopiesHoldsAndRejectsDuplicateOrMissingPayloads (32 ms)
+[ RUN      ] RateDispatch.PublishesEverySubstepAndUsesExactHeldSelection
+[       OK ] RateDispatch.PublishesEverySubstepAndUsesExactHeldSelection (4 ms)
+[ RUN      ] RateDispatch.PeriodicUsesAbsoluteReleaseAndAggregatesRateSummaries
+[       OK ] RateDispatch.PeriodicUsesAbsoluteReleaseAndAggregatesRateSummaries (4 ms)
+[ RUN      ] RateDispatch.TwoActiveRuntimeEpochsAndCursorsRemainIsolated
+[       OK ] RateDispatch.TwoActiveRuntimeEpochsAndCursorsRemainIsolated (7 ms)
+[ RUN      ] RateDispatch.ActiveCheckpointRoundTripsAndReplayIsExplicitlyRejected
+[       OK ] RateDispatch.ActiveCheckpointRoundTripsAndReplayIsExplicitlyRejected (8 ms)
+[----------] 15 tests from RateDispatch (86 ms total)
+
+[----------] 5 tests from RateTelemetry
+[ RUN      ] RateTelemetry.NumericSchemaAndCounterTablesAreExact
+[       OK ] RateTelemetry.NumericSchemaAndCounterTablesAreExact (0 ms)
+[ RUN      ] RateTelemetry.ConcurrentPublishAndReadRemainBoundedAndRaceFree
+[       OK ] RateTelemetry.ConcurrentPublishAndReadRemainBoundedAndRaceFree (2 ms)
+[ RUN      ] RateTelemetry.InspectionRejectsAnActiveStep
+[       OK ] RateTelemetry.InspectionRejectsAnActiveStep (4 ms)
+[ RUN      ] RateTelemetry.RuntimeBoundCursorsRejectForeignInstancesTransactionally
+[       OK ] RateTelemetry.RuntimeBoundCursorsRejectForeignInstancesTransactionally (1 ms)
+[ RUN      ] RateTelemetry.ZeroCapacityAndOverwriteReportExactCursorGaps
+[       OK ] RateTelemetry.ZeroCapacityAndOverwriteReportExactCursorGaps (8 ms)
+[----------] 5 tests from RateTelemetry (16 ms total)
+
+[----------] 8 tests from RateShedding
+[ RUN      ] RateShedding.ThresholdTransitionIsImmediateAndRecoveryIsReverse
+[       OK ] RateShedding.ThresholdTransitionIsImmediateAndRecoveryIsReverse (4 ms)
+[ RUN      ] RateShedding.OptionalOrderIsCriticalityThenReverseRegistration
+[       OK ] RateShedding.OptionalOrderIsCriticalityThenReverseRegistration (4 ms)
+[ RUN      ] RateShedding.StreakResetAndOptionalLatenessNeverDriveTransitions
+[       OK ] RateShedding.StreakResetAndOptionalLatenessNeverDriveTransitions (4 ms)
+[ RUN      ] RateShedding.TerminalFailPreventsPolicyTransition
+[       OK ] RateShedding.TerminalFailPreventsPolicyTransition (4 ms)
+[ RUN      ] RateShedding.LargeLateWindowAggregatesAfterBoundedTransitions
+[       OK ] RateShedding.LargeLateWindowAggregatesAfterBoundedTransitions (4 ms)
+[ RUN      ] RateShedding.LargeOptionalLatePrefixAggregatesBeforeShedThreshold
+[       OK ] RateShedding.LargeOptionalLatePrefixAggregatesBeforeShedThreshold (8 ms)
+[ RUN      ] RateShedding.PolicyAndOptionalChannelValidationAreTransactional
+[       OK ] RateShedding.PolicyAndOptionalChannelValidationAreTransactional (0 ms)
+[ RUN      ] RateShedding.CheckpointRoundTripRestoresStreakAndShedState
+[       OK ] RateShedding.CheckpointRoundTripRestoresStreakAndShedState (8 ms)
+[----------] 8 tests from RateShedding (40 ms total)
+
+[----------] 10 tests from RateTimeline
+[ RUN      ] RateTimeline.PublicDefaultsAndLegacyNoPlanRemainAdditive
+[       OK ] RateTimeline.PublicDefaultsAndLegacyNoPlanRemainAdditive (1 ms)
+[ RUN      ] RateTimeline.HarmonicAndNonHarmonicTimelineMatchesIndependentGenerator
+[       OK ] RateTimeline.HarmonicAndNonHarmonicTimelineMatchesIndependentGenerator (1 ms)
+[ RUN      ] RateTimeline.ValidationIsBoundedOwnedAndTransactional
+[       OK ] RateTimeline.ValidationIsBoundedOwnedAndTransactional (1 ms)
+[ RUN      ] RateTimeline.FailedCompilationHasNoProviderSideEffectsAndCanRetry
+[       OK ] RateTimeline.FailedCompilationHasNoProviderSideEffectsAndCanRetry (0 ms)
+[ RUN      ] RateTimeline.CheckedArithmeticRejectsOverflowCapacityAndRecovers
+[       OK ] RateTimeline.CheckedArithmeticRejectsOverflowCapacityAndRecovers (3 ms)
+[ RUN      ] RateTimeline.ReferenceReleaseCapacityBoundaryIsInclusive
+[       OK ] RateTimeline.ReferenceReleaseCapacityBoundaryIsInclusive (39 ms)
+[ RUN      ] RateTimeline.ExplicitPlanDoesNotChangeHostOrPeriodicDispatch
+[       OK ] RateTimeline.ExplicitPlanDoesNotChangeHostOrPeriodicDispatch (4 ms)
+[ RUN      ] RateTimeline.ExplicitSemanticsChangeIdentityAndNoPlanIdentityIsStable
+[       OK ] RateTimeline.ExplicitSemanticsChangeIdentityAndNoPlanIdentityIsStable (11 ms)
+[ RUN      ] RateTimeline.DirectCompilerRejectsMalformedNamesAndPhaseOrder
+[       OK ] RateTimeline.DirectCompilerRejectsMalformedNamesAndPhaseOrder (0 ms)
+[ RUN      ] RateTimeline.CpuAndMockDeviceBindingsRemainInstanceOwned
+[       OK ] RateTimeline.CpuAndMockDeviceBindingsRemainInstanceOwned (7 ms)
+[----------] 10 tests from RateTimeline (73 ms total)
+
+[----------] 7 tests from SampledIo
+[ RUN      ] SampledIo.CompilesExactInputDescriptorAndDirectMap
+[       OK ] SampledIo.CompilesExactInputDescriptorAndDirectMap (0 ms)
+[ RUN      ] SampledIo.FailureIsTransactionalAndCorrectionIsRetryable
+[       OK ] SampledIo.FailureIsTransactionalAndCorrectionIsRetryable (0 ms)
+[ RUN      ] SampledIo.RejectsMalformedDescriptorsAndEndpointDisagreement
+[       OK ] SampledIo.RejectsMalformedDescriptorsAndEndpointDisagreement (0 ms)
+[ RUN      ] SampledIo.OutputRequiresExactSafeFramesAndSignalOnlyPhase
+[       OK ] SampledIo.OutputRequiresExactSafeFramesAndSignalOnlyPhase (0 ms)
+[ RUN      ] SampledIo.FrameValidationAcceptsUnalignedStorageWithoutAliasing
+[       OK ] SampledIo.FrameValidationAcceptsUnalignedStorageWithoutAliasing (0 ms)
+[ RUN      ] SampledIo.FrameValidationRejectsEveryCorrelatedFieldAndChecksumDrift
+[       OK ] SampledIo.FrameValidationRejectsEveryCorrelatedFieldAndChecksumDrift (0 ms)
+[ RUN      ] SampledIo.RuntimeLoopbackAcknowledgesSafeAndPublishesTerminalInput
+[       OK ] SampledIo.RuntimeLoopbackAcknowledgesSafeAndPublishesTerminalInput (15 ms)
+[----------] 7 tests from SampledIo (16 ms total)
+
+[----------] 3 tests from LoopbackBackend
+[ RUN      ] LoopbackBackend.TransfersCompleteSampledFrameAndRewritesIdentity
+[       OK ] LoopbackBackend.TransfersCompleteSampledFrameAndRewritesIdentity (0 ms)
+[ RUN      ] LoopbackBackend.ConfigurationIsBoundedAndInstanceLocal
+[       OK ] LoopbackBackend.ConfigurationIsBoundedAndInstanceLocal (0 ms)
+[ RUN      ] LoopbackBackend.PairingIdentityIsCanonicalAndFrozenAtRegistration
+[       OK ] LoopbackBackend.PairingIdentityIsCanonicalAndFrozenAtRegistration (0 ms)
+[----------] 3 tests from LoopbackBackend (0 ms total)
+
+[----------] 28 tests from LiveControlMailbox
+[ RUN      ] LiveControlMailbox.PublicLayoutAndDisabledPathRemainAdditive
+[       OK ] LiveControlMailbox.PublicLayoutAndDisabledPathRemainAdditive (2 ms)
+[ RUN      ] LiveControlMailbox.ConfigurationCopiesAndClosesEveryCapacityBoundary
+[       OK ] LiveControlMailbox.ConfigurationCopiesAndClosesEveryCapacityBoundary (2 ms)
+[ RUN      ] LiveControlMailbox.FailedBudgetFinalizationIsTransactionalAndRetryable
+[       OK ] LiveControlMailbox.FailedBudgetFinalizationIsTransactionalAndRetryable (0 ms)
+[ RUN      ] LiveControlMailbox.CopiesBeforePublicationAndRejectsWithoutOverwrite
+[       OK ] LiveControlMailbox.CopiesBeforePublicationAndRejectsWithoutOverwrite (0 ms)
+[ RUN      ] LiveControlMailbox.OneAttemptContentionReturnsBusyWithoutPublication
+[       OK ] LiveControlMailbox.OneAttemptContentionReturnsBusyWithoutPublication (0 ms)
+[ RUN      ] LiveControlMailbox.ValidatesExactCompiledRateTargetsAndClosedKinds
+[       OK ] LiveControlMailbox.ValidatesExactCompiledRateTargetsAndClosedKinds (0 ms)
+[ RUN      ] LiveControlMailbox.PastTargetsBecomeMissedAndStopClosesAdmission
+[       OK ] LiveControlMailbox.PastTargetsBecomeMissedAndStopClosesAdmission (5 ms)
+[ RUN      ] LiveControlMailbox.RuntimeCallbacksCannotUseTheProducerAdmissionApi
+[       OK ] LiveControlMailbox.RuntimeCallbacksCannotUseTheProducerAdmissionApi (4 ms)
+[ RUN      ] LiveControlMailbox.StopRaceEitherCompletesOrRejectsOneWholeRecord
+[       OK ] LiveControlMailbox.StopRaceEitherCompletesOrRejectsOneWholeRecord (0 ms)
+[ RUN      ] LiveControlMailbox.HandlesAndStorageAreIsolatedPerRuntime
+[       OK ] LiveControlMailbox.HandlesAndStorageAreIsolatedPerRuntime (1 ms)
+[ RUN      ] LiveControlMailbox.ConcurrentProducersPublishOnlyCompleteDenseRecords
+[       OK ] LiveControlMailbox.ConcurrentProducersPublishOnlyCompleteDenseRecords (23 ms)
+[ RUN      ] LiveControlMailbox.BoundaryPublishesCanonicalReplacementAndReusesSlots
+[       OK ] LiveControlMailbox.BoundaryPublishesCanonicalReplacementAndReusesSlots (3 ms)
+[ RUN      ] LiveControlMailbox.BoundaryOrderIgnoresRegistrationAndArrivalOrder
+[       OK ] LiveControlMailbox.BoundaryOrderIgnoresRegistrationAndArrivalOrder (3 ms)
+[ RUN      ] LiveControlMailbox.ActiveRateReleasePublishesBeforeItsCallback
+[       OK ] LiveControlMailbox.ActiveRateReleasePublishesBeforeItsCallback (2 ms)
+[ RUN      ] LiveControlMailbox.ExhaustionPrecedesWrapAndDoesNotPublish
+[       OK ] LiveControlMailbox.ExhaustionPrecedesWrapAndDoesNotPublish (0 ms)
+[ RUN      ] LiveControlMailbox.FrozenPolicyChangesIdentityButArrivalsDoNot
+[       OK ] LiveControlMailbox.FrozenPolicyChangesIdentityButArrivalsDoNot (3 ms)
+[ RUN      ] LiveControlMailbox.ClosureSettlesSuccessWithCanonicalActions
+[       OK ] LiveControlMailbox.ClosureSettlesSuccessWithCanonicalActions (2 ms)
+[ RUN      ] LiveControlMailbox.CallbackFailureRestoresPriorGenerationAndRollsBack
+[       OK ] LiveControlMailbox.CallbackFailureRestoresPriorGenerationAndRollsBack (3 ms)
+[ RUN      ] LiveControlMailbox.CheckpointRoundTripRetiresHandlesWithoutPartialRestore
+[       OK ] LiveControlMailbox.CheckpointRoundTripRetiresHandlesWithoutPartialRestore (0 ms)
+[ RUN      ] LiveControlMailbox.OrdinaryReplayInjectsExactRetainedGeneration
+[       OK ] LiveControlMailbox.OrdinaryReplayInjectsExactRetainedGeneration (3 ms)
+[ RUN      ] LiveControlMailbox.ReplayMatchesRecordedRollbackBeforeReturningFailure
+[       OK ] LiveControlMailbox.ReplayMatchesRecordedRollbackBeforeReturningFailure (7 ms)
+[ RUN      ] LiveControlMailbox.LosslessFutureAndPreCheckpointRecordsPreserveAllOutcomes
+[       OK ] LiveControlMailbox.LosslessFutureAndPreCheckpointRecordsPreserveAllOutcomes (4 ms)
+[ RUN      ] LiveControlMailbox.LosslessSemanticJournalCorruptionRejectsBeforeRestore
+[       OK ] LiveControlMailbox.LosslessSemanticJournalCorruptionRejectsBeforeRestore (4 ms)
+[ RUN      ] LiveControlMailbox.LosslessRetentionExhaustionCannotExportSuccess
+[       OK ] LiveControlMailbox.LosslessRetentionExhaustionCannotExportSuccess (8 ms)
+[ RUN      ] LiveControlMailbox.LosslessStoppedAndExhaustedHistoriesReplayAcrossInstances
+[       OK ] LiveControlMailbox.LosslessStoppedAndExhaustedHistoriesReplayAcrossInstances (17 ms)
+[ RUN      ] LiveControlMailbox.LosslessPolicyIsExplicitFrozenAndExactlyAccounted
+[       OK ] LiveControlMailbox.LosslessPolicyIsExplicitFrozenAndExactlyAccounted (19 ms)
+[ RUN      ] LiveControlMailbox.ClearFaultRetainsBothSupportedPayloadForms
+[       OK ] LiveControlMailbox.ClearFaultRetainsBothSupportedPayloadForms (17 ms)
+[ RUN      ] LiveControlMailbox.ConcurrentLosslessProducersReplayOrExplicitlyDisqualifyLoss
+[       OK ] LiveControlMailbox.ConcurrentLosslessProducersReplayOrExplicitlyDisqualifyLoss (15 ms)
+[----------] 28 tests from LiveControlMailbox (162 ms total)
+
+[----------] 4 tests from LiveControlActions
+[ RUN      ] LiveControlActions.PublicLayoutAndClosedTablesRejectMalformedRecords
+[       OK ] LiveControlActions.PublicLayoutAndClosedTablesRejectMalformedRecords (0 ms)
+[ RUN      ] LiveControlActions.FixedRingReportsOverwriteGapAndResetExactly
+[       OK ] LiveControlActions.FixedRingReportsOverwriteGapAndResetExactly (0 ms)
+[ RUN      ] LiveControlActions.ZeroCapacityDropsButStillReservesSequence
+[       OK ] LiveControlActions.ZeroCapacityDropsButStillReservesSequence (0 ms)
+[ RUN      ] LiveControlActions.SequenceExhaustionFailsBeforeWrap
+[       OK ] LiveControlActions.SequenceExhaustionFailsBeforeWrap (0 ms)
+[----------] 4 tests from LiveControlActions (0 ms total)
+
+[----------] 4 tests from LiveControlSdk
+[ RUN      ] LiveControlSdk.CanonicalEnvelopeHasExactLittleEndianLayout
+[       OK ] LiveControlSdk.CanonicalEnvelopeHasExactLittleEndianLayout (0 ms)
+[ RUN      ] LiveControlSdk.DecodeRejectsMutationsWithoutPartiallyChangingOutput
+[       OK ] LiveControlSdk.DecodeRejectsMutationsWithoutPartiallyChangingOutput (0 ms)
+[ RUN      ] LiveControlSdk.BuildersPreserveExactHandleSequenceTargetAndRawStatus
+[       OK ] LiveControlSdk.BuildersPreserveExactHandleSequenceTargetAndRawStatus (0 ms)
+[ RUN      ] LiveControlSdk.TypedClearFaultKeepsRawAdmissionResultVisible
+[       OK ] LiveControlSdk.TypedClearFaultKeepsRawAdmissionResultVisible (1 ms)
+[----------] 4 tests from LiveControlSdk (1 ms total)
+
+[----------] 4 tests from LiveControlStress
+[ RUN      ] LiveControlStress.AbsoluteConfigurationAndPayloadBoundariesAreExact
+[       OK ] LiveControlStress.AbsoluteConfigurationAndPayloadBoundariesAreExact (17 ms)
+[ RUN      ] LiveControlStress.ConcurrentFullOccupancyReclaimsWithExactLossCounts
+[       OK ] LiveControlStress.ConcurrentFullOccupancyReclaimsWithExactLossCounts (141 ms)
+[ RUN      ] LiveControlStress.CallbackRollbackRemainsOrthogonalToWatchdogPolicy
+[       OK ] LiveControlStress.CallbackRollbackRemainsOrthogonalToWatchdogPolicy (7 ms)
+[ RUN      ] LiveControlStress.RepeatedLifecycleAndConcurrentRuntimesStayIsolated
+[       OK ] LiveControlStress.RepeatedLifecycleAndConcurrentRuntimesStayIsolated (218 ms)
+[----------] 4 tests from LiveControlStress (384 ms total)
+
+[----------] 9 tests from LiveControlActiveReplay
+[ RUN      ] LiveControlActiveReplay.HostTwoAndEightFramesPreserveCanonicalState
+[       OK ] LiveControlActiveReplay.HostTwoAndEightFramesPreserveCanonicalState (9 ms)
+[ RUN      ] LiveControlActiveReplay.ReclaimsOnlyAfterFreeSlotsAreExhausted
+[       OK ] LiveControlActiveReplay.ReclaimsOnlyAfterFreeSlotsAreExhausted (5 ms)
+[ RUN      ] LiveControlActiveReplay.MultipleMailboxesAndCompiledRateTargets
+[       OK ] LiveControlActiveReplay.MultipleMailboxesAndCompiledRateTargets (12 ms)
+[ RUN      ] LiveControlActiveReplay.FinalApplicationStateDivergenceStillFails
+[       OK ] LiveControlActiveReplay.FinalApplicationStateDivergenceStillFails (2 ms)
+[ RUN      ] LiveControlActiveReplay.ConcurrentRuntimeInstancesAreIsolated
+[       OK ] LiveControlActiveReplay.ConcurrentRuntimeInstancesAreIsolated (16 ms)
+[ RUN      ] LiveControlActiveReplay.LosslessReplacementsAndRejectionsPreserveAllState
+[       OK ] LiveControlActiveReplay.LosslessReplacementsAndRejectionsPreserveAllState (28 ms)
+[ RUN      ] LiveControlActiveReplay.LosslessApplicationDivergenceStillFails
+[       OK ] LiveControlActiveReplay.LosslessApplicationDivergenceStillFails (3 ms)
+[ RUN      ] LiveControlActiveReplay.IncompleteV1HistoriesRejectBeforeRestore
+[       OK ] LiveControlActiveReplay.IncompleteV1HistoriesRejectBeforeRestore (8 ms)
+[ RUN      ] LiveControlActiveReplay.ConcurrentLosslessInstancesRemainIsolated
+[       OK ] LiveControlActiveReplay.ConcurrentLosslessInstancesRemainIsolated (11 ms)
+[----------] 9 tests from LiveControlActiveReplay (99 ms total)
+
+[----------] 4 tests from MixedRateActions
+[ RUN      ] MixedRateActions.NumericTablesAndRecordShapeAreClosed
+[       OK ] MixedRateActions.NumericTablesAndRecordShapeAreClosed (0 ms)
+[ RUN      ] MixedRateActions.ZeroExactAndOneOverCapacityHaveExactLoss
+[       OK ] MixedRateActions.ZeroExactAndOneOverCapacityHaveExactLoss (0 ms)
+[ RUN      ] MixedRateActions.PolicyValidationIsTransactionalAndAccounted
+[       OK ] MixedRateActions.PolicyValidationIsTransactionalAndAccounted (2 ms)
+[ RUN      ] MixedRateActions.OptionalDeviceSheddingSkipsOwnershipAndRecovers
+[       OK ] MixedRateActions.OptionalDeviceSheddingSkipsOwnershipAndRecovers (8 ms)
+[----------] 4 tests from MixedRateActions (11 ms total)
+
+[----------] 4 tests from MixedRateConformance
+[ RUN      ] MixedRateConformance.ThreeRatePublicFixtureIsOrderedAndExact
+[       OK ] MixedRateConformance.ThreeRatePublicFixtureIsOrderedAndExact (12 ms)
+[ RUN      ] MixedRateConformance.TwoInstancesShareNoMutableState
+[       OK ] MixedRateConformance.TwoInstancesShareNoMutableState (27 ms)
+[ RUN      ] MixedRateConformance.FaultMatrixReplaysTerminalClosureAndSafeFailure
+[       OK ] MixedRateConformance.FaultMatrixReplaysTerminalClosureAndSafeFailure (199 ms)
+[ RUN      ] MixedRateConformance.MissingStartupAcknowledgementHonorsOriginalTimeout
+[       OK ] MixedRateConformance.MissingStartupAcknowledgementHonorsOriginalTimeout (93 ms)
+[----------] 4 tests from MixedRateConformance (332 ms total)
+
+[----------] 12 tests from CpuMemoryPolicy
+[ RUN      ] CpuMemoryPolicy.ReportRetainsPreM15_03AggregatePrefix
+[       OK ] CpuMemoryPolicy.ReportRetainsPreM15_03AggregatePrefix (0 ms)
+[ RUN      ] CpuMemoryPolicy.DefaultsInventoryEveryStableRoleAndMemoryIdentity
+[       OK ] CpuMemoryPolicy.DefaultsInventoryEveryStableRoleAndMemoryIdentity (0 ms)
+[ RUN      ] CpuMemoryPolicy.BoundedDeclarationsCloseExternalFactsWithoutQualification
+[       OK ] CpuMemoryPolicy.BoundedDeclarationsCloseExternalFactsWithoutQualification (3 ms)
+[ RUN      ] CpuMemoryPolicy.StrictClosureRejectsMissingFactsBeforeNativeMutation
+[       OK ] CpuMemoryPolicy.StrictClosureRejectsMissingFactsBeforeNativeMutation (0 ms)
+[ RUN      ] CpuMemoryPolicy.FullyDeclaredHostAdapterClosesWithoutNativeOwnership
+[       OK ] CpuMemoryPolicy.FullyDeclaredHostAdapterClosesWithoutNativeOwnership (0 ms)
+[ RUN      ] CpuMemoryPolicy.RejectsDuplicateOwnedAndContradictoryDeclarations
+[       OK ] CpuMemoryPolicy.RejectsDuplicateOwnedAndContradictoryDeclarations (1 ms)
+[ RUN      ] CpuMemoryPolicy.BestEffortRequestsResolveToExplicitPortableNoops
+[       OK ] CpuMemoryPolicy.BestEffortRequestsResolveToExplicitPortableNoops (2 ms)
+[ RUN      ] CpuMemoryPolicy.RejectsDuplicateMalformedAndContradictoryRequests
+[       OK ] CpuMemoryPolicy.RejectsDuplicateMalformedAndContradictoryRequests (0 ms)
+[ RUN      ] CpuMemoryPolicy.RejectsUnsupportedStrictAndCheckedArithmeticOverflow
+[       OK ] CpuMemoryPolicy.RejectsUnsupportedStrictAndCheckedArithmeticOverflow (0 ms)
+[ RUN      ] CpuMemoryPolicy.FailedFinalizationCanReplacePolicyAndRecover
+[       OK ] CpuMemoryPolicy.FailedFinalizationCanReplacePolicyAndRecover (3 ms)
+[ RUN      ] CpuMemoryPolicy.ExternalHostAndCustomRolesRemainVerifyOnly
+[       OK ] CpuMemoryPolicy.ExternalHostAndCustomRolesRemainVerifyOnly (0 ms)
+[ RUN      ] CpuMemoryPolicy.CustomUnknownCardinalityPropagatesToExternalStacks
+[       OK ] CpuMemoryPolicy.CustomUnknownCardinalityPropagatesToExternalStacks (0 ms)
+[----------] 12 tests from CpuMemoryPolicy (13 ms total)
+
+[----------] 30 tests from MemoryPolicy
+[ RUN      ] MemoryPolicy.ProviderTableValidatesCopiesAndRejectsReentrancy
+[       OK ] MemoryPolicy.ProviderTableValidatesCopiesAndRejectsReentrancy (0 ms)
+[ RUN      ] MemoryPolicy.AcquiresStableOrderAndReleasesReverseExactlyOnce
+[       OK ] MemoryPolicy.AcquiresStableOrderAndReleasesReverseExactlyOnce (2 ms)
+[ RUN      ] MemoryPolicy.ReleaseCallbackCannotReenterRuntime
+[       OK ] MemoryPolicy.ReleaseCallbackCannotReenterRuntime (2 ms)
+[ RUN      ] MemoryPolicy.RollbackFailureRetainsTokensUntilCheckedStopRetry
+[       OK ] MemoryPolicy.RollbackFailureRetainsTokensUntilCheckedStopRetry (2 ms)
+[ RUN      ] MemoryPolicy.PartialRollbackRetriesOnlyTheUnresolvedRegion
+[       OK ] MemoryPolicy.PartialRollbackRetriesOnlyTheUnresolvedRegion (5 ms)
+[ RUN      ] MemoryPolicy.AcquisitionFailureReleasesCompletedTokensInReverse
+[       OK ] MemoryPolicy.AcquisitionFailureReleasesCompletedTokensInReverse (1 ms)
+[ RUN      ] MemoryPolicy.FailedAcquireCannotReleaseAnotherRuntimesLiveToken
+[       OK ] MemoryPolicy.FailedAcquireCannotReleaseAnotherRuntimesLiveToken (2 ms)
+[ RUN      ] MemoryPolicy.RejectsMalformedProviderAllocationsWithoutPublishing
+[       OK ] MemoryPolicy.RejectsMalformedProviderAllocationsWithoutPublishing (1 ms)
+[ RUN      ] MemoryPolicy.RejectsMalformedPageAndHugeOutcomes
+[       OK ] MemoryPolicy.RejectsMalformedPageAndHugeOutcomes (0 ms)
+[ RUN      ] MemoryPolicy.RejectsGuardClaimsOutsideAllocationExtent
+[       OK ] MemoryPolicy.RejectsGuardClaimsOutsideAllocationExtent (0 ms)
+[ RUN      ] MemoryPolicy.RejectsCapabilityMismatchBeforePublishing
+[       OK ] MemoryPolicy.RejectsCapabilityMismatchBeforePublishing (0 ms)
+[ RUN      ] MemoryPolicy.InactiveRowsDoNotInvokeProvider
+[       OK ] MemoryPolicy.InactiveRowsDoNotInvokeProvider (0 ms)
+[ RUN      ] MemoryPolicy.StrictClosureDoesNotDoubleCountProviderStorage
+[       OK ] MemoryPolicy.StrictClosureDoesNotDoubleCountProviderStorage (2 ms)
+[ RUN      ] MemoryPolicy.StrictDeferredRegionFailsBeforeProviderCallbacks
+[       OK ] MemoryPolicy.StrictDeferredRegionFailsBeforeProviderCallbacks (1 ms)
+[ RUN      ] MemoryPolicy.NativeNumaRequiresIndependentProviderObservation
+[       OK ] MemoryPolicy.NativeNumaRequiresIndependentProviderObservation (0 ms)
+[ RUN      ] MemoryPolicy.ReportsRequestedCommittedAndVerifiedProviderState
+[       OK ] MemoryPolicy.ReportsRequestedCommittedAndVerifiedProviderState (2 ms)
+[ RUN      ] MemoryPolicy.RejectsHugeFallbackWhenRequestForbidsIt
+[       OK ] MemoryPolicy.RejectsHugeFallbackWhenRequestForbidsIt (0 ms)
+[ RUN      ] MemoryPolicy.SharedProviderCannotAliasTwoRuntimes
+[       OK ] MemoryPolicy.SharedProviderCannotAliasTwoRuntimes (4 ms)
+[ RUN      ] MemoryPolicy.ProviderBackedNestedAndHostAdapterScratchRemainDistinct
+[       OK ] MemoryPolicy.ProviderBackedNestedAndHostAdapterScratchRemainDistinct (2 ms)
+[ RUN      ] MemoryPolicy.ProviderBackedPeriodicWatchdogPreservesTraceLoss
+[       OK ] MemoryPolicy.ProviderBackedPeriodicWatchdogPreservesTraceLoss (5 ms)
+[ RUN      ] MemoryPolicy.FailedStartDestructionRollsBackBeforeRelease
+[       OK ] MemoryPolicy.FailedStartDestructionRollsBackBeforeRelease (0 ms)
+[ RUN      ] MemoryPolicy.StrictApplyAndReadbackFailuresRollbackAndRetry
+[       OK ] MemoryPolicy.StrictApplyAndReadbackFailuresRollbackAndRetry (5 ms)
+[ RUN      ] MemoryPolicy.LaterThreadFailureRollsBackThreadsThenMemoryAndRetries
+[       OK ] MemoryPolicy.LaterThreadFailureRollsBackThreadsThenMemoryAndRetries (4 ms)
+[ RUN      ] MemoryPolicy.WatchdogFailureJoinsBeforeMemoryRollbackAndRetries
+[       OK ] MemoryPolicy.WatchdogFailureJoinsBeforeMemoryRollbackAndRetries (6 ms)
+[ RUN      ] MemoryPolicy.ExecutorStackCleanupRetriesWithWatchdogStillAccounted
+[       OK ] MemoryPolicy.ExecutorStackCleanupRetriesWithWatchdogStillAccounted (9 ms)
+[ RUN      ] MemoryPolicy.StartupRetainsFirstErrorWhenRollbackAlsoFails
+[       OK ] MemoryPolicy.StartupRetainsFirstErrorWhenRollbackAlsoFails (2 ms)
+[ RUN      ] MemoryPolicy.BestEffortApplyFailureIsReportedAndRuntimeContinues
+[       OK ] MemoryPolicy.BestEffortApplyFailureIsReportedAndRuntimeContinues (3 ms)
+[ RUN      ] MemoryPolicy.RuntimeInstancesIsolateTokensBackingReportsAndRollback
+[       OK ] MemoryPolicy.RuntimeInstancesIsolateTokensBackingReportsAndRollback (8 ms)
+[ RUN      ] MemoryPolicy.NativeLinuxPageBackingIsRoundedGuardedAndObserved
+[       OK ] MemoryPolicy.NativeLinuxPageBackingIsRoundedGuardedAndObserved (29 ms)
+[ RUN      ] MemoryPolicy.NativeLockingUsesIsolatedPagesAndNeverReportsPinning
+[       OK ] MemoryPolicy.NativeLockingUsesIsolatedPagesAndNeverReportsPinning (7 ms)
+[----------] 30 tests from MemoryPolicy (118 ms total)
+
+[----------] 11 tests from ThreadPolicy
+[ RUN      ] ThreadPolicy.AppliesEveryRuntimeOwnedInstanceBeforeCommitAndJoinsReverse
+[       OK ] ThreadPolicy.AppliesEveryRuntimeOwnedInstanceBeforeCommitAndJoinsReverse (14 ms)
+[ RUN      ] ThreadPolicy.StrictFailuresRollbackWithoutCallbacksAndCanRecover
+[       OK ] ThreadPolicy.StrictFailuresRollbackWithoutCallbacksAndCanRecover (82 ms)
+[ RUN      ] ThreadPolicy.BestEffortFailureRemainsObservableAndContinues
+[       OK ] ThreadPolicy.BestEffortFailureRemainsObservableAndContinues (10 ms)
+[ RUN      ] ThreadPolicy.LiveRuntimeStackAccountingIsExactBoundedAndIsolated
+[       OK ] ThreadPolicy.LiveRuntimeStackAccountingIsExactBoundedAndIsolated (17 ms)
+[ RUN      ] ThreadPolicy.StrictRuntimeStackMismatchRollsBackAndRecovers
+[       OK ] ThreadPolicy.StrictRuntimeStackMismatchRollsBackAndRecovers (0 ms)
+[ RUN      ] ThreadPolicy.FailedStartCleanupRetryClearsRetainedStackError
+[       OK ] ThreadPolicy.FailedStartCleanupRetryClearsRetainedStackError (0 ms)
+[ RUN      ] ThreadPolicy.BestEffortRuntimeStackFailureIsReportedWithoutCommitBlock
+[       OK ] ThreadPolicy.BestEffortRuntimeStackFailureIsReportedWithoutCommitBlock (0 ms)
+[ RUN      ] ThreadPolicy.StrictStackLockingCannotClaimIndependentReadback
+[       OK ] ThreadPolicy.StrictStackLockingCannotClaimIndependentReadback (5 ms)
+[ RUN      ] ThreadPolicy.SpinYieldAndParkWakeForWorkAndStop
+[       OK ] ThreadPolicy.SpinYieldAndParkWakeForWorkAndStop (17 ms)
+[ RUN      ] ThreadPolicy.StrictExternalAndUnavailableRequestsFailDuringFinalize
+[       OK ] ThreadPolicy.StrictExternalAndUnavailableRequestsFailDuringFinalize (2 ms)
+[ RUN      ] ThreadPolicy.LinuxAppliesAndReadsBackAvailableNativeFields
+[       OK ] ThreadPolicy.LinuxAppliesAndReadsBackAvailableNativeFields (1 ms)
+[----------] 11 tests from ThreadPolicy (153 ms total)
+
+[----------] 1 test from AffinityTest
+[ RUN      ] AffinityTest.ThreadsPinnedRoundRobin
+[       OK ] AffinityTest.ThreadsPinnedRoundRobin (98 ms)
+[----------] 1 test from AffinityTest (98 ms total)
+
+[----------] 1 test from NumaPool
+[ RUN      ] NumaPool.Skipped
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_numa_pool.cpp:72: Skipped
+SIM_USE_NUMA not enabled
+
+[  SKIPPED ] NumaPool.Skipped (0 ms)
+[----------] 1 test from NumaPool (0 ms total)
+
+[----------] 1 test from NumaIntegration
+[ RUN      ] NumaIntegration.Skipped
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m26-03r/tests/test_numa_integration.cpp:234: Skipped
+SIM_USE_NUMA not enabled
+
+[  SKIPPED ] NumaIntegration.Skipped (0 ms)
+[----------] 1 test from NumaIntegration (0 ms total)
+
+[----------] 3 tests from CrossMatrixDeterminism/SimCoreDeterminism
+[ RUN      ] CrossMatrixDeterminism/SimCoreDeterminism.HashSameAcrossThreadCounts/2ThreadsFmaOff
+[       OK ] CrossMatrixDeterminism/SimCoreDeterminism.HashSameAcrossThreadCounts/2ThreadsFmaOff (3115 ms)
+[ RUN      ] CrossMatrixDeterminism/SimCoreDeterminism.HashSameAcrossThreadCounts/4ThreadsFmaOff
+[       OK ] CrossMatrixDeterminism/SimCoreDeterminism.HashSameAcrossThreadCounts/4ThreadsFmaOff (3149 ms)
+[ RUN      ] CrossMatrixDeterminism/SimCoreDeterminism.HashSameAcrossThreadCounts/8ThreadsFmaOff
+[       OK ] CrossMatrixDeterminism/SimCoreDeterminism.HashSameAcrossThreadCounts/8ThreadsFmaOff (3201 ms)
+[----------] 3 tests from CrossMatrixDeterminism/SimCoreDeterminism (9466 ms total)
+
+[----------] Global test environment tear-down
+[==========] 518 tests from 111 test suites ran. (43916 ms total)
+[  PASSED  ] 513 tests.
+[  SKIPPED ] 4 tests, listed below:
+[  SKIPPED ] JobQueuePerf.MPMCvsMutex
+[  SKIPPED ] FrameArenaBindingAssert.DeathBeforeBinding
+[  SKIPPED ] NumaPool.Skipped
+[  SKIPPED ] NumaIntegration.Skipped
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] MixedRateReplay.SimulationFailedCompletionRetainsBackendTimestamp
+
+ 1 FAILED TEST
+
+      Start 30: m22_live_control_mailbox
+30/76 Test #30: m22_live_control_mailbox .................   Passed    0.32 sec
+      Start 31: m22_live_control_sdk
+31/76 Test #31: m22_live_control_sdk .....................   Passed    0.01 sec
+      Start 32: m22_live_control_stress
+32/76 Test #32: m22_live_control_stress ..................   Passed    0.18 sec
+      Start 33: m19_extension_registration
+33/76 Test #33: m19_extension_registration ...............   Passed    0.03 sec
+      Start 34: m17_command_batch_timeline
+34/76 Test #34: m17_command_batch_timeline ...............   Passed    1.33 sec
+      Start 35: m17_hal_v2_compatibility
+35/76 Test #35: m17_hal_v2_compatibility .................   Passed    0.26 sec
+      Start 36: m17_heterogeneous_memory_topology
+36/76 Test #36: m17_heterogeneous_memory_topology ........   Passed    0.07 sec
+      Start 37: m17_cuda_graph
+37/76 Test #37: m17_cuda_graph ...........................   Passed   10.18 sec
+      Start 38: m17_xdma_control
+38/76 Test #38: m17_xdma_control .........................   Passed    0.02 sec
+      Start 39: m16_rate_timeline
+39/76 Test #39: m16_rate_timeline ........................   Passed    0.11 sec
+      Start 40: m21_device_rate_model
+40/76 Test #40: m21_device_rate_model ....................   Passed    0.03 sec
+      Start 41: m21_cross_rate_payload
+41/76 Test #41: m21_cross_rate_payload ...................   Passed    0.02 sec
+      Start 42: m16_rate_dispatch
+42/76 Test #42: m16_rate_dispatch ........................   Passed    0.07 sec
+      Start 43: m16_shedding_telemetry
+43/76 Test #43: m16_shedding_telemetry ...................   Passed    0.04 sec
+      Start 44: m16_cross_rate_data
+44/76 Test #44: m16_cross_rate_data ......................   Passed    0.07 sec
+      Start 45: m15_accounting_closure
+45/76 Test #45: m15_accounting_closure ...................   Passed    0.03 sec
+      Start 46: m15_stack_lifecycle
+46/76 Test #46: m15_stack_lifecycle ......................   Passed    0.03 sec
+      Start 47: m15_cross_category_rollback
+47/76 Test #47: m15_cross_category_rollback ..............   Passed    0.02 sec
+      Start 48: thread_policy_rollback
+48/76 Test #48: thread_policy_rollback ...................   Passed    0.01 sec
+      Start 49: thread_policy_recovery
+49/76 Test #49: thread_policy_recovery ...................   Passed    0.06 sec
+      Start 50: sbom_dependencies
+50/76 Test #50: sbom_dependencies ........................   Passed    0.07 sec
+      Start 51: m24_cuda_physics
+51/76 Test #51: m24_cuda_physics .........................   Passed    0.38 sec
+      Start 52: m24_cuda_physics_cli
+52/76 Test #52: m24_cuda_physics_cli .....................   Passed    0.45 sec
+      Start 53: m17_cpu_gpu_fpga_cpu_sample
+53/76 Test #53: m17_cpu_gpu_fpga_cpu_sample ..............   Passed    0.22 sec
+      Start 54: cabi_dlopen
+54/76 Test #54: cabi_dlopen ..............................   Passed    0.02 sec
+      Start 55: host_adapter
+55/76 Test #55: host_adapter .............................   Passed    0.01 sec
+      Start 56: runtime_profile
+56/76 Test #56: runtime_profile ..........................   Passed    0.01 sec
+      Start 57: simcore_thread_violation_build
+57/76 Test #57: simcore_thread_violation_build ...........   Passed    4.39 sec
+      Start 58: xdma_backend
+58/76 Test #58: xdma_backend .............................   Passed    0.01 sec
+      Start 59: m24_cuda_pipeline
+59/76 Test #59: m24_cuda_pipeline ........................   Passed    1.61 sec
+      Start 60: m24_cuda_pipeline_cli
+60/76 Test #60: m24_cuda_pipeline_cli ....................   Passed    0.62 sec
+      Start 61: m24_cuda_lifetime
+61/76 Test #61: m24_cuda_lifetime ........................   Passed   21.09 sec
+      Start 62: m24_cuda_lifetime_cli
+62/76 Test #62: m24_cuda_lifetime_cli ....................   Passed   20.29 sec
+      Start 63: m24_cuda_capabilities
+63/76 Test #63: m24_cuda_capabilities ....................   Passed    0.68 sec
+      Start 64: host_adapter_simulation_timing_noalloc
+64/76 Test #64: host_adapter_simulation_timing_noalloc ...   Passed    0.03 sec
+      Start 65: hello_capacity_failure
+65/76 Test #65: hello_capacity_failure ...................   Passed    0.02 sec
+      Start 66: hello_step_failure
+66/76 Test #66: hello_step_failure .......................   Passed    0.02 sec
+      Start 67: typed_sdk
+67/76 Test #67: typed_sdk ................................   Passed    0.05 sec
+      Start 68: typed_sdk_stop_failure
+68/76 Test #68: typed_sdk_stop_failure ...................   Passed    0.03 sec
+      Start 69: backend_authoring_conformance
+69/76 Test #69: backend_authoring_conformance ............   Passed    0.13 sec
+      Start 70: cil_shared_memory_contract
+70/76 Test #70: cil_shared_memory_contract ...............   Passed    0.05 sec
+      Start 71: host_adapter_contract
+71/76 Test #71: host_adapter_contract ....................   Passed    0.04 sec
+      Start 72: host_adapter_golden_system_contract
+72/76 Test #72: host_adapter_golden_system_contract ......   Passed    1.89 sec
+      Start 73: host_adapter_golden_system_native
+73/76 Test #73: host_adapter_golden_system_native ........   Passed    0.14 sec
+      Start 74: host_adapter_golden_system_host
+74/76 Test #74: host_adapter_golden_system_host ..........   Passed    0.13 sec
+      Start 75: host_adapter_golden_system_external
+75/76 Test #75: host_adapter_golden_system_external ......   Passed    0.17 sec
+      Start 76: host_adapter_golden_system_process
+76/76 Test #76: host_adapter_golden_system_process .......   Passed   14.50 sec
+
+99% tests passed, 1 tests failed out of 76
+
+Total Test time (real) = 160.85 sec
+
+The following tests FAILED:
+	 29 - simcore_all (Failed)
+Errors while running CTest

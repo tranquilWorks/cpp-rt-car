@@ -224,3 +224,15 @@ covered by the M11 compatibility and export policy.
 - finite C and C++ periodic samples:
   `samples/embed_c/mini_app.c`,
   `samples/embed_cpp/mini_app.cpp`.
+
+## Explicit simulator device deadlines
+
+`DeviceRatePhaseBinding::simulation` is an optional deterministic-mock policy,
+not a clock-rate conversion. Its positive host watchdog is independently bounded
+to60 seconds; logical periods, phase budgets and backend command timeouts remain
+unchanged. The borrowed RuntimeClock must allow concurrent bounded monotonic
+reads when this policy is used. Logical deadline expiry is checked before
+successful terminal publication. Pending work still expires at the finite host
+watchdog if logical time is frozen. Active replay uses recorded decisions and
+backend simulator time while retaining that host watchdog. The default and
+native backend paths do not select this policy. No RT timing claim follows.

@@ -1,23 +1,20 @@
-# M26-03 CUDA prototype blocked on timing policy
+# M26-03 CUDA physics reactivated
 
-M26-02 merged as target PR276 at dbbab7a433a01459ed737cbb19d3b1a64a3ea1bf,
-with all32 exact-head checks; control closure PR549 is merged. M26-03 canonical
-plan PR550 is merged at0823458c29939d50efb58b16cf3c984ff82e47e8. The active
-feature branch contains a partial Runtime CUDA physics/Graph/replay prototype.
-Repeated normal execution fails its 1 ms wall completion timeout while the
-scenario uses logical time. Parking workers also reproduced the failure.
+The simulator timing prerequisite is merged as [target PR278](https://github.com/tranquilWorks/cpp-rt-car/pull/278)
+at c78075e2b30efba48db4f0ca8136110b1399baf5 after all32 exact-head checks,
+local quick72/full76, focused/sanitizers60, allocation, static, relocated SDK,
+ABI and unchanged default artifacts. Canonical [control PR555](https://github.com/tranquilWorks/portfolio-control/pull/555)
+merged at 7ce76ddfd4d3061b3b55bfffc88f6e8ca11e9548, blob ef229993dec359b6e35662100475473bb2760350.
 
-**M26-03 is incomplete and must not merge.** See the retained
-[evidence](evidence/M26-03-2026-09-29.md) and
-[proposed simulator timing decision](evidence/M26-03-timing-decision.md).
-The proposal requires a separately approved canonical repair; it is not active.
-Preserve the draft, failures and all frozen/default behavior. Do not waive the
-local failure under the control-only hosted infrastructure exception.
-
-Next: resolve the timing policy, integrate any separately approved repair, then
-reactivate and complete the CUDA kit, faults/recovery, matrix/package/sanitizer
-and all32 exact-head gates. M26-04 XDMA, M26-05 showcase and M26-06 audit remain
-inactive. Human/physical/RT, Unreal and release/deployment gates remain separate.
+Reconcile and finish preserved [feature PR277](https://github.com/tranquilWorks/cpp-rt-car/pull/277).
+Its sample-owned deterministic driver alone selects a five-second host watchdog;
+the frozen one-millisecond logical budget and native/default semantics remain.
+The CUDA feature is still incomplete: finish parity/replay, fault/recovery,
+truthful artifacts, optional real-host compilation and installed-kit verification,
+then all local and32 exact-head hosted gates. Preserve [initial failures](evidence/M26-03-2026-09-29.md)
+and [repair evidence](evidence/M26-03R-2026-09-29.md).
+M26-04 XDMA, M26-05 showcase and M26-06 audit remain inactive. Human/physical/RT,
+Unreal, controlled performance and signing/release/deployment remain separate.
 
 ## Historical M26-02 checkpoint
 

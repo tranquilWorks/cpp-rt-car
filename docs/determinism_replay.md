@@ -407,3 +407,16 @@ bounds. The default v1 artifact and existing public structure layouts remain
 unchanged. V2 validates ownership before restore and compares complete canonical
 state plus transcripts; malformed, foreign or incomplete histories fail explicitly.
 The format does not roll back application/backend side effects or qualify hardware.
+
+## Simulator device-rate timing
+
+An explicit `DeviceRateSimulationPolicy` separates the finite host-liveness
+watchdog from logical completion only for declared deterministic mock backends.
+Active replay continues to use recorded logical decisions and the deterministic
+backend command timeout; the current Runtime clock is not replay input. The
+independent host watchdog still runs and its timeout cannot normalize to success.
+A conditional versioned identity marker includes each opted-in phase's watchdog
+in canonical order. Changing or removing the policy rejects incompatible
+checkpoints/replay before mutation. Policy absence preserves default identities
+and wire formats; no snapshot, input-log or active-replay schema changes.
+See [device execution](device_backend.md) for bounds and ownership requirements.

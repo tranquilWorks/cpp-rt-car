@@ -11,23 +11,27 @@ sources:
   - products/cpp-rt-car/PRD.md#cap-m26--golden-full-system-reference
   - products/cpp-rt-car/acceptance.yaml#CAP-M26
   milestone: products/cpp-rt-car/milestones/M26.md#m26-03--cuda-physics-variant
-  baseline_commit: dbbab7a433a01459ed737cbb19d3b1a64a3ea1bf
+  baseline_commit: c78075e2b30efba48db4f0ca8136110b1399baf5
   control_plane_repository: tranquilWorks/portfolio-control
   control_plane_path: products/cpp-rt-car/batches/M26-03.yaml
-  predecessor: M26-02 target PR276 merged at dbbab7a433a01459ed737cbb19d3b1a64a3ea1bf, tested head e0780b2b4e11ebe8fdfc9c67de50b9814f231972/tree227608ba7b434c07b6e19253664fa797aecc102b
-    after all32 exact-head gates and full local71+75; control closure PR549 at a506b76962e469b1827418497ca94186f5f543f1.
-    Preserve all earlier failures/evidence.
-  owner_scope: Owner requested next one after M26-02 closure, selecting M26-03. Standing scoped planning/publication/integration
-    authority persists. Merge this canonical plan before target implementation; M26-04 through M26-06
-    remain inactive. No physical/RT/Unreal/release promotion.
-  control_plane_revision: 0823458c29939d50efb58b16cf3c984ff82e47e8
-  canonical_revision: 0823458c29939d50efb58b16cf3c984ff82e47e8
-  canonical_blob_sha: 773c288349c57a47860481edd5c78f1bd9f68b59
+  predecessor: M26-03R target PR278 merged at c78075e2b30efba48db4f0ca8136110b1399baf5, exact tested head
+    ecd200b30d7651552d4cc58ff3d98b70e6e11c3d/tree 2a8e96e63e40323a4eb236628954e1beac3ccd32, all32 exact-head
+    checks successful with M26-02 names/multiplicity. Full local72+76, focused60, ASan/UBSan/leaks60,
+    TSan60, no-allocation, static, relocated full SDK and byte-identical default artifact checks passed.
+    Preserve all initial M26-03 timeouts and every repair failure/evidence.
+  owner_scope: Owner approved the separately bounded simulator timing policy and completion of M26-03.
+    Repair PR278 is integrated; this canonical amendment reactivates preserved feature draft277 on the
+    repaired baseline. Standing scoped publication/integration authority persists. M26-04 through M26-06
+    remain inactive.
+  control_plane_revision: 7ce76ddfd4d3061b3b55bfffc88f6e8ca11e9548
+  canonical_revision: 7ce76ddfd4d3061b3b55bfffc88f6e8ca11e9548
+  canonical_blob_sha: ef229993dec359b6e35662100475473bb2760350
 dependencies:
 - M26-02
 - M24-04
 - M21-05
 - M22-04
+- M26-03R
 scope:
   allowed_paths:
   - AGENTS.md
@@ -131,7 +135,16 @@ scope:
   - tests/golden_system/verify_package.py
   - docs/evidence/M26-02-*
   - .github/workflows/ci.yml
+  - tests/test_device_rate_simulation.cpp
+  - tests/device_rate_simulation/
+  - docs/evidence/M26-03R-*
 acceptance:
+- Select the integrated M26-03R DeviceRateSimulationPolicy with an explicit finite five-second host watchdog
+  only for the new sample-owned deterministic SimulatedDriver adapter. Preserve the frozen one-millisecond
+  logical completion budget and backend command timeout; use the existing concurrent-safe injected session
+  clock. Native/real CUDA construction must leave simulation policy absent and replay disabled. Keep Runtime/backends/default
+  semantics and all repair tests/evidence unchanged. Reconcile preserved draft277 with the exact repaired
+  baseline before feature verification.
 - Preserve the immutable M26-01 JSON/digest, fixed SoA/initialization/integer arithmetic, eight logical
   phases, five rate domains/envelopes, five CPU channel identities, exact controls and independent C++/Python
   state oracles. Only physics becomes a real Runtime device-command-batch phase in the new variant; input

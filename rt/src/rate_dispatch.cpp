@@ -231,21 +231,24 @@ Status compile_device_rate_plan(
                 compiled_index < rate_plan.bindings.size()
                 ? &rate_plan.bindings[compiled_index]
                 : nullptr;
-            if (!binding.phase.valid() || binding.phase.owner() != graph_owner ||
+            if (!binding.phase.valid() ||
+                binding.phase.owner() != graph_owner ||
                 binding.phase.index() >= rate_plan.bindings.size() ||
-                !binding.domain.valid() || binding.domain.owner() != graph_owner ||
+                !binding.domain.valid() ||
+                binding.domain.owner() != graph_owner ||
                 binding.domain.index() >= rate_plan.domains.size() ||
                 binding.completion_budget_ns == 0 ||
                 binding.maximum_in_flight == 0 ||
-                !phase_source || !phase_source->declaration ||
-                !compiled_binding ||
+                !valid_simulation_policy(binding.simulation) || !phase_source ||
+                !phase_source->declaration || !compiled_binding ||
                 compiled_binding->domain != binding.domain ||
                 compiled_binding->phase_kind != RatePhaseKind::device ||
                 plan_phase_by_registration[binding.phase.index()] !=
                     invalid_reference_release_index) {
-                return fail(Status::invalid_config,
-                            "device-rate binding has invalid ownership, policy, or rate identity",
-                            binding.phase);
+              return fail(Status::invalid_config,
+                          "device-rate binding has invalid ownership, policy, "
+                          "or rate identity",
+                          binding.phase);
             }
             const auto backend_index = phase_source->backend.index();
             if (!phase_source->backend.valid() ||
@@ -259,6 +262,12 @@ Status compile_device_rate_plan(
             }
             const auto& backend =
                 backends[backend_source_by_index[backend_index]];
+            if (binding.simulation && !backend.deterministic_mock) {
+              return fail(
+                  Status::invalid_config,
+                  "simulation timing requires a deterministic mock backend",
+                  binding.phase);
+            }
             const auto& declaration = *phase_source->declaration;
             if (!backend.completion_timestamp_domain_valid ||
                 backend.completion_timestamp_domain_identity == 0 ||
@@ -281,6 +290,7 @@ Status compile_device_rate_plan(
             compiled.backend = phase_source->backend;
             compiled.compiled_phase_index = compiled_binding->compiled_phase_index;
             compiled.completion_budget_ns = binding.completion_budget_ns;
+            compiled.simulation = binding.simulation;
             compiled.maximum_in_flight = binding.maximum_in_flight;
             compiled.command_count = declaration.command_count;
             compiled.wait_count = declaration.wait_count;
