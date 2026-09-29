@@ -233,3 +233,7 @@ add_executable(rtfw_sampled_storage_consumer sampled_io_storage_consumer.cpp)
 target_link_libraries(rtfw_sampled_storage_consumer PRIVATE rtfw::runtime)
 add_test(NAME sampled_storage_package_consumer COMMAND rtfw_sampled_storage_consumer)
 add_test(NAME sampled_storage_default_package_consumer COMMAND rtfw_sampled_storage_consumer --two)
+
+add_executable(rtfw_device_capacity_consumer device_capacity_consumer.cpp)
+target_link_libraries(rtfw_device_capacity_consumer PRIVATE rtfw::runtime)
+add_test(NAME device_capacity_package_consumer COMMAND rtfw_device_capacity_consumer)

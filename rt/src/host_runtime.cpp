@@ -1109,6 +1109,18 @@ struct Runtime::Impl {
     [[nodiscard]] std::uint64_t compute_graph_id() const noexcept {
         std::uint64_t hash = kFnvOffset;
         hash_u64(hash, 1);
+        if (native_device_capacities) {
+            hash_u64(hash, 0x4d32362d63617032ull);
+            hash_u64(hash, device_backends.size());
+            for (const auto& backend : device_backends) {
+                hash_u64(hash, detail::device_command_slots(
+                    backend, config.device_outstanding_capacity, true));
+                hash_u64(hash, backend.command_state ? std::min(
+                    config.device_completion_batch,
+                    static_cast<std::size_t>(backend.command_state->capabilities
+                                                 .completion_batch_capacity)) : 0);
+            }
+        }
         hash_u64(hash, callbacks.size());
         for (const auto& callback : callbacks) {
             hash_string(hash, callback.name);
@@ -1717,11 +1729,16 @@ struct Runtime::Impl {
 
     [[nodiscard]] std::uint64_t compute_config_id() const noexcept {
         const auto base = config_identifier(config);
-        if (extensions.empty() && !live_control_policy_set) {
+        if (extensions.empty() && !live_control_policy_set &&
+            !native_device_capacities) {
             return base;
         }
         std::uint64_t hash = kFnvOffset;
         hash_u64(hash, base);
+        if (native_device_capacities) {
+            hash_u64(hash, 0x4d32362d63617032ull);
+            hash_u64(hash, compute_graph_id());
+        }
         if (!extensions.empty()) {
             hash_u64(hash, 0x4d31392d63666731ull);
             for (const auto& extension_ptr : extensions) {
@@ -6052,6 +6069,9 @@ struct Runtime::Impl {
     RuntimeConfig config{};
     RateExecutionPolicy rate_execution_policy{};
     bool rate_execution_policy_set = false;
+    // Occupies existing padding before the aligned closure policy; no default
+    // control-storage growth. Verified by baseline MemoryPlan/artifact checks.
+    bool native_device_capacities = false;
     MixedRateClosurePolicy mixed_rate_closure_policy{};
     bool mixed_rate_closure_policy_set = false;
     LiveControlPolicy live_control_policy{};
@@ -6236,6 +6256,25 @@ Status Runtime::configure(const RuntimeConfig& config) noexcept {
         return impl_->fail(Status::invalid_config, nullptr);
     }
     impl_->config = config;
+    impl_->clear_error();
+    return Status::ok;
+}
+
+Status Runtime::set_device_capacity_policy(DeviceCapacityPolicy policy) noexcept {
+    if (!impl_) return Status::internal_error;
+    if (impl_->provider_callback_active()) return Status::invalid_state;
+    if (impl_->state != RuntimeState::configuring ||
+        !impl_->device_backends.empty()) {
+        return impl_->fail(Status::invalid_state,
+                           "device capacity policy requires no registered backends");
+    }
+    if (policy != DeviceCapacityPolicy::uniform &&
+        policy != DeviceCapacityPolicy::native_per_backend) {
+        return impl_->fail(Status::invalid_argument,
+                           "unknown device capacity policy");
+    }
+    impl_->native_device_capacities =
+        policy == DeviceCapacityPolicy::native_per_backend;
     impl_->clear_error();
     return Status::ok;
 }
@@ -7047,6 +7086,10 @@ Status Runtime::register_device_backend(
             Status::invalid_state,
             "device backend registration is frozen");
     }
+    if (impl_->native_device_capacities) {
+        return impl_->fail(Status::invalid_argument,
+                           "per-backend capacities require native command backends");
+    }
     std::array<char, RTFW_DEVICE_IDENTIFIER_CAPACITY> name{};
     if (!set_identifier(name, registration.name)) {
         return impl_->fail(
@@ -7161,6 +7204,11 @@ Status Runtime::register_device_backend(
             Status::invalid_state,
             "device backend registration is frozen");
     }
+    if (impl_->native_device_capacities &&
+        (!registration.memory_topology || !registration.command_timeline)) {
+        return impl_->fail(Status::invalid_argument,
+                           "per-backend capacities require native command extensions");
+    }
     std::array<char, RTFW_DEVICE_IDENTIFIER_CAPACITY> name{};
     if (!set_identifier(name, registration.name)) {
         return impl_->fail(
@@ -7251,10 +7299,11 @@ Status Runtime::register_device_backend(
             "HAL v2 command/timeline capability discovery failed or was "
             "malformed");
       }
-      if (command_state->capabilities.max_in_flight_batches <
-              impl_->config.device_outstanding_capacity ||
-          command_state->capabilities.completion_batch_capacity <
-              impl_->config.device_completion_batch) {
+      if (!impl_->native_device_capacities &&
+          (command_state->capabilities.max_in_flight_batches <
+               impl_->config.device_outstanding_capacity ||
+           command_state->capabilities.completion_batch_capacity <
+               impl_->config.device_completion_batch)) {
         return impl_->fail(
             Status::capacity_exceeded,
             "command/timeline backend capacities are below Runtime bounds");
@@ -8877,8 +8926,9 @@ Status Runtime::finalize() noexcept {
          ++backend_index) {
         const auto& backend =
             impl_->device_backends[backend_index];
-        if (impl_->config.device_outstanding_capacity >
-            backend.capabilities.max_in_flight) {
+        if (!impl_->native_device_capacities &&
+            impl_->config.device_outstanding_capacity >
+                backend.capabilities.max_in_flight) {
             return impl_->fail(
                 Status::invalid_config,
                 "device_outstanding_capacity exceeds a backend limit");
@@ -9030,6 +9080,16 @@ Status Runtime::finalize() noexcept {
                 if (backend.command_state) {
                     source.capabilities =
                         backend.command_state->capabilities;
+                    if (impl_->native_device_capacities) {
+                        source.capabilities.max_in_flight_batches =
+                            static_cast<std::uint32_t>(detail::device_command_slots(
+                                backend, impl_->config.device_outstanding_capacity,
+                                true));
+                        source.capabilities.completion_batch_capacity = std::min(
+                            source.capabilities.completion_batch_capacity,
+                            static_cast<std::uint32_t>(
+                                impl_->config.device_completion_batch));
+                    }
                 }
                 if (backend.memory_state) {
                     const auto identity = backend.memory_state->snapshot
@@ -9541,6 +9601,16 @@ Status Runtime::finalize() noexcept {
         memory_plan.device_batch_backend_count,
         impl_->config.device_outstanding_capacity,
         memory_plan.device_batch_queue_slots);
+    if (impl_->native_device_capacities) {
+        memory_plan.device_batch_queue_slots = 0;
+        for (const auto& backend : impl_->device_backends) {
+            plan_valid = plan_valid && detail::checked_add(
+                memory_plan.device_batch_queue_slots,
+                detail::device_command_slots(
+                    backend, impl_->config.device_outstanding_capacity, true),
+                memory_plan.device_batch_queue_slots);
+        }
+    }
     memory_plan.scratch_alignment =
         impl_->config.scratch_alignment;
     memory_plan.overload_policy =
@@ -9759,7 +9829,8 @@ Status Runtime::finalize() noexcept {
                 memory_plan.device_batch_backend_count,
                 impl_->config.device_outstanding_capacity,
                 impl_->config.device_completion_batch,
-                memory_plan.device_control_bytes);
+                memory_plan.device_control_bytes,
+                memory_plan.device_batch_queue_slots);
     }
 
     memory_plan.runtime_control_bytes = sizeof(Impl);
@@ -10223,7 +10294,8 @@ Status Runtime::finalize() noexcept {
                 impl_->device_buffers,
                 impl_->device_timelines,
                 impl_->config.device_outstanding_capacity,
-                impl_->config.device_completion_batch);
+                impl_->config.device_completion_batch,
+                impl_->native_device_capacities);
         }
         telemetry =
             std::make_unique<detail::TelemetryRing>(

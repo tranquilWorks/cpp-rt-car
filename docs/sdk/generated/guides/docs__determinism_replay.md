@@ -433,3 +433,7 @@ artifacts cannot restore into a two-slot owner. No schema or identity rewriting
 is involved. Originating-owner active replay and compatible paired checkpoint
 recovery preserve payload/generation state through the larger bounded store.
 This does not grant replay support to a native nondeterministic backend.
+
+## Native capacity policy identity
+
+Only the explicit native-per-backend policy contributes a conditional graph/config identity marker and resolved outstanding/polling counts. This prevents policy/capacity-incompatible checkpoint or active replay from crossing the pre-effect validation boundary. Default uniform identity and checkpoint/active bytes remain unchanged; all owner-bound replay and compatible paired recovery rules still apply.

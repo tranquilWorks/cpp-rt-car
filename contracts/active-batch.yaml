@@ -11,21 +11,21 @@ sources:
   - products/cpp-rt-car/PRD.md#cap-m26--golden-full-system-reference
   - products/cpp-rt-car/acceptance.yaml#CAP-M26
   milestone: products/cpp-rt-car/milestones/M26.md#m26-04--xdma-hal-hil-loopback-variant
-  baseline_commit: e8caf4396cd5987d9aa4a4bf3dad9a178cf2ded7
+  baseline_commit: 242793be0cb1ff75b56c74e5b89d0f6e8a21fd76
   control_plane_repository: tranquilWorks/portfolio-control
   control_plane_path: products/cpp-rt-car/batches/M26-04.yaml
-  predecessor: M26-04R target PR280 merged at e8caf4396cd5987d9aa4a4bf3dad9a178cf2ded7, exact tested head
-    a7a6b06c5f3293f8ed35634555e8c15a89ab92a9/tree c479c55163e550affd17f5f8b8a653c1e9733506, all32 exact-head
-    checks successful with M26-03 names/multiplicity. Full local108+112, focused37, ASan/UBSan/leaks52,
-    TSan52, no-allocation, production36TU static, relocated full SDK and byte-identical default checkpoint/active
-    artifact checks passed. Preserve all initial M26-04 ring failures and every repair failure/evidence.
-  owner_scope: Owner explicitly approved the separate four-slot storage repair and instructed resume/complete.
-    Repair PR280 is integrated; this canonical amendment reactivates preserved feature draft279 on the
-    repaired baseline. Standing scoped publication/integration authority persists. M26-05 and M26-06 remain
-    inactive.
-  control_plane_revision: 3af5a3db321a51fa61b7fb18f133ddbdd3eed689
-  canonical_revision: 3af5a3db321a51fa61b7fb18f133ddbdd3eed689
-  canonical_blob_sha: 4447bb07bd3d11befcfe8272e05f7b7eb0ecc180
+  predecessor: M26-04R2 target PR281 merged at 242793be0cb1ff75b56c74e5b89d0f6e8a21fd76, tested head 187f2ea721d7da38bb5bf2563a6e0cceda35dbc9/tree
+    89db0965a0b5cd0c75866158f39e5d901afe3d3c, all32 exact-head checks successful. Full local109+113, new11/focused113,
+    ASan/UBSan/leaks51, TSan51, zero-allocation controls,36TU static, relocated full52 SDK consumers and
+    exact default MemoryPlan/checkpoint/active bytes passed. Preserve merged storage repair280 and every
+    prior feature/repair diagnostic.
+  owner_scope: Owner explicitly approved the separate capacity policy proposal and requested finish. Repair281
+    is integrated; reactivate preserved feature279 with actual four-slot storage and explicit combined
+    aggregate capacity policy. Standing scoped publication/integration authority persists. M26-05/M26-06
+    remain inactive.
+  control_plane_revision: 069139f9c2504349d71f280f6dbd16dbc1c92089
+  canonical_revision: 069139f9c2504349d71f280f6dbd16dbc1c92089
+  canonical_blob_sha: 20d0d8b47161d3be5deef554e65ad38187e5bfca
 dependencies:
 - M26-01
 - M26-02
@@ -34,6 +34,7 @@ dependencies:
 - M21-05
 - M22-04
 - M26-04R
+- M26-04R2
 scope:
   allowed_paths:
   - AGENTS.md
@@ -151,7 +152,18 @@ scope:
   - tests/test_sampled_io_storage.cpp
   - tests/sampled_io_storage/
   - docs/evidence/M26-04R-*
+  - tests/test_device_capacity.cpp
+  - tests/device_capacity/
+  - tests/package_consumer/device_capacity_consumer.cpp
+  - tests/package_consumer/sampled_io_storage_consumer.cpp
+  - docs/evidence/M26-04R2-*
 acceptance:
+- Use integrated M26-04R2 explicit DeviceCapacityPolicy::native_per_backend only in the new combined CUDA/XDMA
+  sample. Distinguish unchanged native CUDA1/XDMA2 storage from aggregate Runtime admission reservation3
+  for the three same-nominal device phases. No native queue/event-pool inflation or weakened phase/backend/global
+  admission. XDMA-only and all prior kits retain their defaults. Reconcile preserved draft279 with repaired
+  main; preserve both repair implementations/tests/evidence and all original feature criteria. This amendment
+  reactivates only M26-04; complete fresh feature gates before closure.
 - Use integrated M26-04R actual four-slot sampled storage with the unchanged frozen ring_capacity4; no
   diagnostic two-slot downgrade. Reconcile preserved draft279 with repaired main before feature verification.
   Preserve the private storage plumbing and public comment-only extension, new storage regressions/consumer

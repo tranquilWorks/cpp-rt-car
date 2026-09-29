@@ -1,3 +1,16 @@
+# M26-04 XDMA feature resumed after storage repair
+
+Repair target281 is merged at 242793be0cb1ff75b56c74e5b89d0f6e8a21fd76; all32 final checks, full109+113,
+sanitizers51+51, allocation/static/package/default artifact checks passed.
+Canonical reactivation 069139f9c2504349d71f280f6dbd16dbc1c92089, blob 20d0d8b47161d3be5deef554e65ad38187e5bfca, is merged.
+Complete preserved feature279 on actual frozen four-slot Runtime storage.
+The feature remains incomplete until actual execution/parity/safety/replay/faults,
+installed kit and fresh local/all32 gates pass. Preserve all earlier failures
+and every repaired Runtime/native source/test. M26-05/M26-06 stay inactive;
+human/physical/RT/Unreal/performance/release gates remain separate.
+
+## Historical checkpoints
+
 # M26-04 resumed: storage repaired; combined capacity decision pending
 
 The approved four-slot repair is merged as target280 at
@@ -72,6 +85,31 @@ M26-05 showcase and M26-06 final audit remain inactive; human/physical/RT/Unreal
 controlled-performance/release gates remain separate.
 
 ## Historical M26-03 completion
+
+# M26-04R2 locally complete; exact-head integration required
+
+Opt-in native per-backend capacities pass local full109+113, focused113,
+sanitizers51+51, zero-allocation/static/relocated SDK and exact default
+MemoryPlan/checkpoint/active checks. See evidence/M26-04R2-2026-09-29.md and
+PR281 for exact-head hosted/merge closure. Require all32 successful checks and
+guarded repair integration, then canonically reactivate and complete feature279.
+Native CUDA1/XDMA2 with aggregate3 now executes the retained parity/replay probe.
+Feature acceptance is still incomplete; M26-05/M26-06 remain inactive.
+
+## Earlier activation and history
+
+# M26-04R2 active: explicit per-backend capacity
+
+M26-04R2 capacity repair is active after explicit owner approval of the retained
+proposal and request to finish. Canonical control564 revision 494f9c86619e65e8ef041823b075554960fb9011,
+blob d75d8d152e39fe416f503cf3f115d58a0b3bc88a. Preserve uniform defaults, all ABIs/schemas/native backends,
+prior tests/evidence and storage repair280. Implement opt-in native per-backend
+bounds, pass all32 target gates and integrate separately; then canonically
+reactivate and finish retained feature279 at c939b017ba81de9e80471a593d875d6e62cee729.
+M26-05/M26-06 remain inactive. Standing scoped publication/merge authority persists.
+No physical/RT/human/Unreal/performance/release claim. Earlier activation notes are history.
+
+## Earlier checkpoint
 
 # M26-04R active: bounded four-slot sampled storage
 

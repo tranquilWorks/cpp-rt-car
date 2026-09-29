@@ -525,3 +525,25 @@ merge incomplete feature279. See docs/evidence/M26-04-capacity-repair-proposal.m
 M26-05/M26-06 remain inactive. The original storage approval does not silently
 approve this new C++ Runtime policy. Preserve the verified storage repair and
 all prior source/tests/evidence while the owner reviews the concrete proposal.
+
+## M26-04R2 capacity repair activation
+
+M26-04R2 capacity repair is active after explicit owner approval of the retained
+proposal and request to finish. Canonical control564 revision 494f9c86619e65e8ef041823b075554960fb9011,
+blob d75d8d152e39fe416f503cf3f115d58a0b3bc88a. Preserve uniform defaults, all ABIs/schemas/native backends,
+prior tests/evidence and storage repair280. Implement opt-in native per-backend
+bounds, pass all32 target gates and integrate separately; then canonically
+reactivate and finish retained feature279 at c939b017ba81de9e80471a593d875d6e62cee729.
+M26-05/M26-06 remain inactive. Standing scoped publication/merge authority persists.
+No physical/RT/human/Unreal/performance/release claim. Earlier activation notes are history.
+
+## M26-04 reactivation after capacity policy repair
+
+M26-04R2 target281 merged at 242793be0cb1ff75b56c74e5b89d0f6e8a21fd76 after all32 exact-head gates.
+Canonical reactivation merged at 069139f9c2504349d71f280f6dbd16dbc1c92089, blob 20d0d8b47161d3be5deef554e65ad38187e5bfca.
+Finish feature279 with actual ring4 and CUDA1/XDMA2. Only combined selects
+native_per_backend for aggregate3. Runtime/native
+backends and all prior/repair tests/evidence remain protected. Complete every
+original feature acceptance and fresh local/all32 gates before integration.
+M26-05/M26-06 remain inactive; standing scoped publication/merge authority persists.
+Earlier blocked checkpoints are historical; no physical/human/RT/release claim.
