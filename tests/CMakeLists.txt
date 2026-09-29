@@ -119,6 +119,7 @@ if (SIM_GTEST_AVAILABLE)
         test_rate_timeline.cpp
         test_sampled_io.cpp
         test_sampled_io_storage.cpp
+        test_device_capacity.cpp
         test_loopback_backend.cpp
         test_live_control_mailbox.cpp
         test_live_control_actions.cpp
@@ -571,4 +572,13 @@ add_test(NAME host_adapter_sampled_storage_noalloc COMMAND rtfw_sampled_storage_
 set_tests_properties(host_adapter_sampled_storage_noalloc PROPERTIES TIMEOUT 60)
 if(TARGET rtfw_host_adapter_tests)
     add_dependencies(rtfw_host_adapter_tests rtfw_sampled_storage_noalloc)
+endif()
+
+add_executable(rtfw_device_capacity_noalloc device_capacity/noalloc.cpp)
+target_link_libraries(rtfw_device_capacity_noalloc PRIVATE rtfw::runtime)
+rtfw_enable_project_warnings(rtfw_device_capacity_noalloc)
+add_test(NAME host_adapter_device_capacity_noalloc COMMAND rtfw_device_capacity_noalloc)
+set_tests_properties(host_adapter_device_capacity_noalloc PROPERTIES TIMEOUT 60)
+if(TARGET rtfw_host_adapter_tests)
+    add_dependencies(rtfw_host_adapter_tests rtfw_device_capacity_noalloc)
 endif()

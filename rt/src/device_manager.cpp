@@ -79,12 +79,23 @@ rt::HalV2Status runtime_status_to_hal(rt::Status status) noexcept {
 
 namespace rt::detail {
 
+std::size_t device_command_slots(const DeviceBackendSpec& backend,
+                                 std::size_t global_capacity,
+                                 bool native_per_backend) noexcept {
+    if (!native_per_backend || !backend.command_state) return global_capacity;
+    return std::min({global_capacity,
+                     static_cast<std::size_t>(backend.capabilities.max_in_flight),
+                     static_cast<std::size_t>(backend.command_state->capabilities
+                                                  .max_in_flight_batches)});
+}
+
 DeviceManager::DeviceManager(std::uint32_t owner,
                              std::vector<DeviceBackendSpec> backends,
                              std::vector<DeviceBufferSpec> buffers,
                              std::vector<DeviceTimelineSpec> timelines,
                              std::size_t outstanding_capacity,
-                             std::size_t completion_batch)
+                             std::size_t completion_batch,
+    bool native_per_backend)
     : owner_(owner), backends_(std::move(backends)),
       initialized_backends_(backends_.size(), 0), buffers_(std::move(buffers)),
       timeline_specs_(std::move(timelines)),
@@ -112,6 +123,7 @@ DeviceManager::DeviceManager(std::uint32_t owner,
                 timeline_specs_[index].initial_value, std::memory_order_relaxed);
         }
     }
+    native_per_backend_ = native_per_backend;
     batch_backends_ = backends_.empty()
         ? nullptr
         : std::make_unique<BatchBackendState[]>(backends_.size());
@@ -120,9 +132,10 @@ DeviceManager::DeviceManager(std::uint32_t owner,
             continue;
         }
         batch_backends_[index].slot_offset = batch_slot_count_;
-        batch_backends_[index].slot_count = outstanding_capacity_;
+        batch_backends_[index].slot_count = device_command_slots(
+            backends_[index], outstanding_capacity_, native_per_backend);
         batch_backends_[index].lane_index = batch_backend_count_++;
-        batch_slot_count_ += outstanding_capacity_;
+        batch_slot_count_ += batch_backends_[index].slot_count;
     }
     if (batch_slot_count_ != 0) {
         batch_slots_ = std::make_unique<BatchSlot[]>(batch_slot_count_);
@@ -215,7 +228,8 @@ bool DeviceManager::estimate_control_storage(
     std::size_t batch_backend_count,
     std::size_t outstanding_capacity,
     std::size_t completion_batch,
-    std::size_t& bytes) noexcept {
+    std::size_t& bytes,
+    std::size_t resolved_batch_slots) noexcept {
     bytes = sizeof(DeviceManager);
     const auto add =
         [&bytes](std::size_t count, std::size_t size) {
@@ -236,8 +250,10 @@ bool DeviceManager::estimate_control_storage(
         return false;
     }
     std::size_t batch_slot_count = 0;
-    if (!checked_multiply(batch_backend_count, outstanding_capacity,
-                          batch_slot_count)) {
+    if (resolved_batch_slots != 0) {
+        batch_slot_count = resolved_batch_slots;
+    } else if (!checked_multiply(batch_backend_count, outstanding_capacity,
+                                 batch_slot_count)) {
         return false;
     }
     return add(backend_count, sizeof(DeviceBackendSpec)) &&
@@ -267,7 +283,8 @@ Status DeviceManager::initialize_backends() noexcept {
          ++index) {
         auto& backend = backends_[index];
         HalV2InitializeConfig config;
-        config.requested_in_flight = outstanding_capacity_;
+        config.requested_in_flight = backend.command_state
+            ? batch_backends_[index].slot_count : outstanding_capacity_;
         std::size_t buffer_count = 0;
         for (const auto& buffer : buffers_) {
             buffer_count += buffer.backend_index == index ? 1u : 0u;
@@ -1945,9 +1962,13 @@ void DeviceManager::poll_batch_completions(
     if (!command_state) {
         return;
     }
-    std::fill_n(batch_completion_buffer_.get(), completion_batch_,
+    const auto poll_capacity = native_per_backend_ ? std::min(
+        completion_batch_, static_cast<std::size_t>(
+            command_state->capabilities.completion_batch_capacity))
+        : completion_batch_;
+    std::fill_n(batch_completion_buffer_.get(), poll_capacity,
                 HalV2BatchCompletion{});
-    for (std::size_t index = 0; index < completion_batch_; ++index) {
+    for (std::size_t index = 0; index < poll_capacity; ++index) {
         batch_completion_buffer_[index].struct_size = 0;
     }
     std::uint64_t count = 0;
@@ -1955,14 +1976,14 @@ void DeviceManager::poll_batch_completions(
     try {
         callback_status = command_state->extension.poll(
             command_state->extension.instance, batch_completion_buffer_.get(),
-            completion_batch_, &count);
+            poll_capacity, &count);
     } catch (...) {
         callback_status = HalV2Status::internal_error;
     }
     service_polls_.fetch_add(1, std::memory_order_relaxed);
     const auto callback_runtime_status =
         hal_v2_status_to_runtime(callback_status);
-    if (callback_runtime_status != Status::ok || count > completion_batch_) {
+    if (callback_runtime_status != Status::ok || count > poll_capacity) {
         fail_backend_batches(
             backend_index, callback_runtime_status == Status::ok
                                ? Status::device_error

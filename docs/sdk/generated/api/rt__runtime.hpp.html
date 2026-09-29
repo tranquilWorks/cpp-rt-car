@@ -2,7 +2,7 @@
 <html lang="en"><meta charset="utf-8"><title>rt/runtime.hpp — RTFW 1.2.1</title>
 <style>body{font:16px system-ui;margin:2rem}pre{font:13px monospace;overflow:auto}pre a{color:#555}a{color:#0758a5}</style>
 <h1>rt/runtime.hpp</h1><p>Default installed header. Version 1.2.1.</p>
-<p>Source: rt/include/rt/runtime.hpp; SHA-256: 88cdf50450bb61efe8857e838cedadbb912483d21c0feb34d6998eaeec0152b8. Exact declaration/comment source; private/detail content is not a supported API promise.</p>
+<p>Source: rt/include/rt/runtime.hpp; SHA-256: deeb661c9e02f2ae4a862871b8cdd848c841ae9b05aa9a9ffda3f31157093df7. Exact declaration/comment source; private/detail content is not a supported API promise.</p>
 <p><a href="index.html">API index</a> · <a href="../README.md">Manual</a></p><pre><span id="L1"><a href="#L1">    1</a> #pragma once</span>
 <span id="L2"><a href="#L2">    2</a> </span>
 <span id="L3"><a href="#L3">    3</a> #include &lt;array&gt;</span>
@@ -2491,513 +2491,527 @@
 <span id="L2486"><a href="#L2486"> 2486</a>     std::uint64_t remaining_sequence_count = 0;</span>
 <span id="L2487"><a href="#L2487"> 2487</a> };</span>
 <span id="L2488"><a href="#L2488"> 2488</a> </span>
-<span id="L2489"><a href="#L2489"> 2489</a> // Host-driven lifecycle introduced by M1. Control methods are single-host-</span>
-<span id="L2490"><a href="#L2490"> 2490</a> // thread operations. A step invokes callbacks synchronously and never paces or</span>
-<span id="L2491"><a href="#L2491"> 2491</a> // sleeps; self-paced execution uses the separate M5 run_periodic API.</span>
-<span id="L2492"><a href="#L2492"> 2492</a> class Runtime {</span>
-<span id="L2493"><a href="#L2493"> 2493</a> public:</span>
-<span id="L2494"><a href="#L2494"> 2494</a>     Runtime();</span>
-<span id="L2495"><a href="#L2495"> 2495</a>     explicit Runtime(RuntimeClock&amp; clock);</span>
-<span id="L2496"><a href="#L2496"> 2496</a>     Runtime(RuntimeClock&amp; clock, PlatformPreflightProbe&amp; preflight);</span>
-<span id="L2497"><a href="#L2497"> 2497</a>     ~Runtime();</span>
-<span id="L2498"><a href="#L2498"> 2498</a> </span>
-<span id="L2499"><a href="#L2499"> 2499</a>     Runtime(Runtime&amp;&amp;) noexcept;</span>
-<span id="L2500"><a href="#L2500"> 2500</a>     Runtime&amp; operator=(Runtime&amp;&amp;) noexcept;</span>
-<span id="L2501"><a href="#L2501"> 2501</a> </span>
-<span id="L2502"><a href="#L2502"> 2502</a>     Runtime(const Runtime&amp;) = delete;</span>
-<span id="L2503"><a href="#L2503"> 2503</a>     Runtime&amp; operator=(const Runtime&amp;) = delete;</span>
-<span id="L2504"><a href="#L2504"> 2504</a> </span>
-<span id="L2505"><a href="#L2505"> 2505</a>     [[nodiscard]] Status configure(const RuntimeConfig&amp; config) noexcept;</span>
-<span id="L2506"><a href="#L2506"> 2506</a>     // Copies the bounded C++ policy model. Schema-7 JSON profiles and stable</span>
-<span id="L2507"><a href="#L2507"> 2507</a>     // C ABI v8 intentionally do not include this additive source API.</span>
-<span id="L2508"><a href="#L2508"> 2508</a>     // Validation and portable resolution occur transactionally in finalize().</span>
-<span id="L2509"><a href="#L2509"> 2509</a>     [[nodiscard]] Status set_cpu_memory_policy(</span>
-<span id="L2510"><a href="#L2510"> 2510</a>         const CpuMemoryPolicy&amp; policy) noexcept;</span>
-<span id="L2511"><a href="#L2511"> 2511</a>     // Copies the bounded callback table and borrows provider.user_data through</span>
-<span id="L2512"><a href="#L2512"> 2512</a>     // checked stop. The provider is used only for active phase scratch, task</span>
-<span id="L2513"><a href="#L2513"> 2513</a>     // scratch, and trace storage and may be attached only while configuring.</span>
-<span id="L2514"><a href="#L2514"> 2514</a>     [[nodiscard]] Status set_memory_provider(</span>
-<span id="L2515"><a href="#L2515"> 2515</a>         const MemoryProvider&amp; provider) noexcept;</span>
-<span id="L2516"><a href="#L2516"> 2516</a>     // Copies the callback table and borrows adapter.user_data through stop().</span>
-<span id="L2517"><a href="#L2517"> 2517</a>     // May be called only while configuring.</span>
-<span id="L2518"><a href="#L2518"> 2518</a>     [[nodiscard]] Status set_host_executor(</span>
-<span id="L2519"><a href="#L2519"> 2519</a>         const HostExecutorAdapter&amp; adapter) noexcept;</span>
-<span id="L2520"><a href="#L2520"> 2520</a>     // Copies the opt-in active CPU rate policy while configuring. There is no</span>
-<span id="L2521"><a href="#L2521"> 2521</a>     // unset operation; reference-only behavior is retained by not calling it.</span>
-<span id="L2522"><a href="#L2522"> 2522</a>     [[nodiscard]] Status set_rate_execution_policy(</span>
-<span id="L2523"><a href="#L2523"> 2523</a>         const RateExecutionPolicy&amp; policy) noexcept;</span>
-<span id="L2524"><a href="#L2524"> 2524</a>     [[nodiscard]] Status set_mixed_rate_closure_policy(</span>
-<span id="L2525"><a href="#L2525"> 2525</a>         const MixedRateClosurePolicy&amp; policy) noexcept;</span>
-<span id="L2526"><a href="#L2526"> 2526</a>     [[nodiscard]] Status set_live_control_policy(</span>
-<span id="L2527"><a href="#L2527"> 2527</a>         const LiveControlPolicy&amp; policy) noexcept;</span>
-<span id="L2528"><a href="#L2528"> 2528</a>     [[nodiscard]] Status set_live_control_closure_policy(</span>
-<span id="L2529"><a href="#L2529"> 2529</a>         const LiveControlClosurePolicy&amp; policy) noexcept;</span>
-<span id="L2530"><a href="#L2530"> 2530</a>     [[nodiscard]] Status set_live_control_replay_retention_policy(</span>
-<span id="L2531"><a href="#L2531"> 2531</a>         const LiveControlReplayRetentionPolicy&amp; policy) noexcept;</span>
-<span id="L2532"><a href="#L2532"> 2532</a>     [[nodiscard]] Status configure_key(</span>
-<span id="L2533"><a href="#L2533"> 2533</a>         std::string_view key,</span>
-<span id="L2534"><a href="#L2534"> 2534</a>         std::string_view value) noexcept;</span>
-<span id="L2535"><a href="#L2535"> 2535</a>     [[nodiscard]] Status register_callback(</span>
-<span id="L2536"><a href="#L2536"> 2536</a>         const CallbackRegistration&amp; registration) noexcept;</span>
-<span id="L2537"><a href="#L2537"> 2537</a>     // The returned phase handle is required when defining dependencies or</span>
-<span id="L2538"><a href="#L2538"> 2538</a>     // logical resource access. Handles are valid only for this Runtime.</span>
-<span id="L2539"><a href="#L2539"> 2539</a>     [[nodiscard]] Status register_callback(</span>
-<span id="L2540"><a href="#L2540"> 2540</a>         const CallbackRegistration&amp; registration,</span>
-<span id="L2541"><a href="#L2541"> 2541</a>         PhaseHandle&amp; out_phase) noexcept;</span>
-<span id="L2542"><a href="#L2542"> 2542</a>     // Invokes an already-resolved ABI-v1 entry function only while</span>
-<span id="L2543"><a href="#L2543"> 2543</a>     // configuring. The complete extension is staged and published as one</span>
-<span id="L2544"><a href="#L2544"> 2544</a>     // transaction; Runtime never resolves, loads, or unloads a module.</span>
-<span id="L2545"><a href="#L2545"> 2545</a>     [[nodiscard]] Status register_extension(</span>
-<span id="L2546"><a href="#L2546"> 2546</a>         rtfw_extension_entry_fn_v1 entry,</span>
-<span id="L2547"><a href="#L2547"> 2547</a>         ExtensionHandle&amp; out_extension) noexcept;</span>
-<span id="L2548"><a href="#L2548"> 2548</a>     [[nodiscard]] Status register_device_backend(</span>
-<span id="L2549"><a href="#L2549"> 2549</a>         const DeviceBackendRegistration&amp; registration,</span>
-<span id="L2550"><a href="#L2550"> 2550</a>         DeviceBackendHandle&amp; out_backend) noexcept;</span>
-<span id="L2551"><a href="#L2551"> 2551</a>     [[nodiscard]] Status register_device_backend(</span>
-<span id="L2552"><a href="#L2552"> 2552</a>         const HalV2BackendRegistration&amp; registration,</span>
-<span id="L2553"><a href="#L2553"> 2553</a>         DeviceBackendHandle&amp; out_backend) noexcept;</span>
-<span id="L2554"><a href="#L2554"> 2554</a>     [[nodiscard]] Status register_device_buffer(</span>
-<span id="L2555"><a href="#L2555"> 2555</a>         const DeviceBufferRegistration&amp; registration,</span>
-<span id="L2556"><a href="#L2556"> 2556</a>         DeviceBufferHandle&amp; out_buffer) noexcept;</span>
-<span id="L2557"><a href="#L2557"> 2557</a>     [[nodiscard]] Status register_device_buffer(</span>
-<span id="L2558"><a href="#L2558"> 2558</a>         const HeterogeneousDeviceBufferRegistration&amp; registration,</span>
-<span id="L2559"><a href="#L2559"> 2559</a>         DeviceBufferHandle &amp;out_buffer) noexcept;</span>
-<span id="L2560"><a href="#L2560"> 2560</a>     [[nodiscard]] Status register_device_phase(</span>
-<span id="L2561"><a href="#L2561"> 2561</a>         const DevicePhaseRegistration&amp; registration,</span>
-<span id="L2562"><a href="#L2562"> 2562</a>         PhaseHandle&amp; out_phase) noexcept;</span>
-<span id="L2563"><a href="#L2563"> 2563</a>     [[nodiscard]] Status register_device_timeline(</span>
-<span id="L2564"><a href="#L2564"> 2564</a>         const DeviceTimelineRegistration&amp; registration,</span>
-<span id="L2565"><a href="#L2565"> 2565</a>         DeviceTimelineHandle&amp; out_timeline) noexcept;</span>
-<span id="L2566"><a href="#L2566"> 2566</a>     [[nodiscard]] Status register_device_batch_phase(</span>
-<span id="L2567"><a href="#L2567"> 2567</a>         const DeviceBatchPhaseRegistration&amp; registration,</span>
-<span id="L2568"><a href="#L2568"> 2568</a>         PhaseHandle&amp; out_phase) noexcept;</span>
-<span id="L2569"><a href="#L2569"> 2569</a>     [[nodiscard]] Status register_rate_domain(</span>
-<span id="L2570"><a href="#L2570"> 2570</a>         const RateDomainRegistration&amp; registration,</span>
-<span id="L2571"><a href="#L2571"> 2571</a>         RateDomainHandle&amp; out_domain) noexcept;</span>
-<span id="L2572"><a href="#L2572"> 2572</a>     // Replaces copied metadata without changing the instance-owned identity.</span>
-<span id="L2573"><a href="#L2573"> 2573</a>     // This supports correcting a plan after transactional finalize rejection.</span>
-<span id="L2574"><a href="#L2574"> 2574</a>     [[nodiscard]] Status replace_rate_domain(</span>
-<span id="L2575"><a href="#L2575"> 2575</a>         RateDomainHandle domain,</span>
-<span id="L2576"><a href="#L2576"> 2576</a>         const RateDomainRegistration&amp; registration) noexcept;</span>
-<span id="L2577"><a href="#L2577"> 2577</a>     [[nodiscard]] Status bind_phase_to_rate_domain(</span>
-<span id="L2578"><a href="#L2578"> 2578</a>         PhaseHandle phase,</span>
-<span id="L2579"><a href="#L2579"> 2579</a>         RateDomainHandle domain) noexcept;</span>
-<span id="L2580"><a href="#L2580"> 2580</a>     [[nodiscard]] Status bind_phase_to_rate_domain(</span>
-<span id="L2581"><a href="#L2581"> 2581</a>         const RatePhaseBinding&amp; binding) noexcept;</span>
-<span id="L2582"><a href="#L2582"> 2582</a>     // Copies only the role span. Backend, commands, buffer slices,</span>
-<span id="L2583"><a href="#L2583"> 2583</a>     // synchronization, and timelines are derived from the phase&#x27;s copied M17</span>
-<span id="L2584"><a href="#L2584"> 2584</a>     // declaration during finalization.</span>
-<span id="L2585"><a href="#L2585"> 2585</a>     [[nodiscard]] Status bind_device_phase_to_rate_domain(</span>
-<span id="L2586"><a href="#L2586"> 2586</a>         const DeviceRatePhaseBinding&amp; binding) noexcept;</span>
-<span id="L2587"><a href="#L2587"> 2587</a>     [[nodiscard]] Status replace_device_rate_binding(</span>
-<span id="L2588"><a href="#L2588"> 2588</a>         const DeviceRatePhaseBinding&amp; binding) noexcept;</span>
-<span id="L2589"><a href="#L2589"> 2589</a>     [[nodiscard]] Status register_cross_rate_channel(</span>
-<span id="L2590"><a href="#L2590"> 2590</a>         const CrossRateChannelRegistration&amp; registration,</span>
-<span id="L2591"><a href="#L2591"> 2591</a>         CrossRateChannelHandle&amp; out_channel) noexcept;</span>
-<span id="L2592"><a href="#L2592"> 2592</a>     // Replaces copied semantics without changing the instance-owned handle,</span>
-<span id="L2593"><a href="#L2593"> 2593</a>     // allowing correction after transactional finalization rejection.</span>
-<span id="L2594"><a href="#L2594"> 2594</a>     [[nodiscard]] Status replace_cross_rate_channel(</span>
-<span id="L2595"><a href="#L2595"> 2595</a>         CrossRateChannelHandle channel,</span>
-<span id="L2596"><a href="#L2596"> 2596</a>         const CrossRateChannelRegistration&amp; registration) noexcept;</span>
-<span id="L2597"><a href="#L2597"> 2597</a>     [[nodiscard]] Status register_sampled_io_channel(</span>
-<span id="L2598"><a href="#L2598"> 2598</a>         const SampledIoChannelRegistration&amp; registration) noexcept;</span>
-<span id="L2599"><a href="#L2599"> 2599</a>     [[nodiscard]] Status replace_sampled_io_channel(</span>
-<span id="L2600"><a href="#L2600"> 2600</a>         CrossRateChannelHandle channel,</span>
-<span id="L2601"><a href="#L2601"> 2601</a>         const SampledIoChannelRegistration&amp; registration) noexcept;</span>
-<span id="L2602"><a href="#L2602"> 2602</a>     [[nodiscard]] Status register_live_control_mailbox(</span>
-<span id="L2603"><a href="#L2603"> 2603</a>         const LiveControlMailboxRegistration&amp; registration) noexcept;</span>
-<span id="L2604"><a href="#L2604"> 2604</a>     [[nodiscard]] Status register_live_control_producer(</span>
-<span id="L2605"><a href="#L2605"> 2605</a>         const LiveControlProducerRegistration&amp; registration) noexcept;</span>
-<span id="L2606"><a href="#L2606"> 2606</a>     [[nodiscard]] Status register_resource(</span>
-<span id="L2607"><a href="#L2607"> 2607</a>         std::string_view name,</span>
-<span id="L2608"><a href="#L2608"> 2608</a>         ResourceHandle&amp; out_resource) noexcept;</span>
-<span id="L2609"><a href="#L2609"> 2609</a>     [[nodiscard]] Status register_state(</span>
-<span id="L2610"><a href="#L2610"> 2610</a>         const StateRegistration&amp; registration) noexcept;</span>
-<span id="L2611"><a href="#L2611"> 2611</a>     [[nodiscard]] Status add_dependency(</span>
-<span id="L2612"><a href="#L2612"> 2612</a>         PhaseHandle prerequisite,</span>
-<span id="L2613"><a href="#L2613"> 2613</a>         PhaseHandle dependent) noexcept;</span>
-<span id="L2614"><a href="#L2614"> 2614</a>     [[nodiscard]] Status declare_resource_access(</span>
-<span id="L2615"><a href="#L2615"> 2615</a>         PhaseHandle phase,</span>
-<span id="L2616"><a href="#L2616"> 2616</a>         ResourceHandle resource,</span>
-<span id="L2617"><a href="#L2617"> 2617</a>         ResourceAccess access) noexcept;</span>
-<span id="L2618"><a href="#L2618"> 2618</a>     [[nodiscard]] Status finalize() noexcept;</span>
-<span id="L2619"><a href="#L2619"> 2619</a>     [[nodiscard]] Status start() noexcept;</span>
-<span id="L2620"><a href="#L2620"> 2620</a>     [[nodiscard]] Status step(</span>
-<span id="L2621"><a href="#L2621"> 2621</a>         const HostFrameContext&amp; frame,</span>
-<span id="L2622"><a href="#L2622"> 2622</a>         StepResult* result = nullptr) noexcept;</span>
-<span id="L2623"><a href="#L2623"> 2623</a>     // Runs a finite runtime-owned loop on the calling frame thread. Releases</span>
-<span id="L2624"><a href="#L2624"> 2624</a>     // are first_release + i * period; late frames never shift that epoch.</span>
-<span id="L2625"><a href="#L2625"> 2625</a>     [[nodiscard]] Status run_periodic(</span>
-<span id="L2626"><a href="#L2626"> 2626</a>         const PeriodicRunConfig&amp; config,</span>
-<span id="L2627"><a href="#L2627"> 2627</a>         PeriodicFrameObserver observer = nullptr,</span>
-<span id="L2628"><a href="#L2628"> 2628</a>         void* observer_data = nullptr,</span>
-<span id="L2629"><a href="#L2629"> 2629</a>         PeriodicRunResult* result = nullptr) noexcept;</span>
-<span id="L2630"><a href="#L2630"> 2630</a>     // Device cleanup failures retain borrowed ownership, quiesce execution,</span>
-<span id="L2631"><a href="#L2631"> 2631</a>     // and leave the public lifecycle state unchanged. Retry stop() until it</span>
-<span id="L2632"><a href="#L2632"> 2632</a>     // succeeds before releasing borrowed resources. The destructor cannot</span>
-<span id="L2633"><a href="#L2633"> 2633</a>     // report this status and is only a best-effort fallback.</span>
-<span id="L2634"><a href="#L2634"> 2634</a>     [[nodiscard]] Status stop() noexcept;</span>
-<span id="L2635"><a href="#L2635"> 2635</a>     [[nodiscard]] Status device_health(</span>
-<span id="L2636"><a href="#L2636"> 2636</a>         DeviceBackendHandle backend,</span>
-<span id="L2637"><a href="#L2637"> 2637</a>         DeviceHealth&amp; health) noexcept;</span>
-<span id="L2638"><a href="#L2638"> 2638</a>     [[nodiscard]] Status reset_device(</span>
-<span id="L2639"><a href="#L2639"> 2639</a>         DeviceBackendHandle backend) noexcept;</span>
-<span id="L2640"><a href="#L2640"> 2640</a>     // Checked detach never performs an operating-system unload. It succeeds</span>
-<span id="L2641"><a href="#L2641"> 2641</a>     // only after checked stop released every borrowed extension owner, clears</span>
-<span id="L2642"><a href="#L2642"> 2642</a>     // all copied callable pointers, retires the generation, and then reports</span>
-<span id="L2643"><a href="#L2643"> 2643</a>     // unload readiness.</span>
-<span id="L2644"><a href="#L2644"> 2644</a>     [[nodiscard]] Status detach_extension(</span>
-<span id="L2645"><a href="#L2645"> 2645</a>         ExtensionHandle extension,</span>
-<span id="L2646"><a href="#L2646"> 2646</a>         bool&amp; unload_ready) noexcept;</span>
-<span id="L2647"><a href="#L2647"> 2647</a>     // Optional service status runs synchronously on the caller&#x27;s host-control</span>
-<span id="L2648"><a href="#L2648"> 2648</a>     // path and preserves output on rejection or callback failure.</span>
-<span id="L2649"><a href="#L2649"> 2649</a>     [[nodiscard]] Status extension_service_status(</span>
-<span id="L2650"><a href="#L2650"> 2650</a>         ExtensionHandle extension,</span>
-<span id="L2651"><a href="#L2651"> 2651</a>         std::size_t service_index,</span>
-<span id="L2652"><a href="#L2652"> 2652</a>         rtfw_extension_service_status_v1&amp; status) noexcept;</span>
-<span id="L2653"><a href="#L2653"> 2653</a> </span>
-<span id="L2654"><a href="#L2654"> 2654</a>     [[nodiscard]] RuntimeState state() const noexcept;</span>
-<span id="L2655"><a href="#L2655"> 2655</a>     [[nodiscard]] const RuntimeConfig&amp; config() const noexcept;</span>
-<span id="L2656"><a href="#L2656"> 2656</a>     [[nodiscard]] std::size_t callback_count() const noexcept;</span>
-<span id="L2657"><a href="#L2657"> 2657</a>     [[nodiscard]] std::size_t extension_count() const noexcept;</span>
-<span id="L2658"><a href="#L2658"> 2658</a>     [[nodiscard]] bool extension_at(</span>
-<span id="L2659"><a href="#L2659"> 2659</a>         std::size_t index,</span>
-<span id="L2660"><a href="#L2660"> 2660</a>         ExtensionInfo&amp; info) const noexcept;</span>
-<span id="L2661"><a href="#L2661"> 2661</a>     [[nodiscard]] Status extension_info(</span>
-<span id="L2662"><a href="#L2662"> 2662</a>         ExtensionHandle extension,</span>
-<span id="L2663"><a href="#L2663"> 2663</a>         ExtensionInfo&amp; info) const noexcept;</span>
-<span id="L2664"><a href="#L2664"> 2664</a>     [[nodiscard]] std::size_t device_backend_count() const noexcept;</span>
-<span id="L2665"><a href="#L2665"> 2665</a>     [[nodiscard]] std::size_t device_buffer_count() const noexcept;</span>
-<span id="L2666"><a href="#L2666"> 2666</a>     [[nodiscard]] std::size_t device_phase_count() const noexcept;</span>
-<span id="L2667"><a href="#L2667"> 2667</a>     [[nodiscard]] std::size_t</span>
-<span id="L2668"><a href="#L2668"> 2668</a>     device_timeline_count(DeviceBackendHandle backend) const noexcept;</span>
-<span id="L2669"><a href="#L2669"> 2669</a>     [[nodiscard]] bool device_timeline_at(</span>
-<span id="L2670"><a href="#L2670"> 2670</a>         DeviceBackendHandle backend,</span>
-<span id="L2671"><a href="#L2671"> 2671</a>         std::size_t index,</span>
-<span id="L2672"><a href="#L2672"> 2672</a>         DeviceTimelineInfo&amp; info) const noexcept;</span>
-<span id="L2673"><a href="#L2673"> 2673</a>     [[nodiscard]] std::size_t</span>
-<span id="L2674"><a href="#L2674"> 2674</a>     device_memory_domain_count(DeviceBackendHandle backend) const noexcept;</span>
-<span id="L2675"><a href="#L2675"> 2675</a>     [[nodiscard]] bool</span>
-<span id="L2676"><a href="#L2676"> 2676</a>     device_memory_domain_at(DeviceBackendHandle backend, std::size_t index,</span>
-<span id="L2677"><a href="#L2677"> 2677</a>                             DeviceMemoryDomainHandle &amp;handle,</span>
-<span id="L2678"><a href="#L2678"> 2678</a>                             HalV2MemoryDomain &amp;domain) const noexcept;</span>
-<span id="L2679"><a href="#L2679"> 2679</a>     [[nodiscard]] std::size_t</span>
-<span id="L2680"><a href="#L2680"> 2680</a>     device_topology_node_count(DeviceBackendHandle backend) const noexcept;</span>
-<span id="L2681"><a href="#L2681"> 2681</a>     [[nodiscard]] bool</span>
-<span id="L2682"><a href="#L2682"> 2682</a>     device_topology_node_at(DeviceBackendHandle backend, std::size_t index,</span>
-<span id="L2683"><a href="#L2683"> 2683</a>                             DeviceTopologyNodeHandle &amp;handle,</span>
-<span id="L2684"><a href="#L2684"> 2684</a>                             HalV2TopologyNode &amp;node) const noexcept;</span>
-<span id="L2685"><a href="#L2685"> 2685</a>     [[nodiscard]] std::size_t</span>
-<span id="L2686"><a href="#L2686"> 2686</a>     device_topology_link_count(DeviceBackendHandle backend) const noexcept;</span>
-<span id="L2687"><a href="#L2687"> 2687</a>     [[nodiscard]] bool</span>
-<span id="L2688"><a href="#L2688"> 2688</a>     device_topology_link_at(DeviceBackendHandle backend, std::size_t index,</span>
-<span id="L2689"><a href="#L2689"> 2689</a>                             HalV2TopologyLink &amp;link) const noexcept;</span>
-<span id="L2690"><a href="#L2690"> 2690</a>     [[nodiscard]] bool</span>
-<span id="L2691"><a href="#L2691"> 2691</a>     device_topology_link_at(DeviceBackendHandle backend, std::size_t index,</span>
-<span id="L2692"><a href="#L2692"> 2692</a>                             DeviceTopologyLinkHandle &amp;handle,</span>
-<span id="L2693"><a href="#L2693"> 2693</a>                             HalV2TopologyLink &amp;link) const noexcept;</span>
-<span id="L2694"><a href="#L2694"> 2694</a>     [[nodiscard]] std::size_t</span>
-<span id="L2695"><a href="#L2695"> 2695</a>     device_timestamp_domain_count(DeviceBackendHandle backend) const noexcept;</span>
-<span id="L2696"><a href="#L2696"> 2696</a>     [[nodiscard]] bool</span>
-<span id="L2697"><a href="#L2697"> 2697</a>     device_timestamp_domain_at(DeviceBackendHandle backend, std::size_t index,</span>
-<span id="L2698"><a href="#L2698"> 2698</a>                                DeviceTimestampDomainHandle &amp;handle,</span>
-<span id="L2699"><a href="#L2699"> 2699</a>                                HalV2TimestampDomain &amp;domain) const noexcept;</span>
-<span id="L2700"><a href="#L2700"> 2700</a>     [[nodiscard]] bool device_completion_timestamp_domain(</span>
-<span id="L2701"><a href="#L2701"> 2701</a>         DeviceBackendHandle backend,</span>
-<span id="L2702"><a href="#L2702"> 2702</a>         DeviceTimestampDomainHandle &amp;domain) const noexcept;</span>
-<span id="L2703"><a href="#L2703"> 2703</a>     [[nodiscard]] bool</span>
-<span id="L2704"><a href="#L2704"> 2704</a>     device_memory_object_at(std::size_t index,</span>
-<span id="L2705"><a href="#L2705"> 2705</a>                             DeviceMemoryObjectInfo &amp;object) const noexcept;</span>
-<span id="L2706"><a href="#L2706"> 2706</a>     // Explicit non-RT host query. Samples are not cached or interpreted as</span>
-<span id="L2707"><a href="#L2707"> 2707</a>     // runtime-monotonic time and are invalid across backend reset generations.</span>
-<span id="L2708"><a href="#L2708"> 2708</a>     [[nodiscard]] Status query_device_timestamp_correlation(</span>
-<span id="L2709"><a href="#L2709"> 2709</a>         DeviceBackendHandle backend, DeviceTimestampDomainHandle source,</span>
-<span id="L2710"><a href="#L2710"> 2710</a>         DeviceTimestampDomainHandle destination,</span>
-<span id="L2711"><a href="#L2711"> 2711</a>         HalV2TimestampCorrelation &amp;correlation) noexcept;</span>
-<span id="L2712"><a href="#L2712"> 2712</a>     [[nodiscard]] std::size_t resource_count() const noexcept;</span>
-<span id="L2713"><a href="#L2713"> 2713</a>     [[nodiscard]] std::size_t dependency_count() const noexcept;</span>
-<span id="L2714"><a href="#L2714"> 2714</a>     [[nodiscard]] std::size_t resource_access_count() const noexcept;</span>
-<span id="L2715"><a href="#L2715"> 2715</a>     // Available after successful finalization. The order is deterministic and</span>
-<span id="L2716"><a href="#L2716"> 2716</a>     // remains stable through running and stopped states.</span>
-<span id="L2717"><a href="#L2717"> 2717</a>     [[nodiscard]] bool compiled_phase_at(</span>
-<span id="L2718"><a href="#L2718"> 2718</a>         std::size_t execution_index,</span>
-<span id="L2719"><a href="#L2719"> 2719</a>         PhaseHandle&amp; phase) const noexcept;</span>
-<span id="L2720"><a href="#L2720"> 2720</a>     [[nodiscard]] bool rate_model_enabled() const noexcept;</span>
-<span id="L2721"><a href="#L2721"> 2721</a>     [[nodiscard]] bool rate_execution_enabled() const noexcept;</span>
-<span id="L2722"><a href="#L2722"> 2722</a>     [[nodiscard]] std::size_t rate_domain_count() const noexcept;</span>
-<span id="L2723"><a href="#L2723"> 2723</a>     [[nodiscard]] std::size_t rate_binding_count() const noexcept;</span>
-<span id="L2724"><a href="#L2724"> 2724</a>     [[nodiscard]] std::size_t reference_release_count() const noexcept;</span>
-<span id="L2725"><a href="#L2725"> 2725</a>     [[nodiscard]] std::uint64_t reference_supercycle_ns() const noexcept;</span>
-<span id="L2726"><a href="#L2726"> 2726</a>     [[nodiscard]] bool compiled_rate_domain_at(</span>
-<span id="L2727"><a href="#L2727"> 2727</a>         std::size_t registration_index,</span>
-<span id="L2728"><a href="#L2728"> 2728</a>         CompiledRateDomain&amp; domain) const noexcept;</span>
-<span id="L2729"><a href="#L2729"> 2729</a>     [[nodiscard]] bool compiled_rate_binding_at(</span>
-<span id="L2730"><a href="#L2730"> 2730</a>         std::size_t compiled_phase_index,</span>
-<span id="L2731"><a href="#L2731"> 2731</a>         CompiledRateBinding&amp; binding) const noexcept;</span>
-<span id="L2732"><a href="#L2732"> 2732</a>     [[nodiscard]] bool reference_release_at(</span>
-<span id="L2733"><a href="#L2733"> 2733</a>         std::size_t release_index,</span>
-<span id="L2734"><a href="#L2734"> 2734</a>         ReferenceRelease&amp; release) const noexcept;</span>
-<span id="L2735"><a href="#L2735"> 2735</a>     [[nodiscard]] bool device_rate_model_enabled() const noexcept;</span>
-<span id="L2736"><a href="#L2736"> 2736</a>     [[nodiscard]] std::size_t device_rate_phase_count() const noexcept;</span>
-<span id="L2737"><a href="#L2737"> 2737</a>     [[nodiscard]] std::size_t device_rate_command_count() const noexcept;</span>
-<span id="L2738"><a href="#L2738"> 2738</a>     [[nodiscard]] std::size_t</span>
-<span id="L2739"><a href="#L2739"> 2739</a>     device_rate_payload_reference_count() const noexcept;</span>
-<span id="L2740"><a href="#L2740"> 2740</a>     [[nodiscard]] std::size_t</span>
-<span id="L2741"><a href="#L2741"> 2741</a>     device_rate_timeline_reference_count() const noexcept;</span>
-<span id="L2742"><a href="#L2742"> 2742</a>     [[nodiscard]] bool compiled_device_rate_phase_at(</span>
-<span id="L2743"><a href="#L2743"> 2743</a>         std::size_t phase_index,</span>
-<span id="L2744"><a href="#L2744"> 2744</a>         CompiledDeviceRatePhase&amp; phase) const noexcept;</span>
-<span id="L2745"><a href="#L2745"> 2745</a>     [[nodiscard]] bool compiled_device_rate_command_at(</span>
-<span id="L2746"><a href="#L2746"> 2746</a>         std::size_t command_index,</span>
-<span id="L2747"><a href="#L2747"> 2747</a>         CompiledDeviceRateCommand&amp; command) const noexcept;</span>
-<span id="L2748"><a href="#L2748"> 2748</a>     [[nodiscard]] bool compiled_device_rate_payload_reference_at(</span>
-<span id="L2749"><a href="#L2749"> 2749</a>         std::size_t reference_index,</span>
-<span id="L2750"><a href="#L2750"> 2750</a>         CompiledDeviceRatePayloadReference&amp; reference) const noexcept;</span>
-<span id="L2751"><a href="#L2751"> 2751</a>     [[nodiscard]] bool compiled_device_rate_timeline_reference_at(</span>
-<span id="L2752"><a href="#L2752"> 2752</a>         std::size_t reference_index,</span>
-<span id="L2753"><a href="#L2753"> 2753</a>         CompiledDeviceRateTimelineReference&amp; reference) const noexcept;</span>
-<span id="L2754"><a href="#L2754"> 2754</a>     [[nodiscard]] bool device_rate_admission_report(</span>
-<span id="L2755"><a href="#L2755"> 2755</a>         DeviceRateAdmissionReport&amp; report) const noexcept;</span>
-<span id="L2756"><a href="#L2756"> 2756</a>     [[nodiscard]] bool device_rate_admission_diagnostic(</span>
-<span id="L2757"><a href="#L2757"> 2757</a>         DeviceRateAdmissionDiagnostic&amp; diagnostic) const noexcept;</span>
-<span id="L2758"><a href="#L2758"> 2758</a>     [[nodiscard]] bool device_rate_admission_backend_at(</span>
-<span id="L2759"><a href="#L2759"> 2759</a>         std::size_t backend_index,</span>
-<span id="L2760"><a href="#L2760"> 2760</a>         DeviceRateAdmissionBackend&amp; backend) const noexcept;</span>
-<span id="L2761"><a href="#L2761"> 2761</a>     [[nodiscard]] bool device_rate_admission_phase_at(</span>
-<span id="L2762"><a href="#L2762"> 2762</a>         std::size_t phase_index,</span>
-<span id="L2763"><a href="#L2763"> 2763</a>         DeviceRateAdmissionPhase&amp; phase) const noexcept;</span>
-<span id="L2764"><a href="#L2764"> 2764</a>     [[nodiscard]] bool device_rate_admission_interval_at(</span>
-<span id="L2765"><a href="#L2765"> 2765</a>         std::size_t interval_index,</span>
-<span id="L2766"><a href="#L2766"> 2766</a>         DeviceRateAdmissionInterval&amp; interval) const noexcept;</span>
-<span id="L2767"><a href="#L2767"> 2767</a>     [[nodiscard]] bool cross_rate_model_enabled() const noexcept;</span>
-<span id="L2768"><a href="#L2768"> 2768</a>     [[nodiscard]] std::size_t cross_rate_channel_count() const noexcept;</span>
-<span id="L2769"><a href="#L2769"> 2769</a>     [[nodiscard]] std::size_t cross_rate_selection_count() const noexcept;</span>
-<span id="L2770"><a href="#L2770"> 2770</a>     [[nodiscard]] bool compiled_cross_rate_channel_at(</span>
-<span id="L2771"><a href="#L2771"> 2771</a>         std::size_t registration_index,</span>
-<span id="L2772"><a href="#L2772"> 2772</a>         CompiledCrossRateChannel&amp; channel) const noexcept;</span>
-<span id="L2773"><a href="#L2773"> 2773</a>     [[nodiscard]] bool compiled_cross_rate_selection_at(</span>
-<span id="L2774"><a href="#L2774"> 2774</a>         std::size_t selection_index,</span>
-<span id="L2775"><a href="#L2775"> 2775</a>         CompiledCrossRateSelection&amp; selection) const noexcept;</span>
-<span id="L2776"><a href="#L2776"> 2776</a>     [[nodiscard]] bool sampled_io_model_enabled() const noexcept;</span>
-<span id="L2777"><a href="#L2777"> 2777</a>     [[nodiscard]] std::size_t sampled_io_channel_count() const noexcept;</span>
-<span id="L2778"><a href="#L2778"> 2778</a>     [[nodiscard]] bool compiled_sampled_io_channel_at(</span>
-<span id="L2779"><a href="#L2779"> 2779</a>         std::size_t registration_index,</span>
-<span id="L2780"><a href="#L2780"> 2780</a>         CompiledSampledIoChannel&amp; channel) const noexcept;</span>
-<span id="L2781"><a href="#L2781"> 2781</a>     [[nodiscard]] bool sampled_io_channel_status(</span>
-<span id="L2782"><a href="#L2782"> 2782</a>         CrossRateChannelHandle channel,</span>
-<span id="L2783"><a href="#L2783"> 2783</a>         SampledIoChannelStatus&amp; status) const noexcept;</span>
-<span id="L2784"><a href="#L2784"> 2784</a>     [[nodiscard]] bool live_control_enabled() const noexcept;</span>
-<span id="L2785"><a href="#L2785"> 2785</a>     [[nodiscard]] std::size_t live_control_mailbox_count() const noexcept;</span>
-<span id="L2786"><a href="#L2786"> 2786</a>     [[nodiscard]] std::size_t live_control_producer_count() const noexcept;</span>
-<span id="L2787"><a href="#L2787"> 2787</a>     [[nodiscard]] Status live_control_producer_handle(</span>
-<span id="L2788"><a href="#L2788"> 2788</a>         std::uint64_t mailbox_identity,</span>
-<span id="L2789"><a href="#L2789"> 2789</a>         std::uint64_t producer_identity,</span>
-<span id="L2790"><a href="#L2790"> 2790</a>         LiveControlProducerHandle&amp; handle) const noexcept;</span>
-<span id="L2791"><a href="#L2791"> 2791</a>     [[nodiscard]] Status stage_live_control_update(</span>
-<span id="L2792"><a href="#L2792"> 2792</a>         LiveControlProducerHandle producer,</span>
-<span id="L2793"><a href="#L2793"> 2793</a>         const LiveControlUpdateRecord&amp; update,</span>
-<span id="L2794"><a href="#L2794"> 2794</a>         std::span&lt;const std::byte&gt; payload,</span>
-<span id="L2795"><a href="#L2795"> 2795</a>         LiveControlAdmissionResult&amp; result) noexcept;</span>
-<span id="L2796"><a href="#L2796"> 2796</a>     [[nodiscard]] bool live_control_mailbox_info(</span>
-<span id="L2797"><a href="#L2797"> 2797</a>         std::uint64_t mailbox_identity,</span>
-<span id="L2798"><a href="#L2798"> 2798</a>         LiveControlMailboxInfo&amp; info) const noexcept;</span>
-<span id="L2799"><a href="#L2799"> 2799</a>     [[nodiscard]] bool live_control_record_at(</span>
-<span id="L2800"><a href="#L2800"> 2800</a>         std::uint64_t mailbox_identity,</span>
-<span id="L2801"><a href="#L2801"> 2801</a>         std::uint64_t mailbox_sequence,</span>
-<span id="L2802"><a href="#L2802"> 2802</a>         LiveControlUpdateRecord&amp; record) const noexcept;</span>
-<span id="L2803"><a href="#L2803"> 2803</a>     [[nodiscard]] Status copy_live_control_payload(</span>
-<span id="L2804"><a href="#L2804"> 2804</a>         std::uint64_t mailbox_identity,</span>
-<span id="L2805"><a href="#L2805"> 2805</a>         std::uint64_t mailbox_sequence,</span>
-<span id="L2806"><a href="#L2806"> 2806</a>         std::span&lt;std::byte&gt; output) const noexcept;</span>
-<span id="L2807"><a href="#L2807"> 2807</a>     [[nodiscard]] bool live_control_commit_info(</span>
-<span id="L2808"><a href="#L2808"> 2808</a>         LiveControlCommitInfo&amp; info) const noexcept;</span>
-<span id="L2809"><a href="#L2809"> 2809</a>     [[nodiscard]] bool live_control_record_status(</span>
-<span id="L2810"><a href="#L2810"> 2810</a>         std::uint64_t mailbox_identity,</span>
-<span id="L2811"><a href="#L2811"> 2811</a>         std::uint64_t mailbox_sequence,</span>
-<span id="L2812"><a href="#L2812"> 2812</a>         LiveControlRecordStatusInfo&amp; info) const noexcept;</span>
-<span id="L2813"><a href="#L2813"> 2813</a>     [[nodiscard]] bool live_control_closure_enabled() const noexcept;</span>
-<span id="L2814"><a href="#L2814"> 2814</a>     [[nodiscard]] Status live_control_action_metadata(</span>
-<span id="L2815"><a href="#L2815"> 2815</a>         LiveControlActionMetadata&amp; metadata) noexcept;</span>
-<span id="L2816"><a href="#L2816"> 2816</a>     [[nodiscard]] Status read_live_control_actions(</span>
-<span id="L2817"><a href="#L2817"> 2817</a>         LiveControlActionCursor&amp; cursor,</span>
-<span id="L2818"><a href="#L2818"> 2818</a>         std::span&lt;LiveControlActionRecord&gt; output,</span>
-<span id="L2819"><a href="#L2819"> 2819</a>         LiveControlActionReadResult&amp; result) noexcept;</span>
-<span id="L2820"><a href="#L2820"> 2820</a>     // Copies only into an exact-size caller span. Failure leaves output</span>
-<span id="L2821"><a href="#L2821"> 2821</a>     // unchanged and no inspector allocates or mutates the frozen plan.</span>
-<span id="L2822"><a href="#L2822"> 2822</a>     [[nodiscard]] Status copy_cross_rate_initial_sample(</span>
-<span id="L2823"><a href="#L2823"> 2823</a>         std::size_t registration_index,</span>
-<span id="L2824"><a href="#L2824"> 2824</a>         std::span&lt;std::byte&gt; output) const noexcept;</span>
-<span id="L2825"><a href="#L2825"> 2825</a>     [[nodiscard]] bool static_phase_assignment_at(</span>
-<span id="L2826"><a href="#L2826"> 2826</a>         std::size_t registration_index,</span>
-<span id="L2827"><a href="#L2827"> 2827</a>         StaticPhaseAssignment&amp; assignment) const noexcept;</span>
-<span id="L2828"><a href="#L2828"> 2828</a>     [[nodiscard]] ExecutorStats executor_stats() const noexcept;</span>
-<span id="L2829"><a href="#L2829"> 2829</a>     // Available after successful finalization. Counts describe requested</span>
-<span id="L2830"><a href="#L2830"> 2830</a>     // runtime payload/control storage and exclude allocator metadata and OS</span>
-<span id="L2831"><a href="#L2831"> 2831</a>     // thread stacks.</span>
-<span id="L2832"><a href="#L2832"> 2832</a>     [[nodiscard]] bool memory_plan(MemoryPlan&amp; plan) const noexcept;</span>
-<span id="L2833"><a href="#L2833"> 2833</a>     // Available after successful finalization. The report inventories every</span>
-<span id="L2834"><a href="#L2834"> 2834</a>     // current role and memory accounting identity exactly once. M15-01 does</span>
-<span id="L2835"><a href="#L2835"> 2835</a>     // not apply native policy, so applied/verified remain not_attempted.</span>
-<span id="L2836"><a href="#L2836"> 2836</a>     [[nodiscard]] bool cpu_memory_policy_report(</span>
-<span id="L2837"><a href="#L2837"> 2837</a>         CpuMemoryPolicyReport&amp; report) const noexcept;</span>
-<span id="L2838"><a href="#L2838"> 2838</a>     // Available after start is attempted. Strict failures leave the runtime</span>
-<span id="L2839"><a href="#L2839"> 2839</a>     // finalized so the host can inspect every failed prerequisite.</span>
-<span id="L2840"><a href="#L2840"> 2840</a>     [[nodiscard]] bool platform_preflight_report(</span>
-<span id="L2841"><a href="#L2841"> 2841</a>         PlatformPreflightReport&amp; report) const noexcept;</span>
-<span id="L2842"><a href="#L2842"> 2842</a>     [[nodiscard]] std::uint32_t degradation_level() const noexcept;</span>
-<span id="L2843"><a href="#L2843"> 2843</a>     [[nodiscard]] std::uint64_t now_ns() noexcept;</span>
-<span id="L2844"><a href="#L2844"> 2844</a>     // The view remains valid until the next control operation or destruction.</span>
-<span id="L2845"><a href="#L2845"> 2845</a>     [[nodiscard]] std::string_view last_error() const noexcept;</span>
-<span id="L2846"><a href="#L2846"> 2846</a> </span>
-<span id="L2847"><a href="#L2847"> 2847</a>     // Observability export is a non-RT host operation. These calls reject an</span>
-<span id="L2848"><a href="#L2848"> 2848</a>     // active step/periodic loop and never invoke host callbacks.</span>
-<span id="L2849"><a href="#L2849"> 2849</a>     [[nodiscard]] Status observability_metadata(</span>
-<span id="L2850"><a href="#L2850"> 2850</a>         ObservabilityMetadata&amp; metadata) noexcept;</span>
-<span id="L2851"><a href="#L2851"> 2851</a>     // Interval windows use a caller-owned cursor. The first interval covers</span>
-<span id="L2852"><a href="#L2852"> 2852</a>     // finalization through this call; later intervals partition cumulative</span>
-<span id="L2853"><a href="#L2853"> 2853</a>     // counters without mutating runtime-global baselines. Gauges are sampled</span>
-<span id="L2854"><a href="#L2854"> 2854</a>     // at the window end and are never differenced. Fresh cursors must be</span>
-<span id="L2855"><a href="#L2855"> 2855</a>     // default initialized.</span>
-<span id="L2856"><a href="#L2856"> 2856</a>     [[nodiscard]] Status metrics_snapshot(</span>
-<span id="L2857"><a href="#L2857"> 2857</a>         RuntimeMetricWindow window,</span>
-<span id="L2858"><a href="#L2858"> 2858</a>         RuntimeMetricCursor* cursor,</span>
-<span id="L2859"><a href="#L2859"> 2859</a>         RuntimeMetricSnapshot&amp; snapshot) noexcept;</span>
-<span id="L2860"><a href="#L2860"> 2860</a>     // A zeroed/default cursor starts at the oldest retained event. If an</span>
-<span id="L2861"><a href="#L2861"> 2861</a>     // established cursor falls behind, lost_events reports the exact skipped</span>
-<span id="L2862"><a href="#L2862"> 2862</a>     // sequence span. The caller owns output storage; fresh cursors must be</span>
-<span id="L2863"><a href="#L2863"> 2863</a>     // default initialized.</span>
-<span id="L2864"><a href="#L2864"> 2864</a>     [[nodiscard]] Status read_trace(</span>
-<span id="L2865"><a href="#L2865"> 2865</a>         RuntimeTraceCursor&amp; cursor,</span>
-<span id="L2866"><a href="#L2866"> 2866</a>         std::span&lt;RuntimeTraceEvent&gt; output,</span>
-<span id="L2867"><a href="#L2867"> 2867</a>         RuntimeTraceReadResult&amp; result) noexcept;</span>
-<span id="L2868"><a href="#L2868"> 2868</a>     [[nodiscard]] Status rate_telemetry_metadata(</span>
-<span id="L2869"><a href="#L2869"> 2869</a>         RateTelemetryMetadata&amp; metadata) noexcept;</span>
-<span id="L2870"><a href="#L2870"> 2870</a>     [[nodiscard]] Status rate_counters_snapshot(</span>
-<span id="L2871"><a href="#L2871"> 2871</a>         RateCounterSnapshot&amp; snapshot) noexcept;</span>
-<span id="L2872"><a href="#L2872"> 2872</a>     [[nodiscard]] Status read_rate_actions(</span>
-<span id="L2873"><a href="#L2873"> 2873</a>         RateTelemetryCursor&amp; cursor,</span>
-<span id="L2874"><a href="#L2874"> 2874</a>         std::span&lt;RateActionRecord&gt; output,</span>
-<span id="L2875"><a href="#L2875"> 2875</a>         RateTelemetryReadResult&amp; result) noexcept;</span>
-<span id="L2876"><a href="#L2876"> 2876</a>     [[nodiscard]] Status mixed_rate_action_metadata(</span>
-<span id="L2877"><a href="#L2877"> 2877</a>         MixedRateActionMetadata&amp; metadata) noexcept;</span>
-<span id="L2878"><a href="#L2878"> 2878</a>     [[nodiscard]] Status read_mixed_rate_actions(</span>
-<span id="L2879"><a href="#L2879"> 2879</a>         MixedRateActionCursor&amp; cursor,</span>
-<span id="L2880"><a href="#L2880"> 2880</a>         std::span&lt;MixedRateActionRecord&gt; output,</span>
-<span id="L2881"><a href="#L2881"> 2881</a>         MixedRateActionReadResult&amp; result) noexcept;</span>
-<span id="L2882"><a href="#L2882"> 2882</a> </span>
-<span id="L2883"><a href="#L2883"> 2883</a>     // Checkpoint and replay calls are non-RT host operations. Buffers are</span>
-<span id="L2884"><a href="#L2884"> 2884</a>     // caller-owned, and their maximum accepted sizes are frozen by</span>
-<span id="L2885"><a href="#L2885"> 2885</a>     // RuntimeConfig. A failed restore never mutates registered state.</span>
-<span id="L2886"><a href="#L2886"> 2886</a>     [[nodiscard]] Status checkpoint_size(</span>
-<span id="L2887"><a href="#L2887"> 2887</a>         std::size_t&amp; required_bytes) noexcept;</span>
-<span id="L2888"><a href="#L2888"> 2888</a>     [[nodiscard]] Status write_checkpoint(</span>
-<span id="L2889"><a href="#L2889"> 2889</a>         std::uint64_t checkpoint_frame_index,</span>
-<span id="L2890"><a href="#L2890"> 2890</a>         std::span&lt;std::byte&gt; output,</span>
-<span id="L2891"><a href="#L2891"> 2891</a>         ArtifactWriteResult&amp; result) noexcept;</span>
-<span id="L2892"><a href="#L2892"> 2892</a>     [[nodiscard]] Status restore_checkpoint(</span>
-<span id="L2893"><a href="#L2893"> 2893</a>         std::span&lt;const std::byte&gt; checkpoint,</span>
-<span id="L2894"><a href="#L2894"> 2894</a>         CheckpointMetadata* metadata = nullptr) noexcept;</span>
-<span id="L2895"><a href="#L2895"> 2895</a>     [[nodiscard]] Status write_input_log(</span>
-<span id="L2896"><a href="#L2896"> 2896</a>         std::span&lt;const ReplayInputRecord&gt; records,</span>
-<span id="L2897"><a href="#L2897"> 2897</a>         std::span&lt;std::byte&gt; output,</span>
-<span id="L2898"><a href="#L2898"> 2898</a>         ArtifactWriteResult&amp; result) noexcept;</span>
-<span id="L2899"><a href="#L2899"> 2899</a>     [[nodiscard]] Status replay(</span>
-<span id="L2900"><a href="#L2900"> 2900</a>         std::span&lt;const std::byte&gt; checkpoint,</span>
-<span id="L2901"><a href="#L2901"> 2901</a>         std::span&lt;const std::byte&gt; input_log,</span>
-<span id="L2902"><a href="#L2902"> 2902</a>         ReplayInputCallback input_callback,</span>
-<span id="L2903"><a href="#L2903"> 2903</a>         void* input_user_data = nullptr,</span>
-<span id="L2904"><a href="#L2904"> 2904</a>         ReplayResult* result = nullptr) noexcept;</span>
-<span id="L2905"><a href="#L2905"> 2905</a>     [[nodiscard]] Status write_active_replay_artifact(</span>
-<span id="L2906"><a href="#L2906"> 2906</a>         std::span&lt;const std::byte&gt; checkpoint,</span>
-<span id="L2907"><a href="#L2907"> 2907</a>         std::span&lt;const ReplayInputRecord&gt; records,</span>
-<span id="L2908"><a href="#L2908"> 2908</a>         std::span&lt;std::byte&gt; output,</span>
-<span id="L2909"><a href="#L2909"> 2909</a>         ArtifactWriteResult&amp; result) noexcept;</span>
-<span id="L2910"><a href="#L2910"> 2910</a>     [[nodiscard]] Status replay_active(</span>
-<span id="L2911"><a href="#L2911"> 2911</a>         std::span&lt;const std::byte&gt; artifact,</span>
-<span id="L2912"><a href="#L2912"> 2912</a>         ReplayInputCallback input_callback,</span>
-<span id="L2913"><a href="#L2913"> 2913</a>         void* input_user_data = nullptr,</span>
-<span id="L2914"><a href="#L2914"> 2914</a>         ActiveReplayResult* result = nullptr) noexcept;</span>
-<span id="L2915"><a href="#L2915"> 2915</a>     [[nodiscard]] Status write_live_control_replay_artifact(</span>
-<span id="L2916"><a href="#L2916"> 2916</a>         std::span&lt;const std::byte&gt; checkpoint,</span>
-<span id="L2917"><a href="#L2917"> 2917</a>         std::span&lt;const std::byte&gt; nested_artifact,</span>
-<span id="L2918"><a href="#L2918"> 2918</a>         LiveControlNestedArtifactKind nested_kind,</span>
-<span id="L2919"><a href="#L2919"> 2919</a>         std::span&lt;std::byte&gt; output,</span>
-<span id="L2920"><a href="#L2920"> 2920</a>         ArtifactWriteResult&amp; result) noexcept;</span>
-<span id="L2921"><a href="#L2921"> 2921</a>     [[nodiscard]] Status replay_live_control(</span>
-<span id="L2922"><a href="#L2922"> 2922</a>         std::span&lt;const std::byte&gt; artifact,</span>
-<span id="L2923"><a href="#L2923"> 2923</a>         ReplayInputCallback input_callback,</span>
-<span id="L2924"><a href="#L2924"> 2924</a>         void* input_user_data = nullptr,</span>
-<span id="L2925"><a href="#L2925"> 2925</a>         LiveControlReplayResult* result = nullptr) noexcept;</span>
-<span id="L2926"><a href="#L2926"> 2926</a>     [[nodiscard]] Status registered_state_hash(</span>
-<span id="L2927"><a href="#L2927"> 2927</a>         std::uint64_t&amp; hash) noexcept;</span>
-<span id="L2928"><a href="#L2928"> 2928</a> </span>
-<span id="L2929"><a href="#L2929"> 2929</a>     // Compatibility accessors over the latest retained trace window.</span>
-<span id="L2930"><a href="#L2930"> 2930</a>     [[nodiscard]] std::size_t trace_event_count() const noexcept;</span>
-<span id="L2931"><a href="#L2931"> 2931</a>     [[nodiscard]] bool trace_event(</span>
-<span id="L2932"><a href="#L2932"> 2932</a>         std::size_t chronological_index,</span>
-<span id="L2933"><a href="#L2933"> 2933</a>         RuntimeTraceEvent&amp; event) const noexcept;</span>
-<span id="L2934"><a href="#L2934"> 2934</a> </span>
-<span id="L2935"><a href="#L2935"> 2935</a> private:</span>
-<span id="L2936"><a href="#L2936"> 2936</a>     friend struct detail::RuntimeThreadPolicyTestAccess;</span>
-<span id="L2937"><a href="#L2937"> 2937</a>     friend struct detail::RuntimeLiveControlTestAccess;</span>
-<span id="L2938"><a href="#L2938"> 2938</a>     struct Impl;</span>
-<span id="L2939"><a href="#L2939"> 2939</a>     std::unique_ptr&lt;Impl&gt; impl_;</span>
-<span id="L2940"><a href="#L2940"> 2940</a> };</span>
-<span id="L2941"><a href="#L2941"> 2941</a> </span>
-<span id="L2942"><a href="#L2942"> 2942</a> struct DemoPipeline {</span>
-<span id="L2943"><a href="#L2943"> 2943</a>     struct State {</span>
-<span id="L2944"><a href="#L2944"> 2944</a>         std::atomic&lt;std::uint64_t&gt; ingestCount{0};</span>
-<span id="L2945"><a href="#L2945"> 2945</a>         std::atomic&lt;std::uint64_t&gt; gpuCount{0};</span>
-<span id="L2946"><a href="#L2946"> 2946</a>         std::atomic&lt;std::uint64_t&gt; ioCount{0};</span>
-<span id="L2947"><a href="#L2947"> 2947</a>         std::atomic&lt;std::uint64_t&gt; composeCount{0};</span>
-<span id="L2948"><a href="#L2948"> 2948</a>         std::atomic&lt;std::uint64_t&gt; fenceWaits{0};</span>
-<span id="L2949"><a href="#L2949"> 2949</a>         std::array&lt;std::atomic&lt;std::uint64_t&gt;, 4&gt; rungEventsSeen{};</span>
-<span id="L2950"><a href="#L2950"> 2950</a>     };</span>
-<span id="L2951"><a href="#L2951"> 2951</a> </span>
-<span id="L2952"><a href="#L2952"> 2952</a>     DemoPipeline() = default;</span>
-<span id="L2953"><a href="#L2953"> 2953</a>     explicit DemoPipeline(std::shared_ptr&lt;State&gt; state) : state_(std::move(state)) {}</span>
-<span id="L2954"><a href="#L2954"> 2954</a> </span>
-<span id="L2955"><a href="#L2955"> 2955</a>     [[nodiscard]] bool valid() const { return static_cast&lt;bool&gt;(state_); }</span>
-<span id="L2956"><a href="#L2956"> 2956</a>     [[nodiscard]] std::uint64_t ingest_frames() const;</span>
-<span id="L2957"><a href="#L2957"> 2957</a>     [[nodiscard]] std::uint64_t gpu_frames() const;</span>
-<span id="L2958"><a href="#L2958"> 2958</a>     [[nodiscard]] std::uint64_t io_frames() const;</span>
-<span id="L2959"><a href="#L2959"> 2959</a>     [[nodiscard]] std::uint64_t compose_frames() const;</span>
-<span id="L2960"><a href="#L2960"> 2960</a>     [[nodiscard]] std::uint64_t fence_waits() const;</span>
-<span id="L2961"><a href="#L2961"> 2961</a> </span>
-<span id="L2962"><a href="#L2962"> 2962</a> private:</span>
-<span id="L2963"><a href="#L2963"> 2963</a>     std::shared_ptr&lt;State&gt; state_{};</span>
-<span id="L2964"><a href="#L2964"> 2964</a> </span>
-<span id="L2965"><a href="#L2965"> 2965</a>     [[nodiscard]] std::uint64_t loadCounter(const std::atomic&lt;std::uint64_t&gt;&amp; counter) const;</span>
-<span id="L2966"><a href="#L2966"> 2966</a> </span>
-<span id="L2967"><a href="#L2967"> 2967</a>     friend DemoPipeline build_demo_pipeline(SimCore&amp; sim);</span>
-<span id="L2968"><a href="#L2968"> 2968</a> };</span>
-<span id="L2969"><a href="#L2969"> 2969</a> </span>
-<span id="L2970"><a href="#L2970"> 2970</a> [[deprecated(</span>
-<span id="L2971"><a href="#L2971"> 2971</a>     &quot;legacy SimCore demo; use rt::Runtime and the rtfw::runtime target&quot;)]]</span>
-<span id="L2972"><a href="#L2972"> 2972</a> DemoPipeline build_demo_pipeline(SimCore&amp; sim);</span>
-<span id="L2973"><a href="#L2973"> 2973</a> </span>
-<span id="L2974"><a href="#L2974"> 2974</a> inline std::uint64_t DemoPipeline::loadCounter(const std::atomic&lt;std::uint64_t&gt;&amp; counter) const {</span>
-<span id="L2975"><a href="#L2975"> 2975</a>     return counter.load(std::memory_order_acquire);</span>
-<span id="L2976"><a href="#L2976"> 2976</a> }</span>
-<span id="L2977"><a href="#L2977"> 2977</a> </span>
-<span id="L2978"><a href="#L2978"> 2978</a> inline std::uint64_t DemoPipeline::ingest_frames() const {</span>
-<span id="L2979"><a href="#L2979"> 2979</a>     return state_ ? loadCounter(state_-&gt;ingestCount) : 0;</span>
-<span id="L2980"><a href="#L2980"> 2980</a> }</span>
-<span id="L2981"><a href="#L2981"> 2981</a> </span>
-<span id="L2982"><a href="#L2982"> 2982</a> inline std::uint64_t DemoPipeline::gpu_frames() const {</span>
-<span id="L2983"><a href="#L2983"> 2983</a>     return state_ ? loadCounter(state_-&gt;gpuCount) : 0;</span>
-<span id="L2984"><a href="#L2984"> 2984</a> }</span>
-<span id="L2985"><a href="#L2985"> 2985</a> </span>
-<span id="L2986"><a href="#L2986"> 2986</a> inline std::uint64_t DemoPipeline::io_frames() const {</span>
-<span id="L2987"><a href="#L2987"> 2987</a>     return state_ ? loadCounter(state_-&gt;ioCount) : 0;</span>
-<span id="L2988"><a href="#L2988"> 2988</a> }</span>
-<span id="L2989"><a href="#L2989"> 2989</a> </span>
-<span id="L2990"><a href="#L2990"> 2990</a> inline std::uint64_t DemoPipeline::compose_frames() const {</span>
-<span id="L2991"><a href="#L2991"> 2991</a>     return state_ ? loadCounter(state_-&gt;composeCount) : 0;</span>
-<span id="L2992"><a href="#L2992"> 2992</a> }</span>
-<span id="L2993"><a href="#L2993"> 2993</a> </span>
-<span id="L2994"><a href="#L2994"> 2994</a> inline std::uint64_t DemoPipeline::fence_waits() const {</span>
-<span id="L2995"><a href="#L2995"> 2995</a>     return state_ ? loadCounter(state_-&gt;fenceWaits) : 0;</span>
-<span id="L2996"><a href="#L2996"> 2996</a> }</span>
-<span id="L2997"><a href="#L2997"> 2997</a> </span>
-<span id="L2998"><a href="#L2998"> 2998</a> } // namespace rt</span></pre></html>
+<span id="L2489"><a href="#L2489"> 2489</a> // Uniform preserves the original per-backend RuntimeConfig requirements.</span>
+<span id="L2490"><a href="#L2490"> 2490</a> // The opt-in resolves native command bounds from copied capabilities while</span>
+<span id="L2491"><a href="#L2491"> 2491</a> // RuntimeConfig continues to bound aggregate rate admission.</span>
+<span id="L2492"><a href="#L2492"> 2492</a> enum class DeviceCapacityPolicy : std::uint8_t {</span>
+<span id="L2493"><a href="#L2493"> 2493</a>     uniform = 0,</span>
+<span id="L2494"><a href="#L2494"> 2494</a>     native_per_backend = 1,</span>
+<span id="L2495"><a href="#L2495"> 2495</a> };</span>
+<span id="L2496"><a href="#L2496"> 2496</a> </span>
+<span id="L2497"><a href="#L2497"> 2497</a> // Host-driven lifecycle introduced by M1. Control methods are single-host-</span>
+<span id="L2498"><a href="#L2498"> 2498</a> // thread operations. A step invokes callbacks synchronously and never paces or</span>
+<span id="L2499"><a href="#L2499"> 2499</a> // sleeps; self-paced execution uses the separate M5 run_periodic API.</span>
+<span id="L2500"><a href="#L2500"> 2500</a> class Runtime {</span>
+<span id="L2501"><a href="#L2501"> 2501</a> public:</span>
+<span id="L2502"><a href="#L2502"> 2502</a>     Runtime();</span>
+<span id="L2503"><a href="#L2503"> 2503</a>     explicit Runtime(RuntimeClock&amp; clock);</span>
+<span id="L2504"><a href="#L2504"> 2504</a>     Runtime(RuntimeClock&amp; clock, PlatformPreflightProbe&amp; preflight);</span>
+<span id="L2505"><a href="#L2505"> 2505</a>     ~Runtime();</span>
+<span id="L2506"><a href="#L2506"> 2506</a> </span>
+<span id="L2507"><a href="#L2507"> 2507</a>     Runtime(Runtime&amp;&amp;) noexcept;</span>
+<span id="L2508"><a href="#L2508"> 2508</a>     Runtime&amp; operator=(Runtime&amp;&amp;) noexcept;</span>
+<span id="L2509"><a href="#L2509"> 2509</a> </span>
+<span id="L2510"><a href="#L2510"> 2510</a>     Runtime(const Runtime&amp;) = delete;</span>
+<span id="L2511"><a href="#L2511"> 2511</a>     Runtime&amp; operator=(const Runtime&amp;) = delete;</span>
+<span id="L2512"><a href="#L2512"> 2512</a> </span>
+<span id="L2513"><a href="#L2513"> 2513</a>     [[nodiscard]] Status configure(const RuntimeConfig&amp; config) noexcept;</span>
+<span id="L2514"><a href="#L2514"> 2514</a>     // Select before registering any backend. Only native HAL-v2 backends with</span>
+<span id="L2515"><a href="#L2515"> 2515</a>     // memory/topology and command/timeline extensions support the opt-in.</span>
+<span id="L2516"><a href="#L2516"> 2516</a>     // Frozen after finalize; existing config, C ABI and artifact layouts remain</span>
+<span id="L2517"><a href="#L2517"> 2517</a>     // unchanged. Default uniform identities and memory accounting are preserved.</span>
+<span id="L2518"><a href="#L2518"> 2518</a>     [[nodiscard]] Status set_device_capacity_policy(</span>
+<span id="L2519"><a href="#L2519"> 2519</a>         DeviceCapacityPolicy policy) noexcept;</span>
+<span id="L2520"><a href="#L2520"> 2520</a>     // Copies the bounded C++ policy model. Schema-7 JSON profiles and stable</span>
+<span id="L2521"><a href="#L2521"> 2521</a>     // C ABI v8 intentionally do not include this additive source API.</span>
+<span id="L2522"><a href="#L2522"> 2522</a>     // Validation and portable resolution occur transactionally in finalize().</span>
+<span id="L2523"><a href="#L2523"> 2523</a>     [[nodiscard]] Status set_cpu_memory_policy(</span>
+<span id="L2524"><a href="#L2524"> 2524</a>         const CpuMemoryPolicy&amp; policy) noexcept;</span>
+<span id="L2525"><a href="#L2525"> 2525</a>     // Copies the bounded callback table and borrows provider.user_data through</span>
+<span id="L2526"><a href="#L2526"> 2526</a>     // checked stop. The provider is used only for active phase scratch, task</span>
+<span id="L2527"><a href="#L2527"> 2527</a>     // scratch, and trace storage and may be attached only while configuring.</span>
+<span id="L2528"><a href="#L2528"> 2528</a>     [[nodiscard]] Status set_memory_provider(</span>
+<span id="L2529"><a href="#L2529"> 2529</a>         const MemoryProvider&amp; provider) noexcept;</span>
+<span id="L2530"><a href="#L2530"> 2530</a>     // Copies the callback table and borrows adapter.user_data through stop().</span>
+<span id="L2531"><a href="#L2531"> 2531</a>     // May be called only while configuring.</span>
+<span id="L2532"><a href="#L2532"> 2532</a>     [[nodiscard]] Status set_host_executor(</span>
+<span id="L2533"><a href="#L2533"> 2533</a>         const HostExecutorAdapter&amp; adapter) noexcept;</span>
+<span id="L2534"><a href="#L2534"> 2534</a>     // Copies the opt-in active CPU rate policy while configuring. There is no</span>
+<span id="L2535"><a href="#L2535"> 2535</a>     // unset operation; reference-only behavior is retained by not calling it.</span>
+<span id="L2536"><a href="#L2536"> 2536</a>     [[nodiscard]] Status set_rate_execution_policy(</span>
+<span id="L2537"><a href="#L2537"> 2537</a>         const RateExecutionPolicy&amp; policy) noexcept;</span>
+<span id="L2538"><a href="#L2538"> 2538</a>     [[nodiscard]] Status set_mixed_rate_closure_policy(</span>
+<span id="L2539"><a href="#L2539"> 2539</a>         const MixedRateClosurePolicy&amp; policy) noexcept;</span>
+<span id="L2540"><a href="#L2540"> 2540</a>     [[nodiscard]] Status set_live_control_policy(</span>
+<span id="L2541"><a href="#L2541"> 2541</a>         const LiveControlPolicy&amp; policy) noexcept;</span>
+<span id="L2542"><a href="#L2542"> 2542</a>     [[nodiscard]] Status set_live_control_closure_policy(</span>
+<span id="L2543"><a href="#L2543"> 2543</a>         const LiveControlClosurePolicy&amp; policy) noexcept;</span>
+<span id="L2544"><a href="#L2544"> 2544</a>     [[nodiscard]] Status set_live_control_replay_retention_policy(</span>
+<span id="L2545"><a href="#L2545"> 2545</a>         const LiveControlReplayRetentionPolicy&amp; policy) noexcept;</span>
+<span id="L2546"><a href="#L2546"> 2546</a>     [[nodiscard]] Status configure_key(</span>
+<span id="L2547"><a href="#L2547"> 2547</a>         std::string_view key,</span>
+<span id="L2548"><a href="#L2548"> 2548</a>         std::string_view value) noexcept;</span>
+<span id="L2549"><a href="#L2549"> 2549</a>     [[nodiscard]] Status register_callback(</span>
+<span id="L2550"><a href="#L2550"> 2550</a>         const CallbackRegistration&amp; registration) noexcept;</span>
+<span id="L2551"><a href="#L2551"> 2551</a>     // The returned phase handle is required when defining dependencies or</span>
+<span id="L2552"><a href="#L2552"> 2552</a>     // logical resource access. Handles are valid only for this Runtime.</span>
+<span id="L2553"><a href="#L2553"> 2553</a>     [[nodiscard]] Status register_callback(</span>
+<span id="L2554"><a href="#L2554"> 2554</a>         const CallbackRegistration&amp; registration,</span>
+<span id="L2555"><a href="#L2555"> 2555</a>         PhaseHandle&amp; out_phase) noexcept;</span>
+<span id="L2556"><a href="#L2556"> 2556</a>     // Invokes an already-resolved ABI-v1 entry function only while</span>
+<span id="L2557"><a href="#L2557"> 2557</a>     // configuring. The complete extension is staged and published as one</span>
+<span id="L2558"><a href="#L2558"> 2558</a>     // transaction; Runtime never resolves, loads, or unloads a module.</span>
+<span id="L2559"><a href="#L2559"> 2559</a>     [[nodiscard]] Status register_extension(</span>
+<span id="L2560"><a href="#L2560"> 2560</a>         rtfw_extension_entry_fn_v1 entry,</span>
+<span id="L2561"><a href="#L2561"> 2561</a>         ExtensionHandle&amp; out_extension) noexcept;</span>
+<span id="L2562"><a href="#L2562"> 2562</a>     [[nodiscard]] Status register_device_backend(</span>
+<span id="L2563"><a href="#L2563"> 2563</a>         const DeviceBackendRegistration&amp; registration,</span>
+<span id="L2564"><a href="#L2564"> 2564</a>         DeviceBackendHandle&amp; out_backend) noexcept;</span>
+<span id="L2565"><a href="#L2565"> 2565</a>     [[nodiscard]] Status register_device_backend(</span>
+<span id="L2566"><a href="#L2566"> 2566</a>         const HalV2BackendRegistration&amp; registration,</span>
+<span id="L2567"><a href="#L2567"> 2567</a>         DeviceBackendHandle&amp; out_backend) noexcept;</span>
+<span id="L2568"><a href="#L2568"> 2568</a>     [[nodiscard]] Status register_device_buffer(</span>
+<span id="L2569"><a href="#L2569"> 2569</a>         const DeviceBufferRegistration&amp; registration,</span>
+<span id="L2570"><a href="#L2570"> 2570</a>         DeviceBufferHandle&amp; out_buffer) noexcept;</span>
+<span id="L2571"><a href="#L2571"> 2571</a>     [[nodiscard]] Status register_device_buffer(</span>
+<span id="L2572"><a href="#L2572"> 2572</a>         const HeterogeneousDeviceBufferRegistration&amp; registration,</span>
+<span id="L2573"><a href="#L2573"> 2573</a>         DeviceBufferHandle &amp;out_buffer) noexcept;</span>
+<span id="L2574"><a href="#L2574"> 2574</a>     [[nodiscard]] Status register_device_phase(</span>
+<span id="L2575"><a href="#L2575"> 2575</a>         const DevicePhaseRegistration&amp; registration,</span>
+<span id="L2576"><a href="#L2576"> 2576</a>         PhaseHandle&amp; out_phase) noexcept;</span>
+<span id="L2577"><a href="#L2577"> 2577</a>     [[nodiscard]] Status register_device_timeline(</span>
+<span id="L2578"><a href="#L2578"> 2578</a>         const DeviceTimelineRegistration&amp; registration,</span>
+<span id="L2579"><a href="#L2579"> 2579</a>         DeviceTimelineHandle&amp; out_timeline) noexcept;</span>
+<span id="L2580"><a href="#L2580"> 2580</a>     [[nodiscard]] Status register_device_batch_phase(</span>
+<span id="L2581"><a href="#L2581"> 2581</a>         const DeviceBatchPhaseRegistration&amp; registration,</span>
+<span id="L2582"><a href="#L2582"> 2582</a>         PhaseHandle&amp; out_phase) noexcept;</span>
+<span id="L2583"><a href="#L2583"> 2583</a>     [[nodiscard]] Status register_rate_domain(</span>
+<span id="L2584"><a href="#L2584"> 2584</a>         const RateDomainRegistration&amp; registration,</span>
+<span id="L2585"><a href="#L2585"> 2585</a>         RateDomainHandle&amp; out_domain) noexcept;</span>
+<span id="L2586"><a href="#L2586"> 2586</a>     // Replaces copied metadata without changing the instance-owned identity.</span>
+<span id="L2587"><a href="#L2587"> 2587</a>     // This supports correcting a plan after transactional finalize rejection.</span>
+<span id="L2588"><a href="#L2588"> 2588</a>     [[nodiscard]] Status replace_rate_domain(</span>
+<span id="L2589"><a href="#L2589"> 2589</a>         RateDomainHandle domain,</span>
+<span id="L2590"><a href="#L2590"> 2590</a>         const RateDomainRegistration&amp; registration) noexcept;</span>
+<span id="L2591"><a href="#L2591"> 2591</a>     [[nodiscard]] Status bind_phase_to_rate_domain(</span>
+<span id="L2592"><a href="#L2592"> 2592</a>         PhaseHandle phase,</span>
+<span id="L2593"><a href="#L2593"> 2593</a>         RateDomainHandle domain) noexcept;</span>
+<span id="L2594"><a href="#L2594"> 2594</a>     [[nodiscard]] Status bind_phase_to_rate_domain(</span>
+<span id="L2595"><a href="#L2595"> 2595</a>         const RatePhaseBinding&amp; binding) noexcept;</span>
+<span id="L2596"><a href="#L2596"> 2596</a>     // Copies only the role span. Backend, commands, buffer slices,</span>
+<span id="L2597"><a href="#L2597"> 2597</a>     // synchronization, and timelines are derived from the phase&#x27;s copied M17</span>
+<span id="L2598"><a href="#L2598"> 2598</a>     // declaration during finalization.</span>
+<span id="L2599"><a href="#L2599"> 2599</a>     [[nodiscard]] Status bind_device_phase_to_rate_domain(</span>
+<span id="L2600"><a href="#L2600"> 2600</a>         const DeviceRatePhaseBinding&amp; binding) noexcept;</span>
+<span id="L2601"><a href="#L2601"> 2601</a>     [[nodiscard]] Status replace_device_rate_binding(</span>
+<span id="L2602"><a href="#L2602"> 2602</a>         const DeviceRatePhaseBinding&amp; binding) noexcept;</span>
+<span id="L2603"><a href="#L2603"> 2603</a>     [[nodiscard]] Status register_cross_rate_channel(</span>
+<span id="L2604"><a href="#L2604"> 2604</a>         const CrossRateChannelRegistration&amp; registration,</span>
+<span id="L2605"><a href="#L2605"> 2605</a>         CrossRateChannelHandle&amp; out_channel) noexcept;</span>
+<span id="L2606"><a href="#L2606"> 2606</a>     // Replaces copied semantics without changing the instance-owned handle,</span>
+<span id="L2607"><a href="#L2607"> 2607</a>     // allowing correction after transactional finalization rejection.</span>
+<span id="L2608"><a href="#L2608"> 2608</a>     [[nodiscard]] Status replace_cross_rate_channel(</span>
+<span id="L2609"><a href="#L2609"> 2609</a>         CrossRateChannelHandle channel,</span>
+<span id="L2610"><a href="#L2610"> 2610</a>         const CrossRateChannelRegistration&amp; registration) noexcept;</span>
+<span id="L2611"><a href="#L2611"> 2611</a>     [[nodiscard]] Status register_sampled_io_channel(</span>
+<span id="L2612"><a href="#L2612"> 2612</a>         const SampledIoChannelRegistration&amp; registration) noexcept;</span>
+<span id="L2613"><a href="#L2613"> 2613</a>     [[nodiscard]] Status replace_sampled_io_channel(</span>
+<span id="L2614"><a href="#L2614"> 2614</a>         CrossRateChannelHandle channel,</span>
+<span id="L2615"><a href="#L2615"> 2615</a>         const SampledIoChannelRegistration&amp; registration) noexcept;</span>
+<span id="L2616"><a href="#L2616"> 2616</a>     [[nodiscard]] Status register_live_control_mailbox(</span>
+<span id="L2617"><a href="#L2617"> 2617</a>         const LiveControlMailboxRegistration&amp; registration) noexcept;</span>
+<span id="L2618"><a href="#L2618"> 2618</a>     [[nodiscard]] Status register_live_control_producer(</span>
+<span id="L2619"><a href="#L2619"> 2619</a>         const LiveControlProducerRegistration&amp; registration) noexcept;</span>
+<span id="L2620"><a href="#L2620"> 2620</a>     [[nodiscard]] Status register_resource(</span>
+<span id="L2621"><a href="#L2621"> 2621</a>         std::string_view name,</span>
+<span id="L2622"><a href="#L2622"> 2622</a>         ResourceHandle&amp; out_resource) noexcept;</span>
+<span id="L2623"><a href="#L2623"> 2623</a>     [[nodiscard]] Status register_state(</span>
+<span id="L2624"><a href="#L2624"> 2624</a>         const StateRegistration&amp; registration) noexcept;</span>
+<span id="L2625"><a href="#L2625"> 2625</a>     [[nodiscard]] Status add_dependency(</span>
+<span id="L2626"><a href="#L2626"> 2626</a>         PhaseHandle prerequisite,</span>
+<span id="L2627"><a href="#L2627"> 2627</a>         PhaseHandle dependent) noexcept;</span>
+<span id="L2628"><a href="#L2628"> 2628</a>     [[nodiscard]] Status declare_resource_access(</span>
+<span id="L2629"><a href="#L2629"> 2629</a>         PhaseHandle phase,</span>
+<span id="L2630"><a href="#L2630"> 2630</a>         ResourceHandle resource,</span>
+<span id="L2631"><a href="#L2631"> 2631</a>         ResourceAccess access) noexcept;</span>
+<span id="L2632"><a href="#L2632"> 2632</a>     [[nodiscard]] Status finalize() noexcept;</span>
+<span id="L2633"><a href="#L2633"> 2633</a>     [[nodiscard]] Status start() noexcept;</span>
+<span id="L2634"><a href="#L2634"> 2634</a>     [[nodiscard]] Status step(</span>
+<span id="L2635"><a href="#L2635"> 2635</a>         const HostFrameContext&amp; frame,</span>
+<span id="L2636"><a href="#L2636"> 2636</a>         StepResult* result = nullptr) noexcept;</span>
+<span id="L2637"><a href="#L2637"> 2637</a>     // Runs a finite runtime-owned loop on the calling frame thread. Releases</span>
+<span id="L2638"><a href="#L2638"> 2638</a>     // are first_release + i * period; late frames never shift that epoch.</span>
+<span id="L2639"><a href="#L2639"> 2639</a>     [[nodiscard]] Status run_periodic(</span>
+<span id="L2640"><a href="#L2640"> 2640</a>         const PeriodicRunConfig&amp; config,</span>
+<span id="L2641"><a href="#L2641"> 2641</a>         PeriodicFrameObserver observer = nullptr,</span>
+<span id="L2642"><a href="#L2642"> 2642</a>         void* observer_data = nullptr,</span>
+<span id="L2643"><a href="#L2643"> 2643</a>         PeriodicRunResult* result = nullptr) noexcept;</span>
+<span id="L2644"><a href="#L2644"> 2644</a>     // Device cleanup failures retain borrowed ownership, quiesce execution,</span>
+<span id="L2645"><a href="#L2645"> 2645</a>     // and leave the public lifecycle state unchanged. Retry stop() until it</span>
+<span id="L2646"><a href="#L2646"> 2646</a>     // succeeds before releasing borrowed resources. The destructor cannot</span>
+<span id="L2647"><a href="#L2647"> 2647</a>     // report this status and is only a best-effort fallback.</span>
+<span id="L2648"><a href="#L2648"> 2648</a>     [[nodiscard]] Status stop() noexcept;</span>
+<span id="L2649"><a href="#L2649"> 2649</a>     [[nodiscard]] Status device_health(</span>
+<span id="L2650"><a href="#L2650"> 2650</a>         DeviceBackendHandle backend,</span>
+<span id="L2651"><a href="#L2651"> 2651</a>         DeviceHealth&amp; health) noexcept;</span>
+<span id="L2652"><a href="#L2652"> 2652</a>     [[nodiscard]] Status reset_device(</span>
+<span id="L2653"><a href="#L2653"> 2653</a>         DeviceBackendHandle backend) noexcept;</span>
+<span id="L2654"><a href="#L2654"> 2654</a>     // Checked detach never performs an operating-system unload. It succeeds</span>
+<span id="L2655"><a href="#L2655"> 2655</a>     // only after checked stop released every borrowed extension owner, clears</span>
+<span id="L2656"><a href="#L2656"> 2656</a>     // all copied callable pointers, retires the generation, and then reports</span>
+<span id="L2657"><a href="#L2657"> 2657</a>     // unload readiness.</span>
+<span id="L2658"><a href="#L2658"> 2658</a>     [[nodiscard]] Status detach_extension(</span>
+<span id="L2659"><a href="#L2659"> 2659</a>         ExtensionHandle extension,</span>
+<span id="L2660"><a href="#L2660"> 2660</a>         bool&amp; unload_ready) noexcept;</span>
+<span id="L2661"><a href="#L2661"> 2661</a>     // Optional service status runs synchronously on the caller&#x27;s host-control</span>
+<span id="L2662"><a href="#L2662"> 2662</a>     // path and preserves output on rejection or callback failure.</span>
+<span id="L2663"><a href="#L2663"> 2663</a>     [[nodiscard]] Status extension_service_status(</span>
+<span id="L2664"><a href="#L2664"> 2664</a>         ExtensionHandle extension,</span>
+<span id="L2665"><a href="#L2665"> 2665</a>         std::size_t service_index,</span>
+<span id="L2666"><a href="#L2666"> 2666</a>         rtfw_extension_service_status_v1&amp; status) noexcept;</span>
+<span id="L2667"><a href="#L2667"> 2667</a> </span>
+<span id="L2668"><a href="#L2668"> 2668</a>     [[nodiscard]] RuntimeState state() const noexcept;</span>
+<span id="L2669"><a href="#L2669"> 2669</a>     [[nodiscard]] const RuntimeConfig&amp; config() const noexcept;</span>
+<span id="L2670"><a href="#L2670"> 2670</a>     [[nodiscard]] std::size_t callback_count() const noexcept;</span>
+<span id="L2671"><a href="#L2671"> 2671</a>     [[nodiscard]] std::size_t extension_count() const noexcept;</span>
+<span id="L2672"><a href="#L2672"> 2672</a>     [[nodiscard]] bool extension_at(</span>
+<span id="L2673"><a href="#L2673"> 2673</a>         std::size_t index,</span>
+<span id="L2674"><a href="#L2674"> 2674</a>         ExtensionInfo&amp; info) const noexcept;</span>
+<span id="L2675"><a href="#L2675"> 2675</a>     [[nodiscard]] Status extension_info(</span>
+<span id="L2676"><a href="#L2676"> 2676</a>         ExtensionHandle extension,</span>
+<span id="L2677"><a href="#L2677"> 2677</a>         ExtensionInfo&amp; info) const noexcept;</span>
+<span id="L2678"><a href="#L2678"> 2678</a>     [[nodiscard]] std::size_t device_backend_count() const noexcept;</span>
+<span id="L2679"><a href="#L2679"> 2679</a>     [[nodiscard]] std::size_t device_buffer_count() const noexcept;</span>
+<span id="L2680"><a href="#L2680"> 2680</a>     [[nodiscard]] std::size_t device_phase_count() const noexcept;</span>
+<span id="L2681"><a href="#L2681"> 2681</a>     [[nodiscard]] std::size_t</span>
+<span id="L2682"><a href="#L2682"> 2682</a>     device_timeline_count(DeviceBackendHandle backend) const noexcept;</span>
+<span id="L2683"><a href="#L2683"> 2683</a>     [[nodiscard]] bool device_timeline_at(</span>
+<span id="L2684"><a href="#L2684"> 2684</a>         DeviceBackendHandle backend,</span>
+<span id="L2685"><a href="#L2685"> 2685</a>         std::size_t index,</span>
+<span id="L2686"><a href="#L2686"> 2686</a>         DeviceTimelineInfo&amp; info) const noexcept;</span>
+<span id="L2687"><a href="#L2687"> 2687</a>     [[nodiscard]] std::size_t</span>
+<span id="L2688"><a href="#L2688"> 2688</a>     device_memory_domain_count(DeviceBackendHandle backend) const noexcept;</span>
+<span id="L2689"><a href="#L2689"> 2689</a>     [[nodiscard]] bool</span>
+<span id="L2690"><a href="#L2690"> 2690</a>     device_memory_domain_at(DeviceBackendHandle backend, std::size_t index,</span>
+<span id="L2691"><a href="#L2691"> 2691</a>                             DeviceMemoryDomainHandle &amp;handle,</span>
+<span id="L2692"><a href="#L2692"> 2692</a>                             HalV2MemoryDomain &amp;domain) const noexcept;</span>
+<span id="L2693"><a href="#L2693"> 2693</a>     [[nodiscard]] std::size_t</span>
+<span id="L2694"><a href="#L2694"> 2694</a>     device_topology_node_count(DeviceBackendHandle backend) const noexcept;</span>
+<span id="L2695"><a href="#L2695"> 2695</a>     [[nodiscard]] bool</span>
+<span id="L2696"><a href="#L2696"> 2696</a>     device_topology_node_at(DeviceBackendHandle backend, std::size_t index,</span>
+<span id="L2697"><a href="#L2697"> 2697</a>                             DeviceTopologyNodeHandle &amp;handle,</span>
+<span id="L2698"><a href="#L2698"> 2698</a>                             HalV2TopologyNode &amp;node) const noexcept;</span>
+<span id="L2699"><a href="#L2699"> 2699</a>     [[nodiscard]] std::size_t</span>
+<span id="L2700"><a href="#L2700"> 2700</a>     device_topology_link_count(DeviceBackendHandle backend) const noexcept;</span>
+<span id="L2701"><a href="#L2701"> 2701</a>     [[nodiscard]] bool</span>
+<span id="L2702"><a href="#L2702"> 2702</a>     device_topology_link_at(DeviceBackendHandle backend, std::size_t index,</span>
+<span id="L2703"><a href="#L2703"> 2703</a>                             HalV2TopologyLink &amp;link) const noexcept;</span>
+<span id="L2704"><a href="#L2704"> 2704</a>     [[nodiscard]] bool</span>
+<span id="L2705"><a href="#L2705"> 2705</a>     device_topology_link_at(DeviceBackendHandle backend, std::size_t index,</span>
+<span id="L2706"><a href="#L2706"> 2706</a>                             DeviceTopologyLinkHandle &amp;handle,</span>
+<span id="L2707"><a href="#L2707"> 2707</a>                             HalV2TopologyLink &amp;link) const noexcept;</span>
+<span id="L2708"><a href="#L2708"> 2708</a>     [[nodiscard]] std::size_t</span>
+<span id="L2709"><a href="#L2709"> 2709</a>     device_timestamp_domain_count(DeviceBackendHandle backend) const noexcept;</span>
+<span id="L2710"><a href="#L2710"> 2710</a>     [[nodiscard]] bool</span>
+<span id="L2711"><a href="#L2711"> 2711</a>     device_timestamp_domain_at(DeviceBackendHandle backend, std::size_t index,</span>
+<span id="L2712"><a href="#L2712"> 2712</a>                                DeviceTimestampDomainHandle &amp;handle,</span>
+<span id="L2713"><a href="#L2713"> 2713</a>                                HalV2TimestampDomain &amp;domain) const noexcept;</span>
+<span id="L2714"><a href="#L2714"> 2714</a>     [[nodiscard]] bool device_completion_timestamp_domain(</span>
+<span id="L2715"><a href="#L2715"> 2715</a>         DeviceBackendHandle backend,</span>
+<span id="L2716"><a href="#L2716"> 2716</a>         DeviceTimestampDomainHandle &amp;domain) const noexcept;</span>
+<span id="L2717"><a href="#L2717"> 2717</a>     [[nodiscard]] bool</span>
+<span id="L2718"><a href="#L2718"> 2718</a>     device_memory_object_at(std::size_t index,</span>
+<span id="L2719"><a href="#L2719"> 2719</a>                             DeviceMemoryObjectInfo &amp;object) const noexcept;</span>
+<span id="L2720"><a href="#L2720"> 2720</a>     // Explicit non-RT host query. Samples are not cached or interpreted as</span>
+<span id="L2721"><a href="#L2721"> 2721</a>     // runtime-monotonic time and are invalid across backend reset generations.</span>
+<span id="L2722"><a href="#L2722"> 2722</a>     [[nodiscard]] Status query_device_timestamp_correlation(</span>
+<span id="L2723"><a href="#L2723"> 2723</a>         DeviceBackendHandle backend, DeviceTimestampDomainHandle source,</span>
+<span id="L2724"><a href="#L2724"> 2724</a>         DeviceTimestampDomainHandle destination,</span>
+<span id="L2725"><a href="#L2725"> 2725</a>         HalV2TimestampCorrelation &amp;correlation) noexcept;</span>
+<span id="L2726"><a href="#L2726"> 2726</a>     [[nodiscard]] std::size_t resource_count() const noexcept;</span>
+<span id="L2727"><a href="#L2727"> 2727</a>     [[nodiscard]] std::size_t dependency_count() const noexcept;</span>
+<span id="L2728"><a href="#L2728"> 2728</a>     [[nodiscard]] std::size_t resource_access_count() const noexcept;</span>
+<span id="L2729"><a href="#L2729"> 2729</a>     // Available after successful finalization. The order is deterministic and</span>
+<span id="L2730"><a href="#L2730"> 2730</a>     // remains stable through running and stopped states.</span>
+<span id="L2731"><a href="#L2731"> 2731</a>     [[nodiscard]] bool compiled_phase_at(</span>
+<span id="L2732"><a href="#L2732"> 2732</a>         std::size_t execution_index,</span>
+<span id="L2733"><a href="#L2733"> 2733</a>         PhaseHandle&amp; phase) const noexcept;</span>
+<span id="L2734"><a href="#L2734"> 2734</a>     [[nodiscard]] bool rate_model_enabled() const noexcept;</span>
+<span id="L2735"><a href="#L2735"> 2735</a>     [[nodiscard]] bool rate_execution_enabled() const noexcept;</span>
+<span id="L2736"><a href="#L2736"> 2736</a>     [[nodiscard]] std::size_t rate_domain_count() const noexcept;</span>
+<span id="L2737"><a href="#L2737"> 2737</a>     [[nodiscard]] std::size_t rate_binding_count() const noexcept;</span>
+<span id="L2738"><a href="#L2738"> 2738</a>     [[nodiscard]] std::size_t reference_release_count() const noexcept;</span>
+<span id="L2739"><a href="#L2739"> 2739</a>     [[nodiscard]] std::uint64_t reference_supercycle_ns() const noexcept;</span>
+<span id="L2740"><a href="#L2740"> 2740</a>     [[nodiscard]] bool compiled_rate_domain_at(</span>
+<span id="L2741"><a href="#L2741"> 2741</a>         std::size_t registration_index,</span>
+<span id="L2742"><a href="#L2742"> 2742</a>         CompiledRateDomain&amp; domain) const noexcept;</span>
+<span id="L2743"><a href="#L2743"> 2743</a>     [[nodiscard]] bool compiled_rate_binding_at(</span>
+<span id="L2744"><a href="#L2744"> 2744</a>         std::size_t compiled_phase_index,</span>
+<span id="L2745"><a href="#L2745"> 2745</a>         CompiledRateBinding&amp; binding) const noexcept;</span>
+<span id="L2746"><a href="#L2746"> 2746</a>     [[nodiscard]] bool reference_release_at(</span>
+<span id="L2747"><a href="#L2747"> 2747</a>         std::size_t release_index,</span>
+<span id="L2748"><a href="#L2748"> 2748</a>         ReferenceRelease&amp; release) const noexcept;</span>
+<span id="L2749"><a href="#L2749"> 2749</a>     [[nodiscard]] bool device_rate_model_enabled() const noexcept;</span>
+<span id="L2750"><a href="#L2750"> 2750</a>     [[nodiscard]] std::size_t device_rate_phase_count() const noexcept;</span>
+<span id="L2751"><a href="#L2751"> 2751</a>     [[nodiscard]] std::size_t device_rate_command_count() const noexcept;</span>
+<span id="L2752"><a href="#L2752"> 2752</a>     [[nodiscard]] std::size_t</span>
+<span id="L2753"><a href="#L2753"> 2753</a>     device_rate_payload_reference_count() const noexcept;</span>
+<span id="L2754"><a href="#L2754"> 2754</a>     [[nodiscard]] std::size_t</span>
+<span id="L2755"><a href="#L2755"> 2755</a>     device_rate_timeline_reference_count() const noexcept;</span>
+<span id="L2756"><a href="#L2756"> 2756</a>     [[nodiscard]] bool compiled_device_rate_phase_at(</span>
+<span id="L2757"><a href="#L2757"> 2757</a>         std::size_t phase_index,</span>
+<span id="L2758"><a href="#L2758"> 2758</a>         CompiledDeviceRatePhase&amp; phase) const noexcept;</span>
+<span id="L2759"><a href="#L2759"> 2759</a>     [[nodiscard]] bool compiled_device_rate_command_at(</span>
+<span id="L2760"><a href="#L2760"> 2760</a>         std::size_t command_index,</span>
+<span id="L2761"><a href="#L2761"> 2761</a>         CompiledDeviceRateCommand&amp; command) const noexcept;</span>
+<span id="L2762"><a href="#L2762"> 2762</a>     [[nodiscard]] bool compiled_device_rate_payload_reference_at(</span>
+<span id="L2763"><a href="#L2763"> 2763</a>         std::size_t reference_index,</span>
+<span id="L2764"><a href="#L2764"> 2764</a>         CompiledDeviceRatePayloadReference&amp; reference) const noexcept;</span>
+<span id="L2765"><a href="#L2765"> 2765</a>     [[nodiscard]] bool compiled_device_rate_timeline_reference_at(</span>
+<span id="L2766"><a href="#L2766"> 2766</a>         std::size_t reference_index,</span>
+<span id="L2767"><a href="#L2767"> 2767</a>         CompiledDeviceRateTimelineReference&amp; reference) const noexcept;</span>
+<span id="L2768"><a href="#L2768"> 2768</a>     [[nodiscard]] bool device_rate_admission_report(</span>
+<span id="L2769"><a href="#L2769"> 2769</a>         DeviceRateAdmissionReport&amp; report) const noexcept;</span>
+<span id="L2770"><a href="#L2770"> 2770</a>     [[nodiscard]] bool device_rate_admission_diagnostic(</span>
+<span id="L2771"><a href="#L2771"> 2771</a>         DeviceRateAdmissionDiagnostic&amp; diagnostic) const noexcept;</span>
+<span id="L2772"><a href="#L2772"> 2772</a>     [[nodiscard]] bool device_rate_admission_backend_at(</span>
+<span id="L2773"><a href="#L2773"> 2773</a>         std::size_t backend_index,</span>
+<span id="L2774"><a href="#L2774"> 2774</a>         DeviceRateAdmissionBackend&amp; backend) const noexcept;</span>
+<span id="L2775"><a href="#L2775"> 2775</a>     [[nodiscard]] bool device_rate_admission_phase_at(</span>
+<span id="L2776"><a href="#L2776"> 2776</a>         std::size_t phase_index,</span>
+<span id="L2777"><a href="#L2777"> 2777</a>         DeviceRateAdmissionPhase&amp; phase) const noexcept;</span>
+<span id="L2778"><a href="#L2778"> 2778</a>     [[nodiscard]] bool device_rate_admission_interval_at(</span>
+<span id="L2779"><a href="#L2779"> 2779</a>         std::size_t interval_index,</span>
+<span id="L2780"><a href="#L2780"> 2780</a>         DeviceRateAdmissionInterval&amp; interval) const noexcept;</span>
+<span id="L2781"><a href="#L2781"> 2781</a>     [[nodiscard]] bool cross_rate_model_enabled() const noexcept;</span>
+<span id="L2782"><a href="#L2782"> 2782</a>     [[nodiscard]] std::size_t cross_rate_channel_count() const noexcept;</span>
+<span id="L2783"><a href="#L2783"> 2783</a>     [[nodiscard]] std::size_t cross_rate_selection_count() const noexcept;</span>
+<span id="L2784"><a href="#L2784"> 2784</a>     [[nodiscard]] bool compiled_cross_rate_channel_at(</span>
+<span id="L2785"><a href="#L2785"> 2785</a>         std::size_t registration_index,</span>
+<span id="L2786"><a href="#L2786"> 2786</a>         CompiledCrossRateChannel&amp; channel) const noexcept;</span>
+<span id="L2787"><a href="#L2787"> 2787</a>     [[nodiscard]] bool compiled_cross_rate_selection_at(</span>
+<span id="L2788"><a href="#L2788"> 2788</a>         std::size_t selection_index,</span>
+<span id="L2789"><a href="#L2789"> 2789</a>         CompiledCrossRateSelection&amp; selection) const noexcept;</span>
+<span id="L2790"><a href="#L2790"> 2790</a>     [[nodiscard]] bool sampled_io_model_enabled() const noexcept;</span>
+<span id="L2791"><a href="#L2791"> 2791</a>     [[nodiscard]] std::size_t sampled_io_channel_count() const noexcept;</span>
+<span id="L2792"><a href="#L2792"> 2792</a>     [[nodiscard]] bool compiled_sampled_io_channel_at(</span>
+<span id="L2793"><a href="#L2793"> 2793</a>         std::size_t registration_index,</span>
+<span id="L2794"><a href="#L2794"> 2794</a>         CompiledSampledIoChannel&amp; channel) const noexcept;</span>
+<span id="L2795"><a href="#L2795"> 2795</a>     [[nodiscard]] bool sampled_io_channel_status(</span>
+<span id="L2796"><a href="#L2796"> 2796</a>         CrossRateChannelHandle channel,</span>
+<span id="L2797"><a href="#L2797"> 2797</a>         SampledIoChannelStatus&amp; status) const noexcept;</span>
+<span id="L2798"><a href="#L2798"> 2798</a>     [[nodiscard]] bool live_control_enabled() const noexcept;</span>
+<span id="L2799"><a href="#L2799"> 2799</a>     [[nodiscard]] std::size_t live_control_mailbox_count() const noexcept;</span>
+<span id="L2800"><a href="#L2800"> 2800</a>     [[nodiscard]] std::size_t live_control_producer_count() const noexcept;</span>
+<span id="L2801"><a href="#L2801"> 2801</a>     [[nodiscard]] Status live_control_producer_handle(</span>
+<span id="L2802"><a href="#L2802"> 2802</a>         std::uint64_t mailbox_identity,</span>
+<span id="L2803"><a href="#L2803"> 2803</a>         std::uint64_t producer_identity,</span>
+<span id="L2804"><a href="#L2804"> 2804</a>         LiveControlProducerHandle&amp; handle) const noexcept;</span>
+<span id="L2805"><a href="#L2805"> 2805</a>     [[nodiscard]] Status stage_live_control_update(</span>
+<span id="L2806"><a href="#L2806"> 2806</a>         LiveControlProducerHandle producer,</span>
+<span id="L2807"><a href="#L2807"> 2807</a>         const LiveControlUpdateRecord&amp; update,</span>
+<span id="L2808"><a href="#L2808"> 2808</a>         std::span&lt;const std::byte&gt; payload,</span>
+<span id="L2809"><a href="#L2809"> 2809</a>         LiveControlAdmissionResult&amp; result) noexcept;</span>
+<span id="L2810"><a href="#L2810"> 2810</a>     [[nodiscard]] bool live_control_mailbox_info(</span>
+<span id="L2811"><a href="#L2811"> 2811</a>         std::uint64_t mailbox_identity,</span>
+<span id="L2812"><a href="#L2812"> 2812</a>         LiveControlMailboxInfo&amp; info) const noexcept;</span>
+<span id="L2813"><a href="#L2813"> 2813</a>     [[nodiscard]] bool live_control_record_at(</span>
+<span id="L2814"><a href="#L2814"> 2814</a>         std::uint64_t mailbox_identity,</span>
+<span id="L2815"><a href="#L2815"> 2815</a>         std::uint64_t mailbox_sequence,</span>
+<span id="L2816"><a href="#L2816"> 2816</a>         LiveControlUpdateRecord&amp; record) const noexcept;</span>
+<span id="L2817"><a href="#L2817"> 2817</a>     [[nodiscard]] Status copy_live_control_payload(</span>
+<span id="L2818"><a href="#L2818"> 2818</a>         std::uint64_t mailbox_identity,</span>
+<span id="L2819"><a href="#L2819"> 2819</a>         std::uint64_t mailbox_sequence,</span>
+<span id="L2820"><a href="#L2820"> 2820</a>         std::span&lt;std::byte&gt; output) const noexcept;</span>
+<span id="L2821"><a href="#L2821"> 2821</a>     [[nodiscard]] bool live_control_commit_info(</span>
+<span id="L2822"><a href="#L2822"> 2822</a>         LiveControlCommitInfo&amp; info) const noexcept;</span>
+<span id="L2823"><a href="#L2823"> 2823</a>     [[nodiscard]] bool live_control_record_status(</span>
+<span id="L2824"><a href="#L2824"> 2824</a>         std::uint64_t mailbox_identity,</span>
+<span id="L2825"><a href="#L2825"> 2825</a>         std::uint64_t mailbox_sequence,</span>
+<span id="L2826"><a href="#L2826"> 2826</a>         LiveControlRecordStatusInfo&amp; info) const noexcept;</span>
+<span id="L2827"><a href="#L2827"> 2827</a>     [[nodiscard]] bool live_control_closure_enabled() const noexcept;</span>
+<span id="L2828"><a href="#L2828"> 2828</a>     [[nodiscard]] Status live_control_action_metadata(</span>
+<span id="L2829"><a href="#L2829"> 2829</a>         LiveControlActionMetadata&amp; metadata) noexcept;</span>
+<span id="L2830"><a href="#L2830"> 2830</a>     [[nodiscard]] Status read_live_control_actions(</span>
+<span id="L2831"><a href="#L2831"> 2831</a>         LiveControlActionCursor&amp; cursor,</span>
+<span id="L2832"><a href="#L2832"> 2832</a>         std::span&lt;LiveControlActionRecord&gt; output,</span>
+<span id="L2833"><a href="#L2833"> 2833</a>         LiveControlActionReadResult&amp; result) noexcept;</span>
+<span id="L2834"><a href="#L2834"> 2834</a>     // Copies only into an exact-size caller span. Failure leaves output</span>
+<span id="L2835"><a href="#L2835"> 2835</a>     // unchanged and no inspector allocates or mutates the frozen plan.</span>
+<span id="L2836"><a href="#L2836"> 2836</a>     [[nodiscard]] Status copy_cross_rate_initial_sample(</span>
+<span id="L2837"><a href="#L2837"> 2837</a>         std::size_t registration_index,</span>
+<span id="L2838"><a href="#L2838"> 2838</a>         std::span&lt;std::byte&gt; output) const noexcept;</span>
+<span id="L2839"><a href="#L2839"> 2839</a>     [[nodiscard]] bool static_phase_assignment_at(</span>
+<span id="L2840"><a href="#L2840"> 2840</a>         std::size_t registration_index,</span>
+<span id="L2841"><a href="#L2841"> 2841</a>         StaticPhaseAssignment&amp; assignment) const noexcept;</span>
+<span id="L2842"><a href="#L2842"> 2842</a>     [[nodiscard]] ExecutorStats executor_stats() const noexcept;</span>
+<span id="L2843"><a href="#L2843"> 2843</a>     // Available after successful finalization. Counts describe requested</span>
+<span id="L2844"><a href="#L2844"> 2844</a>     // runtime payload/control storage and exclude allocator metadata and OS</span>
+<span id="L2845"><a href="#L2845"> 2845</a>     // thread stacks.</span>
+<span id="L2846"><a href="#L2846"> 2846</a>     [[nodiscard]] bool memory_plan(MemoryPlan&amp; plan) const noexcept;</span>
+<span id="L2847"><a href="#L2847"> 2847</a>     // Available after successful finalization. The report inventories every</span>
+<span id="L2848"><a href="#L2848"> 2848</a>     // current role and memory accounting identity exactly once. M15-01 does</span>
+<span id="L2849"><a href="#L2849"> 2849</a>     // not apply native policy, so applied/verified remain not_attempted.</span>
+<span id="L2850"><a href="#L2850"> 2850</a>     [[nodiscard]] bool cpu_memory_policy_report(</span>
+<span id="L2851"><a href="#L2851"> 2851</a>         CpuMemoryPolicyReport&amp; report) const noexcept;</span>
+<span id="L2852"><a href="#L2852"> 2852</a>     // Available after start is attempted. Strict failures leave the runtime</span>
+<span id="L2853"><a href="#L2853"> 2853</a>     // finalized so the host can inspect every failed prerequisite.</span>
+<span id="L2854"><a href="#L2854"> 2854</a>     [[nodiscard]] bool platform_preflight_report(</span>
+<span id="L2855"><a href="#L2855"> 2855</a>         PlatformPreflightReport&amp; report) const noexcept;</span>
+<span id="L2856"><a href="#L2856"> 2856</a>     [[nodiscard]] std::uint32_t degradation_level() const noexcept;</span>
+<span id="L2857"><a href="#L2857"> 2857</a>     [[nodiscard]] std::uint64_t now_ns() noexcept;</span>
+<span id="L2858"><a href="#L2858"> 2858</a>     // The view remains valid until the next control operation or destruction.</span>
+<span id="L2859"><a href="#L2859"> 2859</a>     [[nodiscard]] std::string_view last_error() const noexcept;</span>
+<span id="L2860"><a href="#L2860"> 2860</a> </span>
+<span id="L2861"><a href="#L2861"> 2861</a>     // Observability export is a non-RT host operation. These calls reject an</span>
+<span id="L2862"><a href="#L2862"> 2862</a>     // active step/periodic loop and never invoke host callbacks.</span>
+<span id="L2863"><a href="#L2863"> 2863</a>     [[nodiscard]] Status observability_metadata(</span>
+<span id="L2864"><a href="#L2864"> 2864</a>         ObservabilityMetadata&amp; metadata) noexcept;</span>
+<span id="L2865"><a href="#L2865"> 2865</a>     // Interval windows use a caller-owned cursor. The first interval covers</span>
+<span id="L2866"><a href="#L2866"> 2866</a>     // finalization through this call; later intervals partition cumulative</span>
+<span id="L2867"><a href="#L2867"> 2867</a>     // counters without mutating runtime-global baselines. Gauges are sampled</span>
+<span id="L2868"><a href="#L2868"> 2868</a>     // at the window end and are never differenced. Fresh cursors must be</span>
+<span id="L2869"><a href="#L2869"> 2869</a>     // default initialized.</span>
+<span id="L2870"><a href="#L2870"> 2870</a>     [[nodiscard]] Status metrics_snapshot(</span>
+<span id="L2871"><a href="#L2871"> 2871</a>         RuntimeMetricWindow window,</span>
+<span id="L2872"><a href="#L2872"> 2872</a>         RuntimeMetricCursor* cursor,</span>
+<span id="L2873"><a href="#L2873"> 2873</a>         RuntimeMetricSnapshot&amp; snapshot) noexcept;</span>
+<span id="L2874"><a href="#L2874"> 2874</a>     // A zeroed/default cursor starts at the oldest retained event. If an</span>
+<span id="L2875"><a href="#L2875"> 2875</a>     // established cursor falls behind, lost_events reports the exact skipped</span>
+<span id="L2876"><a href="#L2876"> 2876</a>     // sequence span. The caller owns output storage; fresh cursors must be</span>
+<span id="L2877"><a href="#L2877"> 2877</a>     // default initialized.</span>
+<span id="L2878"><a href="#L2878"> 2878</a>     [[nodiscard]] Status read_trace(</span>
+<span id="L2879"><a href="#L2879"> 2879</a>         RuntimeTraceCursor&amp; cursor,</span>
+<span id="L2880"><a href="#L2880"> 2880</a>         std::span&lt;RuntimeTraceEvent&gt; output,</span>
+<span id="L2881"><a href="#L2881"> 2881</a>         RuntimeTraceReadResult&amp; result) noexcept;</span>
+<span id="L2882"><a href="#L2882"> 2882</a>     [[nodiscard]] Status rate_telemetry_metadata(</span>
+<span id="L2883"><a href="#L2883"> 2883</a>         RateTelemetryMetadata&amp; metadata) noexcept;</span>
+<span id="L2884"><a href="#L2884"> 2884</a>     [[nodiscard]] Status rate_counters_snapshot(</span>
+<span id="L2885"><a href="#L2885"> 2885</a>         RateCounterSnapshot&amp; snapshot) noexcept;</span>
+<span id="L2886"><a href="#L2886"> 2886</a>     [[nodiscard]] Status read_rate_actions(</span>
+<span id="L2887"><a href="#L2887"> 2887</a>         RateTelemetryCursor&amp; cursor,</span>
+<span id="L2888"><a href="#L2888"> 2888</a>         std::span&lt;RateActionRecord&gt; output,</span>
+<span id="L2889"><a href="#L2889"> 2889</a>         RateTelemetryReadResult&amp; result) noexcept;</span>
+<span id="L2890"><a href="#L2890"> 2890</a>     [[nodiscard]] Status mixed_rate_action_metadata(</span>
+<span id="L2891"><a href="#L2891"> 2891</a>         MixedRateActionMetadata&amp; metadata) noexcept;</span>
+<span id="L2892"><a href="#L2892"> 2892</a>     [[nodiscard]] Status read_mixed_rate_actions(</span>
+<span id="L2893"><a href="#L2893"> 2893</a>         MixedRateActionCursor&amp; cursor,</span>
+<span id="L2894"><a href="#L2894"> 2894</a>         std::span&lt;MixedRateActionRecord&gt; output,</span>
+<span id="L2895"><a href="#L2895"> 2895</a>         MixedRateActionReadResult&amp; result) noexcept;</span>
+<span id="L2896"><a href="#L2896"> 2896</a> </span>
+<span id="L2897"><a href="#L2897"> 2897</a>     // Checkpoint and replay calls are non-RT host operations. Buffers are</span>
+<span id="L2898"><a href="#L2898"> 2898</a>     // caller-owned, and their maximum accepted sizes are frozen by</span>
+<span id="L2899"><a href="#L2899"> 2899</a>     // RuntimeConfig. A failed restore never mutates registered state.</span>
+<span id="L2900"><a href="#L2900"> 2900</a>     [[nodiscard]] Status checkpoint_size(</span>
+<span id="L2901"><a href="#L2901"> 2901</a>         std::size_t&amp; required_bytes) noexcept;</span>
+<span id="L2902"><a href="#L2902"> 2902</a>     [[nodiscard]] Status write_checkpoint(</span>
+<span id="L2903"><a href="#L2903"> 2903</a>         std::uint64_t checkpoint_frame_index,</span>
+<span id="L2904"><a href="#L2904"> 2904</a>         std::span&lt;std::byte&gt; output,</span>
+<span id="L2905"><a href="#L2905"> 2905</a>         ArtifactWriteResult&amp; result) noexcept;</span>
+<span id="L2906"><a href="#L2906"> 2906</a>     [[nodiscard]] Status restore_checkpoint(</span>
+<span id="L2907"><a href="#L2907"> 2907</a>         std::span&lt;const std::byte&gt; checkpoint,</span>
+<span id="L2908"><a href="#L2908"> 2908</a>         CheckpointMetadata* metadata = nullptr) noexcept;</span>
+<span id="L2909"><a href="#L2909"> 2909</a>     [[nodiscard]] Status write_input_log(</span>
+<span id="L2910"><a href="#L2910"> 2910</a>         std::span&lt;const ReplayInputRecord&gt; records,</span>
+<span id="L2911"><a href="#L2911"> 2911</a>         std::span&lt;std::byte&gt; output,</span>
+<span id="L2912"><a href="#L2912"> 2912</a>         ArtifactWriteResult&amp; result) noexcept;</span>
+<span id="L2913"><a href="#L2913"> 2913</a>     [[nodiscard]] Status replay(</span>
+<span id="L2914"><a href="#L2914"> 2914</a>         std::span&lt;const std::byte&gt; checkpoint,</span>
+<span id="L2915"><a href="#L2915"> 2915</a>         std::span&lt;const std::byte&gt; input_log,</span>
+<span id="L2916"><a href="#L2916"> 2916</a>         ReplayInputCallback input_callback,</span>
+<span id="L2917"><a href="#L2917"> 2917</a>         void* input_user_data = nullptr,</span>
+<span id="L2918"><a href="#L2918"> 2918</a>         ReplayResult* result = nullptr) noexcept;</span>
+<span id="L2919"><a href="#L2919"> 2919</a>     [[nodiscard]] Status write_active_replay_artifact(</span>
+<span id="L2920"><a href="#L2920"> 2920</a>         std::span&lt;const std::byte&gt; checkpoint,</span>
+<span id="L2921"><a href="#L2921"> 2921</a>         std::span&lt;const ReplayInputRecord&gt; records,</span>
+<span id="L2922"><a href="#L2922"> 2922</a>         std::span&lt;std::byte&gt; output,</span>
+<span id="L2923"><a href="#L2923"> 2923</a>         ArtifactWriteResult&amp; result) noexcept;</span>
+<span id="L2924"><a href="#L2924"> 2924</a>     [[nodiscard]] Status replay_active(</span>
+<span id="L2925"><a href="#L2925"> 2925</a>         std::span&lt;const std::byte&gt; artifact,</span>
+<span id="L2926"><a href="#L2926"> 2926</a>         ReplayInputCallback input_callback,</span>
+<span id="L2927"><a href="#L2927"> 2927</a>         void* input_user_data = nullptr,</span>
+<span id="L2928"><a href="#L2928"> 2928</a>         ActiveReplayResult* result = nullptr) noexcept;</span>
+<span id="L2929"><a href="#L2929"> 2929</a>     [[nodiscard]] Status write_live_control_replay_artifact(</span>
+<span id="L2930"><a href="#L2930"> 2930</a>         std::span&lt;const std::byte&gt; checkpoint,</span>
+<span id="L2931"><a href="#L2931"> 2931</a>         std::span&lt;const std::byte&gt; nested_artifact,</span>
+<span id="L2932"><a href="#L2932"> 2932</a>         LiveControlNestedArtifactKind nested_kind,</span>
+<span id="L2933"><a href="#L2933"> 2933</a>         std::span&lt;std::byte&gt; output,</span>
+<span id="L2934"><a href="#L2934"> 2934</a>         ArtifactWriteResult&amp; result) noexcept;</span>
+<span id="L2935"><a href="#L2935"> 2935</a>     [[nodiscard]] Status replay_live_control(</span>
+<span id="L2936"><a href="#L2936"> 2936</a>         std::span&lt;const std::byte&gt; artifact,</span>
+<span id="L2937"><a href="#L2937"> 2937</a>         ReplayInputCallback input_callback,</span>
+<span id="L2938"><a href="#L2938"> 2938</a>         void* input_user_data = nullptr,</span>
+<span id="L2939"><a href="#L2939"> 2939</a>         LiveControlReplayResult* result = nullptr) noexcept;</span>
+<span id="L2940"><a href="#L2940"> 2940</a>     [[nodiscard]] Status registered_state_hash(</span>
+<span id="L2941"><a href="#L2941"> 2941</a>         std::uint64_t&amp; hash) noexcept;</span>
+<span id="L2942"><a href="#L2942"> 2942</a> </span>
+<span id="L2943"><a href="#L2943"> 2943</a>     // Compatibility accessors over the latest retained trace window.</span>
+<span id="L2944"><a href="#L2944"> 2944</a>     [[nodiscard]] std::size_t trace_event_count() const noexcept;</span>
+<span id="L2945"><a href="#L2945"> 2945</a>     [[nodiscard]] bool trace_event(</span>
+<span id="L2946"><a href="#L2946"> 2946</a>         std::size_t chronological_index,</span>
+<span id="L2947"><a href="#L2947"> 2947</a>         RuntimeTraceEvent&amp; event) const noexcept;</span>
+<span id="L2948"><a href="#L2948"> 2948</a> </span>
+<span id="L2949"><a href="#L2949"> 2949</a> private:</span>
+<span id="L2950"><a href="#L2950"> 2950</a>     friend struct detail::RuntimeThreadPolicyTestAccess;</span>
+<span id="L2951"><a href="#L2951"> 2951</a>     friend struct detail::RuntimeLiveControlTestAccess;</span>
+<span id="L2952"><a href="#L2952"> 2952</a>     struct Impl;</span>
+<span id="L2953"><a href="#L2953"> 2953</a>     std::unique_ptr&lt;Impl&gt; impl_;</span>
+<span id="L2954"><a href="#L2954"> 2954</a> };</span>
+<span id="L2955"><a href="#L2955"> 2955</a> </span>
+<span id="L2956"><a href="#L2956"> 2956</a> struct DemoPipeline {</span>
+<span id="L2957"><a href="#L2957"> 2957</a>     struct State {</span>
+<span id="L2958"><a href="#L2958"> 2958</a>         std::atomic&lt;std::uint64_t&gt; ingestCount{0};</span>
+<span id="L2959"><a href="#L2959"> 2959</a>         std::atomic&lt;std::uint64_t&gt; gpuCount{0};</span>
+<span id="L2960"><a href="#L2960"> 2960</a>         std::atomic&lt;std::uint64_t&gt; ioCount{0};</span>
+<span id="L2961"><a href="#L2961"> 2961</a>         std::atomic&lt;std::uint64_t&gt; composeCount{0};</span>
+<span id="L2962"><a href="#L2962"> 2962</a>         std::atomic&lt;std::uint64_t&gt; fenceWaits{0};</span>
+<span id="L2963"><a href="#L2963"> 2963</a>         std::array&lt;std::atomic&lt;std::uint64_t&gt;, 4&gt; rungEventsSeen{};</span>
+<span id="L2964"><a href="#L2964"> 2964</a>     };</span>
+<span id="L2965"><a href="#L2965"> 2965</a> </span>
+<span id="L2966"><a href="#L2966"> 2966</a>     DemoPipeline() = default;</span>
+<span id="L2967"><a href="#L2967"> 2967</a>     explicit DemoPipeline(std::shared_ptr&lt;State&gt; state) : state_(std::move(state)) {}</span>
+<span id="L2968"><a href="#L2968"> 2968</a> </span>
+<span id="L2969"><a href="#L2969"> 2969</a>     [[nodiscard]] bool valid() const { return static_cast&lt;bool&gt;(state_); }</span>
+<span id="L2970"><a href="#L2970"> 2970</a>     [[nodiscard]] std::uint64_t ingest_frames() const;</span>
+<span id="L2971"><a href="#L2971"> 2971</a>     [[nodiscard]] std::uint64_t gpu_frames() const;</span>
+<span id="L2972"><a href="#L2972"> 2972</a>     [[nodiscard]] std::uint64_t io_frames() const;</span>
+<span id="L2973"><a href="#L2973"> 2973</a>     [[nodiscard]] std::uint64_t compose_frames() const;</span>
+<span id="L2974"><a href="#L2974"> 2974</a>     [[nodiscard]] std::uint64_t fence_waits() const;</span>
+<span id="L2975"><a href="#L2975"> 2975</a> </span>
+<span id="L2976"><a href="#L2976"> 2976</a> private:</span>
+<span id="L2977"><a href="#L2977"> 2977</a>     std::shared_ptr&lt;State&gt; state_{};</span>
+<span id="L2978"><a href="#L2978"> 2978</a> </span>
+<span id="L2979"><a href="#L2979"> 2979</a>     [[nodiscard]] std::uint64_t loadCounter(const std::atomic&lt;std::uint64_t&gt;&amp; counter) const;</span>
+<span id="L2980"><a href="#L2980"> 2980</a> </span>
+<span id="L2981"><a href="#L2981"> 2981</a>     friend DemoPipeline build_demo_pipeline(SimCore&amp; sim);</span>
+<span id="L2982"><a href="#L2982"> 2982</a> };</span>
+<span id="L2983"><a href="#L2983"> 2983</a> </span>
+<span id="L2984"><a href="#L2984"> 2984</a> [[deprecated(</span>
+<span id="L2985"><a href="#L2985"> 2985</a>     &quot;legacy SimCore demo; use rt::Runtime and the rtfw::runtime target&quot;)]]</span>
+<span id="L2986"><a href="#L2986"> 2986</a> DemoPipeline build_demo_pipeline(SimCore&amp; sim);</span>
+<span id="L2987"><a href="#L2987"> 2987</a> </span>
+<span id="L2988"><a href="#L2988"> 2988</a> inline std::uint64_t DemoPipeline::loadCounter(const std::atomic&lt;std::uint64_t&gt;&amp; counter) const {</span>
+<span id="L2989"><a href="#L2989"> 2989</a>     return counter.load(std::memory_order_acquire);</span>
+<span id="L2990"><a href="#L2990"> 2990</a> }</span>
+<span id="L2991"><a href="#L2991"> 2991</a> </span>
+<span id="L2992"><a href="#L2992"> 2992</a> inline std::uint64_t DemoPipeline::ingest_frames() const {</span>
+<span id="L2993"><a href="#L2993"> 2993</a>     return state_ ? loadCounter(state_-&gt;ingestCount) : 0;</span>
+<span id="L2994"><a href="#L2994"> 2994</a> }</span>
+<span id="L2995"><a href="#L2995"> 2995</a> </span>
+<span id="L2996"><a href="#L2996"> 2996</a> inline std::uint64_t DemoPipeline::gpu_frames() const {</span>
+<span id="L2997"><a href="#L2997"> 2997</a>     return state_ ? loadCounter(state_-&gt;gpuCount) : 0;</span>
+<span id="L2998"><a href="#L2998"> 2998</a> }</span>
+<span id="L2999"><a href="#L2999"> 2999</a> </span>
+<span id="L3000"><a href="#L3000"> 3000</a> inline std::uint64_t DemoPipeline::io_frames() const {</span>
+<span id="L3001"><a href="#L3001"> 3001</a>     return state_ ? loadCounter(state_-&gt;ioCount) : 0;</span>
+<span id="L3002"><a href="#L3002"> 3002</a> }</span>
+<span id="L3003"><a href="#L3003"> 3003</a> </span>
+<span id="L3004"><a href="#L3004"> 3004</a> inline std::uint64_t DemoPipeline::compose_frames() const {</span>
+<span id="L3005"><a href="#L3005"> 3005</a>     return state_ ? loadCounter(state_-&gt;composeCount) : 0;</span>
+<span id="L3006"><a href="#L3006"> 3006</a> }</span>
+<span id="L3007"><a href="#L3007"> 3007</a> </span>
+<span id="L3008"><a href="#L3008"> 3008</a> inline std::uint64_t DemoPipeline::fence_waits() const {</span>
+<span id="L3009"><a href="#L3009"> 3009</a>     return state_ ? loadCounter(state_-&gt;fenceWaits) : 0;</span>
+<span id="L3010"><a href="#L3010"> 3010</a> }</span>
+<span id="L3011"><a href="#L3011"> 3011</a> </span>
+<span id="L3012"><a href="#L3012"> 3012</a> } // namespace rt</span></pre></html>

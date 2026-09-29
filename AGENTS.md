@@ -480,3 +480,14 @@ Feature draft279 at998ec43035229406e93e6294e0834a0b4204b767 remains preserved.
 Require all32 target gates and guarded integration, then canonically reactivate
 and complete draft279 under continuing scoped publication/merge authorization.
 No later-batch, physical/RT/human/Unreal/performance/release activation or claim.
+
+## M26-04R2 capacity repair activation
+
+M26-04R2 capacity repair is active after explicit owner approval of the retained
+proposal and request to finish. Canonical control564 revision 494f9c86619e65e8ef041823b075554960fb9011,
+blob d75d8d152e39fe416f503cf3f115d58a0b3bc88a. Preserve uniform defaults, all ABIs/schemas/native backends,
+prior tests/evidence and storage repair280. Implement opt-in native per-backend
+bounds, pass all32 target gates and integrate separately; then canonically
+reactivate and finish retained feature279 at c939b017ba81de9e80471a593d875d6e62cee729.
+M26-05/M26-06 remain inactive. Standing scoped publication/merge authority persists.
+No physical/RT/human/Unreal/performance/release claim. Earlier activation notes are history.

@@ -70,6 +70,12 @@ struct DeviceBackendSpec {
     CommandTimelineExtensionState *command_state = nullptr;
 };
 
+// Resolve only validated native command backends. Uniform returns the original
+// global requirement without changing legacy behavior or private object layout.
+[[nodiscard]] std::size_t device_command_slots(
+    const DeviceBackendSpec& backend, std::size_t global_capacity,
+    bool native_per_backend) noexcept;
+
 struct DeviceTimelineSpec {
     std::array<char, hal_v2_identifier_capacity> name{};
     std::uint32_t backend_index = 0;
@@ -175,7 +181,8 @@ public:
         std::vector<DeviceBufferSpec> buffers,
         std::vector<DeviceTimelineSpec> timelines,
         std::size_t outstanding_capacity,
-        std::size_t completion_batch);
+        std::size_t completion_batch,
+        bool native_per_backend = false);
     ~DeviceManager();
 
     DeviceManager(const DeviceManager&) = delete;
@@ -266,7 +273,8 @@ public:
         std::size_t batch_backend_count,
         std::size_t outstanding_capacity,
         std::size_t completion_batch,
-        std::size_t& bytes) noexcept;
+        std::size_t& bytes,
+        std::size_t resolved_batch_slots = 0) noexcept;
 
 private:
     struct Outstanding {
@@ -397,6 +405,7 @@ private:
     std::atomic<bool> batch_admission_open_{false};
     std::atomic<bool> batch_stopping_{false};
     std::atomic<bool> service_ready_{false};
+    bool native_per_backend_ = false;
     std::atomic<std::size_t> slot_hint_{0};
     std::atomic<std::uint64_t> next_submission_id_{1};
     std::atomic<std::uint64_t> next_batch_id_{1};

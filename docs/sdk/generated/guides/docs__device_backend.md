@@ -436,3 +436,7 @@ No native capability, timeout, sampled safe acknowledgement, public structure
 layout or artifact schema changes. Existing ring capacity identity makes two-
 and four-slot checkpoints/replay incompatible before state changes. See
 [memory accounting](docs__memory_plan.md) for the exact reconciled counts.
+
+## Opt-in native backend capacity
+
+Select `Runtime::set_device_capacity_policy(DeviceCapacityPolicy::native_per_backend)` before registering any backend. Every backend must supply native HAL-v2 memory/topology and command/timeline extensions. Outstanding slots resolve to min(global outstanding, core max_in_flight, command max_in_flight_batches); polling resolves to min(global completion batch, command completion_batch_capacity). Initialization, actual slot storage, retirement and cleanup use those same bounds. Global rate admission remains enforced; native CUDA1/XDMA2 can reserve an aggregate3 without queue inflation. Uniform is the unchanged default. Malformed policies and unsupported mixtures reject before backend initialization; policy selection freezes on first successful backend registration.
