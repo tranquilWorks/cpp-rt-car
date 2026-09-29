@@ -729,6 +729,19 @@ Status DeviceManager::stop() noexcept {
         fail_backend_batches(backend_index, Status::device_canceled);
     }
     const auto quiesce_status = quiesce_lane();
+    // A timed-out rate batch can retain a native terminal completion after the
+    // service lane quiesces. Collect at most one bounded batch per backend on
+    // each checked stop before unregistering its referenced buffers. Unfinished
+    // work still makes unregister fail and retains ownership for a later retry.
+    if (quiesce_status == Status::ok) {
+        for (std::size_t backend_index = 0;
+             backend_index < backends_.size(); ++backend_index) {
+            if (initialized_backends_[backend_index] != kBackendOwnershipNone &&
+                backends_[backend_index].command_state) {
+                poll_batch_completions(backend_index);
+            }
+        }
+    }
     const auto backend_status = shutdown_backends();
     if (backend_status == Status::ok) {
         release_rate_slots_after_shutdown();
