@@ -491,3 +491,24 @@ a separate blocker: frozen ring4 versus Runtime fixed2. Feature implementation
 is incomplete and retained as a draft checkpoint. No Runtime repair is active;
 see docs/evidence/M26-04-repair-proposal.md. Never ship the ring2 diagnostic as
 golden acceptance. Obtain the bounded repair decision before forbidden edits.
+
+## M26-04R sampled storage repair activation
+
+Owner explicitly approved separate four-slot repair and resume/complete of M26-04.
+Canonical plan561 merged at 5ad722d8316037b77fe741b56e2d673408ca0fa9, blob b465fac6bd653073c7fcea74fae0bb947f0181f1.
+Implement bounded opt-in ring4 through the existing field; preserve default2,
+public layouts/ABIs/schemas, native backends, earlier sources/tests/evidence.
+Feature draft279 at998ec43035229406e93e6294e0834a0b4204b767 remains preserved.
+Require all32 target gates and guarded integration, then canonically reactivate
+and complete draft279 under continuing scoped publication/merge authorization.
+No later-batch, physical/RT/human/Unreal/performance/release activation or claim.
+
+## M26-04 reactivation after four-slot storage repair
+
+M26-04R target280 merged at e8caf4396cd5987d9aa4a4bf3dad9a178cf2ded7 after all32 exact-head gates.
+Canonical reactivation merged at 3af5a3db321a51fa61b7fb18f133ddbdd3eed689, blob 4447bb07bd3d11befcfe8272e05f7b7eb0ecc180.
+Finish preserved feature279 using actual frozen ring4 storage. Runtime/native
+backends and all prior/repair tests/evidence remain protected. Complete every
+original feature acceptance and fresh local/all32 gates before integration.
+M26-05/M26-06 remain inactive; standing scoped publication/merge authority persists.
+Earlier blocked checkpoints are historical; no physical/human/RT/release claim.

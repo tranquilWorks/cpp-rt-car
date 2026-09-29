@@ -9171,6 +9171,15 @@ Status Runtime::finalize() noexcept {
         }
     }
 
+    std::array<std::size_t, cross_rate_channel_capacity> snapshot_slot_counts{};
+    detail::SampledIoCompileDiagnostic storage_diagnostic;
+    const auto storage_status = detail::sampled_io_snapshot_slots(
+        impl_->graph_owner, impl_->sampled_io_channels, impl_->cross_rate_channels,
+        std::span(snapshot_slot_counts).first(impl_->cross_rate_channels.size()),
+        storage_diagnostic);
+    if (storage_status != Status::ok) {
+        return impl_->fail(storage_status, storage_diagnostic.message);
+    }
     detail::CompiledCrossRatePlan compiled_cross_rate_plan;
     detail::CrossRateCompileDiagnostic cross_rate_diagnostic;
     const auto cross_rate_status = detail::compile_cross_rate_data(
@@ -9183,7 +9192,8 @@ Status Runtime::finalize() noexcept {
             : &compiled_device_rate_plan,
         cross_rate_device_buffers,
         compiled_cross_rate_plan,
-        cross_rate_diagnostic);
+        cross_rate_diagnostic,
+        std::span(snapshot_slot_counts).first(impl_->cross_rate_channels.size()));
     if (cross_rate_status != Status::ok) {
         return impl_->fail(
             cross_rate_status,

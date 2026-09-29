@@ -11,20 +11,21 @@ sources:
   - products/cpp-rt-car/PRD.md#cap-m26--golden-full-system-reference
   - products/cpp-rt-car/acceptance.yaml#CAP-M26
   milestone: products/cpp-rt-car/milestones/M26.md#m26-04--xdma-hal-hil-loopback-variant
-  baseline_commit: b0564fef90ce9cc3537e2814e8e972c4e32cc168
+  baseline_commit: e8caf4396cd5987d9aa4a4bf3dad9a178cf2ded7
   control_plane_repository: tranquilWorks/portfolio-control
   control_plane_path: products/cpp-rt-car/batches/M26-04.yaml
-  predecessor: M26-03 target PR277 merged at b0564fef90ce9cc3537e2814e8e972c4e32cc168, tested head a8cca85514a78b98e2feeca412054d8330cebd76/tree7a36cf6e8bc272d9f8ccbbfc261daf04cc7c6ea4
-    after all32 final gates, quick107/full107+111, sanitizer23+23, source-kit/toolkit gates. Canonical
-    closure PR557 merged at a82253d2cb2c290f77c2be7c9c7af88cfc0ae9ef. Preserve the failed first M23 timeout
-    fixture attempt and failed diagnostics; its scheduling-sensitive submission assumption remains a separate
-    benchmark follow-up.
-  owner_scope: Owner explicitly requested lets do04 after M26-03 closure. Standing scoped planning/publication/merge
-    authority persists; canonical plan precedes target activation. Complete only M26-04; M26-05/M26-06
-    and human/physical/RT/Unreal/performance/release gates remain separate.
-  control_plane_revision: da7e8563c3aba6c427cfec5de17f716a8fc96b82
-  canonical_revision: da7e8563c3aba6c427cfec5de17f716a8fc96b82
-  canonical_blob_sha: b4cf895e418b76598ab124875e0894867f46822c
+  predecessor: M26-04R target PR280 merged at e8caf4396cd5987d9aa4a4bf3dad9a178cf2ded7, exact tested head
+    a7a6b06c5f3293f8ed35634555e8c15a89ab92a9/tree c479c55163e550affd17f5f8b8a653c1e9733506, all32 exact-head
+    checks successful with M26-03 names/multiplicity. Full local108+112, focused37, ASan/UBSan/leaks52,
+    TSan52, no-allocation, production36TU static, relocated full SDK and byte-identical default checkpoint/active
+    artifact checks passed. Preserve all initial M26-04 ring failures and every repair failure/evidence.
+  owner_scope: Owner explicitly approved the separate four-slot storage repair and instructed resume/complete.
+    Repair PR280 is integrated; this canonical amendment reactivates preserved feature draft279 on the
+    repaired baseline. Standing scoped publication/integration authority persists. M26-05 and M26-06 remain
+    inactive.
+  control_plane_revision: 3af5a3db321a51fa61b7fb18f133ddbdd3eed689
+  canonical_revision: 3af5a3db321a51fa61b7fb18f133ddbdd3eed689
+  canonical_blob_sha: 4447bb07bd3d11befcfe8272e05f7b7eb0ecc180
 dependencies:
 - M26-01
 - M26-02
@@ -32,6 +33,7 @@ dependencies:
 - M24-04
 - M21-05
 - M22-04
+- M26-04R
 scope:
   allowed_paths:
   - AGENTS.md
@@ -146,7 +148,15 @@ scope:
   - tests/golden_cuda/process_suite.py
   - tests/golden_cuda/verify_package.py
   - tests/golden_cuda/CMakeLists.txt
+  - tests/test_sampled_io_storage.cpp
+  - tests/sampled_io_storage/
+  - docs/evidence/M26-04R-*
 acceptance:
+- Use integrated M26-04R actual four-slot sampled storage with the unchanged frozen ring_capacity4; no
+  diagnostic two-slot downgrade. Reconcile preserved draft279 with repaired main before feature verification.
+  Preserve the private storage plumbing and public comment-only extension, new storage regressions/consumer
+  and all failed repair/feature evidence unchanged. This amendment closes the repair and resumes only
+  the original M26-04 feature acceptance; all feature criteria and required gates remain binding.
 - Preserve the immutable M26-01 contract/digest, fixed256-capacity integer SoA/initialization/model/controls/rate
   envelopes/channel identities and independent C++/Python oracles, all CPU/CUDA source kits/tests and
   repaired Runtime/native backends. New source files may derive documented copies with provenance and

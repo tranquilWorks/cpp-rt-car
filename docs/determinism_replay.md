@@ -420,3 +420,12 @@ in canonical order. Changing or removing the policy rejects incompatible
 checkpoints/replay before mutation. Policy absence preserves default identities
 and wire formats; no snapshot, input-log or active-replay schema changes.
 See [device execution](device_backend.md) for bounds and ownership requirements.
+
+### Sampled storage capacity
+
+An explicit sampled `ring_capacity = 4` is part of the existing sampled topology
+identity. Two-slot callers retain their prior identities and bytes; four-slot
+artifacts cannot restore into a two-slot owner. No schema or identity rewriting
+is involved. Originating-owner active replay and compatible paired checkpoint
+recovery preserve payload/generation state through the larger bounded store.
+This does not grant replay support to a native nondeterministic backend.

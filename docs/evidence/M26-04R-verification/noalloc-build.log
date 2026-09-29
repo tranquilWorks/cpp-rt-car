@@ -1,0 +1,18 @@
+In file included from tests/sampled_io_storage/noalloc.cpp:1:
+tests/sampled_io_storage/../cuda_physics/allocation_guard.hpp: In function ‘void* rtfw_physics_allocation::allocate_aligned(std::size_t, std::size_t)’:
+tests/sampled_io_storage/../cuda_physics/allocation_guard.hpp:32:50: error: ‘max_align_t’ is not a member of ‘std’; did you mean ‘max_align_t’?
+   32 |     alignment = std::max(alignment, alignof(std::max_align_t));
+      |                                                  ^~~~~~~~~~~
+In file included from /usr/include/c++/12/bits/cxxabi_init_exception.h:38,
+                 from /usr/include/c++/12/bits/exception_ptr.h:38,
+                 from /usr/include/c++/12/exception:168,
+                 from /usr/include/c++/12/stdexcept:38,
+                 from /usr/include/c++/12/system_error:41,
+                 from /usr/include/c++/12/bits/std_mutex.h:39,
+                 from /usr/include/c++/12/bits/atomic_wait.h:49,
+                 from /usr/include/c++/12/bits/atomic_base.h:41,
+                 from /usr/include/c++/12/atomic:41,
+                 from tests/sampled_io_storage/../cuda_physics/allocation_guard.hpp:3:
+/usr/lib/gcc/x86_64-linux-gnu/12/include/stddef.h:435:3: note: ‘max_align_t’ declared here
+  435 | } max_align_t;
+      |   ^~~~~~~~~~~

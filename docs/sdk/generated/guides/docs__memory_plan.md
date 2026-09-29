@@ -179,7 +179,11 @@ total slot count, and total snapshot payload bytes for reconciliation.
 
 Limits are explicit: 256 channels, names shorter than 64 bytes, 64 KiB per
 payload, 1 MiB aggregate initial bytes, 262,144 selections, two slots per
-channel, and 2 MiB aggregate slot payload. Checked arithmetic and construction
+ordinary/default channel, and 2 MiB aggregate slot payload. An explicit
+`SampledIoChannelRegistration::ring_capacity = 4` opts that sampled channel into
+four actual slots; supported sampled counts are exactly 2 and 4. The same count
+drives payload/control allocation, compiled descriptors and MemoryPlan.
+The aggregate byte caps still apply across mixed two/four-slot channels. Checked arithmetic and construction
 complete before publication. No seventh planned row is added and cross-rate
 storage never enters the phase/task/trace `MemoryProvider` acquisition boundary.
 

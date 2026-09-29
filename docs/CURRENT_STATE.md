@@ -1,3 +1,16 @@
+# M26-04 XDMA feature resumed after storage repair
+
+Repair target280 is merged at e8caf4396cd5987d9aa4a4bf3dad9a178cf2ded7; all32 final checks, full108+112,
+sanitizers52+52, allocation/static/package/default artifact checks passed.
+Canonical reactivation 3af5a3db321a51fa61b7fb18f133ddbdd3eed689, blob 4447bb07bd3d11befcfe8272e05f7b7eb0ecc180, is merged.
+Complete preserved feature279 on actual frozen four-slot Runtime storage.
+The feature remains incomplete until actual execution/parity/safety/replay/faults,
+installed kit and fresh local/all32 gates pass. Preserve all earlier failures
+and every repaired Runtime/native source/test. M26-05/M26-06 stay inactive;
+human/physical/RT/Unreal/performance/release gates remain separate.
+
+## Historical checkpoints
+
 # M26-04 checkpoint: four-slot sampled storage blocked
 
 The first XDMA graph compiles but fails Runtime finalization: frozen scenario
@@ -31,6 +44,18 @@ M26-05 showcase and M26-06 final audit remain inactive; human/physical/RT/Unreal
 controlled-performance/release gates remain separate.
 
 ## Historical M26-03 completion
+
+# M26-04R active: bounded four-slot sampled storage
+
+Owner approved repair and resume/complete. Canonical plan561 merged at
+5ad722d8316037b77fe741b56e2d673408ca0fa9; only its repair scope is active against merged M26-03.
+Preserve M26-04 draft279 and rejected four-slot diagnostic. Implement real
+ring_capacity4 storage while keeping default2, public layouts/ABIs/artifacts,
+native behavior and all prior sources/tests/evidence unchanged. All32 target
+gates precede separate repair integration, canonical M26-04 reactivation and
+full feature completion. M26-05/M26-06 and manual/physical/RT/release stay separate.
+
+## Previous completed feature
 
 # M26-03 CUDA golden physics
 
