@@ -1,7 +1,6 @@
 # M26-04R3 risk review
 
-No unresolved correctness finding in the reviewed candidate. Full/package and
-exact-head hosted gates remain required before integration. This is a private
+No unresolved correctness finding in the reviewed candidate. All local gates pass. Exact-final-head hosted gates remain required before integration. This is a private
 Runtime lifecycle and checkpoint repair, not feature or qualification closure.
 
 `Runtime::stop` previously repeated sampled safety after native workers had
@@ -32,6 +31,7 @@ zero with a positive control. The fixture transports data through actual native
 XDMA H2C, control, event and C2H operations; only its owned-card registration is
 marked replay-capable. Native backend extensions and public sources are intact.
 
-Remaining validation risk: complete local full/package/sanitizer/static and all
-32 exact-final-head checks, then clean/head/base/review/fetched-tree guards.
+Local full110+114/package55/sanitizer11+11/allocation/static36 gates pass.
+Remaining integration requirements: exact-final-head full rerun, all32 hosted
+checks, then clean/head/base/review/fetched-tree guards.
 Retain every failed fixture/build/startup attempt. No functional gate waiver.

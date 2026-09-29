@@ -1,3 +1,15 @@
+# M26-04R3 local verification complete; integration required
+
+Sampled cleanup/checkpoint repair passes full110+114, focused110 including11
+new tests, ASan/UBSan/leaks11, TSan11, zero-allocation controls,36TU static,
+relocated full55 SDK and exact default MemoryPlan/checkpoint/active bytes.
+See evidence/M26-04R3-2026-09-29.md and PR282 for final-head integration evidence.
+Require all32 exact-head successful checks and guarded merge; then canonically
+reactivate and FINISH feature279. M26-05/M26-06 remain inactive.
+No physical/HIL/RT/human/release claim. Earlier checkpoint notes are history.
+
+## Earlier activation and history
+
 # M26-04R3 sampled lifecycle and checkpoint repair active
 
 Control567 merged 0284c417e74c43742b96ffdc1ad025752d34559e, canonical blob e16883d10d151fc8873bfc1069cfaf290aae5fc9.
