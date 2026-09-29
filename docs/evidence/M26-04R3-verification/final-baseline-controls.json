@@ -1,0 +1,44 @@
+[
+  {
+    "label": "baseline",
+    "mode": "cleanup",
+    "exit": 3,
+    "expected_exit": 3,
+    "stdout": "cleanup retry=-1 acks=2/2\n"
+  },
+  {
+    "label": "baseline",
+    "mode": "recovery",
+    "exit": 8,
+    "expected_exit": 8,
+    "stdout": "restored tick7=-5 read=4 producer_domain=0\n"
+  },
+  {
+    "label": "baseline",
+    "mode": "defaults",
+    "exit": 0,
+    "expected_exit": 0,
+    "stdout": "runtime=2285413 device=61621 planned=2622601 slots=10\n"
+  },
+  {
+    "label": "repaired",
+    "mode": "cleanup",
+    "exit": 0,
+    "expected_exit": 0,
+    "stdout": "cleanup retry=0 acks=2/2\n"
+  },
+  {
+    "label": "repaired",
+    "mode": "recovery",
+    "exit": 0,
+    "expected_exit": 0,
+    "stdout": "restored tick7=0 read=0 producer_domain=1\n"
+  },
+  {
+    "label": "repaired",
+    "mode": "defaults",
+    "exit": 0,
+    "expected_exit": 0,
+    "stdout": "runtime=2285413 device=61621 planned=2622601 slots=10\n"
+  }
+]

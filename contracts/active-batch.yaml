@@ -1,37 +1,40 @@
 schema_version: 1
 batch:
-  id: M26-04R2
-  title: Explicit native per-backend capacity policy
-  goal: Separate aggregate Runtime admission capacity from bounded native command-backend storage through
-    an additive opt-in C++ policy, then resume and complete M26-04.
+  id: M26-04R3
+  title: Sampled-I/O checked cleanup and checkpoint recovery
+  goal: Repair stop retry after acknowledged sampled safety and partial backend teardown, and restore
+    exact sampled-device producer provenance from validated existing checkpoint payloads; then resume
+    and finish M26-04.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
   - products/cpp-rt-car/PRD.md#cap-m26--golden-full-system-reference
   - products/cpp-rt-car/acceptance.yaml#CAP-M26
   milestone: products/cpp-rt-car/milestones/M26.md#m26-04--xdma-hal-hil-loopback-variant
-  baseline_commit: e8caf4396cd5987d9aa4a4bf3dad9a178cf2ded7
+  baseline_commit: 242793be0cb1ff75b56c74e5b89d0f6e8a21fd76
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M26-04R2.yaml
-  predecessor: Storage repair target280 and reactivation control562 are merged. Feature draft279 at c939b017ba81de9e80471a593d875d6e62cee729
-    retains actual XDMA parity/replay and combined-capacity rejection with complete diagnostics and concrete
-    proposal.
-  owner_scope: Owner explicitly approved the M26-04R2 capacity proposal and requested finish. Merge this
-    canonical plan, implement and integrate repair separately, then canonically reactivate and complete
-    M26-04 draft279. Standing scoped publication/merge authority persists. M26-05/M26-06 remain inactive.
-  control_plane_revision: 494f9c86619e65e8ef041823b075554960fb9011
-  canonical_revision: 494f9c86619e65e8ef041823b075554960fb9011
-  canonical_blob_sha: d75d8d152e39fe416f503cf3f115d58a0b3bc88a
+  control_plane_path: products/cpp-rt-car/batches/M26-04R3.yaml
+  predecessor: Capacity repair281 and canonical feature reactivation566 are merged. Feature279 at e9d7d025552c61379c4d4530888ce512a31b266a/tree9f8c73490ab96e2270645361416a15995073035a
+    retains real shutdown retry and produced sampled checkpoint recovery failures.
+  owner_scope: The owner approved repair and requested completion. This is a necessary bounded correctness
+    prerequisite within that sequence, with no new public policy/schema/capability or milestone. Standing
+    scoped commit/PR/integration authority persists. Integrate separately, then canonically reactivate
+    and complete preserved feature279; M26-05/M26-06 remain inactive.
+  control_plane_revision: 0284c417e74c43742b96ffdc1ad025752d34559e
+  canonical_revision: 0284c417e74c43742b96ffdc1ad025752d34559e
+  canonical_blob_sha: e16883d10d151fc8873bfc1069cfaf290aae5fc9
 dependencies:
-- M26-04R
+- M26-04R2
 scope:
   allowed_paths:
   - AGENTS.md
   - contracts/active-batch.yaml
-  - rt/include/rt/runtime.hpp
   - rt/src/host_runtime.cpp
   - tests/CMakeLists.txt
   - tests/package_consumer/CMakeLists.txt
+  - tests/test_sampled_io_recovery.cpp
+  - tests/sampled_io_recovery/**
+  - tests/package_consumer/sampled_io_recovery_consumer.cpp
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
   - docs/roadmap.md
@@ -43,12 +46,7 @@ scope:
   - docs/cuda_capabilities.json
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - rt/src/device_manager.hpp
-  - rt/src/device_manager.cpp
-  - tests/test_device_capacity.cpp
-  - tests/device_capacity/**
-  - tests/package_consumer/device_capacity_consumer.cpp
-  - docs/evidence/M26-04R2-*
+  - docs/evidence/M26-04R3-*
   forbidden_paths:
   - abi/
   - core/
@@ -108,59 +106,71 @@ scope:
   - tests/sampled_io_storage/
   - tests/package_consumer/sampled_io_storage_consumer.cpp
   - docs/evidence/M26-04R-*
+  - rt/include/rt/runtime.hpp
+  - rt/src/device_manager.hpp
+  - rt/src/device_manager.cpp
+  - tests/test_device_capacity.cpp
+  - tests/device_capacity/
+  - tests/package_consumer/device_capacity_consumer.cpp
+  - docs/evidence/M26-04R2-*
 acceptance:
-- Add an explicit additive C++ native-per-backend capacity policy and Runtime setter; default remains
-  uniform with exact previous success/rejection behavior, identities, MemoryPlan and checkpoint/replay
-  bytes. Preserve existing public layouts, RuntimeConfig schema7/layout, C ABIv8/70exports/fingerprint0xd0e7a5a14bf35f97,
-  SONAME8, deviceABIv1, native backend sources/capabilities and artifact schemas.
-- Opt-in must be configured before any backend registration and frozen after finalization. Reject malformed
-  policy values and unsupported adapted-v1, core-only or extension mixtures before taking ownership. Resolve
-  each native command backend outstanding bound as the minimum of global outstanding, core max_in_flight
-  and command max_in_flight_batches; resolve polling count as the minimum of global completion batch and
-  advertised command completion capacity. Capabilities must remain validated/copied. No unbounded or inflated
-  storage.
-- Use resolved actual counts consistently for command slot allocation, initialization requested_in_flight,
-  submission/saturation, completion polling, retirement, stop/reset/retry, reconstruction and exact MemoryPlan/control
-  accounting. Preserve global reservation bounds and all existing backend/phase admission checks and algorithm,
-  deadlines, safe-ACK semantics, no-allocation and instance isolation. Existing slot metadata may carry
-  resolved counts; no default storage-layout/accounting drift.
-- Opt-in identities include a conditional marker and resolved backend counts; default graph/config/checkpoint/active
-  replay bytes are unchanged. Reject policy/capacity-incompatible replay/checkpoint before effects. Preserve
-  trusted originating-owner replay, compatible paired recovery, ownership on failed stop and bounded retry;
-  no artifact rewrite.
-- Add independent new tests and installed public SDK consumer, integrated into existing compiler/FMA/sanitizer/package
-  filters without changing protected workflows or prior tests. Cover actual heterogeneous one/two-slot
-  native command backends with global3, allocation and MemoryPlan deltas, aggregate/backend saturation,
-  policy malformed/frozen/order rejection, unsupported mixtures, lifecycle/partial initialize/failure/retry/isolation,
-  replay/recovery and default bytes. Old-order control must fail new acceptance against unchanged baseline.
-  Positive-controlled zero steady/replay allocation includes native workers.
-- Run focused new and preserved device/rate/sampled/replay tests, default-v1/ABI, ASan/UBSan/leaks, TSan,
-  production Clang static, actual CPack/relocated full SDK and embedding/negative consumers, contract/quick/full
-  and all32 exact-head hosted checks with exact predecessor names/multiplicity. Retain failed attempts,
-  diagnostics and risk review. No target or local functional waiver.
-- Update source-linked generated SDK docs and current reviewed release/source ledgers only as needed.
-  docs/cuda_capabilities.json may refresh only product_sources hashes of changed Runtime files; preserve
-  all capability rows, historical gates/evidence and claims. Preserve every previous fixture/assertion/deadline/source/evidence.
-- Merge repair separately under clean/head/base/no-unresolved-thread and fetched-tested-tree guards. Then
-  canonically reactivate M26-04, explicitly distinguishing aggregate reservation3 from frozen native CUDA1/XDMA2,
-  reconcile draft279 and complete all feature acceptance with fresh gates. Do not inflate native queues,
-  change prior CUDA event pools, weaken admission or deadlines, or declare repair as feature closure.
-  M26-05/M26-06 remain inactive.
+- Change only private host_runtime.cpp behavior. Preserve C ABI8/70exports/fingerprint0xd0e7a5a14bf35f97,
+  SONAME8/deviceABI1, public layouts/RuntimeConfig schema7, native backends, all defaults/identities,
+  exact serialized checkpoint/active/trusted bytes and MemoryPlan. No new public policy or format, native
+  queue growth, deadline change or fabricated physical safety.
+- After all sampled stop-time safe batches actually acknowledge, retain private completion bookkeeping
+  across partial device/extension/executor/provider teardown failures. Subsequent checked stop continues
+  teardown without resubmitting to already stopped workers. A failed/missing safe acknowledgement must
+  remain unknown, retain the complete owner, and be retried through actual device execution. Never use
+  startup/ordinary active acknowledgements as stop evidence. Block execution/reset/replay while teardown
+  is pending; clear private bookkeeping on valid fresh lifecycle boundaries. Cover running/finalized/startup-failure
+  and multiple backend/owner cases.
+- Restore exact successful producer provenance only for produced sampled device-to-CPU frames using their
+  existing fully validated sampled header, compiled endpoint/domain and saved source logical release.
+  Validate frame checksum/shape/identity/status/sequence/generation/timestamp domain and checked arithmetic
+  before effects. Reconstruct producer release sequence/substep, successful completion and actual saved
+  device timestamp without host-clock guesses, replay identity rewriting or new device execution. Cover
+  prior-cycle/held selections, fresh/same owner intermediate checkpoints and actual header clock domains.
+  Preserve initial-frame and ordinary untyped channel behavior; do not infer unavailable provenance. If
+  exact reconstruction cannot be proved from existing bytes, stop for a separate explicit format/design
+  decision.
+- New independent regressions and installed public consumer must fail unchanged baseline for both defects.
+  Cover native partial shutdown/unregistration and multi-backend retry, missing-safe-ACK negative, no
+  resubmission after successful stop ACK, repeated idempotent stop, actual retained resources through
+  failures, unchanged clocks/budgets, isolation and ordinary allocation instrumentation with positive
+  control. Preserve every previous test/assertion and repair evidence.
+- Checkpoint tests cover exact full state/channel/control metadata, originating-owner replay, compatible
+  paired fresh-owner continuation through the next cross-rate reads and subsequent device work, underflow/safe
+  payload, held/prior-cycle data, malformed/foreign/cross-policy rejection before effects, zero allocations,
+  resource conservation and exact default MemoryPlan/artifact-byte negative controls. No artifact edits
+  may disguise compatibility or ownership.
+- Run contract/quick/full, focused all preserved device/rate/sampled/control/replay suites, ASan/UBSan/leaks,
+  TSan, Clang static, actual CPack relocated full SDK/custom paths/spaces/removed original prefix/embedding/negative
+  consumers, ABI/default bytes and all32 exact-final-head target checks with exact M26-03 names/multiplicity.
+  Retain all failures and risk review. Control-only completed zero-step infrastructure exception never
+  waives target/local functional gates.
+- Refresh only required source-linked documentation and reviewed ledgers; cuda_capabilities.json changes
+  are product_sources hashes only. Separate guarded repair merge requires clean/head/base/no-unresolved-thread
+  and fetched-tested-tree equality. Then canonically reactivate/reconcile feature279 and finish every
+  original M26-04 acceptance with fresh feature gates. Repair is not feature or CAP-M26 closure; M26-05/M26-06
+  and physical/human/RT/Unreal/performance/release work remain separate.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh quick
   - ./scripts/agent-verify.sh full
-  - Focused DeviceCapacity/CommandBatch/RateDispatch/MixedRateReplay and preserved sampled/device suites,
-    old-order negative control, exact default identities/artifact bytes, lifecycle and zero allocations.
+  - Focused SampledIoRecovery/CommandBatch/RateDispatch/MixedRateReplay and preserved suites, both unchanged-baseline
+    negatives, exact default bytes/MemoryPlan, actual native shutdown/fresh-owner recovery and allocation
+    controls.
   - ASan/UBSan/leaks, TSan, Clang static, installed/relocated full SDK consumer, ABI/default-v1 and source-linked
     docs.
   - git diff --check
   focused_tests_to_add:
-  - Heterogeneous native one/two-slot execution, actual allocation/MemoryPlan and global/backend saturation.
-  - Malformed/order/frozen/unsupported policy, partial initialization/failed stop/retry/isolation.
-  - Owner replay/paired recovery, incompatible artifacts before effects, unchanged default bytes and old-order
-    failure.
+  - 'Actual sampled safe ACK followed by native partial teardown: retained ownership and no resubmission
+    on retry; missing ACK genuinely retries.'
+  - Produced sampled checkpoint provenance restored exactly for first/prior-cycle/held/underflow data
+    and same/fresh owner continuation.
+  - Malformed/foreign/default-byte/no-allocation/multi-backend/isolation and public relocated SDK controls.
   required_ci:
   - All32 exact-head records successful with exact M26-03 names/multiplicity; no target exceptions.
   - New cases join existing compiler/FMA/sanitizer/package filters; workflows and earlier tests remain
@@ -170,23 +180,23 @@ validation:
 risk:
   class: high
   hazards:
-  - Per-backend storage, init or poll bounds disagree with validated capabilities.
-  - Default behavior/accounting/identity bytes drift.
-  - Aggregate or per-backend admission is accidentally weakened.
-  - Completion ownership or replay state escapes bounded per-backend lanes.
-  - Failure/retry frees borrowed resources before terminal ownership.
+  - Stop bookkeeping falsely claims acknowledgement or permits work after partial teardown.
+  - Checkpoint reconstructs missing or forged producer provenance or confuses device and Runtime clocks.
+  - Private state changes default allocation/accounting or versioned artifact bytes.
+  - Malformed checkpoint mutates an owner before validation.
+  - Earlier repairs/tests/evidence or mandatory checks are weakened.
   stop_conditions:
   - Public ABI/layout/schema versioning, default capacity/timeout weakening or native backend changes
     become necessary.
   - Earlier tests/assertions/deadlines or mandatory gates would require weakening.
   - Unrelated product, physical/privileged/signing/release authority is needed.
 rollback:
-  strategy: Revert only additive opt-in capacity policy/plumbing and its new tests/docs/activation; preserve
-    merged storage repair, defaults, native backends and retained feature279.
+  strategy: Revert only this private Runtime correction and new regressions/docs/activation; preserve
+    capacity/storage repairs and feature279 with all diagnostics.
 evidence:
   output:
-  - docs/evidence/M26-04R2-<date>.md
+  - docs/evidence/M26-04R3-<date>.md
   - Exact retained positive/negative/baseline, memory/identity/replay/ownership/allocation/sanitizer/package/ABI
     commands and source/head/tree/check/merge records.
-  claim_boundary: Portable opt-in native command capacity policy only; no M26-04/CAP-M26 closure or physical/HIL/RT/human/release
-    promotion.
+  claim_boundary: Portable sampled-I/O lifecycle/checkpoint correctness only; no physical/HIL/RT/human
+    or M26-04/CAP-M26/release closure.

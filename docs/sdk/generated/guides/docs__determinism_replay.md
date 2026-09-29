@@ -437,3 +437,8 @@ This does not grant replay support to a native nondeterministic backend.
 ## Native capacity policy identity
 
 Only the explicit native-per-backend policy contributes a conditional graph/config identity marker and resolved outstanding/polling counts. This prevents policy/capacity-incompatible checkpoint or active replay from crossing the pre-effect validation boundary. Default uniform identity and checkpoint/active bytes remain unchanged; all owner-bound replay and compatible paired recovery rules still apply.
+
+
+## Sampled lifecycle and checkpoint recovery
+
+Restoring a produced sampled device frame reconstructs its successful producer release/substep and device timestamp from the validated existing sampled header and compiled rate/endpoint metadata. It validates every sampled frame before applying any checkpoint state. Runtime time never replaces device time; initial and untyped ordinary payload behavior and all artifact bytes/formats remain unchanged.

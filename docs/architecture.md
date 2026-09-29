@@ -615,3 +615,8 @@ semantics and artifact identities unchanged. See [device backend](device_backend
 ## Native command capacity resolution
 
 The additive C++ device capacity policy separates conservative aggregate rate reservations from each native command backend storage bound. It is opt-in before backend registration, uses validated copied capabilities, and changes no RuntimeConfig schema, C ABI, artifact format, native backend or admission algorithm. Existing DeviceManager slot ranges carry actual per-backend counts without changing its object layout.
+
+
+## Sampled lifecycle and checkpoint recovery
+
+Sampled shutdown acknowledgement and backend teardown are separate private lifecycle stages. Once every stop-time safe output acknowledges, a failed later teardown retains that completion stage for checked retry. Produced sampled checkpoint payloads retain enough validated frame/rate metadata to reconstruct exact producer provenance before continuation.

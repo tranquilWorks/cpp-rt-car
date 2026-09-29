@@ -237,3 +237,9 @@ add_test(NAME sampled_storage_default_package_consumer COMMAND rtfw_sampled_stor
 add_executable(rtfw_device_capacity_consumer device_capacity_consumer.cpp)
 target_link_libraries(rtfw_device_capacity_consumer PRIVATE rtfw::runtime)
 add_test(NAME device_capacity_package_consumer COMMAND rtfw_device_capacity_consumer)
+
+add_executable(rtfw_sampled_recovery_consumer sampled_io_recovery_consumer.cpp)
+target_link_libraries(rtfw_sampled_recovery_consumer PRIVATE rtfw::runtime rtfw::xdma_backend)
+add_test(NAME sampled_recovery_package_consumer COMMAND rtfw_sampled_recovery_consumer)
+add_test(NAME sampled_cleanup_package_consumer COMMAND rtfw_sampled_recovery_consumer --cleanup)
+add_test(NAME sampled_replay_package_consumer COMMAND rtfw_sampled_recovery_consumer --defaults)
