@@ -71,6 +71,9 @@ public:
       return s;                                                                \
   } while (false)
     GOLDEN_TRY(r.configure(c));
+    if (physics_)
+      GOLDEN_TRY(r.set_device_capacity_policy(
+          rt::DeviceCapacityPolicy::native_per_backend));
     if (jobs_) {
       GOLDEN_TRY(jobs_->attach());
       attached_ = true;
@@ -308,6 +311,13 @@ public:
     } else if (p == 4) {
       if (!io_.read(release, 1))
         return false;
+      if (w.configuration.fault == 2 && tick == 6) {
+        // Preserve the prior application-level stale-input campaign. The
+        // actual sampled transport frame remains separately validated.
+        seal(w.buffers[1], 1, 2, w.publications[1]);
+        w.timestamps[1] = 2 * fixed::tick_ns;
+        ++w.stale;
+      }
       const bool absent = (w.options.external && !w.external_ready) ||
                           w.configuration.fault == 10;
       if (absent)
@@ -315,7 +325,7 @@ public:
       w.buffers[2].fill(std::byte{});
       for (std::size_t a = 0; a < 3; ++a)
         for (std::size_t i = 0; i < w.options.count; ++i) {
-          const auto v = get32(
+          const auto v = (w.configuration.fault == 2 && tick == 6) ? 0 : get32(
               w.buffers[1], header_bytes + 4 * ((3 + a) * fixed::capacity + i));
           const auto value =
               absent ? 0
@@ -327,7 +337,10 @@ public:
           put32(w.buffers[2], header_bytes + 4 * (a * fixed::capacity + i),
                 value);
         }
-      if (!io_.publish(release, 2))
+      // Frozen underflow is a genuinely absent CPU command publication.
+      // Runtime selects the registered zero safe frame; the native device
+      // must still return its terminal acknowledgement. Clear at tick 12.
+      if (w.configuration.fault != 3 && !io_.publish(release, 2))
         return false;
     } else
       return false;
