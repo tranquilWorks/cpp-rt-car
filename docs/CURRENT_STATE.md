@@ -1,3 +1,23 @@
+# M26-02 portable golden reference
+
+M26-01 merged as PR275 at11fce253dc601824eeadbce519b8135bc778815c.
+Canonical M26-02 plan PR546 and replay-ownership amendment PR548 merged;
+active revision ab889ba70d768b73eb9c209d6aaa57f8febe92b0, blob
+98cdb422eefd68a9560626c2506277eeb1c2ed74. The portable CPU source kit implements
+native and independent host jobs, actual vector CIL processes, active rates,
+controls, paired-checkpoint recovery, trusted replay and independent artifacts.
+See the [guide](golden_system.md) and [evidence](evidence/M26-02-2026-09-29.md).
+Local/hosted validation and exact integration status are retained there and in
+the implementation PR and canonical control closure. Do not infer integration
+from the existence of implementation files.
+
+Four M26 batches remain: M26-03 CUDA, M26-04 XDMA, M26-05 benchmark/fault
+showcase and M26-06 living documentation/audit. They remain inactive. M25
+independent human acceptance is UNPERFORMED; physical/RT, controlled performance,
+Unreal, signing/release/deployment remain separate.
+
+## Historical M26-01 checkpoint
+
 # M26-01 golden scenario specification
 
 M25 software merged through target PR274 at62e61474c2d2efa6d673a9db31c45e2f35974ada.

@@ -914,3 +914,13 @@ partial capacity arithmetic and checked-stop ownership remain explicit. See
 validation and integration. Four later M25 software batches and six M26 batches
 remain; independent novice review and hardware/RT/performance/release gates are
 separate. The raw hello and all compiled production implementations are preserved.
+
+## M26-02 portable golden reference
+
+The portable source kit executes eight CPU phases, five active rates/channels,
+native and host-adapter jobs, typed controls, same-owner trusted replay and
+fresh-owner checkpoint recovery. It includes real vector CIL processes and an
+independently validated installed CPack source kit. See the [guide](golden_system.md)
+and [evidence](evidence/M26-02-2026-09-29.md) for validation/integration status.
+M26-03 CUDA, M26-04 XDMA, M26-05 showcase and M26-06 audit remain separate,
+unactivated batches; human/physical/RT/performance/Unreal/release gates remain.

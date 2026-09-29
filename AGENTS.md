@@ -412,3 +412,18 @@ Preserve all production, ABI, SDK, earlier source kits and evidence, and require
 all32 exact-head target gates. Standing scoped publication/integration authority
 persists. M26-02 through M26-06 remain inactive; M25 human acceptance is
 UNPERFORMED. Do not claim golden execution, hardware/RT, Unreal or release.
+
+## M26-02 portable scenario activation
+
+The owner requested M26-02. Canonical control PR546 merged at e7b8b39e7979b4e555567eccd169f5cf05690ee2,
+batch blob 327c5c46f47d6749977ffabc3c2837f6afd70fac. Implement only the portable golden CPU/native/host/external
+CIL source kit, controls/replay/faults and validation under the active contract.
+Preserve immutable M26-01 JSON/hash/checker, production/SDK/ABI and earlier kits.
+All32 exact-head target gates and scoped integration authority persist.
+M26-03 through M26-06 remain inactive; M25 human/physical/RT/Unreal/release gates
+remain separate. Earlier activation sections are historical.
+
+Canonical amendment PR548 merged at ab889ba70d768b73eb9c209d6aaa57f8febe92b0, blob 98cdb422eefd68a9560626c2506277eeb1c2ed74.
+Active replay is originating-owner bound; verify same-owner trusted replay,
+explicit cross-owner rejection and fresh-owner paired-checkpoint recovery.
+Preserve Runtime and the frozen M26-01 scenario without artifact identity rewriting.

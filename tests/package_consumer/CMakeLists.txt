@@ -220,3 +220,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../cil_shared_memory/package_contract.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../host_adapter/package_contract.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../installed_docs/package_contract.cmake")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../golden_system/package_contract.cmake")

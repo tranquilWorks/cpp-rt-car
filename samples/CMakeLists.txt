@@ -173,3 +173,16 @@ endif()
 
 # Installed recipes reuse the unchanged public-package conformance sources.
 add_subdirectory(recipes)
+
+add_executable(sample_golden_system golden_system/main.cpp)
+target_link_libraries(sample_golden_system PRIVATE rtfw::runtime)
+if(WIN32)
+    target_link_libraries(sample_golden_system PRIVATE psapi)
+endif()
+rtfw_enable_project_warnings(sample_golden_system)
+add_executable(sample_golden_controller golden_system/controller.cpp)
+target_link_libraries(sample_golden_controller PRIVATE rtfw::runtime)
+if(UNIX AND NOT APPLE)
+    target_link_libraries(sample_golden_controller PRIVATE rt)
+endif()
+rtfw_enable_project_warnings(sample_golden_controller)
