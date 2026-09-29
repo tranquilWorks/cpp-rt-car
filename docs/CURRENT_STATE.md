@@ -1,3 +1,18 @@
+# M26-04R3 sampled lifecycle and checkpoint repair active
+
+Control567 merged 0284c417e74c43742b96ffdc1ad025752d34559e, canonical blob e16883d10d151fc8873bfc1069cfaf290aae5fc9.
+Baseline target242793be0cb1ff75b56c74e5b89d0f6e8a21fd76 includes both prior repairs.
+New independent public-SDK/native-XDMA consumer proves old-order cleanup retry
+returns invalid_state and intermediate produced checkpoint read returns not_ready.
+Repair private lifecycle stage retention and validated sampled provenance, keeping
+exact public/default bytes and MemoryPlan. No new public policy or format.
+Retain feature279 at e9d7d025552c61379c4d4530888ce512a31b266a, integrate this
+repair only after all local and exact32 gates, then canonically reactivate and
+finish every original M26-04 acceptance. M26-05/M26-06 stay inactive.
+No physical/human/HIL/RT/Unreal/performance/release claim.
+
+## Earlier checkpoint
+
 # M26-04R2 locally complete; exact-head integration required
 
 Opt-in native per-backend capacities pass local full109+113, focused113,

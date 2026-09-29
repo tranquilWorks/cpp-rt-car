@@ -491,3 +491,16 @@ bounds, pass all32 target gates and integrate separately; then canonically
 reactivate and finish retained feature279 at c939b017ba81de9e80471a593d875d6e62cee729.
 M26-05/M26-06 remain inactive. Standing scoped publication/merge authority persists.
 No physical/RT/human/Unreal/performance/release claim. Earlier activation notes are history.
+
+## M26-04R3 sampled lifecycle/recovery prerequisite
+
+Canonical control567 merged at 0284c417e74c43742b96ffdc1ad025752d34559e, blob e16883d10d151fc8873bfc1069cfaf290aae5fc9.
+The owner requested repair and finish. Scope this necessary private Runtime
+correction separately under that authorization, preserving public formats,
+default bytes/MemoryPlan, native backends and every prior repair/test/evidence.
+Feature279 is retained at e9d7d025552c61379c4d4530888ce512a31b266a.
+Require both unchanged-baseline negatives, full local/sanitizer/static/package
+and exact32 gates; integrate, canonically reactivate and complete the feature.
+No public format/design expansion without a separate explicit decision.
+M26-05/M26-06 inactive; standing scoped publication/integration persists.
+Earlier feature checkpoints are historical, not closure.

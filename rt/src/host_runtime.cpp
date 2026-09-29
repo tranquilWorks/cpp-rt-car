@@ -1926,6 +1926,56 @@ struct Runtime::Impl {
         }
     }
 
+    [[nodiscard]] bool sampled_checkpoint_provenance(
+        std::size_t channel_index,
+        std::uint64_t source_logical_release_ns,
+        std::span<const std::byte> payload,
+        ActiveChannelState& output) const noexcept {
+        const auto* sampled = sampled_io_record(channel_index);
+        const auto* endpoint = device_endpoint_for_channel(channel_index);
+        if (!sampled || !endpoint || !endpoint->producer ||
+            channel_index >= compiled_cross_rate_plan.channels.size()) {
+            return false;
+        }
+        const auto& descriptor = compiled_cross_rate_plan.channels[channel_index];
+        if (!descriptor.producer_domain.valid() ||
+            descriptor.producer_domain.index() >= compiled_rate_plan.domains.size()) {
+            return false;
+        }
+        const auto& domain = compiled_rate_plan.domains[
+            descriptor.producer_domain.index()];
+        SampledIoFrameHeader header{};
+        if (domain.period_ns == 0 || domain.substep_count == 0 ||
+            !detail::sampled_io_read_header(payload, header) ||
+            header.release_generation == 0 ||
+            header.timestamp_domain_identity != endpoint->timestamp_domain_identity) {
+            return false;
+        }
+        const auto ordinal = header.release_generation - 1;
+        const auto release_sequence = ordinal / domain.substep_count;
+        const auto substep = ordinal % domain.substep_count;
+        std::uint64_t logical_release = 0;
+        std::uint64_t sequence = 0;
+        if (!checked_time_multiply(release_sequence, domain.period_ns, logical_release) ||
+            logical_release != source_logical_release_ns ||
+            !checked_time_add(sampled->public_record.initial_sequence,
+                              header.release_generation, sequence) ||
+            !detail::sampled_io_frame_valid(
+                payload, sampled->public_record, SampledIoFrameStatus::produced,
+                sequence, header.release_generation, true)) {
+            return false;
+        }
+        // Publication already required successful native completion and exact
+        // header/completion timestamp equality. Preserve the saved device clock,
+        // never substitute the Runtime clock or emit a new device operation.
+        output.producer_release_sequence = release_sequence;
+        output.producer_substep_ordinal = static_cast<std::uint32_t>(substep);
+        output.producer_completion_status = Status::ok;
+        output.producer_timestamp_domain_identity = header.timestamp_domain_identity;
+        output.producer_timestamp = header.first_sample_timestamp;
+        return true;
+    }
+
     [[nodiscard]] bool validate_active_checkpoint_state(
         std::span<const std::byte> bytes) const noexcept {
         if (!rate_execution_policy_set ||
@@ -2062,6 +2112,25 @@ struct Runtime::Impl {
                      CrossRateSampleProvenance::initial_sample &&
                  source_logical_release_ns != 0)) {
                 return false;
+            }
+            if (provenance == CrossRateSampleProvenance::produced &&
+                compiled_cross_rate_plan.channels[index].producer_device.valid() &&
+                sampled_io_record(index)) {
+                const auto payload_begin = kRateDispatchStateHeaderBytes +
+                    active_channel_states.size() * kRateDispatchChannelStateBytes;
+                if (payload_begin > bytes.size() ||
+                    payload_offset > bytes.size() - payload_begin ||
+                    payload_size > bytes.size() - payload_begin - payload_offset) {
+                    return false;
+                }
+                ActiveChannelState restored{};
+                if (!sampled_checkpoint_provenance(
+                        index, source_logical_release_ns,
+                        bytes.subspan(payload_begin + static_cast<std::size_t>(payload_offset),
+                                      static_cast<std::size_t>(payload_size)),
+                        restored)) {
+                    return false;
+                }
             }
             for (std::size_t reserved = offset + 42;
                  reserved < offset + kRateDispatchChannelStateBytes;
@@ -2202,6 +2271,19 @@ struct Runtime::Impl {
             channel_state.producer_completion_status = Status::ok;
             channel_state.producer_timestamp_domain_identity = 0;
             channel_state.producer_timestamp = 0;
+            if (channel_state.provenance == CrossRateSampleProvenance::produced &&
+                compiled_cross_rate_plan.channels[index].producer_device.valid() &&
+                sampled_io_record(index)) {
+                // The same helper already validated every channel before any
+                // checkpoint state was applied; this path only copies metadata.
+                if (!sampled_checkpoint_provenance(
+                        index, channel_state.source_logical_release_ns,
+                        std::span<const std::byte>(active_committed_payloads).subspan(
+                            channel_state.payload_offset, channel.payload_size),
+                        channel_state)) {
+                    return false;
+                }
+            }
             active_publication_claims[index].store(
                 0,
                 std::memory_order_relaxed);
@@ -6186,6 +6268,10 @@ struct Runtime::Impl {
     std::atomic<std::uint32_t> degradation_level{0};
     bool watchdog_started = false;
     bool stop_pending = false;
+    // Once stop-time safe output is acknowledged, teardown may disable native
+    // submissions before a later cleanup operation fails. Retain this private
+    // stage across retries; failed acknowledgements never advance it.
+    bool sampled_stop_acknowledged = false;
     bool lane_cleanup_pending = false;
     bool memory_cleanup_pending = false;
     bool runtime_stack_results_available = false;
@@ -11275,6 +11361,7 @@ Status Runtime::start() noexcept {
             "sampled-I/O startup safe output was not terminally acknowledged");
     }
     impl_->stop_pending = false;
+    impl_->sampled_stop_acknowledged = false;
     impl_->lane_cleanup_pending = false;
     impl_->memory_cleanup_pending = false;
     impl_->state = RuntimeState::running;
@@ -11932,11 +12019,15 @@ Status Runtime::stop() noexcept {
     }
 
     Status sampled_io_safe_status = Status::ok;
-    if (impl_->state == RuntimeState::running) {
+    if (impl_->state == RuntimeState::running &&
+        !impl_->sampled_stop_acknowledged) {
         sampled_io_safe_status = impl_->apply_sampled_io_safe_transition(
             impl_->active_faulted
                 ? SampledIoSafetyState::failure_acknowledged
                 : SampledIoSafetyState::shutdown_acknowledged);
+        if (sampled_io_safe_status == Status::ok) {
+            impl_->sampled_stop_acknowledged = true;
+        }
     }
     if (sampled_io_safe_status != Status::ok) {
         impl_->stop_pending = true;

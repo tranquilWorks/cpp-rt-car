@@ -480,3 +480,8 @@ encode this implementation layout.
 ## Per-backend command storage
 
 Under the explicit native capacity policy, device_batch_queue_slots is the sum of resolved native command slots. device_control_bytes includes exactly that many actual BatchSlots; shared completion scratch remains bounded by the global completion batch. Existing global fields retain aggregate meaning. Default uniform allocation, object sizes and MemoryPlan remain unchanged.
+
+
+## Sampled lifecycle and checkpoint recovery
+
+Sampled stop retry bookkeeping occupies existing private Runtime padding; exact baseline MemoryPlan and checkpoint/active artifact bytes are regression-checked. Sampled provenance reconstruction uses bounded stack metadata and existing frame storage, without extra allocations.
