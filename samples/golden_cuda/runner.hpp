@@ -310,10 +310,10 @@ int execute(const Arguments &a) {
   const auto peer_result = peer ? peer->result : cil::Code::ok,
              peer_cleanup = peer ? peer->cleanup : cil::Code::ok;
   const auto sample_bytes =
-      sizeof(Session) + sizeof(Memory) + sizeof(Jobs) + sizeof(Oracle) +
-      sizeof(OwnedReplay) + sizeof(Telemetry) + 3 * sizeof(StateBytes) +
-      sizeof(SimulatedDriver) + sizeof(CudaPhysics) + 2 * sizeof(Storage) +
-      (peer ? sizeof(Peer) + sizeof(cil::Region) : 0) +
+      sizeof(Owner) + sizeof(Totals) + sizeof(Session) + sizeof(Memory) +
+      sizeof(Jobs) + sizeof(Oracle) + sizeof(OwnedReplay) + sizeof(Telemetry) +
+      3 * sizeof(StateBytes) + sizeof(SimulatedDriver) + sizeof(CudaPhysics) +
+      2 * sizeof(Storage) + (peer ? sizeof(Peer) + sizeof(cil::Region) : 0) +
       replay.initial.capacity() + replay.active.capacity() +
       replay.trusted.capacity() +
       replay.inputs.capacity() * sizeof(rt::ReplayInputRecord) +

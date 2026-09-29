@@ -5,6 +5,12 @@ if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8
         target_link_libraries(test_golden_cuda PRIVATE psapi)
     endif()
     rtfw_enable_project_warnings(test_golden_cuda)
+    # Keep full sanitizer instrumentation and the Debug Runtime libraries.
+    # The new inline-heavy 1024-tick fixture uses the validated -O1 sanitizer
+    # profile; no Runtime, prior target, diagnostic or timeout is changed.
+    if(SIM_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(test_golden_cuda PRIVATE -O1)
+    endif()
     add_test(NAME host_adapter_golden_cuda_contract COMMAND test_golden_cuda --case 0)
     set_tests_properties(host_adapter_golden_cuda_contract PROPERTIES TIMEOUT 120)
     foreach(case RANGE 1 18)
