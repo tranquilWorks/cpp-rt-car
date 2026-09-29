@@ -189,14 +189,25 @@ public:
               rt::sampled_io_payload_checksum(
                   frame_span(lane.input, c).subspan(header_bytes)))
         return rt::XdmaUserEventResult{rt::XdmaDriverResult::io_error, 0};
-      for (std::size_t field = 0; field < fixed::channel_elements[c]; ++field)
-        for (std::size_t i = 0; i < fixed::capacity; ++i) {
-          const auto at = header_bytes + 4 * (field * fixed::capacity + i);
-          auto value = safe ? 0 : get32(lane.input, at);
-          if (!safe && index == 0 && i < s.count_)
-            value += std::bit_cast<std::int32_t>(lane.control);
-          put32(lane.output, at, value);
-        }
+      // The card echo is a byte transfer; only active sensor lanes require
+      // calibration arithmetic. Keep every inactive byte and both checksum
+      // validations, while avoiding scalar codec work for a plain copy/zero.
+      const auto payload_bytes = frame_size(c) - header_bytes;
+      if (safe)
+        std::memset(lane.output.data() + header_bytes, 0, payload_bytes);
+      else {
+        std::memcpy(lane.output.data() + header_bytes,
+                    lane.input.data() + header_bytes, payload_bytes);
+        if (index == 0)
+          for (std::size_t field = 0; field < fixed::channel_elements[c];
+               ++field)
+            for (std::size_t i = 0; i < s.count_; ++i) {
+              const auto at = header_bytes + 4 * (field * fixed::capacity + i);
+              put32(lane.output, at,
+                    get32(lane.input, at) +
+                        std::bit_cast<std::int32_t>(lane.control));
+            }
+      }
       if (safe)
         ++s.safe_acks;
       // A substituted command is still a real produced device frame.
