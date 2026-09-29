@@ -1,3 +1,10 @@
+<!-- M26-03 prototype checkpoint -->
+M26-03 CUDA physics is active but incomplete: repeated ordinary runs expose the
+logical-time versus wall-completion constraint. See
+[retained evidence](evidence/M26-03-2026-09-29.md) and the
+[unapproved repair proposal](evidence/M26-03-timing-decision.md).
+M26-04 through M26-06 remain inactive; no CAP-M26 closure is claimed.
+
 # M26-02 portable golden reference
 
 The [golden source kit](golden_system.md) implements the frozen M26-01 scenario

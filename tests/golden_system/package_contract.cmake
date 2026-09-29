@@ -3,7 +3,7 @@ if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8
     set(golden_kit "${RTFW_DATA_DIR}/examples/golden_system")
     file(GLOB golden_sources LIST_DIRECTORIES FALSE RELATIVE "${golden_kit}" "${golden_kit}/*")
     list(SORT golden_sources)
-    if(NOT "${golden_sources}" STREQUAL "CMakeLists.txt;README.md;artifacts.py;channel.hpp;common.hpp;contract.json;controller.cpp;controls.hpp;fixed.hpp;jobs.hpp;main.cpp;mapping.hpp;memory.hpp;model.hpp;oracle.hpp;peer.hpp;provenance.json;provenance.py;replay.hpp;run.py;session.hpp;telemetry.hpp;wire.hpp;world.hpp")
+    if(NOT "${golden_sources}" STREQUAL "CMakeLists.txt;README.md;artifacts.py;channel.hpp;common.hpp;contract.json;controller.cpp;controls.hpp;fixed.hpp;jobs.hpp;main.cpp;mapping.hpp;memory.hpp;model.hpp;oracle.hpp;peer.hpp;physics.hpp;provenance.json;provenance.py;replay.hpp;run.py;session.hpp;telemetry.hpp;wire.hpp;world.hpp")
         message(FATAL_ERROR "Golden source inventory differs from contract")
     endif()
     if(NOT EXISTS "${RTFW_DATA_DIR}/golden_system.md")

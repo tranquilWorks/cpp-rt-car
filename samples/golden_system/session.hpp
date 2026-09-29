@@ -1,7 +1,7 @@
 #pragma once
 #include "jobs.hpp"
 #include "memory.hpp"
-#include "world.hpp"
+#include "physics.hpp"
 #include <optional>
 #include <vector>
 
@@ -14,6 +14,7 @@ public:
   }
 };
 class Session {
+  Physics *physics_;
   Jobs *jobs_;
   Memory &memory_;
   bool attached_ = false, closed_ = false;
@@ -28,8 +29,8 @@ public:
   rt::MemoryPlan plan{};
   rt::LiveControlProducerHandle producer{};
   std::uint64_t sequence = 1;
-  Session(Options options, Jobs *jobs, Memory &memory)
-      : jobs_(jobs), memory_(memory), world(options),
+  Session(Options options, Jobs *jobs, Memory &memory, Physics *physics = nullptr)
+      : physics_(physics), jobs_(jobs), memory_(memory), world(options),
         runtime(std::in_place, clock) {}
   ~Session() {
     if (close() != rt::Status::ok)
@@ -58,6 +59,9 @@ public:
               c.workload_id.begin());
     if (jobs_)
       c.executor_policy = rt::ExecutorPolicy::host_adapter;
+    if (physics_)
+      physics_->limits(c);
+    const bool replay_enabled = !physics_ || physics_->replay_enabled();
     auto &r = *runtime;
     rt::Status s;
 #define GOLDEN_TRY(expression)                                                 \
@@ -83,7 +87,7 @@ public:
          fixed::artifact_bytes,
          128,
          rt::MixedRateOverflowPolicy::overwrite_committed,
-         true,
+         replay_enabled,
          true,
          {}}));
     rt::LiveControlPolicy p;
@@ -111,13 +115,16 @@ public:
     closure.retained_payload_bytes = 16384;
     closure.replay_record_capacity = retention_capacity;
     closure.replay_max_bytes = fixed::artifact_bytes;
-    closure.replay_enabled = true;
+    closure.replay_enabled = replay_enabled;
     GOLDEN_TRY(r.set_live_control_closure_policy(closure));
     rt::LiveControlReplayRetentionPolicy retention;
     retention.policy_identity = 2601;
     retention.admission_capacity = 128;
     retention.payload_capacity_bytes = 8192;
-    GOLDEN_TRY(r.set_live_control_replay_retention_policy(retention));
+    if (replay_enabled)
+      GOLDEN_TRY(r.set_live_control_replay_retention_policy(retention));
+    if (physics_)
+      GOLDEN_TRY(physics_->configure(r, world));
     constexpr std::array<std::size_t, 5> phases_per_domain{3, 1, 1, 1, 2};
     // Contract budgets are domain-release envelopes; Runtime charges each
     // phase.
@@ -129,10 +136,15 @@ public:
           rates[i]));
     for (std::size_t i = 0; i < 8; ++i) {
       bindings[i] = {&world, i};
-      GOLDEN_TRY(r.register_callback(
-          {fixed::phase_names[i], invoke, &bindings[i]}, phases[i]));
-      GOLDEN_TRY(
-          r.bind_phase_to_rate_domain(phases[i], rates[fixed::phase_rates[i]]));
+      if (physics_ && i == 1) {
+        GOLDEN_TRY(physics_->register_phase(r, rates[0], phases[i]));
+      } else {
+        GOLDEN_TRY(r.register_callback(
+            {fixed::phase_names[i], physics_ ? invoke_variant : invoke,
+             physics_ ? static_cast<void *>(this) : static_cast<void *>(&bindings[i])},
+            phases[i]));
+        GOLDEN_TRY(r.bind_phase_to_rate_domain(phases[i], rates[fixed::phase_rates[i]]));
+      }
     }
     for (auto edge :
          std::array<std::array<std::size_t, 2>, 3>{{{0, 1}, {1, 2}, {6, 7}}})
@@ -170,7 +182,8 @@ public:
         plan.phase_count != 8 || plan.rate_domain_count != 5 ||
         plan.rate_binding_count != 8 || plan.reference_release_count != 27 ||
         plan.cross_rate_channel_count != 5 ||
-        plan.sampled_io_channel_count != 0 || plan.device_backend_count != 0 ||
+        plan.sampled_io_channel_count != 0 ||
+        (physics_ ? !physics_->plan(plan) : plan.device_backend_count != 0) ||
         memory_.live_count() != 3)
       return rt::Status::internal_error;
     const auto accounted =
@@ -187,6 +200,17 @@ public:
     GOLDEN_TRY(r.start());
 #undef GOLDEN_TRY
     return rt::Status::ok;
+  }
+  static rt::CallbackResult invoke_variant(void *opaque, const rt::CallbackContext &ctx) noexcept {
+    auto &s = *static_cast<Session *>(opaque);
+    if (!ctx.rate_release || !s.physics_)
+      return rt::CallbackResult::error;
+    const auto phase = ctx.rate_release->phase.index();
+    if (phase == 2 && !s.physics_->complete(ctx))
+      return rt::CallbackResult::error;
+    if (!s.world.phase(phase, ctx) || (phase == 0 && !s.physics_->input(ctx)))
+      return rt::CallbackResult::error;
+    return rt::CallbackResult::ok;
   }
   rt::HostFrameContext frame(std::size_t tick) const noexcept {
     return {tick, std::chrono::nanoseconds(fixed::tick_ns), std::nullopt,

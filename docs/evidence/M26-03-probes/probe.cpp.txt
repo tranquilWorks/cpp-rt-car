@@ -1,0 +1,17 @@
+#include "samples/golden_cuda/physics.hpp"
+#include "samples/golden_system/replay.hpp"
+#include "samples/golden_system/oracle.hpp"
+#include <iostream>
+int main(){
+  golden::Options o; auto m=std::make_unique<golden::Memory>();
+  golden::cuda::SimulatedDriver driver(o.count); golden::cuda::CudaPhysics physics(driver,true);
+  golden::Session s(o,nullptr,*m,&physics);
+  auto status=s.prepare();std::cerr<<"prepare="<<int(status)<<" "<<s.runtime->last_error()<<"\n";
+  if(status!=rt::Status::ok)return 1;
+  golden::Replay replay(o.ticks);golden::Oracle oracle(o);
+  if(!replay.begin(s)||!s.controls())return 2;
+  for(std::size_t i=0;i<o.ticks;++i){replay.record(s,i);status=s.step(i);std::cerr<<i<<" status="<<int(status)<<" "<<s.runtime->last_error()<<"\n";if(status!=rt::Status::ok||!oracle.step(i,s.world))return 3;}
+  if(!replay.seal(s)||!replay.verify(s)){std::cerr<<"replay "<<s.runtime->last_error()<<"\n";return 4;}
+  std::cerr<<"replay pass; operations "<<driver.graphs<<"\n";
+  return s.close()==rt::Status::ok?0:5;
+}

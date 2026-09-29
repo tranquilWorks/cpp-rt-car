@@ -1,3 +1,26 @@
+# M26-03 CUDA prototype blocked on timing policy
+
+M26-02 merged as target PR276 at dbbab7a433a01459ed737cbb19d3b1a64a3ea1bf,
+with all32 exact-head checks; control closure PR549 is merged. M26-03 canonical
+plan PR550 is merged at0823458c29939d50efb58b16cf3c984ff82e47e8. The active
+feature branch contains a partial Runtime CUDA physics/Graph/replay prototype.
+Repeated normal execution fails its 1 ms wall completion timeout while the
+scenario uses logical time. Parking workers also reproduced the failure.
+
+**M26-03 is incomplete and must not merge.** See the retained
+[evidence](evidence/M26-03-2026-09-29.md) and
+[proposed simulator timing decision](evidence/M26-03-timing-decision.md).
+The proposal requires a separately approved canonical repair; it is not active.
+Preserve the draft, failures and all frozen/default behavior. Do not waive the
+local failure under the control-only hosted infrastructure exception.
+
+Next: resolve the timing policy, integrate any separately approved repair, then
+reactivate and complete the CUDA kit, faults/recovery, matrix/package/sanitizer
+and all32 exact-head gates. M26-04 XDMA, M26-05 showcase and M26-06 audit remain
+inactive. Human/physical/RT, Unreal and release/deployment gates remain separate.
+
+## Historical M26-02 checkpoint
+
 # M26-02 portable golden reference
 
 M26-01 merged as PR275 at11fce253dc601824eeadbce519b8135bc778815c.

@@ -64,6 +64,7 @@ HASHED_CONTRACT_PATHS = {
     'samples/golden_system/model.hpp',
     'samples/golden_system/oracle.hpp',
     'samples/golden_system/peer.hpp',
+    'samples/golden_system/physics.hpp',
     'samples/golden_system/provenance.py',
     'samples/golden_system/replay.hpp',
     'samples/golden_system/run.py',

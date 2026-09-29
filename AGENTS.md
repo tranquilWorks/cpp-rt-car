@@ -427,3 +427,15 @@ Canonical amendment PR548 merged at ab889ba70d768b73eb9c209d6aaa57f8febe92b0, bl
 Active replay is originating-owner bound; verify same-owner trusted replay,
 explicit cross-owner rejection and fresh-owner paired-checkpoint recovery.
 Preserve Runtime and the frozen M26-01 scenario without artifact identity rewriting.
+
+## M26-03 CUDA physics activation
+
+The owner requested the next batch after M26-02 merged target PR276 at
+dbbab7a433a01459ed737cbb19d3b1a64a3ea1bf with all32 checks. Canonical control
+PR550 merged at 0823458c29939d50efb58b16cf3c984ff82e47e8,
+blob 773c288349c57a47860481edd5c78f1bd9f68b59. Implement only the bounded CUDA golden
+physics variant, simulator-only replay adapter, faults/recovery, installed kit
+and optional real-host compile scope. Preserve production/SDK/ABI, immutable
+scenario and all prior tests/kits/evidence. Native CUDA remains nondeterministic;
+no physical replay claim. All32 target gates and scoped integration authority
+persist; M26-04 through M26-06 and human/physical/RT/Unreal/release stay separate.
