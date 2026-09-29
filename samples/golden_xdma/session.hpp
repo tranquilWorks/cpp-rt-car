@@ -325,8 +325,11 @@ public:
       w.buffers[2].fill(std::byte{});
       for (std::size_t a = 0; a < 3; ++a)
         for (std::size_t i = 0; i < w.options.count; ++i) {
-          const auto v = (w.configuration.fault == 2 && tick == 6) ? 0 : get32(
-              w.buffers[1], header_bytes + 4 * ((3 + a) * fixed::capacity + i));
+          const auto v =
+              (w.configuration.fault == 2 && tick == 6)
+                  ? 0
+                  : get32(w.buffers[1],
+                          header_bytes + 4 * ((3 + a) * fixed::capacity + i));
           const auto value =
               absent ? 0
                      : (w.options.external ? w.external_command[a][i]

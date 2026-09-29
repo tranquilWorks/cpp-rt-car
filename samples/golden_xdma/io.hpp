@@ -14,6 +14,7 @@ class Io {
   };
   std::array<HostLane, 2> host_{};
   SimulatedDriver *simulation_;
+  const bool simulated_;
   std::unique_ptr<rt::XdmaDeviceBackend> backend_;
   rt::HalV2BackendApi original_{};
   rt::Runtime *runtime_ = nullptr;
@@ -101,12 +102,14 @@ class Io {
       sampled_header(duplicate, 1, generation + 1, generation,
                      ctx.rate_release->nominal_release_ns,
                      rt::SampledIoFrameStatus::produced);
-      s.first_duplicate = ctx.rate_release->publish(s.world_->channels[1], frame_span(duplicate, 1));
+      s.first_duplicate = ctx.rate_release->publish(s.world_->channels[1],
+                                                    frame_span(duplicate, 1));
       duplicate[header_bytes] = std::byte{1};
       sampled_header(duplicate, 1, generation + 1, generation,
                      ctx.rate_release->nominal_release_ns,
                      rt::SampledIoFrameStatus::produced);
-      s.second_duplicate = ctx.rate_release->publish(s.world_->channels[1], frame_span(duplicate, 1));
+      s.second_duplicate = ctx.rate_release->publish(s.world_->channels[1],
+                                                     frame_span(duplicate, 1));
       return rt::CallbackResult::error;
     }
     if (s.world_->configuration.fault == 9 && phase == 5)
@@ -132,11 +135,27 @@ public:
   rt::CrossRateReadResult last_read{};
   std::size_t last_read_channel = 0;
   bool last_decoded = false;
-  rt::Status first_duplicate = rt::Status::internal_error, second_duplicate = rt::Status::internal_error;
+  rt::Status first_duplicate = rt::Status::internal_error,
+             second_duplicate = rt::Status::internal_error;
   rt::Status reset() noexcept { return runtime_->reset_device(handle_); }
-  rt::Status health(rt::DeviceHealth &value) noexcept { return runtime_->device_health(handle_, value); }
+  rt::Status health(rt::DeviceHealth &value) noexcept {
+    return runtime_->device_health(handle_, value);
+  }
   std::array<std::uint64_t, 2> providers{}, publications{};
-  explicit Io(SimulatedDriver &driver) : simulation_(&driver) {}
+  explicit Io(SimulatedDriver &driver, bool simulated = true)
+      : simulation_(&driver), simulated_(simulated) {}
+  bool timeline(std::size_t lane, rt::DeviceTimelineInfo &info) const noexcept {
+    return runtime_->device_timeline_at(handle_, lane, info);
+  }
+  rt::HalV2Capabilities native_capabilities() noexcept {
+    auto registration =
+        backend_->hal_v2_registration("native.capability.probe");
+    rt::HalV2Capabilities capabilities{};
+    if (registration.api.get_capabilities(registration.api.instance,
+                                          &capabilities) != rt::HalV2Status::ok)
+      capabilities.deterministic_mock = UINT8_MAX;
+    return capabilities;
+  }
   static void limits(rt::RuntimeConfig &c, bool combined) noexcept {
     c.device_backend_capacity = combined ? 2 : 1;
     c.device_buffer_capacity = combined ? 8 : 6;
@@ -160,9 +179,9 @@ public:
     } catch (...) {
       return rt::Status::resource_exhausted;
     }
+    auto registration = backend_->hal_v2_registration("golden.native.xdma");
     auto s = r.register_device_backend(
-        simulated(backend_->hal_v2_registration("golden.native.xdma")),
-        handle_);
+        simulated_ ? simulated(registration) : registration, handle_);
     if (s != rt::Status::ok)
       return s;
     rt::DeviceMemoryDomainHandle memory;
@@ -248,17 +267,22 @@ public:
     using R = rt::DeviceRatePayloadRole;
     const std::array roles{R::input, R::input, R::output, R::output};
     rt::DeviceRatePhaseBinding binding{out, domain, completion_ns, 1, roles};
-    binding.simulation = rt::DeviceRateSimulationPolicy{5'000'000'000ull};
+    if (simulated_)
+      binding.simulation = rt::DeviceRateSimulationPolicy{5'000'000'000ull};
     return r.bind_device_phase_to_rate_domain(binding);
   }
   bool read(const rt::RateReleaseView &release, std::size_t c) noexcept {
     Frame sampled{};
     rt::CrossRateReadResult result;
-    const auto copied = release.copy(world_->channels[c], frame_span(sampled, c), result);
-    last_read = result; last_read_channel = c;
+    const auto copied =
+        release.copy(world_->channels[c], frame_span(sampled, c), result);
+    last_read = result;
+    last_read_channel = c;
     last_decoded = copied == rt::CrossRateReadStatus::ok &&
-        application_frame(sampled, world_->buffers[c], c, world_->options.count);
-    if (!last_decoded) return false;
+                   application_frame(sampled, world_->buffers[c], c,
+                                     world_->options.count);
+    if (!last_decoded)
+      return false;
     ++world_->selections[c];
     world_->ages[c] = result.age_ns;
     world_->generations[c] = result.generation;

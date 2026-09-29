@@ -243,3 +243,5 @@ target_link_libraries(rtfw_sampled_recovery_consumer PRIVATE rtfw::runtime rtfw:
 add_test(NAME sampled_recovery_package_consumer COMMAND rtfw_sampled_recovery_consumer)
 add_test(NAME sampled_cleanup_package_consumer COMMAND rtfw_sampled_recovery_consumer --cleanup)
 add_test(NAME sampled_replay_package_consumer COMMAND rtfw_sampled_recovery_consumer --defaults)
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../golden_xdma/package_contract.cmake")

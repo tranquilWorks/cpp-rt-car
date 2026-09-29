@@ -366,3 +366,6 @@ incorrectly request the prior owner's history and is rejected as a gap.
 
 The separately scoped [CUDA physics variant](golden_cuda.md) shares this frozen
 scenario and adds explicit injected-driver kernel/Graph execution.
+
+The [XDMA sampled-I/O reference](golden_xdma.md) adds an installed simulated
+XDMA/combined kit using the same frozen logical scenario.

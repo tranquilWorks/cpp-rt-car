@@ -79,14 +79,17 @@ struct Replay {
                rt::LiveControlNestedArtifactKind::active_replay, trusted,
                write) == rt::Status::ok;
   }
-  static rt::Status apply(Session &s, std::span<const std::byte> artifact,
-                          rt::LiveControlReplayResult *result = nullptr) noexcept {
+  static rt::Status
+  apply(Session &s, std::span<const std::byte> artifact,
+        rt::LiveControlReplayResult *result = nullptr) noexcept {
     rt::LiveControlReplayMetadata envelope;
     auto status = rt::inspect_live_control_replay_artifact(artifact, envelope);
-    if (status != rt::Status::ok) return status;
+    if (status != rt::Status::ok)
+      return status;
     rt::LiveControlActionMetadata owner;
     status = s.runtime->live_control_action_metadata(owner);
-    if (status != rt::Status::ok) return status;
+    if (status != rt::Status::ok)
+      return status;
     if (envelope.runtime_id != owner.runtime_id)
       return rt::Status::incompatible_artifact;
     return s.runtime->replay_live_control(artifact, input, &s, result);

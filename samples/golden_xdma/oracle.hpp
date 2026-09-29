@@ -17,7 +17,8 @@ class Oracle {
   std::uint64_t stale_ = 0, missing_ = 0;
 
 public:
-  explicit Oracle(Options o, bool underflow = false) : options_(o), underflow_(underflow) {
+  explicit Oracle(Options o, bool underflow = false)
+      : options_(o), underflow_(underflow) {
     std::uint64_t seed = 1;
     const auto draw = [&](std::uint64_t modulus, int offset) {
       seed = (seed * 1664525 + 1013904223) & 0xffffffffULL;
@@ -81,9 +82,10 @@ public:
           const auto demand =
               static_cast<std::int64_t>(gain_) * (target_ - velocity);
           actuator_[a][i] =
-              (absent || (underflow_ && tick >= 6 && tick < 12)) ? 0
-                     : static_cast<std::int32_t>(
-                           demand < -4 ? -4 : (demand > 4 ? 4 : demand));
+              (absent || (underflow_ && tick >= 6 && tick < 12))
+                  ? 0
+                  : static_cast<std::int32_t>(
+                        demand < -4 ? -4 : (demand > 4 ? 4 : demand));
         }
     }
     if (tick % 6 == 0) {
@@ -125,4 +127,4 @@ public:
            actual.generations == generations;
   }
 };
-} // namespace golden
+} // namespace golden::xdma

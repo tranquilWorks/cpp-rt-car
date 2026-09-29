@@ -1,3 +1,13 @@
+# M26-04 source kit implemented; final verification remains
+
+The sampled XDMA/combined source kit, exact independent Python artifacts,
+expanded parity/fault/lifecycle/allocation tests and install wiring are present
+in draft279. See [the feature checkpoint](evidence/M26-04-feature-verification/checkpoint.md)
+for passing checks, retained startup8ms failures, corrected package inventory and
+remaining gates. Canonical control568 remains active; complete M26-04 only.
+Runtime/native/CPU/CUDA/prior evidence stay protected. Earlier notes below are
+history, not feature closure. M26-05/M26-06 remain inactive.
+
 # M26-04 feature resumed after sampled recovery repair
 
 Repair282 is merged at f5402b9a646a6d7adfbb54f5eca2170a69a6e292; all32 final checks and local full110+114,

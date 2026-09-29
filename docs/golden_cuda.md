@@ -60,3 +60,6 @@ named accessible tuple.
 
 XDMA/combined execution, showcase/benchmarking, final M26 audit, independent
 human review, physical/RT/Unreal qualification and release remain separate work.
+
+The [XDMA sampled-I/O reference](golden_xdma.md) adds an installed simulated
+XDMA/combined kit using the same frozen logical scenario.

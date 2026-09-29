@@ -92,7 +92,8 @@ struct Telemetry {
         }
         if constexpr (std::is_same_v<Record, rt::MixedRateActionRecord>) {
           if (record.action == rt::MixedRateActionId::device_terminal) {
-            if (record.phase_index != 1 && record.phase_index != 3 && record.phase_index != 5)
+            if (record.phase_index != 1 && record.phase_index != 3 &&
+                record.phase_index != 5)
               return rt::Status::internal_error;
             if (record.terminal_status !=
                 static_cast<std::int32_t>(rt::Status::ok)) {
@@ -103,16 +104,17 @@ struct Telemetry {
                   record.terminal_status !=
                       static_cast<std::int32_t>(expected_device_failure) ||
                   record.reason !=
-                      (lost_device
-                           ? rt::MixedRateActionReason::lost
-                           : expected_device_failure == rt::Status::device_timeout
-                             ? rt::MixedRateActionReason::timeout
-                             : expected_device_failure == rt::Status::callback_failed
-                               ? rt::MixedRateActionReason::callback_failure
-                               : rt::MixedRateActionReason::completion_error) ||
-                  record.stage != ((lost_device || expected_device_failure == rt::Status::device_timeout)
-                                       ? rt::MixedRateActionStage::quarantined
-                                       : rt::MixedRateActionStage::terminal))
+                      (lost_device ? rt::MixedRateActionReason::lost
+                       : expected_device_failure == rt::Status::device_timeout
+                           ? rt::MixedRateActionReason::timeout
+                       : expected_device_failure == rt::Status::callback_failed
+                           ? rt::MixedRateActionReason::callback_failure
+                           : rt::MixedRateActionReason::completion_error) ||
+                  record.stage !=
+                      ((lost_device ||
+                        expected_device_failure == rt::Status::device_timeout)
+                           ? rt::MixedRateActionStage::quarantined
+                           : rt::MixedRateActionStage::terminal))
                 return rt::Status::internal_error;
             }
             ++device_terminals;

@@ -592,3 +592,5 @@ set_tests_properties(host_adapter_sampled_recovery_noalloc PROPERTIES TIMEOUT 60
 if(TARGET rtfw_host_adapter_tests)
     add_dependencies(rtfw_host_adapter_tests rtfw_sampled_recovery_noalloc)
 endif()
+
+add_subdirectory(golden_xdma)
