@@ -1,0 +1,16 @@
+import subprocess, pathlib, os, time
+root=pathlib.Path('/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24')
+kind=os.sys.argv[1]
+san='thread' if kind=='tsan' else 'address,undefined'
+binary='/tmp/cpp-m26-03-'+kind+'-final'
+libs=root.parent/'cpp-rt-car-m26-03r'/'build'/('m26-03r-'+kind)
+cmd=['c++','-std=c++20','-O1','-g','-fno-omit-frame-pointer','-fsanitize='+san,'-fno-pie','-no-pie','-Irt/include','-Icore/include','-Iinclude','tests/golden_cuda/test_cuda.cpp','tests/golden_cuda/allocation.cpp',str(libs/'librtfw_cuda_backend.a'),str(libs/'librtfw_runtime.a'),'-pthread','-o',binary]
+print('BUILD',cmd,flush=True); subprocess.run(cmd,cwd=root,check=True)
+env=os.environ.copy();env.update(TSAN_OPTIONS='halt_on_error=1',ASAN_OPTIONS='detect_leaks=1:halt_on_error=1',UBSAN_OPTIONS='halt_on_error=1')
+count=0
+for case in range(19):
+ for dispatch in (['cpu','kernel','graph'] if case in [9,18] else [None]):
+  cmd=(['setarch','x86_64','-R'] if kind=='tsan' else [])+[binary,'--case',str(case)]
+  if dispatch: cmd+=['--dispatch',dispatch,'--reference',f'/tmp/cpp-m26-03-{kind}-final-reference-{case}']
+  print('RUN',cmd,flush=True);t=time.monotonic();subprocess.run(cmd,cwd=root,env=env,check=True,timeout=120);count+=1;print('PASS seconds',round(time.monotonic()-t,2),flush=True)
+print('PASS',kind,count,'cases',flush=True)

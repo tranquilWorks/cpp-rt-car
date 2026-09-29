@@ -1365,6 +1365,7 @@ install(FILES
     samples/golden_system/model.hpp
     samples/golden_system/oracle.hpp
     samples/golden_system/peer.hpp
+    samples/golden_system/physics.hpp
     samples/golden_system/provenance.py
     samples/golden_system/replay.hpp
     samples/golden_system/run.py
@@ -1376,3 +1377,33 @@ install(FILES
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/golden-provenance.json"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_system RENAME provenance.json)
 install(FILES docs/golden_system.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+
+execute_process(COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/golden_cuda/provenance.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/golden-cuda-provenance.json"
+    RESULT_VARIABLE golden_cuda_provenance_result)
+if(NOT golden_cuda_provenance_result EQUAL 0)
+    message(FATAL_ERROR "Golden CUDA source provenance generation failed")
+endif()
+install(FILES
+    samples/golden_cuda/CMakeLists.txt
+    samples/golden_cuda/README.md
+    samples/golden_cuda/artifacts.py
+    samples/golden_cuda/main.cpp
+    samples/golden_cuda/native_launcher.cpp
+    samples/golden_cuda/owner.hpp
+    samples/golden_cuda/physics.cu
+    samples/golden_cuda/physics.hpp
+    samples/golden_cuda/provenance.py
+    samples/golden_cuda/real.cmake
+    samples/golden_cuda/real.cpp
+    samples/golden_cuda/replay.hpp
+    samples/golden_cuda/resources.hpp
+    samples/golden_cuda/run.py
+    samples/golden_cuda/runner.hpp
+    samples/golden_cuda/simulated_driver.hpp
+    samples/golden_cuda/telemetry.hpp
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_cuda)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/golden-cuda-provenance.json"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_cuda RENAME provenance.json)
+install(FILES docs/golden_cuda.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)

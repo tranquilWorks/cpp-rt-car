@@ -1,0 +1,14 @@
+#include "samples/golden_cuda/physics.hpp"
+#include "samples/golden_system/replay.hpp"
+#include "samples/golden_system/oracle.hpp"
+#include <iostream>
+int main(){for(int fault=0;fault<4;++fault){
+ golden::Options o;auto m=std::make_unique<golden::Memory>();golden::cuda::SimulatedDriver d(o.count);golden::cuda::CudaPhysics p(d,true);golden::Session s(o,nullptr,*m,&p);
+ auto st=s.prepare();if(st!=rt::Status::ok)return 1;if(!s.controls())return 2;
+ for(unsigned t=0;t<6;++t){auto st=s.step(t);if(st!=rt::Status::ok){std::cerr<<"prefix fault="<<fault<<" t="<<t<<" status="<<int(st)<<" "<<s.runtime->last_error()<<"\n";return 3;}}
+ if(fault==0)d.lose_query=true;if(fault==1){d.fail_query=true;d.fail_stream_sync=true;}if(fault==2)d.hold=true;if(fault==3)d.corrupt_output=true;
+ st=s.step(6);std::cerr<<"fault "<<fault<<" step "<<int(st)<<" "<<s.runtime->last_error()<<" calls "<<s.world.calls[0]<<","<<s.world.calls[1]<<","<<s.world.calls[2]<<"\n";
+ rt::DeviceHealth h;p.health(h);std::cerr<<"health "<<int(h.state)<<" reset "<<int(p.reset())<<"\n";
+ std::cerr<<"reset2 "<<int(p.reset())<<" close "<<int(s.close())<<" clean "<<d.clean()<<" faults "<<d.faults<<"\n";
+ if(s.close()!=rt::Status::ok)return 4;
+}}

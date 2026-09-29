@@ -1,0 +1,660 @@
+﻿2026-09-29T08:19:52.9850221Z Current runner version: '2.337.0'
+2026-09-29T08:19:52.9874867Z ##[group]Runner Image Provisioner
+2026-09-29T08:19:52.9875642Z Hosted Compute Agent
+2026-09-29T08:19:52.9876205Z Version: 20260828.587
+2026-09-29T08:19:52.9876777Z Commit: abac92662cab4cc7352de4f9f9d2e2419aad9c29
+2026-09-29T08:19:52.9877418Z Build Date: 2026-08-28T16:44:25Z
+2026-09-29T08:19:52.9878049Z Worker ID: {0e8444fb-3816-4fa0-9760-8dd6a4a1b261}
+2026-09-29T08:19:52.9878688Z Azure Region: northcentralus
+2026-09-29T08:19:52.9879232Z ##[endgroup]
+2026-09-29T08:19:52.9880616Z ##[group]Operating System
+2026-09-29T08:19:52.9881233Z Microsoft Windows Server 2022
+2026-09-29T08:19:52.9881816Z 10.0.20348
+2026-09-29T08:19:52.9882259Z Datacenter
+2026-09-29T08:19:52.9882725Z ##[endgroup]
+2026-09-29T08:19:52.9883236Z ##[group]Runner Image
+2026-09-29T08:19:52.9883762Z Image: windows-2022
+2026-09-29T08:19:52.9884256Z Version: 20260920.314.1
+2026-09-29T08:19:52.9885682Z Included Software: https://github.com/actions/runner-images/blob/win22/20260920.314/images/windows/Windows2022-Readme.md
+2026-09-29T08:19:52.9887145Z Image Release: https://github.com/actions/runner-images/releases/tag/win22%2F20260920.314
+2026-09-29T08:19:52.9888017Z ##[endgroup]
+2026-09-29T08:19:52.9888998Z ##[group]GITHUB_TOKEN Permissions
+2026-09-29T08:19:52.9890718Z Contents: read
+2026-09-29T08:19:52.9891278Z Metadata: read
+2026-09-29T08:19:52.9891759Z ##[endgroup]
+2026-09-29T08:19:52.9893664Z Secret source: Actions
+2026-09-29T08:19:52.9894491Z Cache mode: write
+2026-09-29T08:19:52.9895120Z Prepare workflow directory
+2026-09-29T08:19:53.0226892Z Prepare all required actions
+2026-09-29T08:19:53.0273446Z Getting action download info
+2026-09-29T08:19:53.2487051Z Download action repository 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-09-29T08:19:53.3688664Z Download action repository 'anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610' (SHA:e22c389904149dbc22b58101806040fa8d37a610)
+2026-09-29T08:19:53.6753313Z Download action repository 'actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48' (SHA:2031cfc080254a8a887f58cffee85186f0e49e48)
+2026-09-29T08:19:54.5189521Z Complete job name: build-windows (Debug)
+2026-09-29T08:19:54.6682150Z ##[group]Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+2026-09-29T08:19:54.6683682Z with:
+2026-09-29T08:19:54.6684217Z   submodules: recursive
+2026-09-29T08:19:54.6684843Z   repository: tranquilWorks/cpp-rt-car
+2026-09-29T08:19:54.6690177Z   token: ***
+2026-09-29T08:19:54.6690703Z   ssh-strict: true
+2026-09-29T08:19:54.6691244Z   ssh-user: git
+2026-09-29T08:19:54.6691773Z   persist-credentials: true
+2026-09-29T08:19:54.6692261Z   clean: true
+2026-09-29T08:19:54.6692694Z   sparse-checkout-cone-mode: true
+2026-09-29T08:19:54.6693210Z   fetch-depth: 1
+2026-09-29T08:19:54.6693634Z   fetch-tags: false
+2026-09-29T08:19:54.6694074Z   show-progress: true
+2026-09-29T08:19:54.6694509Z   lfs: false
+2026-09-29T08:19:54.6694960Z   set-safe-directory: true
+2026-09-29T08:19:54.6695464Z   allow-unsafe-pr-checkout: false
+2026-09-29T08:19:54.6696211Z ##[endgroup]
+2026-09-29T08:19:54.8056363Z Syncing repository: tranquilWorks/cpp-rt-car
+2026-09-29T08:19:54.8058463Z ##[group]Getting Git version info
+2026-09-29T08:19:54.8059271Z Working directory is 'D:\a\cpp-rt-car\cpp-rt-car'
+2026-09-29T08:19:54.9013034Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-09-29T08:19:55.2460901Z git version 2.55.0.windows.5
+2026-09-29T08:19:55.2500799Z ##[endgroup]
+2026-09-29T08:19:55.2518697Z Temporarily overriding HOME='D:\a\_temp\9417a01e-78c9-42b2-9f9b-8f3244b59993' before making global git config changes
+2026-09-29T08:19:55.2520187Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-29T08:19:55.2529611Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\cpp-rt-car\cpp-rt-car
+2026-09-29T08:19:55.2996513Z Deleting the contents of 'D:\a\cpp-rt-car\cpp-rt-car'
+2026-09-29T08:19:55.3002166Z ##[group]Initializing the repository
+2026-09-29T08:19:55.3010457Z [command]"C:\Program Files\Git\bin\git.exe" init D:\a\cpp-rt-car\cpp-rt-car
+2026-09-29T08:19:55.3781689Z Initialized empty Git repository in D:/a/cpp-rt-car/cpp-rt-car/.git/
+2026-09-29T08:19:55.3822649Z [command]"C:\Program Files\Git\bin\git.exe" remote add origin https://github.com/tranquilWorks/cpp-rt-car
+2026-09-29T08:19:55.4318130Z ##[endgroup]
+2026-09-29T08:19:55.4319270Z ##[group]Disabling automatic garbage collection
+2026-09-29T08:19:55.4328971Z [command]"C:\Program Files\Git\bin\git.exe" config --local gc.auto 0
+2026-09-29T08:19:55.4558592Z ##[endgroup]
+2026-09-29T08:19:55.4559366Z ##[group]Setting up auth
+2026-09-29T08:19:55.4575320Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-09-29T08:19:55.4809485Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-09-29T08:19:56.6779759Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-29T08:19:56.7008059Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-09-29T08:19:57.1294524Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-29T08:19:57.1523361Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-09-29T08:19:57.5623017Z [command]"C:\Program Files\Git\bin\git.exe" config --local http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+2026-09-29T08:19:57.5844697Z ##[endgroup]
+2026-09-29T08:19:57.5845569Z ##[group]Fetching the repository
+2026-09-29T08:19:57.5859785Z [command]"C:\Program Files\Git\bin\git.exe" -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +d687e44c316ca6977133eef344e6f16c0c298f80:refs/remotes/pull/277/merge
+2026-09-29T08:19:58.8618088Z From https://github.com/tranquilWorks/cpp-rt-car
+2026-09-29T08:19:58.8618901Z  * [new ref]         d687e44c316ca6977133eef344e6f16c0c298f80 -> pull/277/merge
+2026-09-29T08:19:58.8649597Z ##[endgroup]
+2026-09-29T08:19:58.8650188Z ##[group]Determining the checkout info
+2026-09-29T08:19:58.8652714Z ##[endgroup]
+2026-09-29T08:19:58.8663437Z [command]"C:\Program Files\Git\bin\git.exe" sparse-checkout disable
+2026-09-29T08:19:58.9042423Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all extensions.worktreeConfig
+2026-09-29T08:19:58.9254281Z ##[group]Checking out the ref
+2026-09-29T08:19:58.9260523Z [command]"C:\Program Files\Git\bin\git.exe" checkout --progress --force refs/remotes/pull/277/merge
+2026-09-29T08:19:59.1994998Z Note: switching to 'refs/remotes/pull/277/merge'.
+2026-09-29T08:19:59.1995809Z 
+2026-09-29T08:19:59.1996178Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-09-29T08:19:59.1996937Z changes and commit them, and you can discard any commits you make in this
+2026-09-29T08:19:59.1997507Z state without impacting any branches by switching back to a branch.
+2026-09-29T08:19:59.1997875Z 
+2026-09-29T08:19:59.1998097Z If you want to create a new branch to retain commits you create, you may
+2026-09-29T08:19:59.1998668Z do so (now or later) by using -c with the switch command. Example:
+2026-09-29T08:19:59.1998984Z 
+2026-09-29T08:19:59.1999143Z   git switch -c <new-branch-name>
+2026-09-29T08:19:59.1999368Z 
+2026-09-29T08:19:59.1999535Z Or undo this operation with:
+2026-09-29T08:19:59.1999756Z 
+2026-09-29T08:19:59.1999937Z   git switch -
+2026-09-29T08:19:59.2000107Z 
+2026-09-29T08:19:59.2000372Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-09-29T08:19:59.2001580Z 
+2026-09-29T08:19:59.2001988Z HEAD is now at d687e44 Merge a44a8c9650c1d9cfa241aaa19289c4b6f6170b42 into c78075e2b30efba48db4f0ca8136110b1399baf5
+2026-09-29T08:19:59.2092553Z ##[endgroup]
+2026-09-29T08:19:59.2093512Z ##[group]Setting up auth for fetching submodules
+2026-09-29T08:19:59.2105228Z [command]"C:\Program Files\Git\bin\git.exe" config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+2026-09-29T08:19:59.2372247Z [command]"C:\Program Files\Git\bin\git.exe" config --global --unset-all url.https://github.com/.insteadOf
+2026-09-29T08:19:59.2594326Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add url.https://github.com/.insteadOf git@github.com:
+2026-09-29T08:19:59.2809649Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add url.https://github.com/.insteadOf org-321916666@github.com:
+2026-09-29T08:19:59.3026759Z ##[endgroup]
+2026-09-29T08:19:59.3027236Z ##[group]Fetching submodules
+2026-09-29T08:19:59.3038404Z [command]"C:\Program Files\Git\bin\git.exe" submodule sync --recursive
+2026-09-29T08:19:59.7510208Z [command]"C:\Program Files\Git\bin\git.exe" -c protocol.version=2 submodule update --init --force --depth=1 --recursive
+2026-09-29T08:20:00.1520153Z Submodule 'external/googletest' (https://github.com/google/googletest.git) registered for path 'external/googletest'
+2026-09-29T08:20:00.2036629Z Cloning into 'D:/a/cpp-rt-car/cpp-rt-car/external/googletest'...
+2026-09-29T08:20:02.0419850Z From https://github.com/google/googletest
+2026-09-29T08:20:02.0420601Z  * branch            7e17b15f1547bb8dd9c2fed91043b7af3437387f -> FETCH_HEAD
+2026-09-29T08:20:02.3793844Z Submodule path 'external/googletest': checked out '7e17b15f1547bb8dd9c2fed91043b7af3437387f'
+2026-09-29T08:20:02.3974390Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local gc.auto 0"
+2026-09-29T08:20:02.7964183Z Entering 'external/googletest'
+2026-09-29T08:20:02.8458127Z ##[endgroup]
+2026-09-29T08:20:02.8458498Z ##[group]Persisting credentials for submodules
+2026-09-29T08:20:02.8472043Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'url\.https\:\/\/github\.com\/\.insteadOf' && git config --local --unset-all 'url.https://github.com/.insteadOf' || :\""
+2026-09-29T08:20:03.2978694Z Entering 'external/googletest'
+2026-09-29T08:20:03.3716014Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local 'http.https://github.com/.extraheader' 'AUTHORIZATION: basic ***' && git config --local --show-origin --name-only --get-regexp remote.origin.url\""
+2026-09-29T08:20:03.8597887Z Entering 'external/googletest'
+2026-09-29T08:20:03.9217493Z file:D:/a/cpp-rt-car/cpp-rt-car/.git/modules/external/googletest/config	remote.origin.url
+2026-09-29T08:20:03.9431300Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --add 'url.https://github.com/.insteadOf' 'git@github.com:'"
+2026-09-29T08:20:04.3648196Z Entering 'external/googletest'
+2026-09-29T08:20:04.4109967Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --add 'url.https://github.com/.insteadOf' 'org-321916666@github.com:'"
+2026-09-29T08:20:04.8336857Z Entering 'external/googletest'
+2026-09-29T08:20:04.8819064Z ##[endgroup]
+2026-09-29T08:20:04.9111871Z [command]"C:\Program Files\Git\bin\git.exe" log -1 --format=%H
+2026-09-29T08:20:04.9317591Z d687e44c316ca6977133eef344e6f16c0c298f80
+2026-09-29T08:20:04.9661473Z ##[group]Run powershell -ExecutionPolicy Bypass -File tools/rt_harden.ps1
+2026-09-29T08:20:04.9662120Z [36;1mpowershell -ExecutionPolicy Bypass -File tools/rt_harden.ps1[0m
+2026-09-29T08:20:04.9759233Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-09-29T08:20:04.9759578Z ##[endgroup]
+2026-09-29T08:20:08.6407412Z [rt_harden] Configuring Windows settings
+2026-09-29T08:20:09.6202194Z [rt_harden] High performance power profile enforced
+2026-09-29T08:20:09.6484971Z [rt_harden] MMCSS Pro Audio class enabled
+2026-09-29T08:20:09.7312235Z [rt_harden] timeBeginPeriod(1) called
+2026-09-29T08:20:09.7320281Z [rt_harden] Windows real-time hardening complete
+2026-09-29T08:20:09.8947396Z ##[group]Run cmake -S . -B build -A x64 -T v143 -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=ON -DRTFW_BUILD_BENCHMARKS=ON -DSIM_WERROR=ON
+2026-09-29T08:20:09.8948557Z [36;1mcmake -S . -B build -A x64 -T v143 -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=ON -DRTFW_BUILD_BENCHMARKS=ON -DSIM_WERROR=ON[0m
+2026-09-29T08:20:09.8986626Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-09-29T08:20:09.8986978Z ##[endgroup]
+2026-09-29T08:20:10.7485636Z -- Building for: Visual Studio 17 2022
+2026-09-29T08:20:10.9426082Z -- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.20348.
+2026-09-29T08:20:19.5036665Z -- The C compiler identification is MSVC 19.44.35229.0
+2026-09-29T08:20:20.6912516Z -- The CXX compiler identification is MSVC 19.44.35229.0
+2026-09-29T08:20:20.7891796Z -- Detecting C compiler ABI info
+2026-09-29T08:20:21.7572917Z -- Detecting C compiler ABI info - done
+2026-09-29T08:20:21.7726352Z -- Check for working C compiler: C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe - skipped
+2026-09-29T08:20:21.7738184Z -- Detecting C compile features
+2026-09-29T08:20:21.7785687Z -- Detecting C compile features - done
+2026-09-29T08:20:21.8011317Z -- Detecting CXX compiler ABI info
+2026-09-29T08:20:22.4699813Z -- Detecting CXX compiler ABI info - done
+2026-09-29T08:20:22.4832925Z -- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe - skipped
+2026-09-29T08:20:22.4836697Z -- Detecting CXX compile features
+2026-09-29T08:20:22.4844781Z -- Detecting CXX compile features - done
+2026-09-29T08:20:22.5192852Z -- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+2026-09-29T08:20:24.0924955Z -- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Failed
+2026-09-29T08:20:24.0925977Z -- Looking for pthread_create in pthreads
+2026-09-29T08:20:24.6708125Z -- Looking for pthread_create in pthreads - not found
+2026-09-29T08:20:24.6708837Z -- Looking for pthread_create in pthread
+2026-09-29T08:20:25.2178097Z -- Looking for pthread_create in pthread - not found
+2026-09-29T08:20:25.2285987Z -- Found Threads: TRUE
+2026-09-29T08:20:26.4079959Z -- Found Python3: C:/hostedtoolcache/windows/Python/3.14.7/x64/python3.exe (found version "3.14.7") found components: Interpreter
+2026-09-29T08:20:27.9773185Z -- Configuring done (17.2s)
+2026-09-29T08:20:28.4892778Z -- Generating done (0.5s)
+2026-09-29T08:20:28.4901006Z -- Build files have been written to: D:/a/cpp-rt-car/cpp-rt-car/build
+2026-09-29T08:20:28.5993716Z ##[group]Run cmake --build build --config Debug -- /m
+2026-09-29T08:20:28.5994170Z [36;1mcmake --build build --config Debug -- /m[0m
+2026-09-29T08:20:28.6031513Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-09-29T08:20:28.6031839Z ##[endgroup]
+2026-09-29T08:20:28.9222266Z MSBuild version 17.14.60+43b635718 for .NET Framework
+2026-09-29T08:20:28.9515418Z 
+2026-09-29T08:20:29.3027836Z   1>Checking Build System
+2026-09-29T08:20:29.6008038Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/CMakeLists.txt
+2026-09-29T08:20:29.7856211Z   platform_init.cpp
+2026-09-29T08:20:30.0295880Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/CMakeLists.txt
+2026-09-29T08:20:30.0559840Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/external/googletest/googlemock/CMakeLists.txt
+2026-09-29T08:20:30.0630859Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/external/googletest/googlemock/CMakeLists.txt
+2026-09-29T08:20:30.0807261Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/external/googletest/googletest/CMakeLists.txt
+2026-09-29T08:20:30.1948646Z   compiled_graph.cpp
+2026-09-29T08:20:30.2558322Z   gtest-all.cc
+2026-09-29T08:20:30.2609963Z   gtest-all.cc
+2026-09-29T08:20:30.2920720Z   gtest-all.cc
+2026-09-29T08:20:30.3928935Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/CMakeLists.txt
+2026-09-29T08:20:30.4982093Z   cuda_backend.cpp
+2026-09-29T08:20:33.3972618Z   rtfw_cuda_backend.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\Debug\rtfw_cuda_backend.lib
+2026-09-29T08:20:34.2107555Z   cross_rate_data.cpp
+2026-09-29T08:20:36.0860985Z   metrics.cpp
+2026-09-29T08:20:38.0362905Z   command_batch.cpp
+2026-09-29T08:20:38.0649042Z   gmock-all.cc
+2026-09-29T08:20:38.9714518Z   hal_v2.cpp
+2026-09-29T08:20:39.0463820Z   gmock-all.cc
+2026-09-29T08:20:40.1856280Z   heterogeneous_memory.cpp
+2026-09-29T08:20:40.4277794Z   Generating Code...
+2026-09-29T08:20:41.2353994Z   device_manager.cpp
+2026-09-29T08:20:41.2775471Z   simcore_platform.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\Debug\simcore_platform.lib
+2026-09-29T08:20:41.3650908Z   gtest.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\lib\Debug\gtest.lib
+2026-09-29T08:20:41.6614352Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:20:41.6634672Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/CMakeLists.txt
+2026-09-29T08:20:41.6969370Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:20:41.9200708Z   bench_aosoa_vs_soa.cpp
+2026-09-29T08:20:42.4878054Z   gmock_main.cc
+2026-09-29T08:20:42.5470747Z   Generating Code...
+2026-09-29T08:20:43.4544470Z   benchmark.cpp
+2026-09-29T08:20:44.1050044Z   xdma_backend.cpp
+2026-09-29T08:20:44.9812085Z   executor.cpp
+2026-09-29T08:20:46.1469625Z   gmock.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\lib\Debug\gmock.lib
+2026-09-29T08:20:46.2091672Z   bench_aosoa_vs_soa.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\bench_aosoa_vs_soa.exe
+2026-09-29T08:20:46.3553623Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/external/googletest/googletest/CMakeLists.txt
+2026-09-29T08:20:46.4351966Z   rtfw_xdma_backend.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\Debug\rtfw_xdma_backend.lib
+2026-09-29T08:20:46.5002194Z   Generating Code...
+2026-09-29T08:20:47.0193888Z   gtest_main.cc
+2026-09-29T08:20:48.4487612Z   gmock_main.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\lib\Debug\gmock_main.lib
+2026-09-29T08:20:48.6472844Z   extension_registration.cpp
+2026-09-29T08:20:48.8106662Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/recipes/CMakeLists.txt
+2026-09-29T08:20:48.9171839Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:20:48.9392770Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:20:49.0728928Z   async_gpu_stub.cpp
+2026-09-29T08:20:49.4861485Z   xdma_backend_tests.cpp
+2026-09-29T08:20:50.0472626Z   xdma_consumer.cpp
+2026-09-29T08:20:50.5557546Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:20:50.6523624Z   gtest_main.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\lib\Debug\gtest_main.lib
+2026-09-29T08:20:50.8346983Z   rtfw_benchmark.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_benchmark.lib
+2026-09-29T08:20:50.9696001Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:20:50.9727693Z   sample_async_gpu.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_async_gpu.exe
+2026-09-29T08:20:51.0093718Z   particles.cpp
+2026-09-29T08:20:51.0893503Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:20:51.1063793Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:20:51.7567241Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:20:51.9265299Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:20:51.9554325Z   host_runtime.cpp
+2026-09-29T08:20:52.0640137Z   recipe_xdma_boundary.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\recipes\Debug\recipe_xdma_boundary.exe
+2026-09-29T08:20:52.1291153Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:20:52.3132233Z   tyre_belt_kernel.cpp
+2026-09-29T08:20:52.3554278Z   extension_fixture.c
+2026-09-29T08:20:52.4558748Z   extension_fixture_bad.c
+2026-09-29T08:20:52.7491154Z      Creating library D:/a/cpp-rt-car/cpp-rt-car/build/tests/Debug/extension_fixture.lib and object D:/a/cpp-rt-car/cpp-rt-car/build/tests/Debug/extension_fixture.exp
+2026-09-29T08:20:52.7533322Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:20:52.7686910Z      Creating library D:/a/cpp-rt-car/cpp-rt-car/build/tests/Debug/extension_fixture_bad.lib and object D:/a/cpp-rt-car/cpp-rt-car/build/tests/Debug/extension_fixture_bad.exp
+2026-09-29T08:20:52.9068628Z   test_extension_fixture.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\extension_fixture.dll
+2026-09-29T08:20:52.9471258Z   rtfw_xdma_backend_tests.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\rtfw_xdma_backend_tests.exe
+2026-09-29T08:20:52.9553649Z   sample_plugin_bad.c
+2026-09-29T08:20:52.9798786Z   test_extension_fixture_bad.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\extension_fixture_bad.dll
+2026-09-29T08:20:53.1158713Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:20:53.1527835Z   benchmark_consumer.cpp
+2026-09-29T08:20:53.2659465Z   main.cpp
+2026-09-29T08:20:53.8369407Z   sample_particles.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_particles.exe
+2026-09-29T08:20:53.9328719Z      Creating library D:/a/cpp-rt-car/cpp-rt-car/build/tests/Debug/bad_plugin.lib and object D:/a/cpp-rt-car/cpp-rt-car/build/tests/Debug/bad_plugin.exp
+2026-09-29T08:20:54.2669124Z   sample_plugin.c
+2026-09-29T08:20:54.3818960Z   test_incompatible_plugin.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\bad_plugin.dll
+2026-09-29T08:20:54.4738415Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/CMakeLists.txt
+2026-09-29T08:20:54.5315271Z   lifecycle.cpp
+2026-09-29T08:20:56.2850274Z   sample_tyre_belt.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_tyre_belt.exe
+2026-09-29T08:20:56.3814816Z   provider.cpp
+2026-09-29T08:20:56.5106083Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/recipes/CMakeLists.txt
+2026-09-29T08:20:56.6567960Z   trace_dump.cpp
+2026-09-29T08:20:57.8559259Z   provider.cpp
+2026-09-29T08:20:58.2533842Z   live_control_actions.cpp
+2026-09-29T08:20:58.2852368Z   rtfw_benchmark_consumer.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_benchmark_consumer.exe
+2026-09-29T08:20:59.2874677Z      Creating library D:/a/cpp-rt-car/cpp-rt-car/build/tests/Debug/sample_plugin.lib and object D:/a/cpp-rt-car/cpp-rt-car/build/tests/Debug/sample_plugin.exp
+2026-09-29T08:20:59.5374342Z   Generating Code...
+2026-09-29T08:20:59.8641387Z   test_sample_plugin.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\sample_plugin.dll
+2026-09-29T08:20:59.9792157Z   cuda_consumer.cpp
+2026-09-29T08:21:00.0612690Z   rtfw-bench-template.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw-bench-template.exe
+2026-09-29T08:21:00.3079545Z   trace_dump.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\Debug\trace_dump.exe
+2026-09-29T08:21:00.9560625Z   live_control_mailbox.cpp
+2026-09-29T08:21:00.9613767Z   recipe_cuda_boundary.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\recipes\Debug\recipe_cuda_boundary.exe
+2026-09-29T08:21:00.9901463Z   Generating Code...
+2026-09-29T08:21:01.3099097Z   rtfw_benchmark_extension_tests.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_benchmark_extension_tests.exe
+2026-09-29T08:21:03.1148891Z   live_control_replay.cpp
+2026-09-29T08:21:04.8826757Z   memory_policy.cpp
+2026-09-29T08:21:06.6050670Z   mixed_rate_actions.cpp
+2026-09-29T08:21:08.2214637Z   mixed_rate_replay.cpp
+2026-09-29T08:21:09.9663704Z   mock_device.cpp
+2026-09-29T08:21:10.6801030Z   native_platform_preflight.cpp
+2026-09-29T08:21:12.2808313Z   observability_export.cpp
+2026-09-29T08:21:14.0432028Z   rate_dispatch.cpp
+2026-09-29T08:21:16.2324115Z   rate_telemetry.cpp
+2026-09-29T08:21:17.8558354Z   Generating Code...
+2026-09-29T08:21:18.8735184Z   Compiling...
+2026-09-29T08:21:18.8735515Z   rate_timeline.cpp
+2026-09-29T08:21:20.6788264Z   resource_policy.cpp
+2026-09-29T08:21:22.5140907Z   runtime_compat.cpp
+2026-09-29T08:21:24.1289088Z   runtime_profile.cpp
+2026-09-29T08:21:25.7617544Z   sampled_io.cpp
+2026-09-29T08:21:27.6456213Z   loopback_backend.cpp
+2026-09-29T08:21:29.4349015Z   snapshot_codec.cpp
+2026-09-29T08:21:31.1877971Z   telemetry.cpp
+2026-09-29T08:21:32.9130095Z   thread_policy.cpp
+2026-09-29T08:21:34.6822244Z   watchdog_monitor.cpp
+2026-09-29T08:21:36.4760015Z   Generating Code...
+2026-09-29T08:21:36.9395573Z   rtfw_runtime.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\Debug\rtfw_runtime.lib
+2026-09-29T08:21:37.0302549Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.0310384Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/hello_runtime/CMakeLists.txt
+2026-09-29T08:21:37.0317983Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/CMakeLists.txt
+2026-09-29T08:21:37.0352340Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/recipes/CMakeLists.txt
+2026-09-29T08:21:37.1125707Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:21:37.1128832Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.1174982Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/recipes/CMakeLists.txt
+2026-09-29T08:21:37.1311136Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.1988147Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:21:37.1994064Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.2005774Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/backend_authoring/CMakeLists.txt
+2026-09-29T08:21:37.2194549Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.2838677Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/CMakeLists.txt
+2026-09-29T08:21:37.2839949Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.2962411Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/cil_shared_memory/CMakeLists.txt
+2026-09-29T08:21:37.3083796Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.3693090Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:21:37.3770254Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.3886290Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/typed_runtime/CMakeLists.txt
+2026-09-29T08:21:37.3963824Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.4540206Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/host_adapter/CMakeLists.txt
+2026-09-29T08:21:37.4623853Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.4824932Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.5340723Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:21:37.5452491Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/CMakeLists.txt
+2026-09-29T08:21:37.5587955Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.6183365Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:21:37.6283805Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.6366506Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.6976185Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:21:37.7028718Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.7158987Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/golden_system/CMakeLists.txt
+2026-09-29T08:21:37.7781612Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:21:37.7784082Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/hello_runtime/CMakeLists.txt
+2026-09-29T08:21:37.7968311Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:21:37.8684309Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:21:37.9104399Z   capacity.cpp
+2026-09-29T08:21:37.9110953Z   test_sdk.cpp
+2026-09-29T08:21:37.9140146Z   main.cpp
+2026-09-29T08:21:38.0856809Z   main.cpp
+2026-09-29T08:21:38.1461817Z   test_cil.cpp
+2026-09-29T08:21:41.5407238Z   runtime_profile_demo.cpp
+2026-09-29T08:21:41.8370705Z   cpu_provider.cpp
+2026-09-29T08:21:43.4141641Z   sample_hello_runtime.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_hello_runtime.exe
+2026-09-29T08:21:43.5658570Z   main.cpp
+2026-09-29T08:21:44.7498376Z   test_cil_shared_memory.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\cil_shared_memory\Debug\test_cil_shared_memory.exe
+2026-09-29T08:21:45.1039919Z   hello_capacity_failure.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\hello_runtime\Debug\hello_capacity_failure.exe
+2026-09-29T08:21:45.3680772Z   main.cpp
+2026-09-29T08:21:45.4323557Z   mini_app.cpp
+2026-09-29T08:21:45.8862805Z   sample_golden_cuda.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_golden_cuda.exe
+2026-09-29T08:21:46.1414009Z   test_typed_sdk.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\typed_runtime\Debug\test_typed_sdk.exe
+2026-09-29T08:21:46.3598390Z   c_abi.cpp
+2026-09-29T08:21:47.1339997Z   rtfw_runtime_demo.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\Debug\rtfw_runtime_demo.exe
+2026-09-29T08:21:48.2040510Z   test_backend.cpp
+2026-09-29T08:21:48.2250702Z   main.cpp
+2026-09-29T08:21:49.0334517Z   rtfw_benchmark_cpu.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_benchmark_cpu.lib
+2026-09-29T08:21:49.5990105Z   cpp_consumer.cpp
+2026-09-29T08:21:49.9493278Z   profile_consumer.cpp
+2026-09-29T08:21:50.2683512Z   sample_embed_cpp.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_embed_cpp.exe
+2026-09-29T08:21:50.7705859Z   sample_typed_runtime.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_typed_runtime.exe
+2026-09-29T08:21:51.3679298Z      Creating library D:/a/cpp-rt-car/cpp-rt-car/build/Debug/rtfw.lib and object D:/a/cpp-rt-car/cpp-rt-car/build/Debug/rtfw.exp
+2026-09-29T08:21:51.7325811Z   device_mock.cpp
+2026-09-29T08:21:52.8965692Z   main.cpp
+2026-09-29T08:21:52.9894995Z   rtfw_shared.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\Debug\rtfw.dll
+2026-09-29T08:21:53.2941185Z   controller.cpp
+2026-09-29T08:21:53.7695390Z   cpu_gpu_fpga_cpu.cpp
+2026-09-29T08:21:54.5236135Z   test_backend_authoring.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\backend_authoring\Debug\test_backend_authoring.exe
+2026-09-29T08:21:55.1162496Z   plant.cpp
+2026-09-29T08:21:57.0631223Z   sample_golden_system.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_golden_system.exe
+2026-09-29T08:21:57.2642364Z   runtime.cpp
+2026-09-29T08:21:57.5471673Z   sample_device_mock.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_device_mock.exe
+2026-09-29T08:21:58.2586610Z   sample_golden_controller.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_golden_controller.exe
+2026-09-29T08:21:58.5259892Z   test_cuda_physics.cpp
+2026-09-29T08:21:59.0384536Z   recipe_raw_cpp.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\recipes\Debug\recipe_raw_cpp.exe
+2026-09-29T08:21:59.1613706Z   sample_cpu_gpu_fpga_cpu.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_cpu_gpu_fpga_cpu.exe
+2026-09-29T08:21:59.2346864Z   test_cpu_gpu_fpga_cpu_sample.cpp
+2026-09-29T08:21:59.8195344Z   step.cpp
+2026-09-29T08:22:00.3115445Z   recipe_profile.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\recipes\Debug\recipe_profile.exe
+2026-09-29T08:22:00.8384712Z   sample_cuda_pipeline.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_cuda_pipeline.exe
+2026-09-29T08:22:02.9398013Z   sample_host_adapter.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_host_adapter.exe
+2026-09-29T08:22:03.0937441Z   sample_cil_plant.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_cil_plant.exe
+2026-09-29T08:22:03.2907136Z   live_control_typed.cpp
+2026-09-29T08:22:03.4595643Z   controller.cpp
+2026-09-29T08:22:03.6773793Z   main.cpp
+2026-09-29T08:22:03.9961320Z   fiber_pool.cpp
+2026-09-29T08:22:04.4669476Z   hello_step_failure.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\hello_runtime\Debug\hello_step_failure.exe
+2026-09-29T08:22:04.9601979Z   main.cpp
+2026-09-29T08:22:07.6810578Z   test_system.cpp
+2026-09-29T08:22:07.8918549Z   rtfw_cpu_gpu_fpga_cpu_sample_tests.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\rtfw_cpu_gpu_fpga_cpu_sample_tests.exe
+2026-09-29T08:22:07.8951931Z   Generating Code...
+2026-09-29T08:22:08.7578969Z   sample_live_control_typed.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_live_control_typed.exe
+2026-09-29T08:22:08.8050110Z   rtfw_cuda_physics_tests.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\rtfw_cuda_physics_tests.exe
+2026-09-29T08:22:08.9738819Z   simcore_rt.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\Debug\simcore_rt.lib
+2026-09-29T08:22:09.0522630Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/CMakeLists.txt
+2026-09-29T08:22:09.0778403Z   sample_cil_controller.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_cil_controller.exe
+2026-09-29T08:22:09.1445358Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/CMakeLists.txt
+2026-09-29T08:22:09.1670545Z   plugin_manager.cpp
+2026-09-29T08:22:09.1791723Z   sample_cuda_physics.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_cuda_physics.exe
+2026-09-29T08:22:09.2076078Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:22:09.2540878Z   main.cpp
+2026-09-29T08:22:09.3874372Z   runtime_profile_tests.cpp
+2026-09-29T08:22:10.2790675Z   main.cpp
+2026-09-29T08:22:10.6938127Z   scheduler.cpp
+2026-09-29T08:22:12.9263521Z   test_host.cpp
+2026-09-29T08:22:14.4121734Z   crashdump_stub.cpp
+2026-09-29T08:22:15.2085368Z   Generating Code...
+2026-09-29T08:22:15.7298381Z   rtfw_runtime_profile_tests.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\rtfw_runtime_profile_tests.exe
+2026-09-29T08:22:15.7508174Z   rtfw_experimental.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\Debug\rtfw_experimental.lib
+2026-09-29T08:22:15.8368227Z   test_golden_system.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\golden_system\Debug\test_golden_system.exe
+2026-09-29T08:22:15.9120364Z   test_cabi_dlopen.c
+2026-09-29T08:22:16.0576823Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:22:16.2608185Z   sample_cuda_lifetime.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_cuda_lifetime.exe
+2026-09-29T08:22:16.2680402Z   mini_app.c
+2026-09-29T08:22:16.3820872Z   noalloc.cpp
+2026-09-29T08:22:16.7762703Z   test_cabi_dlopen.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\test_cabi_dlopen.exe
+2026-09-29T08:22:16.8728162Z   sample_backend_authoring.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_backend_authoring.exe
+2026-09-29T08:22:17.0692459Z   sample_embed_c.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_embed_c.exe
+2026-09-29T08:22:17.0770243Z   Staging the RTFW DLL beside the shared C embedding sample
+2026-09-29T08:22:17.2187727Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/golden_cuda/CMakeLists.txt
+2026-09-29T08:22:17.3510806Z   test_cuda.cpp
+2026-09-29T08:22:18.2299901Z   test_cuda_pipeline.cpp
+2026-09-29T08:22:18.2505288Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:22:18.4613090Z   test_cuda_lifetime.cpp
+2026-09-29T08:22:20.4821007Z   simcore_app.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\Debug\rtfw_demo.exe
+2026-09-29T08:22:20.6431769Z   test_host_adapter.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\host_adapter\Debug\test_host_adapter.exe
+2026-09-29T08:22:20.6459591Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/recipes/CMakeLists.txt
+2026-09-29T08:22:21.1065053Z   rtfw_simulation_timing_noalloc.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\rtfw_simulation_timing_noalloc.exe
+2026-09-29T08:22:21.1995678Z   live_control_replay_consumer.cpp
+2026-09-29T08:22:22.4005938Z   runtime_provider.cpp
+2026-09-29T08:22:23.8232669Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/CMakeLists.txt
+2026-09-29T08:22:24.7475218Z   c_abi.cpp
+2026-09-29T08:22:25.1586436Z   device_provider.cpp
+2026-09-29T08:22:25.2081768Z   recipe_replay.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\recipes\Debug\recipe_replay.exe
+2026-09-29T08:22:25.6864436Z   rtfw_cuda_lifetime_tests.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\rtfw_cuda_lifetime_tests.exe
+2026-09-29T08:22:26.2019305Z   test_golden_cuda.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\golden_cuda\Debug\test_golden_cuda.exe
+2026-09-29T08:22:26.2681146Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/recipes/CMakeLists.txt
+2026-09-29T08:22:26.3767260Z   mixed_rate_consumer.cpp
+2026-09-29T08:22:26.3778437Z   rates.cpp
+2026-09-29T08:22:28.3651302Z   rtfw_static.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\Debug\rtfw_static.lib
+2026-09-29T08:22:28.4282694Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:22:28.6898543Z   native replay rejected status=-3 active replay requires deterministic mock/loopback backends
+2026-09-29T08:22:29.2580104Z   rtfw_benchmark_device.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_benchmark_device.lib
+2026-09-29T08:22:29.3179514Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/recipes/CMakeLists.txt
+2026-09-29T08:22:29.3563916Z   foreign rejected=-16 
+2026-09-29T08:22:29.3569997Z   foreign rejected=-16 
+2026-09-29T08:22:29.7814856Z   rtfw_cuda_pipeline_tests.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\rtfw_cuda_pipeline_tests.exe
+2026-09-29T08:22:29.8656622Z   recipe_mixed_rate.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\recipes\Debug\recipe_mixed_rate.exe
+2026-09-29T08:22:29.8683307Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:22:29.8753250Z   c_consumer.c
+2026-09-29T08:22:29.9603161Z   provider.cpp
+2026-09-29T08:22:30.3788293Z   recipe_raw_c.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\recipes\Debug\recipe_raw_c.exe
+2026-09-29T08:22:30.4329024Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/recipes/CMakeLists.txt
+2026-09-29T08:22:30.4884672Z   controls.cpp
+2026-09-29T08:22:30.5503147Z   live_control_consumer.cpp
+2026-09-29T08:22:31.6139698Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:22:32.8020625Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:22:33.6791301Z   recipe_live_control.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\recipes\Debug\recipe_live_control.exe
+2026-09-29T08:22:33.8211434Z   benchmark_device_consumer.cpp
+2026-09-29T08:22:34.0982158Z   noalloc.cpp
+2026-09-29T08:22:34.9677222Z   checkpoint.cpp
+2026-09-29T08:22:36.4320193Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:22:36.7771253Z   rtfw_cuda_particle_benchmark.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_cuda_particle_benchmark.lib
+2026-09-29T08:22:37.0631001Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:22:37.1433022Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:22:37.2473398Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:22:37.5534993Z   main.cpp
+2026-09-29T08:22:37.7216776Z   test_cuda_benchmark.cpp
+2026-09-29T08:22:38.0038198Z   rtfw_benchmark_device_consumer.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_benchmark_device_consumer.exe
+2026-09-29T08:22:38.4718535Z   replay.cpp
+2026-09-29T08:22:38.6010884Z   benchmark_cpu_consumer.cpp
+2026-09-29T08:22:41.3045937Z   rtfw_benchmark_device_noalloc.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_benchmark_device_noalloc.exe
+2026-09-29T08:22:42.0868155Z   observability.cpp
+2026-09-29T08:22:42.2826743Z   noalloc.cpp
+2026-09-29T08:22:44.4554837Z   rtfw_benchmark_cpu_consumer.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_benchmark_cpu_consumer.exe
+2026-09-29T08:22:44.6246352Z   rtfw-bench-cuda-physics.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw-bench-cuda-physics.exe
+2026-09-29T08:22:45.0971212Z   rtfw_cuda_benchmark_tests.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_cuda_benchmark_tests.exe
+2026-09-29T08:22:45.7774761Z   rtfw_benchmark_cpu_noalloc.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_benchmark_cpu_noalloc.exe
+2026-09-29T08:22:48.0530726Z   capacity.cpp
+2026-09-29T08:22:50.8630800Z   device.cpp
+2026-09-29T08:22:52.4209279Z   parity host=0 count=1 ticks=24 workers=1 grain=1
+2026-09-29T08:22:52.4216250Z   dispatch=0 begin
+2026-09-29T08:22:52.4527062Z   parity:115 failed: parked
+2026-09-29T08:22:52.4627394Z C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(254,5): error MSB8066: Custom build for 'D:\a\cpp-rt-car\cpp-rt-car\build\CMakeFiles\8921c9dfc457e1267326bb0beb8dfada\golden_cuda_determinism_check.rule;D:\a\cpp-rt-car\cpp-rt-car\tests\golden_cuda\CMakeLists.txt' exited with code 1. [D:\a\cpp-rt-car\cpp-rt-car\build\tests\golden_cuda\golden_cuda_determinism_check.vcxproj]
+2026-09-29T08:22:55.6661172Z   Generating Code...
+2026-09-29T08:22:56.2228044Z   rtfw_benchmark_runtime.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_benchmark_runtime.lib
+2026-09-29T08:22:56.2952835Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:22:56.2958415Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:22:56.3012780Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/bench/CMakeLists.txt
+2026-09-29T08:22:56.3854609Z   benchmark_runtime_consumer.cpp
+2026-09-29T08:22:56.3855144Z   noalloc.cpp
+2026-09-29T08:22:56.9045234Z   benchmark_cli.cpp
+2026-09-29T08:22:59.6442657Z   rtfw_benchmark_runtime_noalloc.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_benchmark_runtime_noalloc.exe
+2026-09-29T08:22:59.6540969Z   rtfw_benchmark_runtime_consumer.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw_benchmark_runtime_consumer.exe
+2026-09-29T08:23:00.4254283Z   rtfw-bench.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\bench\Debug\rtfw-bench.exe
+2026-09-29T08:23:04.6037727Z   golden state, controls, replay, recovery, allocation: PASS
+2026-09-29T08:23:06.0583848Z   golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+2026-09-29T08:23:06.0953506Z   PASS: portable golden run/state/replay; hardware and RT qualification not performed
+2026-09-29T08:23:06.4362811Z   golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+2026-09-29T08:23:06.4630568Z   PASS: portable golden run/state/replay; hardware and RT qualification not performed
+2026-09-29T08:23:06.4736528Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/golden_system/CMakeLists.txt
+2026-09-29T08:23:06.5320270Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/samples/CMakeLists.txt
+2026-09-29T08:23:06.6019362Z   mini_app.c
+2026-09-29T08:23:06.6248175Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:23:06.6249735Z   Building Custom Rule D:/a/cpp-rt-car/cpp-rt-car/tests/CMakeLists.txt
+2026-09-29T08:23:06.7135278Z   test_thread_policy.cpp
+2026-09-29T08:23:06.8437083Z   test_simcore_basic.cpp
+2026-09-29T08:23:06.9765682Z   sample_embed_c_static.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\samples\Debug\sample_embed_c_static.exe
+2026-09-29T08:23:07.5769953Z   host_adapter_tests.cpp
+2026-09-29T08:23:10.1695812Z   rtfw_host_adapter_tests.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\rtfw_host_adapter_tests.exe
+2026-09-29T08:23:10.6571408Z   rtfw_thread_policy_rollback_test.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\rtfw_thread_policy_rollback_test.exe
+2026-09-29T08:23:12.2358871Z   test_simcore_determinism.cpp
+2026-09-29T08:23:16.7570486Z   test_logging.cpp
+2026-09-29T08:23:20.0697789Z   test_async_logger.cpp
+2026-09-29T08:23:23.2272519Z   test_logger_backpressure.cpp
+2026-09-29T08:23:27.8659094Z   test_profiler.cpp
+2026-09-29T08:23:32.1772686Z   test_adaptive_param.cpp
+2026-09-29T08:23:36.7427462Z   test_soa.cpp
+2026-09-29T08:23:38.5303459Z   test_sparse_set.cpp
+2026-09-29T08:23:40.7627267Z   test_soa_view.cpp
+2026-09-29T08:23:42.5666817Z   test_jobqueue.cpp
+2026-09-29T08:23:45.2527627Z   test_queue_metrics.cpp
+2026-09-29T08:23:48.2844129Z   test_metrics_json.cpp
+2026-09-29T08:23:52.7110275Z   test_jobqueue_perf.cpp
+2026-09-29T08:23:55.2920100Z   test_workerpool_priority.cpp
+2026-09-29T08:23:58.1425548Z   test_phase_graph.cpp
+2026-09-29T08:24:02.5256320Z   test_static_phase_graph.cpp
+2026-09-29T08:24:04.3849142Z   test_chunk_autotune.cpp
+2026-09-29T08:24:08.7844232Z   test_deterministic_reduce.cpp
+2026-09-29T08:24:13.1396181Z   test_differential_output.cpp
+2026-09-29T08:24:14.9087058Z   Generating Code...
+2026-09-29T08:24:17.9034360Z   Compiling...
+2026-09-29T08:24:17.9034755Z   test_robust_fp.cpp
+2026-09-29T08:24:19.6141801Z   test_budget_monitor.cpp
+2026-09-29T08:24:23.9731943Z   test_fault_injection.cpp
+2026-09-29T08:24:28.4016900Z   test_simd.cpp
+2026-09-29T08:24:30.8442684Z   test_aosoa_autotune.cpp
+2026-09-29T08:24:32.5386746Z   test_rt_pool.cpp
+2026-09-29T08:24:34.3639854Z   test_rt_arena.cpp
+2026-09-29T08:24:36.1633968Z   test_arena_binding_assert.cpp
+2026-09-29T08:24:37.9569733Z   test_rt_overflow_death.cpp
+2026-09-29T08:24:40.4919309Z   test_fiber_pool.cpp
+2026-09-29T08:24:44.9123057Z   test_fiber_pool_race.cpp
+2026-09-29T08:24:49.4088074Z   test_bintrace.cpp
+2026-09-29T08:24:53.8584289Z   test_budget_degrade.cpp
+2026-09-29T08:24:58.3046530Z   test_predictive_adaptive.cpp
+2026-09-29T08:25:02.7674024Z   test_small_array_balance.cpp
+2026-09-29T08:25:07.2071263Z   test_phase_telemetry.cpp
+2026-09-29T08:25:11.6241040Z   test_aligned_allocator.cpp
+2026-09-29T08:25:13.3321030Z   test_highres_clock.cpp
+2026-09-29T08:25:15.6425754Z   test_highres_clock_integration.cpp
+2026-09-29T08:25:17.9558775Z   test_rate_governor.cpp
+2026-09-29T08:25:19.7826905Z   Generating Code...
+2026-09-29T08:25:22.3233962Z   Compiling...
+2026-09-29T08:25:22.3234519Z   test_hazard_ptr.cpp
+2026-09-29T08:25:24.1488310Z   test_lockfree_queue.cpp
+2026-09-29T08:25:26.0493400Z   test_seqlock_config.cpp
+2026-09-29T08:25:27.7839629Z   test_backpressure.cpp
+2026-09-29T08:25:30.1944052Z   test_physics_integrators.cpp
+2026-09-29T08:25:32.0089709Z   test_constraint_solver.cpp
+2026-09-29T08:25:33.7215257Z   test_narrowphase.cpp
+2026-09-29T08:25:35.4541748Z   test_hal.cpp
+2026-09-29T08:25:38.2008565Z   test_gpu_stub.cpp
+2026-09-29T08:25:42.7719934Z   test_gpu_overlap.cpp
+2026-09-29T08:25:45.8442792Z   test_frame_graph.cpp
+2026-09-29T08:25:48.9084193Z   test_watchdog.cpp
+2026-09-29T08:25:51.2803756Z   test_rt_watchdog.cpp
+2026-09-29T08:25:53.6274443Z   test_crashdump.cpp
+2026-09-29T08:25:55.9474393Z   test_numerics.cpp
+2026-09-29T08:25:57.6894702Z   test_prng_determinism.cpp
+2026-09-29T08:26:02.2155790Z   test_snapshot.cpp
+2026-09-29T08:26:06.8442367Z   test_trace_export.cpp
+2026-09-29T08:26:09.3625531Z   test_trace_noalloc.cpp
+2026-09-29T08:26:12.2294007Z   test_units.cpp
+2026-09-29T08:26:13.9156640Z   Generating Code...
+2026-09-29T08:26:15.5126185Z   Compiling...
+2026-09-29T08:26:15.5126583Z   test_huge_page.cpp
+2026-09-29T08:26:17.2016483Z   test_thermal_limp.cpp
+2026-09-29T08:26:21.6716304Z   test_limp_mode.cpp
+2026-09-29T08:26:26.1315431Z   test_config_hot_reload.cpp
+2026-09-29T08:26:28.8096834Z   test_plugin_manager.cpp
+2026-09-29T08:26:30.8998971Z   test_sandbox.cpp
+2026-09-29T08:26:32.9463633Z   test_minidump_symbols.cpp
+2026-09-29T08:26:34.6363446Z   test_perf_artifacts.cpp
+2026-09-29T08:26:37.2534974Z   test_scheduler.cpp
+2026-09-29T08:26:39.7314028Z   test_host_runtime.cpp
+2026-09-29T08:26:42.2735721Z   test_periodic_runtime.cpp
+2026-09-29T08:26:44.8882437Z   test_platform_preflight.cpp
+2026-09-29T08:26:47.3618805Z   test_compiled_graph.cpp
+2026-09-29T08:26:50.1558716Z   test_executor.cpp
+2026-09-29T08:26:52.6894294Z   test_memory_plan.cpp
+2026-09-29T08:26:55.1772512Z   test_observability.cpp
+2026-09-29T08:26:57.8171431Z   test_determinism_replay.cpp
+2026-09-29T08:27:00.4875426Z   test_device_runtime.cpp
+2026-09-29T08:27:03.3079999Z   test_cuda_backend.cpp
+2026-09-29T08:27:07.6516006Z   test_vendor_hal_v2.cpp
+2026-09-29T08:27:10.2819233Z   Generating Code...
+2026-09-29T08:27:11.9394930Z   Compiling...
+2026-09-29T08:27:11.9395718Z   test_rt_pipeline.cpp
+2026-09-29T08:27:16.5206169Z   test_platform_gate.cpp
+2026-09-29T08:27:19.5117840Z   test_determinism.cpp
+2026-09-29T08:27:22.2479675Z   test_extension_registration.cpp
+2026-09-29T08:27:24.9091556Z   test_command_batch.cpp
+2026-09-29T08:27:28.5739876Z   test_device_rate_simulation.cpp
+2026-09-29T08:27:31.8666958Z   test_heterogeneous_memory.cpp
+2026-09-29T08:27:34.8970479Z   test_hal_v2.cpp
+2026-09-29T08:27:37.6526651Z   test_cross_rate_data.cpp
+2026-09-29T08:27:40.8598459Z   test_rate_dispatch.cpp
+2026-09-29T08:27:44.0378418Z   test_rate_telemetry.cpp
+2026-09-29T08:27:46.7777813Z   test_rate_timeline.cpp
+2026-09-29T08:27:49.6256446Z   test_sampled_io.cpp
+2026-09-29T08:27:52.5573322Z   test_loopback_backend.cpp
+2026-09-29T08:27:55.1321214Z   test_live_control_mailbox.cpp
+2026-09-29T08:27:58.1418802Z   test_live_control_actions.cpp
+2026-09-29T08:28:00.5471284Z   test_live_control_sdk.cpp
+2026-09-29T08:28:03.2119615Z   test_live_control_stress.cpp
+2026-09-29T08:28:06.0724774Z   test_live_control_active_replay.cpp
+2026-09-29T08:28:08.7182931Z   test_mixed_rate_actions.cpp
+2026-09-29T08:28:11.3232233Z   Generating Code...
+2026-09-29T08:28:14.0704318Z   Compiling...
+2026-09-29T08:28:14.0704714Z   test_mixed_rate_replay.cpp
+2026-09-29T08:28:16.7443269Z   test_mixed_rate_conformance.cpp
+2026-09-29T08:28:19.3769134Z   test_cpu_memory_policy.cpp
+2026-09-29T08:28:22.1000065Z   test_memory_policy.cpp
+2026-09-29T08:28:25.0007894Z   test_thread_policy.cpp
+2026-09-29T08:28:27.6339360Z   test_benchmark_contract.cpp
+2026-09-29T08:28:30.5165753Z   test_benchmark_runner.cpp
+2026-09-29T08:28:33.3724180Z   test_benchmark_artifacts.cpp
+2026-09-29T08:28:36.3209395Z   test_benchmark_cpu.cpp
+2026-09-29T08:28:39.1053420Z   test_benchmark_runtime.cpp
+2026-09-29T08:28:41.8685833Z   test_benchmark_device.cpp
+2026-09-29T08:28:45.1951044Z   Generating Code...
+2026-09-29T08:28:47.8195277Z   simcore_tests.vcxproj -> D:\a\cpp-rt-car\cpp-rt-car\build\tests\Debug\simcore_tests.exe
+2026-09-29T08:28:47.9906842Z ##[error]Process completed with exit code 1.
+2026-09-29T08:28:48.0216149Z Post job cleanup.
+2026-09-29T08:28:48.2107344Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-09-29T08:28:48.2354171Z git version 2.55.0.windows.5
+2026-09-29T08:28:48.2419996Z Temporarily overriding HOME='D:\a\_temp\c743e643-409a-4680-9491-5cfd15bb299c' before making global git config changes
+2026-09-29T08:28:48.2421329Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-29T08:28:48.2432132Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\cpp-rt-car\cpp-rt-car
+2026-09-29T08:28:48.2718946Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-09-29T08:28:48.3021026Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-09-29T08:28:48.7968135Z Entering 'external/googletest'
+2026-09-29T08:28:48.8698682Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-29T08:28:48.8896690Z http.https://github.com/.extraheader
+2026-09-29T08:28:48.8931448Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all http.https://github.com/.extraheader
+2026-09-29T08:28:48.9165173Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-09-29T08:28:49.4053325Z Entering 'external/googletest'
+2026-09-29T08:28:49.4575059Z http.https://github.com/.extraheader
+2026-09-29T08:28:49.4993439Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-29T08:28:49.5221049Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-09-29T08:28:49.9818803Z Entering 'external/googletest'
+2026-09-29T08:28:50.0092715Z file:D:/a/cpp-rt-car/cpp-rt-car/.git/modules/external/googletest/config	remote.origin.url
+2026-09-29T08:28:50.0297500Z [command]"C:\Program Files\Git\bin\git.exe" config --file D:/a/cpp-rt-car/cpp-rt-car/.git/modules/external/googletest/config --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-29T08:28:50.0695536Z Cleaning up orphan processes
+2026-09-29T08:28:50.0840552Z Terminate orphan process: pid (8096) (vctip)
+2026-09-29T08:28:50.0926928Z Terminate orphan process: pid (5480) (MSBuild)
+2026-09-29T08:28:50.0971647Z Terminate orphan process: pid (7956) (MSBuild)
+2026-09-29T08:28:50.1027780Z Terminate orphan process: pid (4788) (MSBuild)
+2026-09-29T08:28:50.1295638Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

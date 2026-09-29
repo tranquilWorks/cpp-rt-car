@@ -428,6 +428,18 @@ Active replay is originating-owner bound; verify same-owner trusted replay,
 explicit cross-owner rejection and fresh-owner paired-checkpoint recovery.
 Preserve Runtime and the frozen M26-01 scenario without artifact identity rewriting.
 
+## M26-03 CUDA physics activation
+
+The owner requested the next batch after M26-02 merged target PR276 at
+dbbab7a433a01459ed737cbb19d3b1a64a3ea1bf with all32 checks. Canonical control
+PR550 merged at 0823458c29939d50efb58b16cf3c984ff82e47e8,
+blob 773c288349c57a47860481edd5c78f1bd9f68b59. Implement only the bounded CUDA golden
+physics variant, simulator-only replay adapter, faults/recovery, installed kit
+and optional real-host compile scope. Preserve production/SDK/ABI, immutable
+scenario and all prior tests/kits/evidence. Native CUDA remains nondeterministic;
+no physical replay claim. All32 target gates and scoped integration authority
+persist; M26-04 through M26-06 and human/physical/RT/Unreal/release stay separate.
+
 ## M26-03R simulator timing activation
 
 Owner approved the proposed simulator timing policy by answering go03. Canonical
@@ -443,3 +455,17 @@ Canonical source-binding amendment PR554 merged at 3c3cc89254961726b1e0970109d9c
 blob 89008db136e5c4d23f6888b76503f19d629ef29c. Refresh only current product_sources hashes
 in docs/cuda_capabilities.json; preserve every historical gate/source/evidence
 binding, capability row, denominator and prior checker/test. Rerun all gates.
+
+## M26-03 reactivation after simulator timing repair
+
+M26-03R merged as target PR278 at c78075e2b30efba48db4f0ca8136110b1399baf5,
+after all32 exact-head checks on ecd200b, fetched/tested tree2a8e96e63e40323a4eb236628954e1beac3ccd32.
+Canonical reactivation PR555 merged at 7ce76ddfd4d3061b3b55bfffc88f6e8ca11e9548,
+blob ef229993dec359b6e35662100475473bb2760350. Finish preserved feature PR277 on this baseline.
+Only its owned deterministic simulator selects the explicit five-second host
+watchdog; preserve the frozen one-millisecond logical budget and backend timeout.
+Native construction leaves the policy absent and replay disabled. Runtime,
+native backends and all repair/prior tests and evidence remain protected. Finish
+all CUDA feature acceptance with fresh local/all32 hosted gates before integration.
+M26-04..06 remain inactive; standing scoped publication/merge authority persists.
+Historical activation/checkpoint text above does not reopen completed repairs.

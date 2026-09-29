@@ -1,0 +1,974 @@
+﻿2026-09-29T07:50:34.4748180Z Current runner version: '2.337.0'
+2026-09-29T07:50:34.4762470Z ##[group]Runner Image Provisioner
+2026-09-29T07:50:34.4762941Z Hosted Compute Agent
+2026-09-29T07:50:34.4763303Z Version: 20260828.587
+2026-09-29T07:50:34.4763640Z Commit: abac92662cab4cc7352de4f9f9d2e2419aad9c29
+2026-09-29T07:50:34.4764032Z Build Date: 2026-08-28T16:44:25Z
+2026-09-29T07:50:34.4764397Z Worker ID: {2ea5af86-b5fc-4972-abcd-5fb06dcf2188}
+2026-09-29T07:50:34.4764774Z Azure Region: westus3
+2026-09-29T07:50:34.4765099Z ##[endgroup]
+2026-09-29T07:50:34.4765741Z ##[group]Operating System
+2026-09-29T07:50:34.4766078Z Ubuntu
+2026-09-29T07:50:34.4766354Z 22.04.5
+2026-09-29T07:50:34.4766831Z LTS
+2026-09-29T07:50:34.4767110Z ##[endgroup]
+2026-09-29T07:50:34.4767404Z ##[group]Runner Image
+2026-09-29T07:50:34.4767710Z Image: ubuntu-22.04
+2026-09-29T07:50:34.4768033Z Version: 20260920.303.1
+2026-09-29T07:50:34.4768690Z Included Software: https://github.com/actions/runner-images/blob/ubuntu22/20260920.303/images/ubuntu/Ubuntu2204-Readme.md
+2026-09-29T07:50:34.4769490Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu22%2F20260920.303
+2026-09-29T07:50:34.4769985Z ##[endgroup]
+2026-09-29T07:50:34.4770586Z ##[group]GITHUB_TOKEN Permissions
+2026-09-29T07:50:34.4771632Z Contents: read
+2026-09-29T07:50:34.4771987Z Metadata: read
+2026-09-29T07:50:34.4772276Z ##[endgroup]
+2026-09-29T07:50:34.4773433Z Secret source: Actions
+2026-09-29T07:50:34.4773892Z Cache mode: write
+2026-09-29T07:50:34.4774260Z Prepare workflow directory
+2026-09-29T07:50:34.4993588Z Prepare all required actions
+2026-09-29T07:50:34.5022468Z Getting action download info
+2026-09-29T07:50:34.7982906Z Download action repository 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-09-29T07:50:34.8878070Z Download action repository 'anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610' (SHA:e22c389904149dbc22b58101806040fa8d37a610)
+2026-09-29T07:50:35.4535965Z Download action repository 'actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48' (SHA:2031cfc080254a8a887f58cffee85186f0e49e48)
+2026-09-29T07:50:36.2112804Z Complete job name: build-linux (clang, Debug, OFF)
+2026-09-29T07:50:36.2620619Z ##[group]Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+2026-09-29T07:50:36.2621551Z with:
+2026-09-29T07:50:36.2622048Z   submodules: recursive
+2026-09-29T07:50:36.2622648Z   repository: tranquilWorks/cpp-rt-car
+2026-09-29T07:50:36.2627885Z   token: ***
+2026-09-29T07:50:36.2628384Z   ssh-strict: true
+2026-09-29T07:50:36.2628902Z   ssh-user: git
+2026-09-29T07:50:36.2629428Z   persist-credentials: true
+2026-09-29T07:50:36.2630001Z   clean: true
+2026-09-29T07:50:36.2630534Z   sparse-checkout-cone-mode: true
+2026-09-29T07:50:36.2631149Z   fetch-depth: 1
+2026-09-29T07:50:36.2631661Z   fetch-tags: false
+2026-09-29T07:50:36.2632194Z   show-progress: true
+2026-09-29T07:50:36.2632733Z   lfs: false
+2026-09-29T07:50:36.2633234Z   set-safe-directory: true
+2026-09-29T07:50:36.2633845Z   allow-unsafe-pr-checkout: false
+2026-09-29T07:50:36.2634571Z ##[endgroup]
+2026-09-29T07:50:36.3221571Z Syncing repository: tranquilWorks/cpp-rt-car
+2026-09-29T07:50:36.3224138Z ##[group]Getting Git version info
+2026-09-29T07:50:36.3225351Z Working directory is '/home/runner/work/cpp-rt-car/cpp-rt-car'
+2026-09-29T07:50:36.3227298Z [command]/usr/bin/git version
+2026-09-29T07:50:36.3231282Z git version 2.55.0
+2026-09-29T07:50:36.3245160Z ##[endgroup]
+2026-09-29T07:50:36.3253730Z Temporarily overriding HOME='/home/runner/work/_temp/d00e9f19-bda8-46db-99f9-b2c2787f0295' before making global git config changes
+2026-09-29T07:50:36.3256181Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-29T07:50:36.3258382Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cpp-rt-car/cpp-rt-car
+2026-09-29T07:50:36.3275570Z Deleting the contents of '/home/runner/work/cpp-rt-car/cpp-rt-car'
+2026-09-29T07:50:36.3278736Z ##[group]Initializing the repository
+2026-09-29T07:50:36.3280726Z [command]/usr/bin/git init /home/runner/work/cpp-rt-car/cpp-rt-car
+2026-09-29T07:50:36.3366321Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-09-29T07:50:36.3368228Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-09-29T07:50:36.3371521Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-09-29T07:50:36.3372901Z hint: call:
+2026-09-29T07:50:36.3375867Z hint:
+2026-09-29T07:50:36.3376828Z hint: 	git config --global init.defaultBranch <name>
+2026-09-29T07:50:36.3377845Z hint:
+2026-09-29T07:50:36.3379535Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-09-29T07:50:36.3381131Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-09-29T07:50:36.3382402Z hint:
+2026-09-29T07:50:36.3383092Z hint: 	git branch -m <name>
+2026-09-29T07:50:36.3383888Z hint:
+2026-09-29T07:50:36.3384987Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-09-29T07:50:36.3387320Z Initialized empty Git repository in /home/runner/work/cpp-rt-car/cpp-rt-car/.git/
+2026-09-29T07:50:36.3389472Z [command]/usr/bin/git remote add origin https://github.com/tranquilWorks/cpp-rt-car
+2026-09-29T07:50:36.3458078Z ##[endgroup]
+2026-09-29T07:50:36.3459501Z ##[group]Disabling automatic garbage collection
+2026-09-29T07:50:36.3460753Z [command]/usr/bin/git config --local gc.auto 0
+2026-09-29T07:50:36.3463085Z ##[endgroup]
+2026-09-29T07:50:36.3464148Z ##[group]Setting up auth
+2026-09-29T07:50:36.3465030Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-29T07:50:36.3469845Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-29T07:50:36.3650325Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-29T07:50:36.3668059Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-29T07:50:36.3761361Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-29T07:50:36.3776446Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-29T07:50:36.3869093Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-09-29T07:50:36.3889214Z ##[endgroup]
+2026-09-29T07:50:36.3890483Z ##[group]Fetching the repository
+2026-09-29T07:50:36.3895587Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +82e340de930326b736672b20019b05018bdc9945:refs/remotes/pull/277/merge
+2026-09-29T07:50:37.4708230Z From https://github.com/tranquilWorks/cpp-rt-car
+2026-09-29T07:50:37.4708688Z  * [new ref]         82e340de930326b736672b20019b05018bdc9945 -> pull/277/merge
+2026-09-29T07:50:37.4711217Z ##[endgroup]
+2026-09-29T07:50:37.4711513Z ##[group]Determining the checkout info
+2026-09-29T07:50:37.4712764Z ##[endgroup]
+2026-09-29T07:50:37.4716347Z [command]/usr/bin/git sparse-checkout disable
+2026-09-29T07:50:37.4738061Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-09-29T07:50:37.4785233Z ##[group]Checking out the ref
+2026-09-29T07:50:37.4787485Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/277/merge
+2026-09-29T07:50:37.5171293Z Note: switching to 'refs/remotes/pull/277/merge'.
+2026-09-29T07:50:37.5171552Z 
+2026-09-29T07:50:37.5171792Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-09-29T07:50:37.5172221Z changes and commit them, and you can discard any commits you make in this
+2026-09-29T07:50:37.5172612Z state without impacting any branches by switching back to a branch.
+2026-09-29T07:50:37.5172774Z 
+2026-09-29T07:50:37.5173147Z If you want to create a new branch to retain commits you create, you may
+2026-09-29T07:50:37.5173411Z do so (now or later) by using -c with the switch command. Example:
+2026-09-29T07:50:37.5173548Z 
+2026-09-29T07:50:37.5173617Z   git switch -c <new-branch-name>
+2026-09-29T07:50:37.5173715Z 
+2026-09-29T07:50:37.5173780Z Or undo this operation with:
+2026-09-29T07:50:37.5173877Z 
+2026-09-29T07:50:37.5173942Z   git switch -
+2026-09-29T07:50:37.5174123Z 
+2026-09-29T07:50:37.5174321Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-09-29T07:50:37.5174570Z 
+2026-09-29T07:50:37.5174809Z HEAD is now at 82e340d Merge f9e72822b2501aa09daea0f37d980803a0ff6cb2 into c78075e2b30efba48db4f0ca8136110b1399baf5
+2026-09-29T07:50:37.5175506Z ##[endgroup]
+2026-09-29T07:50:37.5175716Z ##[group]Setting up auth for fetching submodules
+2026-09-29T07:50:37.5179424Z [command]/usr/bin/git config --global http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-09-29T07:50:37.5201467Z [command]/usr/bin/git config --global --unset-all url.https://github.com/.insteadOf
+2026-09-29T07:50:37.5215448Z [command]/usr/bin/git config --global --add url.https://github.com/.insteadOf git@github.com:
+2026-09-29T07:50:37.5229760Z [command]/usr/bin/git config --global --add url.https://github.com/.insteadOf org-321916666@github.com:
+2026-09-29T07:50:37.5243114Z ##[endgroup]
+2026-09-29T07:50:37.5245029Z ##[group]Fetching submodules
+2026-09-29T07:50:37.5245228Z [command]/usr/bin/git submodule sync --recursive
+2026-09-29T07:50:37.5338726Z [command]/usr/bin/git -c protocol.version=2 submodule update --init --force --depth=1 --recursive
+2026-09-29T07:50:37.5428568Z Submodule 'external/googletest' (https://github.com/google/googletest.git) registered for path 'external/googletest'
+2026-09-29T07:50:37.5439516Z Cloning into '/home/runner/work/cpp-rt-car/cpp-rt-car/external/googletest'...
+2026-09-29T07:50:39.7648700Z From https://github.com/google/googletest
+2026-09-29T07:50:39.7649265Z  * branch            7e17b15f1547bb8dd9c2fed91043b7af3437387f -> FETCH_HEAD
+2026-09-29T07:50:39.7861919Z Submodule path 'external/googletest': checked out '7e17b15f1547bb8dd9c2fed91043b7af3437387f'
+2026-09-29T07:50:39.7892773Z [command]/usr/bin/git submodule foreach --recursive git config --local gc.auto 0
+2026-09-29T07:50:39.7991134Z Entering 'external/googletest'
+2026-09-29T07:50:39.8013385Z ##[endgroup]
+2026-09-29T07:50:39.8013719Z ##[group]Persisting credentials for submodules
+2026-09-29T07:50:39.8017927Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'url\.https\:\/\/github\.com\/\.insteadOf' && git config --local --unset-all 'url.https://github.com/.insteadOf' || :"
+2026-09-29T07:50:39.8111187Z Entering 'external/googletest'
+2026-09-29T07:50:39.8133627Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local 'http.https://github.com/.extraheader' 'AUTHORIZATION: basic ***' && git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-09-29T07:50:39.8223442Z Entering 'external/googletest'
+2026-09-29T07:50:39.8247021Z file:/home/runner/work/cpp-rt-car/cpp-rt-car/.git/modules/external/googletest/config	remote.origin.url
+2026-09-29T07:50:39.8268376Z [command]/usr/bin/git submodule foreach --recursive git config --local --add 'url.https://github.com/.insteadOf' 'git@github.com:'
+2026-09-29T07:50:39.8348688Z Entering 'external/googletest'
+2026-09-29T07:50:39.8370425Z [command]/usr/bin/git submodule foreach --recursive git config --local --add 'url.https://github.com/.insteadOf' 'org-321916666@github.com:'
+2026-09-29T07:50:39.8460135Z Entering 'external/googletest'
+2026-09-29T07:50:39.8479916Z ##[endgroup]
+2026-09-29T07:50:39.8500943Z [command]/usr/bin/git log -1 --format=%H
+2026-09-29T07:50:39.8512665Z 82e340de930326b736672b20019b05018bdc9945
+2026-09-29T07:50:39.8644150Z ##[group]Run tools/rt_harden.sh
+2026-09-29T07:50:39.8644345Z [36;1mtools/rt_harden.sh[0m
+2026-09-29T07:50:39.9032015Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-29T07:50:39.9032326Z ##[endgroup]
+2026-09-29T07:50:39.9094178Z tools/rt_harden.sh: line 13: ulimit: max locked memory: cannot modify limit: Operation not permitted
+2026-09-29T07:50:39.9094538Z [rt_harden] mlockall may fail (unable to set unlimited lockable memory)
+2026-09-29T07:50:39.9130183Z [rt_harden] transparent hugepages disabled
+2026-09-29T07:50:39.9161964Z [rt_harden] perf_event_paranoid set to 3
+2026-09-29T07:50:40.0328757Z [rt_harden] irqbalance service masked
+2026-09-29T07:50:40.0816767Z [rt_harden] unable to set performance governor
+2026-09-29T07:50:40.0870863Z [rt_harden] unable to disable C-states
+2026-09-29T07:50:40.1005123Z [rt_harden] pinned current process to CPU0
+2026-09-29T07:50:40.1005373Z [rt_harden] real-time hardening setup complete
+2026-09-29T07:50:40.1046748Z ##[group]Run if [ "clang" = "clang" ]; then
+2026-09-29T07:50:40.1046959Z [36;1mif [ "clang" = "clang" ]; then[0m
+2026-09-29T07:50:40.1047121Z [36;1m  echo "CC=clang-14" >> "$GITHUB_ENV"[0m
+2026-09-29T07:50:40.1047307Z [36;1m  echo "CXX=clang++-14" >> "$GITHUB_ENV"[0m
+2026-09-29T07:50:40.1047467Z [36;1m  clang++-14 --version[0m
+2026-09-29T07:50:40.1047599Z [36;1melse[0m
+2026-09-29T07:50:40.1047718Z [36;1m  echo "CC=gcc-11" >> "$GITHUB_ENV"[0m
+2026-09-29T07:50:40.1047870Z [36;1m  echo "CXX=g++-11" >> "$GITHUB_ENV"[0m
+2026-09-29T07:50:40.1048017Z [36;1m  g++-11 --version[0m
+2026-09-29T07:50:40.1048141Z [36;1mfi[0m
+2026-09-29T07:50:40.1075845Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-29T07:50:40.1076023Z ##[endgroup]
+2026-09-29T07:50:40.2683035Z Ubuntu clang version 14.0.0-1ubuntu1.1
+2026-09-29T07:50:40.2683294Z Target: x86_64-pc-linux-gnu
+2026-09-29T07:50:40.2683432Z Thread model: posix
+2026-09-29T07:50:40.2683553Z InstalledDir: /usr/bin
+2026-09-29T07:50:40.2726209Z ##[group]Run SANITIZERS=""
+2026-09-29T07:50:40.2726374Z [36;1mSANITIZERS=""[0m
+2026-09-29T07:50:40.2726504Z [36;1mif [ "Debug" = "Debug" ]; then[0m
+2026-09-29T07:50:40.2726881Z [36;1m  SANITIZERS="address;undefined"[0m
+2026-09-29T07:50:40.2727107Z [36;1mfi[0m
+2026-09-29T07:50:40.2727275Z [36;1mcmake -S . -B build \[0m
+2026-09-29T07:50:40.2727487Z [36;1m  -DCMAKE_BUILD_TYPE=Debug \[0m
+2026-09-29T07:50:40.2727697Z [36;1m  -DENABLE_TESTS=ON \[0m
+2026-09-29T07:50:40.2727905Z [36;1m  -DRTFW_BUILD_EXPERIMENTAL=ON \[0m
+2026-09-29T07:50:40.2728146Z [36;1m  -DRTFW_BUILD_BENCHMARKS=ON \[0m
+2026-09-29T07:50:40.2728382Z [36;1m  -DENABLE_RAPIDCHECK=ON \[0m
+2026-09-29T07:50:40.2728563Z [36;1m  -DSIM_SANITIZERS="$SANITIZERS" \[0m
+2026-09-29T07:50:40.2728711Z [36;1m  -DSIM_ENABLE_AVX2=OFF \[0m
+2026-09-29T07:50:40.2728846Z [36;1m  -DSIM_WERROR=ON[0m
+2026-09-29T07:50:40.2757696Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-29T07:50:40.2757940Z env:
+2026-09-29T07:50:40.2758064Z   CC: clang-14
+2026-09-29T07:50:40.2758169Z   CXX: clang++-14
+2026-09-29T07:50:40.2758279Z ##[endgroup]
+2026-09-29T07:50:40.6833487Z -- The C compiler identification is Clang 14.0.0
+2026-09-29T07:50:40.8490690Z -- The CXX compiler identification is Clang 14.0.0
+2026-09-29T07:50:40.9362410Z -- Detecting C compiler ABI info
+2026-09-29T07:50:41.0700903Z -- Detecting C compiler ABI info - done
+2026-09-29T07:50:41.0776242Z -- Check for working C compiler: /usr/bin/clang-14 - skipped
+2026-09-29T07:50:41.0817100Z -- Detecting C compile features
+2026-09-29T07:50:41.0821544Z -- Detecting C compile features - done
+2026-09-29T07:50:41.1100766Z -- Detecting CXX compiler ABI info
+2026-09-29T07:50:41.1874933Z -- Detecting CXX compiler ABI info - done
+2026-09-29T07:50:41.1955844Z -- Check for working CXX compiler: /usr/bin/clang++-14 - skipped
+2026-09-29T07:50:41.1957961Z -- Detecting CXX compile features
+2026-09-29T07:50:41.1962017Z -- Detecting CXX compile features - done
+2026-09-29T07:50:41.2269447Z -- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+2026-09-29T07:50:41.3022653Z -- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+2026-09-29T07:50:41.3123928Z -- Found Threads: TRUE
+2026-09-29T07:50:41.3125783Z -- Enabling sanitizers: address;undefined
+2026-09-29T07:50:47.3338660Z -- Sanitizer runtimes for rtfw_shared: using fallback /usr/lib/llvm-14/lib/clang/14.0.0/lib/linux/libclang_rt.ubsan_standalone-x86_64.so
+2026-09-29T07:50:47.4376471Z -- Found Python3: /usr/bin/python3.10 (found version "3.10.12") found components: Interpreter
+2026-09-29T07:50:47.7190007Z -- Configuring done (7.3s)
+2026-09-29T07:50:47.8218538Z -- Generating done (0.1s)
+2026-09-29T07:50:47.8227213Z -- Build files have been written to: /home/runner/work/cpp-rt-car/cpp-rt-car/build
+2026-09-29T07:50:47.9671137Z ##[group]Run cmake --build build --config Debug -- -j2
+2026-09-29T07:50:47.9671385Z [36;1mcmake --build build --config Debug -- -j2[0m
+2026-09-29T07:50:47.9699214Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-29T07:50:47.9699391Z env:
+2026-09-29T07:50:47.9699495Z   CC: clang-14
+2026-09-29T07:50:47.9699601Z   CXX: clang++-14
+2026-09-29T07:50:47.9699709Z ##[endgroup]
+2026-09-29T07:50:47.9829972Z [  1%] Building CXX object CMakeFiles/simcore_platform.dir/src/platform_init.cpp.o
+2026-09-29T07:50:47.9835765Z [  1%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/compiled_graph.cpp.o
+2026-09-29T07:50:48.9535690Z [  2%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/cross_rate_data.cpp.o
+2026-09-29T07:50:49.1282013Z [  2%] Building CXX object CMakeFiles/simcore_platform.dir/src/metrics.cpp.o
+2026-09-29T07:50:49.6814963Z [  2%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/command_batch.cpp.o
+2026-09-29T07:50:49.8665674Z [  2%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/hal_v2.cpp.o
+2026-09-29T07:50:50.2132609Z [  3%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/heterogeneous_memory.cpp.o
+2026-09-29T07:50:50.4153197Z [  3%] Linking CXX static library libsimcore_platform.a
+2026-09-29T07:50:50.4417699Z [  3%] Built target simcore_platform
+2026-09-29T07:50:50.4451761Z [  3%] Building CXX object CMakeFiles/rtfw_cuda_backend.dir/rt/src/cuda_backend.cpp.o
+2026-09-29T07:50:50.6130134Z [  3%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/device_manager.cpp.o
+2026-09-29T07:50:51.0693968Z [  3%] Linking CXX static library librtfw_cuda_backend.a
+2026-09-29T07:50:51.0878501Z [  3%] Built target rtfw_cuda_backend
+2026-09-29T07:50:51.0917378Z [  3%] Building CXX object CMakeFiles/rtfw_xdma_backend.dir/rt/src/xdma_backend.cpp.o
+2026-09-29T07:50:51.6894041Z [  3%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/executor.cpp.o
+2026-09-29T07:50:51.7252878Z [  4%] Linking CXX static library librtfw_xdma_backend.a
+2026-09-29T07:50:51.7432952Z [  4%] Built target rtfw_xdma_backend
+2026-09-29T07:50:51.7467679Z [  4%] Building CXX object CMakeFiles/trace_dump.dir/src/trace_dump.cpp.o
+2026-09-29T07:50:52.3232737Z [  5%] Linking CXX executable trace_dump
+2026-09-29T07:50:52.4937364Z [  5%] Built target trace_dump
+2026-09-29T07:50:52.4974737Z [  6%] Building CXX object _deps/googletest/googletest/CMakeFiles/gtest.dir/src/gtest-all.cc.o
+2026-09-29T07:50:52.6533586Z [  6%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/extension_registration.cpp.o
+2026-09-29T07:50:53.0903115Z [  7%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/host_runtime.cpp.o
+2026-09-29T07:50:55.5354767Z [  7%] Linking CXX static library ../../../lib/libgtest.a
+2026-09-29T07:50:55.5577590Z [  7%] Built target gtest
+2026-09-29T07:50:55.5623787Z [  7%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/BeforeMinimalTestCase.cpp.o
+2026-09-29T07:50:55.5774762Z [  7%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Check.cpp.o
+2026-09-29T07:50:55.9400970Z [  7%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Classify.cpp.o
+2026-09-29T07:50:56.1897716Z [  8%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/GenerationFailure.cpp.o
+2026-09-29T07:50:56.2606891Z [  8%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Log.cpp.o
+2026-09-29T07:50:56.5203656Z [  8%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Random.cpp.o
+2026-09-29T07:50:56.8836933Z [  9%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Show.cpp.o
+2026-09-29T07:50:57.0965026Z [  9%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Any.cpp.o
+2026-09-29T07:50:57.3032223Z [  9%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Assertions.cpp.o
+2026-09-29T07:50:57.5209727Z [  9%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Base64.cpp.o
+2026-09-29T07:50:57.5702483Z [  9%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/live_control_actions.cpp.o
+2026-09-29T07:50:57.6353962Z [ 10%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Configuration.cpp.o
+2026-09-29T07:50:57.9360635Z [ 10%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/live_control_mailbox.cpp.o
+2026-09-29T07:50:58.0686689Z [ 10%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/DefaultTestListener.cpp.o
+2026-09-29T07:50:58.3810305Z [ 10%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/FrequencyMap.cpp.o
+2026-09-29T07:50:58.4694734Z [ 10%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/ImplicitParam.cpp.o
+2026-09-29T07:50:58.6922901Z [ 11%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/LogTestListener.cpp.o
+2026-09-29T07:50:58.9745281Z [ 11%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/MapParser.cpp.o
+2026-09-29T07:50:59.1985407Z [ 11%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/MulticastTestListener.cpp.o
+2026-09-29T07:50:59.2996055Z [ 11%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/live_control_replay.cpp.o
+2026-09-29T07:50:59.4939045Z [ 12%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/ParseException.cpp.o
+2026-09-29T07:50:59.5672156Z [ 12%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Platform.cpp.o
+2026-09-29T07:50:59.7521144Z [ 12%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Property.cpp.o
+2026-09-29T07:50:59.8088604Z [ 13%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/memory_policy.cpp.o
+2026-09-29T07:51:00.2592352Z [ 13%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/mixed_rate_actions.cpp.o
+2026-09-29T07:51:00.2994442Z [ 13%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/PropertyContext.cpp.o
+2026-09-29T07:51:00.4585236Z [ 14%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/ReproduceListener.cpp.o
+2026-09-29T07:51:00.6281370Z [ 14%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/mixed_rate_replay.cpp.o
+2026-09-29T07:51:00.8495170Z [ 14%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Results.cpp.o
+2026-09-29T07:51:01.0718843Z [ 15%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/mock_device.cpp.o
+2026-09-29T07:51:01.3404263Z [ 15%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Serialization.cpp.o
+2026-09-29T07:51:01.4314475Z [ 15%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/StringSerialization.cpp.o
+2026-09-29T07:51:01.5170051Z [ 15%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/native_platform_preflight.cpp.o
+2026-09-29T07:51:01.7458635Z [ 16%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/TestMetadata.cpp.o
+2026-09-29T07:51:01.8564755Z [ 16%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/TestParams.cpp.o
+2026-09-29T07:51:01.8595946Z [ 16%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/observability_export.cpp.o
+2026-09-29T07:51:02.0550778Z [ 16%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Testing.cpp.o
+2026-09-29T07:51:02.2732380Z [ 16%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/rate_dispatch.cpp.o
+2026-09-29T07:51:02.5630204Z [ 17%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/Numeric.cpp.o
+2026-09-29T07:51:03.5506186Z [ 18%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/rate_telemetry.cpp.o
+2026-09-29T07:51:03.9048208Z [ 18%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/rate_timeline.cpp.o
+2026-09-29T07:51:04.0625209Z [ 18%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/Text.cpp.o
+2026-09-29T07:51:04.4503990Z [ 18%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/resource_policy.cpp.o
+2026-09-29T07:51:04.6536301Z [ 18%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/detail/ExecHandler.cpp.o
+2026-09-29T07:51:04.9564196Z [ 18%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/detail/GenerationHandler.cpp.o
+2026-09-29T07:51:05.0524939Z [ 18%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/runtime_compat.cpp.o
+2026-09-29T07:51:05.1536958Z [ 19%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/detail/Recipe.cpp.o
+2026-09-29T07:51:05.3706107Z [ 20%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/runtime_profile.cpp.o
+2026-09-29T07:51:05.4957838Z [ 20%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/detail/ScaleInteger.cpp.o
+2026-09-29T07:51:05.7219380Z [ 20%] Linking CXX static library librapidcheck.a
+2026-09-29T07:51:05.7504614Z [ 20%] Built target rapidcheck
+2026-09-29T07:51:05.7540848Z [ 20%] Building CXX object samples/CMakeFiles/sample_particles.dir/particles.cpp.o
+2026-09-29T07:51:05.7661793Z [ 20%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/sampled_io.cpp.o
+2026-09-29T07:51:05.9954580Z [ 21%] Linking CXX executable sample_particles
+2026-09-29T07:51:06.0820381Z [ 21%] Built target sample_particles
+2026-09-29T07:51:06.0855913Z [ 22%] Building CXX object samples/CMakeFiles/sample_tyre_belt.dir/tyre_belt_kernel.cpp.o
+2026-09-29T07:51:06.3478667Z [ 22%] Linking CXX executable sample_tyre_belt
+2026-09-29T07:51:06.4287291Z [ 22%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/loopback_backend.cpp.o
+2026-09-29T07:51:06.4411134Z [ 22%] Built target sample_tyre_belt
+2026-09-29T07:51:06.4446886Z [ 23%] Building CXX object samples/CMakeFiles/sample_async_gpu.dir/async_gpu_stub.cpp.o
+2026-09-29T07:51:06.6540775Z [ 23%] Linking CXX executable sample_async_gpu
+2026-09-29T07:51:06.7438878Z [ 23%] Built target sample_async_gpu
+2026-09-29T07:51:06.7473363Z [ 23%] Building CXX object samples/recipes/CMakeFiles/recipe_cuda_boundary.dir/__/__/tests/package_consumer/cuda_consumer.cpp.o
+2026-09-29T07:51:06.9252930Z [ 24%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/snapshot_codec.cpp.o
+2026-09-29T07:51:06.9971914Z [ 25%] Linking CXX executable recipe_cuda_boundary
+2026-09-29T07:51:07.0997620Z [ 25%] Built target recipe_cuda_boundary
+2026-09-29T07:51:07.1031587Z [ 25%] Building CXX object samples/recipes/CMakeFiles/recipe_xdma_boundary.dir/__/__/tests/package_consumer/xdma_consumer.cpp.o
+2026-09-29T07:51:07.3365895Z [ 26%] Linking CXX executable recipe_xdma_boundary
+2026-09-29T07:51:07.3869270Z [ 26%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/telemetry.cpp.o
+2026-09-29T07:51:07.4392032Z [ 26%] Built target recipe_xdma_boundary
+2026-09-29T07:51:07.4425688Z [ 27%] Building CXX object bench/CMakeFiles/rtfw_benchmark.dir/src/benchmark.cpp.o
+2026-09-29T07:51:07.7692381Z [ 27%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/thread_policy.cpp.o
+2026-09-29T07:51:08.2828465Z [ 27%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/watchdog_monitor.cpp.o
+2026-09-29T07:51:08.7275237Z [ 27%] Linking CXX static library librtfw_benchmark.a
+2026-09-29T07:51:08.7477341Z [ 27%] Built target rtfw_benchmark
+2026-09-29T07:51:08.7513098Z [ 27%] Building CXX object bench/CMakeFiles/bench_aosoa_vs_soa.dir/bench_aosoa_vs_soa.cpp.o
+2026-09-29T07:51:08.7899414Z [ 28%] Linking CXX static library librtfw_runtime.a
+2026-09-29T07:51:08.8268846Z [ 28%] Built target rtfw_runtime
+2026-09-29T07:51:08.8305046Z [ 29%] Building C object tests/CMakeFiles/test_incompatible_plugin.dir/sample_plugin_bad.c.o
+2026-09-29T07:51:08.8486490Z [ 29%] Linking C shared library libbad_plugin.so
+2026-09-29T07:51:08.8724830Z [ 29%] Built target test_incompatible_plugin
+2026-09-29T07:51:08.8783036Z [ 29%] Building C object tests/CMakeFiles/test_extension_fixture.dir/extension_fixture.c.o
+2026-09-29T07:51:08.9034794Z [ 29%] Linking C shared library libextension_fixture.so
+2026-09-29T07:51:08.9243360Z [ 29%] Built target test_extension_fixture
+2026-09-29T07:51:08.9278209Z [ 29%] Building C object tests/CMakeFiles/test_extension_fixture_bad.dir/extension_fixture_bad.c.o
+2026-09-29T07:51:08.9485360Z [ 30%] Linking C shared library libextension_fixture_bad.so
+2026-09-29T07:51:08.9692183Z [ 30%] Built target test_extension_fixture_bad
+2026-09-29T07:51:08.9727704Z [ 30%] Building C object tests/CMakeFiles/test_sample_plugin.dir/sample_plugin.c.o
+2026-09-29T07:51:08.9894539Z [ 30%] Linking C shared library libsample_plugin.so
+2026-09-29T07:51:09.0101215Z [ 30%] Built target test_sample_plugin
+2026-09-29T07:51:09.0135036Z [ 30%] Building CXX object tests/CMakeFiles/rtfw_cuda_physics_tests.dir/test_cuda_physics.cpp.o
+2026-09-29T07:51:09.2759311Z [ 30%] Linking CXX executable bench_aosoa_vs_soa
+2026-09-29T07:51:09.3707233Z [ 30%] Built target bench_aosoa_vs_soa
+2026-09-29T07:51:09.3745357Z [ 30%] Building CXX object tests/CMakeFiles/rtfw_cpu_gpu_fpga_cpu_sample_tests.dir/test_cpu_gpu_fpga_cpu_sample.cpp.o
+2026-09-29T07:51:09.9598692Z [ 30%] Linking CXX executable rtfw_cuda_physics_tests
+2026-09-29T07:51:10.1350275Z [ 31%] Linking CXX executable rtfw_cpu_gpu_fpga_cpu_sample_tests
+2026-09-29T07:51:10.3751770Z [ 31%] Built target rtfw_cuda_physics_tests
+2026-09-29T07:51:10.3787415Z [ 31%] Building CXX object tests/golden_cuda/CMakeFiles/test_golden_cuda.dir/test_cuda.cpp.o
+2026-09-29T07:51:10.5484797Z [ 31%] Built target rtfw_cpu_gpu_fpga_cpu_sample_tests
+2026-09-29T07:51:10.5521950Z [ 31%] Building CXX object tests/golden_system/CMakeFiles/test_golden_system.dir/test_system.cpp.o
+2026-09-29T07:51:11.6884995Z [ 32%] Linking CXX executable test_golden_system
+2026-09-29T07:51:12.0910940Z [ 32%] Built target test_golden_system
+2026-09-29T07:51:12.0951225Z [ 33%] Building CXX object tests/CMakeFiles/rtfw_simulation_timing_noalloc.dir/device_rate_simulation/noalloc.cpp.o
+2026-09-29T07:51:12.2034893Z [ 33%] Linking CXX executable test_golden_cuda
+2026-09-29T07:51:12.6431631Z [ 33%] Built target test_golden_cuda
+2026-09-29T07:51:12.6469946Z [ 33%] Building CXX object tests/host_adapter/CMakeFiles/test_host_adapter.dir/test_host.cpp.o
+2026-09-29T07:51:12.6548459Z [ 33%] Linking CXX executable rtfw_simulation_timing_noalloc
+2026-09-29T07:51:13.0320576Z [ 33%] Built target rtfw_simulation_timing_noalloc
+2026-09-29T07:51:13.0355549Z [ 33%] Building CXX object tests/CMakeFiles/rtfw_runtime_profile_tests.dir/runtime_profile_tests.cpp.o
+2026-09-29T07:51:13.4500799Z [ 34%] Linking CXX executable rtfw_runtime_profile_tests
+2026-09-29T07:51:13.4602792Z [ 34%] Linking CXX executable test_host_adapter
+2026-09-29T07:51:13.8490110Z [ 34%] Built target rtfw_runtime_profile_tests
+2026-09-29T07:51:13.8527701Z [ 34%] Building CXX object tests/CMakeFiles/rtfw_xdma_backend_tests.dir/xdma_backend_tests.cpp.o
+2026-09-29T07:51:13.8617375Z [ 34%] Built target test_host_adapter
+2026-09-29T07:51:13.8653403Z [ 35%] Building CXX object tests/CMakeFiles/rtfw_cuda_pipeline_tests.dir/test_cuda_pipeline.cpp.o
+2026-09-29T07:51:14.3316222Z [ 35%] Linking CXX executable rtfw_xdma_backend_tests
+2026-09-29T07:51:14.4358737Z [ 35%] Built target rtfw_xdma_backend_tests
+2026-09-29T07:51:14.4392603Z [ 35%] Building CXX object tests/CMakeFiles/rtfw_cuda_lifetime_tests.dir/test_cuda_lifetime.cpp.o
+2026-09-29T07:51:14.9340703Z [ 35%] Linking CXX executable rtfw_cuda_pipeline_tests
+2026-09-29T07:51:15.2695099Z [ 35%] Linking CXX executable rtfw_cuda_lifetime_tests
+2026-09-29T07:51:15.3607469Z [ 35%] Built target rtfw_cuda_pipeline_tests
+2026-09-29T07:51:15.3648208Z [ 35%] Building CXX object tests/hello_runtime/CMakeFiles/hello_capacity_failure.dir/capacity.cpp.o
+2026-09-29T07:51:15.6831093Z [ 35%] Built target rtfw_cuda_lifetime_tests
+2026-09-29T07:51:15.6868460Z [ 35%] Building CXX object tests/hello_runtime/CMakeFiles/hello_step_failure.dir/step.cpp.o
+2026-09-29T07:51:15.7261128Z [ 35%] Linking CXX executable hello_capacity_failure
+2026-09-29T07:51:16.0512507Z [ 36%] Linking CXX executable hello_step_failure
+2026-09-29T07:51:16.1346328Z [ 36%] Built target hello_capacity_failure
+2026-09-29T07:51:16.1394824Z [ 37%] Building CXX object tests/typed_runtime/CMakeFiles/test_typed_sdk.dir/test_sdk.cpp.o
+2026-09-29T07:51:16.4630043Z [ 37%] Built target hello_step_failure
+2026-09-29T07:51:16.4666290Z [ 37%] Building CXX object tests/backend_authoring/CMakeFiles/test_backend_authoring.dir/test_backend.cpp.o
+2026-09-29T07:51:16.8690674Z [ 37%] Linking CXX executable test_typed_sdk
+2026-09-29T07:51:17.2635974Z [ 37%] Built target test_typed_sdk
+2026-09-29T07:51:17.2675288Z [ 37%] Building CXX object tests/cil_shared_memory/CMakeFiles/test_cil_shared_memory.dir/test_cil.cpp.o
+2026-09-29T07:51:17.2971707Z [ 37%] Linking CXX executable test_backend_authoring
+2026-09-29T07:51:17.6972857Z [ 37%] Built target test_backend_authoring
+2026-09-29T07:51:17.7009438Z [ 37%] Building CXX object CMakeFiles/simcore_rt.dir/rt/src/runtime.cpp.o
+2026-09-29T07:51:17.9944474Z [ 38%] Linking CXX executable test_cil_shared_memory
+2026-09-29T07:51:18.3748890Z [ 38%] Built target test_cil_shared_memory
+2026-09-29T07:51:18.3784934Z [ 38%] Building CXX object CMakeFiles/rtfw_shared.dir/src/c_abi.cpp.o
+2026-09-29T07:51:19.0669247Z [ 38%] Linking CXX shared library librtfw.so
+2026-09-29T07:51:19.3116858Z [ 39%] Building CXX object CMakeFiles/simcore_rt.dir/rt/src/fiber_pool.cpp.o
+2026-09-29T07:51:19.3844986Z [ 39%] Built target rtfw_shared
+2026-09-29T07:51:19.3878475Z [ 39%] Building CXX object CMakeFiles/rtfw_static.dir/src/c_abi.cpp.o
+2026-09-29T07:51:19.8301705Z [ 39%] Linking CXX static library libsimcore_rt.a
+2026-09-29T07:51:19.8506298Z [ 39%] Built target simcore_rt
+2026-09-29T07:51:19.8543926Z [ 39%] Building CXX object CMakeFiles/rtfw_runtime_demo.dir/src/runtime_profile_demo.cpp.o
+2026-09-29T07:51:20.1070424Z [ 39%] Linking CXX static library librtfw_static.a
+2026-09-29T07:51:20.1262450Z [ 39%] Built target rtfw_static
+2026-09-29T07:51:20.1300068Z [ 40%] Building CXX object _deps/googletest/googlemock/CMakeFiles/gmock.dir/src/gmock-all.cc.o
+2026-09-29T07:51:20.5316221Z [ 40%] Linking CXX executable rtfw_runtime_demo
+2026-09-29T07:51:20.9095508Z [ 40%] Built target rtfw_runtime_demo
+2026-09-29T07:51:20.9130539Z [ 40%] Building CXX object _deps/googletest/googletest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o
+2026-09-29T07:51:21.4783091Z [ 41%] Linking CXX static library ../../../lib/libgtest_main.a
+2026-09-29T07:51:21.4980897Z [ 41%] Built target gtest_main
+2026-09-29T07:51:21.5020478Z [ 41%] Building CXX object samples/CMakeFiles/sample_cuda_pipeline.dir/cuda_physics/pipeline/main.cpp.o
+2026-09-29T07:51:21.5507492Z [ 41%] Linking CXX static library ../../../lib/libgmock.a
+2026-09-29T07:51:21.5714143Z [ 41%] Built target gmock
+2026-09-29T07:51:21.5751444Z [ 41%] Building CXX object samples/CMakeFiles/sample_cuda_physics.dir/cuda_physics/main.cpp.o
+2026-09-29T07:51:22.1020830Z [ 41%] Linking CXX executable sample_cuda_physics
+2026-09-29T07:51:22.1328788Z [ 42%] Linking CXX executable sample_cuda_pipeline
+2026-09-29T07:51:22.5015406Z [ 42%] Built target sample_cuda_physics
+2026-09-29T07:51:22.5053666Z [ 43%] Building C object samples/CMakeFiles/sample_embed_c.dir/embed_c/mini_app.c.o
+2026-09-29T07:51:22.5370091Z [ 43%] Linking C executable sample_embed_c
+2026-09-29T07:51:22.5370395Z [ 43%] Built target sample_cuda_pipeline
+2026-09-29T07:51:22.5405284Z [ 43%] Building C object samples/CMakeFiles/sample_embed_c_static.dir/embed_c/mini_app.c.o
+2026-09-29T07:51:22.5705259Z [ 43%] Linking CXX executable sample_embed_c_static
+2026-09-29T07:51:22.6230183Z [ 43%] Built target sample_embed_c
+2026-09-29T07:51:22.6269101Z [ 44%] Building CXX object samples/CMakeFiles/sample_embed_cpp.dir/embed_cpp/mini_app.cpp.o
+2026-09-29T07:51:22.9559076Z [ 44%] Built target sample_embed_c_static
+2026-09-29T07:51:22.9598732Z [ 44%] Building CXX object samples/CMakeFiles/sample_device_mock.dir/device_mock.cpp.o
+2026-09-29T07:51:23.0152829Z [ 44%] Linking CXX executable sample_embed_cpp
+2026-09-29T07:51:23.3617004Z [ 44%] Linking CXX executable sample_device_mock
+2026-09-29T07:51:23.3927781Z [ 44%] Built target sample_embed_cpp
+2026-09-29T07:51:23.3964036Z [ 44%] Building CXX object samples/CMakeFiles/sample_cpu_gpu_fpga_cpu.dir/cpu_gpu_fpga_cpu.cpp.o
+2026-09-29T07:51:23.7501705Z [ 44%] Built target sample_device_mock
+2026-09-29T07:51:23.7538534Z [ 44%] Building CXX object samples/CMakeFiles/sample_live_control_typed.dir/live_control_typed.cpp.o
+2026-09-29T07:51:24.0094844Z [ 44%] Linking CXX executable sample_cpu_gpu_fpga_cpu
+2026-09-29T07:51:24.2828700Z [ 44%] Linking CXX executable sample_live_control_typed
+2026-09-29T07:51:24.4134208Z [ 44%] Built target sample_cpu_gpu_fpga_cpu
+2026-09-29T07:51:24.4173718Z [ 44%] Building CXX object samples/CMakeFiles/sample_cuda_lifetime.dir/cuda_physics/lifetime/main.cpp.o
+2026-09-29T07:51:24.6530007Z [ 44%] Built target sample_live_control_typed
+2026-09-29T07:51:24.6566820Z [ 44%] Building CXX object samples/CMakeFiles/sample_hello_runtime.dir/hello_runtime/main.cpp.o
+2026-09-29T07:51:24.9864576Z [ 44%] Linking CXX executable sample_hello_runtime
+2026-09-29T07:51:25.2070724Z [ 45%] Linking CXX executable sample_cuda_lifetime
+2026-09-29T07:51:25.3667526Z [ 45%] Built target sample_hello_runtime
+2026-09-29T07:51:25.3702814Z [ 45%] Building CXX object samples/CMakeFiles/sample_typed_runtime.dir/typed_runtime/main.cpp.o
+2026-09-29T07:51:25.6062497Z [ 45%] Built target sample_cuda_lifetime
+2026-09-29T07:51:25.6100500Z [ 45%] Building CXX object samples/CMakeFiles/sample_backend_authoring.dir/backend_authoring/main.cpp.o
+2026-09-29T07:51:25.8307072Z [ 45%] Linking CXX executable sample_typed_runtime
+2026-09-29T07:51:26.2024069Z [ 45%] Built target sample_typed_runtime
+2026-09-29T07:51:26.2058969Z [ 45%] Building CXX object samples/CMakeFiles/sample_cil_plant.dir/cil_shared_memory/plant.cpp.o
+2026-09-29T07:51:26.2336818Z [ 45%] Linking CXX executable sample_backend_authoring
+2026-09-29T07:51:26.6263306Z [ 45%] Built target sample_backend_authoring
+2026-09-29T07:51:26.6298792Z [ 46%] Building CXX object samples/CMakeFiles/sample_cil_controller.dir/cil_shared_memory/controller.cpp.o
+2026-09-29T07:51:26.7979828Z [ 47%] Linking CXX executable sample_cil_plant
+2026-09-29T07:51:27.0527786Z [ 47%] Linking CXX executable sample_cil_controller
+2026-09-29T07:51:27.1498480Z [ 47%] Built target sample_cil_controller
+2026-09-29T07:51:27.1534306Z [ 47%] Building CXX object samples/CMakeFiles/sample_host_adapter.dir/host_adapter/main.cpp.o
+2026-09-29T07:51:27.1729311Z [ 47%] Built target sample_cil_plant
+2026-09-29T07:51:27.1765577Z [ 47%] Building CXX object samples/CMakeFiles/sample_golden_system.dir/golden_system/main.cpp.o
+2026-09-29T07:51:27.7887179Z [ 48%] Linking CXX executable sample_host_adapter
+2026-09-29T07:51:28.1755066Z [ 48%] Built target sample_host_adapter
+2026-09-29T07:51:28.1790026Z [ 48%] Building CXX object samples/CMakeFiles/sample_golden_controller.dir/golden_system/controller.cpp.o
+2026-09-29T07:51:28.5669653Z [ 50%] Linking CXX executable sample_golden_system
+2026-09-29T07:51:28.6299927Z [ 50%] Linking CXX executable sample_golden_controller
+2026-09-29T07:51:28.7280201Z [ 50%] Built target sample_golden_controller
+2026-09-29T07:51:28.7313785Z [ 51%] Building CXX object samples/CMakeFiles/sample_golden_cuda.dir/golden_cuda/main.cpp.o
+2026-09-29T07:51:28.9770928Z [ 51%] Built target sample_golden_system
+2026-09-29T07:51:28.9807938Z [ 52%] Building C object samples/recipes/CMakeFiles/recipe_raw_c.dir/__/__/tests/package_consumer/c_consumer.c.o
+2026-09-29T07:51:29.0007119Z [ 52%] Linking CXX executable recipe_raw_c
+2026-09-29T07:51:29.3817339Z [ 52%] Built target recipe_raw_c
+2026-09-29T07:51:29.3855126Z [ 52%] Building CXX object samples/recipes/CMakeFiles/recipe_raw_cpp.dir/__/__/tests/package_consumer/cpp_consumer.cpp.o
+2026-09-29T07:51:29.7862918Z [ 52%] Linking CXX executable recipe_raw_cpp
+2026-09-29T07:51:30.1734712Z [ 52%] Built target recipe_raw_cpp
+2026-09-29T07:51:30.1773163Z [ 52%] Building CXX object samples/recipes/CMakeFiles/recipe_profile.dir/__/__/tests/package_consumer/profile_consumer.cpp.o
+2026-09-29T07:51:30.4787335Z [ 52%] Linking CXX executable sample_golden_cuda
+2026-09-29T07:51:30.5211524Z [ 52%] Linking CXX executable recipe_profile
+2026-09-29T07:51:30.9139391Z [ 52%] Built target recipe_profile
+2026-09-29T07:51:30.9180557Z [ 53%] Building CXX object samples/recipes/CMakeFiles/recipe_mixed_rate.dir/__/__/tests/package_consumer/mixed_rate_consumer.cpp.o
+2026-09-29T07:51:30.9215599Z [ 53%] Built target sample_golden_cuda
+2026-09-29T07:51:30.9251384Z [ 53%] Building CXX object samples/recipes/CMakeFiles/recipe_live_control.dir/__/__/tests/package_consumer/live_control_consumer.cpp.o
+2026-09-29T07:51:31.2725803Z [ 53%] Linking CXX executable recipe_live_control
+2026-09-29T07:51:31.4122576Z [ 53%] Linking CXX executable recipe_mixed_rate
+2026-09-29T07:51:31.6551127Z [ 53%] Built target recipe_live_control
+2026-09-29T07:51:31.6592870Z [ 54%] Building CXX object samples/recipes/CMakeFiles/recipe_replay.dir/__/__/tests/package_consumer/live_control_replay_consumer.cpp.o
+2026-09-29T07:51:31.7961074Z [ 54%] Built target recipe_mixed_rate
+2026-09-29T07:51:31.7998937Z [ 54%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_provider.cpp.o
+2026-09-29T07:51:32.0943279Z [ 54%] Linking CXX executable recipe_replay
+2026-09-29T07:51:32.4510505Z [ 54%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/rates.cpp.o
+2026-09-29T07:51:32.4650599Z [ 54%] Built target recipe_replay
+2026-09-29T07:51:32.4686896Z [ 54%] Building CXX object bench/CMakeFiles/rtfw_benchmark_device.dir/providers/device_provider.cpp.o
+2026-09-29T07:51:33.2103134Z [ 54%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/controls.cpp.o
+2026-09-29T07:51:33.6741926Z [ 55%] Linking CXX static library librtfw_benchmark_device.a
+2026-09-29T07:51:33.6949272Z [ 55%] Built target rtfw_benchmark_device
+2026-09-29T07:51:33.6986185Z [ 55%] Building CXX object bench/CMakeFiles/rtfw_benchmark_cpu.dir/providers/cpu_provider.cpp.o
+2026-09-29T07:51:33.8769130Z [ 56%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/checkpoint.cpp.o
+2026-09-29T07:51:34.4995700Z [ 56%] Linking CXX static library librtfw_benchmark_cpu.a
+2026-09-29T07:51:34.5034783Z [ 56%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/replay.cpp.o
+2026-09-29T07:51:34.5187072Z [ 56%] Built target rtfw_benchmark_cpu
+2026-09-29T07:51:34.5222106Z [ 56%] Building CXX object bench/CMakeFiles/rtfw-bench-template.dir/extension/main.cpp.o
+2026-09-29T07:51:34.9290361Z [ 56%] Building CXX object bench/CMakeFiles/rtfw-bench-template.dir/extension/provider.cpp.o
+2026-09-29T07:51:35.2380126Z [ 56%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/observability.cpp.o
+2026-09-29T07:51:35.3970237Z [ 56%] Linking CXX executable rtfw-bench-template
+2026-09-29T07:51:35.5233318Z [ 56%] Built target rtfw-bench-template
+2026-09-29T07:51:35.5269350Z [ 56%] Building CXX object bench/CMakeFiles/rtfw_benchmark_device_consumer.dir/__/tests/package_consumer/benchmark_device_consumer.cpp.o
+2026-09-29T07:51:35.9462728Z [ 57%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/capacity.cpp.o
+2026-09-29T07:51:35.9623578Z [ 57%] Linking CXX executable rtfw_benchmark_device_consumer
+2026-09-29T07:51:36.4158625Z [ 57%] Built target rtfw_benchmark_device_consumer
+2026-09-29T07:51:36.4197682Z [ 58%] Building CXX object bench/CMakeFiles/rtfw_benchmark_device_noalloc.dir/__/tests/benchmark_fixtures/device_consumer/noalloc.cpp.o
+2026-09-29T07:51:36.5627160Z [ 58%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/device.cpp.o
+2026-09-29T07:51:36.8189421Z [ 58%] Linking CXX executable rtfw_benchmark_device_noalloc
+2026-09-29T07:51:37.2659840Z [ 58%] Built target rtfw_benchmark_device_noalloc
+2026-09-29T07:51:37.2696049Z [ 58%] Building CXX object bench/CMakeFiles/rtfw_benchmark_cpu_consumer.dir/__/tests/package_consumer/benchmark_cpu_consumer.cpp.o
+2026-09-29T07:51:37.4961786Z [ 58%] Linking CXX static library librtfw_benchmark_runtime.a
+2026-09-29T07:51:37.5180537Z [ 58%] Built target rtfw_benchmark_runtime
+2026-09-29T07:51:37.5214116Z [ 58%] Building CXX object bench/CMakeFiles/rtfw_benchmark_cpu_noalloc.dir/__/tests/benchmark_fixtures/cpu_consumer/noalloc.cpp.o
+2026-09-29T07:51:37.6872521Z [ 59%] Linking CXX executable rtfw_benchmark_cpu_consumer
+2026-09-29T07:51:37.9181793Z [ 59%] Linking CXX executable rtfw_benchmark_cpu_noalloc
+2026-09-29T07:51:38.1076509Z [ 59%] Built target rtfw_benchmark_cpu_consumer
+2026-09-29T07:51:38.1113362Z [ 59%] Building CXX object bench/CMakeFiles/rtfw_benchmark_consumer.dir/__/tests/package_consumer/benchmark_consumer.cpp.o
+2026-09-29T07:51:38.3509860Z [ 59%] Built target rtfw_benchmark_cpu_noalloc
+2026-09-29T07:51:38.3548825Z [ 59%] Building CXX object bench/CMakeFiles/rtfw_benchmark_extension_tests.dir/__/tests/benchmark_fixtures/extension_consumer/lifecycle.cpp.o
+2026-09-29T07:51:38.5603768Z [ 60%] Linking CXX executable rtfw_benchmark_consumer
+2026-09-29T07:51:38.6837903Z [ 60%] Built target rtfw_benchmark_consumer
+2026-09-29T07:51:38.6873933Z [ 61%] Building CXX object bench/CMakeFiles/rtfw_cuda_particle_benchmark.dir/__/samples/cuda_physics/benchmark/provider.cpp.o
+2026-09-29T07:51:38.9203606Z [ 61%] Building CXX object bench/CMakeFiles/rtfw_benchmark_extension_tests.dir/extension/provider.cpp.o
+2026-09-29T07:51:39.3764984Z [ 62%] Linking CXX executable rtfw_benchmark_extension_tests
+2026-09-29T07:51:39.5055901Z [ 62%] Built target rtfw_benchmark_extension_tests
+2026-09-29T07:51:39.5091414Z [ 62%] Building CXX object tests/CMakeFiles/rtfw_thread_policy_rollback_test.dir/test_thread_policy.cpp.o
+2026-09-29T07:51:39.5548324Z [ 62%] Linking CXX static library librtfw_cuda_particle_benchmark.a
+2026-09-29T07:51:39.5736459Z [ 62%] Built target rtfw_cuda_particle_benchmark
+2026-09-29T07:51:40.9025710Z [ 62%] Linking CXX executable rtfw_thread_policy_rollback_test
+2026-09-29T07:51:41.5913503Z [ 62%] Built target rtfw_thread_policy_rollback_test
+2026-09-29T07:51:59.6722952Z golden state, controls, replay, recovery, allocation: PASS
+2026-09-29T07:52:00.2023312Z golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+2026-09-29T07:52:00.2217703Z PASS: portable golden run/state/replay; hardware and RT qualification not performed
+2026-09-29T07:52:00.7335271Z golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+2026-09-29T07:52:00.7537451Z PASS: portable golden run/state/replay; hardware and RT qualification not performed
+2026-09-29T07:52:00.7588038Z [ 62%] Built target golden_determinism_check
+2026-09-29T07:52:00.7657020Z [ 63%] Building C object tests/CMakeFiles/test_cabi_dlopen.dir/test_cabi_dlopen.c.o
+2026-09-29T07:52:00.9162239Z [ 63%] Linking C executable test_cabi_dlopen
+2026-09-29T07:52:01.0421272Z [ 63%] Built target test_cabi_dlopen
+2026-09-29T07:52:01.0457559Z [ 63%] Building CXX object tests/CMakeFiles/rtfw_host_adapter_tests.dir/host_adapter_tests.cpp.o
+2026-09-29T07:52:01.6919809Z [ 63%] Linking CXX executable rtfw_host_adapter_tests
+2026-09-29T07:52:02.3460283Z [ 63%] Built target rtfw_host_adapter_tests
+2026-09-29T07:52:02.3519983Z [ 63%] Building CXX object CMakeFiles/rtfw_experimental.dir/rt/src/plugin_manager.cpp.o
+2026-09-29T07:52:02.5565233Z [ 63%] Building CXX object CMakeFiles/rtfw_experimental.dir/rt/src/scheduler.cpp.o
+2026-09-29T07:52:03.6563627Z [ 63%] Building CXX object CMakeFiles/rtfw_experimental.dir/rt/src/crashdump_posix.cpp.o
+2026-09-29T07:52:04.1683866Z [ 64%] Linking CXX static library librtfw_experimental.a
+2026-09-29T07:52:04.2031704Z [ 64%] Built target rtfw_experimental
+2026-09-29T07:52:04.2074361Z [ 64%] Building CXX object CMakeFiles/simcore_app.dir/src/main.cpp.o
+2026-09-29T07:52:08.7023515Z [ 64%] Linking CXX executable rtfw_demo
+2026-09-29T07:52:09.0067924Z [ 64%] Built target simcore_app
+2026-09-29T07:52:09.0145397Z [ 64%] Building CXX object _deps/googletest/googlemock/CMakeFiles/gmock_main.dir/src/gmock_main.cc.o
+2026-09-29T07:52:10.1638805Z [ 64%] Linking CXX static library ../../../lib/libgmock_main.a
+2026-09-29T07:52:10.1885936Z [ 64%] Built target gmock_main
+2026-09-29T07:52:10.1930630Z [ 64%] Building CXX object bench/CMakeFiles/rtfw-bench.dir/src/benchmark_cli.cpp.o
+2026-09-29T07:52:11.1611814Z [ 64%] Linking CXX executable rtfw-bench
+2026-09-29T07:52:12.0479777Z [ 64%] Built target rtfw-bench
+2026-09-29T07:52:12.0539709Z [ 64%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime_consumer.dir/__/tests/package_consumer/benchmark_runtime_consumer.cpp.o
+2026-09-29T07:52:12.7763573Z [ 65%] Linking CXX executable rtfw_benchmark_runtime_consumer
+2026-09-29T07:52:13.5338252Z [ 65%] Built target rtfw_benchmark_runtime_consumer
+2026-09-29T07:52:13.5384450Z [ 65%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime_noalloc.dir/__/tests/benchmark_fixtures/runtime_consumer/noalloc.cpp.o
+2026-09-29T07:52:14.1076134Z [ 65%] Linking CXX executable rtfw_benchmark_runtime_noalloc
+2026-09-29T07:52:14.8260327Z [ 65%] Built target rtfw_benchmark_runtime_noalloc
+2026-09-29T07:52:14.8327845Z [ 65%] Building CXX object bench/CMakeFiles/rtfw-bench-cuda-physics.dir/__/samples/cuda_physics/benchmark/main.cpp.o
+2026-09-29T07:52:15.8969043Z [ 66%] Linking CXX executable rtfw-bench-cuda-physics
+2026-09-29T07:52:16.5992970Z [ 66%] Built target rtfw-bench-cuda-physics
+2026-09-29T07:52:16.6054713Z [ 67%] Building CXX object bench/CMakeFiles/rtfw_cuda_benchmark_tests.dir/__/tests/test_cuda_benchmark.cpp.o
+2026-09-29T07:52:17.6771046Z [ 67%] Linking CXX executable rtfw_cuda_benchmark_tests
+2026-09-29T07:52:18.3577036Z [ 67%] Built target rtfw_cuda_benchmark_tests
+2026-09-29T07:52:18.3676920Z [ 67%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_simcore_basic.cpp.o
+2026-09-29T07:52:22.2795039Z [ 68%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_simcore_determinism.cpp.o
+2026-09-29T07:52:27.0346967Z [ 68%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_logging.cpp.o
+2026-09-29T07:52:28.9594534Z [ 68%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_async_logger.cpp.o
+2026-09-29T07:52:30.6164455Z [ 68%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_logger_backpressure.cpp.o
+2026-09-29T07:52:35.1817905Z [ 69%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_profiler.cpp.o
+2026-09-29T07:52:39.3853051Z [ 69%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_adaptive_param.cpp.o
+2026-09-29T07:52:43.1801580Z [ 69%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_soa.cpp.o
+2026-09-29T07:52:44.2535734Z [ 69%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_sparse_set.cpp.o
+2026-09-29T07:52:45.3945006Z [ 70%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_soa_view.cpp.o
+2026-09-29T07:52:46.3144958Z [ 70%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_jobqueue.cpp.o
+2026-09-29T07:52:48.1320391Z [ 70%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_queue_metrics.cpp.o
+2026-09-29T07:52:50.1195645Z [ 71%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_metrics_json.cpp.o
+2026-09-29T07:52:54.8010744Z [ 71%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_jobqueue_perf.cpp.o
+2026-09-29T07:52:56.3169364Z [ 71%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_workerpool_priority.cpp.o
+2026-09-29T07:52:58.2864989Z [ 71%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_phase_graph.cpp.o
+2026-09-29T07:53:02.4131812Z [ 72%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_static_phase_graph.cpp.o
+2026-09-29T07:53:03.7647154Z [ 72%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_chunk_autotune.cpp.o
+2026-09-29T07:53:07.4897255Z [ 72%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_deterministic_reduce.cpp.o
+2026-09-29T07:53:11.1263631Z [ 72%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_differential_output.cpp.o
+2026-09-29T07:53:12.2338738Z [ 73%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_robust_fp.cpp.o
+2026-09-29T07:53:13.4670618Z [ 73%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_budget_monitor.cpp.o
+2026-09-29T07:53:17.0590141Z [ 73%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_fault_injection.cpp.o
+2026-09-29T07:53:20.9489302Z [ 74%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_simd.cpp.o
+2026-09-29T07:53:22.1536226Z [ 74%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_aosoa_autotune.cpp.o
+2026-09-29T07:53:23.3767773Z [ 74%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rt_pool.cpp.o
+2026-09-29T07:53:24.4951223Z [ 74%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rt_arena.cpp.o
+2026-09-29T07:53:25.5888464Z [ 75%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_arena_binding_assert.cpp.o
+2026-09-29T07:53:26.7287313Z [ 75%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rt_overflow_death.cpp.o
+2026-09-29T07:53:27.9368560Z [ 75%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_fiber_pool.cpp.o
+2026-09-29T07:53:30.9717670Z [ 75%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_fiber_pool_race.cpp.o
+2026-09-29T07:53:33.9961717Z [ 76%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_bintrace.cpp.o
+2026-09-29T07:53:38.0209277Z [ 76%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_budget_degrade.cpp.o
+2026-09-29T07:53:41.9048190Z [ 76%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_predictive_adaptive.cpp.o
+2026-09-29T07:53:45.7552592Z [ 77%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_small_array_balance.cpp.o
+2026-09-29T07:53:49.6530589Z [ 77%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_phase_telemetry.cpp.o
+2026-09-29T07:53:53.5465603Z [ 77%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_aligned_allocator.cpp.o
+2026-09-29T07:53:54.4596456Z [ 77%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_highres_clock.cpp.o
+2026-09-29T07:53:55.4138957Z [ 78%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_highres_clock_integration.cpp.o
+2026-09-29T07:53:56.3496421Z [ 78%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rate_governor.cpp.o
+2026-09-29T07:53:57.3869671Z [ 78%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_hazard_ptr.cpp.o
+2026-09-29T07:53:58.4926433Z [ 78%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_lockfree_queue.cpp.o
+2026-09-29T07:53:59.7610335Z [ 79%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_seqlock_config.cpp.o
+2026-09-29T07:54:00.6621804Z [ 79%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_backpressure.cpp.o
+2026-09-29T07:54:01.6146115Z [ 79%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_physics_integrators.cpp.o
+2026-09-29T07:54:02.6094373Z [ 80%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_constraint_solver.cpp.o
+2026-09-29T07:54:03.4964871Z [ 80%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_narrowphase.cpp.o
+2026-09-29T07:54:04.3981294Z [ 80%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_hal.cpp.o
+2026-09-29T07:54:05.6092972Z [ 80%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_gpu_stub.cpp.o
+2026-09-29T07:54:06.4306792Z native replay rejected status=-3 active replay requires deterministic mock/loopback backends
+2026-09-29T07:54:06.4307506Z foreign rejected=-16 
+2026-09-29T07:54:06.4307730Z foreign rejected=-16 
+2026-09-29T07:54:06.4308096Z PASS CPU/kernel/Graph semantic parity, exact oracles, counters, zero allocation and trusted replay
+2026-09-29T07:54:06.4495960Z [ 80%] Built target golden_cuda_determinism_check
+2026-09-29T07:54:06.4508979Z [ 81%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_gpu_overlap.cpp.o
+2026-09-29T07:54:07.9516459Z [ 81%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_frame_graph.cpp.o
+2026-09-29T07:54:08.1127727Z [ 81%] Building CXX object tests/CMakeFiles/rtfw_determinism_artifact.dir/determinism_artifact.cpp.o
+2026-09-29T07:54:08.5226505Z [ 82%] Linking CXX executable rtfw_determinism_artifact
+2026-09-29T07:54:08.9045760Z [ 82%] Built target rtfw_determinism_artifact
+2026-09-29T07:54:08.9058095Z [ 82%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_watchdog.cpp.o
+2026-09-29T07:54:09.4228755Z [ 82%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rt_watchdog.cpp.o
+2026-09-29T07:54:09.6318578Z [ 83%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_crashdump.cpp.o
+2026-09-29T07:54:10.1634092Z [ 83%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_numerics.cpp.o
+2026-09-29T07:54:10.2871136Z [ 83%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_prng_determinism.cpp.o
+2026-09-29T07:54:10.9453871Z [ 84%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_snapshot.cpp.o
+2026-09-29T07:54:13.1363009Z [ 84%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_trace_export.cpp.o
+2026-09-29T07:54:13.9543039Z [ 84%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_trace_noalloc.cpp.o
+2026-09-29T07:54:14.0090064Z [ 84%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_units.cpp.o
+2026-09-29T07:54:14.6240873Z [ 85%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_huge_page.cpp.o
+2026-09-29T07:54:15.2839447Z [ 85%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_thermal_limp.cpp.o
+2026-09-29T07:54:15.3475251Z [ 85%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_limp_mode.cpp.o
+2026-09-29T07:54:17.4249779Z [ 85%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_config_hot_reload.cpp.o
+2026-09-29T07:54:18.0991234Z [ 86%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_plugin_manager.cpp.o
+2026-09-29T07:54:18.2195934Z [ 86%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_sandbox.cpp.o
+2026-09-29T07:54:18.7420264Z [ 86%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_minidump_symbols.cpp.o
+2026-09-29T07:54:18.9049997Z [ 87%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_perf_artifacts.cpp.o
+2026-09-29T07:54:19.4098266Z [ 87%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_scheduler.cpp.o
+2026-09-29T07:54:19.6461805Z [ 87%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_host_runtime.cpp.o
+2026-09-29T07:54:20.2627302Z [ 87%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_periodic_runtime.cpp.o
+2026-09-29T07:54:20.6290277Z [ 88%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_platform_preflight.cpp.o
+2026-09-29T07:54:21.1650722Z [ 88%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_compiled_graph.cpp.o
+2026-09-29T07:54:21.4060906Z [ 88%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_executor.cpp.o
+2026-09-29T07:54:22.2995041Z [ 88%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_memory_plan.cpp.o
+2026-09-29T07:54:22.3271487Z [ 89%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_observability.cpp.o
+2026-09-29T07:54:23.1613622Z [ 89%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_determinism_replay.cpp.o
+2026-09-29T07:54:23.2943551Z [ 89%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_device_runtime.cpp.o
+2026-09-29T07:54:24.1372642Z [ 90%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_cuda_backend.cpp.o
+2026-09-29T07:54:24.6005237Z [ 90%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_vendor_hal_v2.cpp.o
+2026-09-29T07:54:25.6109512Z [ 90%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rt_pipeline.cpp.o
+2026-09-29T07:54:25.8878443Z [ 90%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_platform_gate.cpp.o
+2026-09-29T07:54:26.8078749Z [ 91%] Building CXX object tests/CMakeFiles/simcore_tests.dir/integration/test_determinism.cpp.o
+2026-09-29T07:54:27.7993760Z [ 91%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_extension_registration.cpp.o
+2026-09-29T07:54:28.6938583Z [ 91%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_command_batch.cpp.o
+2026-09-29T07:54:28.8491050Z [ 91%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_device_rate_simulation.cpp.o
+2026-09-29T07:54:30.9322833Z [ 92%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_heterogeneous_memory.cpp.o
+2026-09-29T07:54:31.0386698Z [ 92%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_hal_v2.cpp.o
+2026-09-29T07:54:32.3741817Z [ 92%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_cross_rate_data.cpp.o
+2026-09-29T07:54:32.5740377Z [ 93%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rate_dispatch.cpp.o
+2026-09-29T07:54:33.9632042Z [ 93%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rate_telemetry.cpp.o
+2026-09-29T07:54:34.3232926Z [ 93%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_rate_timeline.cpp.o
+2026-09-29T07:54:35.1914292Z [ 93%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_sampled_io.cpp.o
+2026-09-29T07:54:35.6163460Z [ 94%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_loopback_backend.cpp.o
+2026-09-29T07:54:36.5177286Z [ 94%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_mailbox.cpp.o
+2026-09-29T07:54:36.5930355Z [ 94%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_actions.cpp.o
+2026-09-29T07:54:37.3600704Z [ 94%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_sdk.cpp.o
+2026-09-29T07:54:38.2783914Z [ 95%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_stress.cpp.o
+2026-09-29T07:54:38.3712171Z [ 95%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_live_control_active_replay.cpp.o
+2026-09-29T07:54:39.4261893Z [ 95%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_mixed_rate_actions.cpp.o
+2026-09-29T07:54:39.6455282Z [ 96%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_mixed_rate_replay.cpp.o
+2026-09-29T07:54:40.3299633Z [ 96%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_mixed_rate_conformance.cpp.o
+2026-09-29T07:54:40.6294106Z [ 96%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_cpu_memory_policy.cpp.o
+2026-09-29T07:54:41.2940001Z [ 96%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_memory_policy.cpp.o
+2026-09-29T07:54:41.7389534Z [ 97%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_thread_policy.cpp.o
+2026-09-29T07:54:42.7012572Z [ 97%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_affinity.cpp.o
+2026-09-29T07:54:42.8297714Z [ 97%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_numa_pool.cpp.o
+2026-09-29T07:54:43.5093817Z [ 97%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_numa_integration.cpp.o
+2026-09-29T07:54:44.9048659Z [ 98%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_benchmark_contract.cpp.o
+2026-09-29T07:54:45.4377267Z [ 98%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_benchmark_runner.cpp.o
+2026-09-29T07:54:45.9803162Z [ 98%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_benchmark_artifacts.cpp.o
+2026-09-29T07:54:46.5971193Z [100%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_benchmark_cpu.cpp.o
+2026-09-29T07:54:47.1746182Z [100%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_benchmark_runtime.cpp.o
+2026-09-29T07:54:47.6805784Z [100%] Building CXX object tests/CMakeFiles/simcore_tests.dir/test_benchmark_device.cpp.o
+2026-09-29T07:54:49.2256053Z [100%] Linking CXX executable simcore_tests
+2026-09-29T07:54:52.9030064Z [100%] Built target simcore_tests
+2026-09-29T07:54:52.9170779Z ##[group]Run ctest --test-dir build -C Debug --output-on-failure -R simcore_all
+2026-09-29T07:54:52.9171091Z [36;1mctest --test-dir build -C Debug --output-on-failure -R simcore_all[0m
+2026-09-29T07:54:52.9199034Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-29T07:54:52.9199204Z env:
+2026-09-29T07:54:52.9199308Z   CC: clang-14
+2026-09-29T07:54:52.9199415Z   CXX: clang++-14
+2026-09-29T07:54:52.9199545Z   ASAN_OPTIONS: abort_on_error=1:detect_leaks=0
+2026-09-29T07:54:52.9199718Z   UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+2026-09-29T07:54:52.9199886Z   GTEST_DEATH_TEST_STYLE: threadsafe
+2026-09-29T07:54:52.9200027Z   GTEST_FILTER: MetricsJson.*
+2026-09-29T07:54:52.9200166Z ##[endgroup]
+2026-09-29T07:54:53.0658327Z Internal ctest changing into directory: /home/runner/work/cpp-rt-car/cpp-rt-car/build
+2026-09-29T07:54:53.0658779Z Test project /home/runner/work/cpp-rt-car/cpp-rt-car/build
+2026-09-29T07:54:53.0673716Z     Start 45: simcore_all
+2026-09-29T07:54:53.2483267Z 1/1 Test #45: simcore_all ......................   Passed    0.18 sec
+2026-09-29T07:54:53.2485616Z 
+2026-09-29T07:54:53.2485812Z 100% tests passed, 0 tests failed out of 1
+2026-09-29T07:54:53.2485991Z 
+2026-09-29T07:54:53.2486176Z Total Test time (real) =   0.18 sec
+2026-09-29T07:54:53.5398511Z ##[group]Run ctest --test-dir build -C Debug --output-on-failure -R simcore_all
+2026-09-29T07:54:53.5398847Z [36;1mctest --test-dir build -C Debug --output-on-failure -R simcore_all[0m
+2026-09-29T07:54:53.5426732Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-29T07:54:53.5426905Z env:
+2026-09-29T07:54:53.5427007Z   CC: clang-14
+2026-09-29T07:54:53.5427113Z   CXX: clang++-14
+2026-09-29T07:54:53.5427241Z   ASAN_OPTIONS: abort_on_error=1:detect_leaks=0
+2026-09-29T07:54:53.5427414Z   UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+2026-09-29T07:54:53.5427579Z   GTEST_DEATH_TEST_STYLE: threadsafe
+2026-09-29T07:54:53.5427769Z   GTEST_FILTER: DeviceRuntime.CrossInstanceDeviceStateIsIsolated
+2026-09-29T07:54:53.5427960Z ##[endgroup]
+2026-09-29T07:54:53.5467833Z Internal ctest changing into directory: /home/runner/work/cpp-rt-car/cpp-rt-car/build
+2026-09-29T07:54:53.5469370Z Test project /home/runner/work/cpp-rt-car/cpp-rt-car/build
+2026-09-29T07:54:53.5483512Z     Start 45: simcore_all
+2026-09-29T07:54:53.6280572Z 1/1 Test #45: simcore_all ......................   Passed    0.08 sec
+2026-09-29T07:54:53.6282222Z 
+2026-09-29T07:54:53.6282737Z 100% tests passed, 0 tests failed out of 1
+2026-09-29T07:54:53.6282931Z 
+2026-09-29T07:54:53.6282987Z Total Test time (real) =   0.08 sec
+2026-09-29T07:54:53.6308917Z ##[group]Run ctest --test-dir build -C Debug --output-on-failure
+2026-09-29T07:54:53.6309262Z [36;1mctest --test-dir build -C Debug --output-on-failure[0m
+2026-09-29T07:54:53.6337122Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-29T07:54:53.6337293Z env:
+2026-09-29T07:54:53.6337397Z   CC: clang-14
+2026-09-29T07:54:53.6337506Z   CXX: clang++-14
+2026-09-29T07:54:53.6337632Z   ASAN_OPTIONS: abort_on_error=1:detect_leaks=0
+2026-09-29T07:54:53.6337805Z   UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+2026-09-29T07:54:53.6337969Z   GTEST_DEATH_TEST_STYLE: threadsafe
+2026-09-29T07:54:53.6338119Z ##[endgroup]
+2026-09-29T07:54:53.6380167Z Internal ctest changing into directory: /home/runner/work/cpp-rt-car/cpp-rt-car/build
+2026-09-29T07:54:53.6381425Z Test project /home/runner/work/cpp-rt-car/cpp-rt-car/build
+2026-09-29T07:54:53.6396048Z         Start   1: sample_cuda_pipeline
+2026-09-29T07:54:53.6668192Z   1/103 Test   #1: sample_cuda_pipeline .......................   Passed    0.03 sec
+2026-09-29T07:54:53.6669026Z         Start   2: sample_cuda_physics
+2026-09-29T07:54:53.6848945Z   2/103 Test   #2: sample_cuda_physics ........................   Passed    0.02 sec
+2026-09-29T07:54:53.6849470Z         Start   3: sample_particles
+2026-09-29T07:54:53.6873400Z   3/103 Test   #3: sample_particles ...........................   Passed    0.00 sec
+2026-09-29T07:54:53.6873762Z         Start   4: sample_tyre_belt
+2026-09-29T07:54:53.6905151Z   4/103 Test   #4: sample_tyre_belt ...........................   Passed    0.00 sec
+2026-09-29T07:54:53.6905720Z         Start   5: sample_async_gpu
+2026-09-29T07:54:53.6941773Z   5/103 Test   #5: sample_async_gpu ...........................   Passed    0.00 sec
+2026-09-29T07:54:53.6942191Z         Start   6: sample_embed_c
+2026-09-29T07:54:53.7530011Z   6/103 Test   #6: sample_embed_c .............................   Passed    0.06 sec
+2026-09-29T07:54:53.7530432Z         Start   7: sample_embed_c_static
+2026-09-29T07:54:53.7724477Z   7/103 Test   #7: sample_embed_c_static ......................   Passed    0.02 sec
+2026-09-29T07:54:53.7724954Z         Start   8: sample_embed_cpp
+2026-09-29T07:54:53.7927210Z   8/103 Test   #8: sample_embed_cpp ...........................   Passed    0.02 sec
+2026-09-29T07:54:53.7927708Z         Start   9: sample_device_mock
+2026-09-29T07:54:53.8033012Z   9/103 Test   #9: sample_device_mock .........................   Passed    0.01 sec
+2026-09-29T07:54:53.8033615Z         Start  10: sample_live_control_typed
+2026-09-29T07:54:53.8177718Z  10/103 Test  #10: sample_live_control_typed ..................   Passed    0.01 sec
+2026-09-29T07:54:53.8178828Z         Start  11: sample_cpu_gpu_fpga_cpu
+2026-09-29T07:54:53.8320870Z  11/103 Test  #11: sample_cpu_gpu_fpga_cpu ....................   Passed    0.01 sec
+2026-09-29T07:54:53.8321451Z         Start  12: sample_cuda_lifetime
+2026-09-29T07:55:14.4750880Z  12/103 Test  #12: sample_cuda_lifetime .......................   Passed   20.64 sec
+2026-09-29T07:55:14.4751289Z         Start  13: hello_runtime_output
+2026-09-29T07:55:14.4857655Z  13/103 Test  #13: hello_runtime_output .......................   Passed    0.01 sec
+2026-09-29T07:55:14.4858350Z         Start  14: typed_runtime_output
+2026-09-29T07:55:14.4962571Z  14/103 Test  #14: typed_runtime_output .......................   Passed    0.01 sec
+2026-09-29T07:55:14.4963097Z         Start  15: backend_authoring_output
+2026-09-29T07:55:14.5113561Z  15/103 Test  #15: backend_authoring_output ...................   Passed    0.01 sec
+2026-09-29T07:55:14.5114017Z         Start  16: cil_shared_memory_processes
+2026-09-29T07:55:29.7923093Z  16/103 Test  #16: cil_shared_memory_processes ................   Passed   15.28 sec
+2026-09-29T07:55:29.7923640Z         Start  17: host_adapter_native
+2026-09-29T07:55:29.8121774Z  17/103 Test  #17: host_adapter_native ........................   Passed    0.02 sec
+2026-09-29T07:55:29.8122129Z         Start  18: host_adapter_host
+2026-09-29T07:55:29.8227142Z  18/103 Test  #18: host_adapter_host ..........................   Passed    0.01 sec
+2026-09-29T07:55:29.8227569Z         Start  19: recipe_raw_c
+2026-09-29T07:55:29.8322045Z  19/103 Test  #19: recipe_raw_c ...............................   Passed    0.01 sec
+2026-09-29T07:55:29.8322591Z         Start  20: recipe_raw_cpp
+2026-09-29T07:55:29.8411536Z  20/103 Test  #20: recipe_raw_cpp .............................   Passed    0.01 sec
+2026-09-29T07:55:29.8412210Z         Start  21: recipe_profile
+2026-09-29T07:55:29.8450029Z  21/103 Test  #21: recipe_profile .............................   Passed    0.00 sec
+2026-09-29T07:55:29.8450485Z         Start  22: recipe_mixed_rate
+2026-09-29T07:55:29.9293566Z  22/103 Test  #22: recipe_mixed_rate ..........................   Passed    0.08 sec
+2026-09-29T07:55:29.9293926Z         Start  23: recipe_live_control
+2026-09-29T07:55:29.9372694Z  23/103 Test  #23: recipe_live_control ........................   Passed    0.01 sec
+2026-09-29T07:55:29.9373134Z         Start  24: recipe_replay
+2026-09-29T07:55:29.9538611Z  24/103 Test  #24: recipe_replay ..............................   Passed    0.02 sec
+2026-09-29T07:55:29.9539316Z         Start  25: recipe_replay_replaced
+2026-09-29T07:55:29.9701649Z  25/103 Test  #25: recipe_replay_replaced .....................   Passed    0.02 sec
+2026-09-29T07:55:29.9702254Z         Start  26: recipe_replay_rejected
+2026-09-29T07:55:29.9878051Z  26/103 Test  #26: recipe_replay_rejected .....................   Passed    0.02 sec
+2026-09-29T07:55:29.9878818Z         Start  27: recipe_cuda_boundary
+2026-09-29T07:55:29.9910702Z  27/103 Test  #27: recipe_cuda_boundary .......................   Passed    0.00 sec
+2026-09-29T07:55:29.9911434Z         Start  28: recipe_xdma_boundary
+2026-09-29T07:55:29.9934277Z  28/103 Test  #28: recipe_xdma_boundary .......................   Passed    0.00 sec
+2026-09-29T07:55:29.9934854Z         Start  29: benchmark_device_package_consumer
+2026-09-29T07:55:30.0060425Z  29/103 Test  #29: benchmark_device_package_consumer ..........   Passed    0.01 sec
+2026-09-29T07:55:30.0061005Z         Start  30: m23_benchmark_device_noalloc
+2026-09-29T07:55:30.2402567Z  30/103 Test  #30: m23_benchmark_device_noalloc ...............   Passed    0.23 sec
+2026-09-29T07:55:30.2403075Z         Start  31: benchmark_runtime_package_consumer
+2026-09-29T07:55:30.2535322Z  31/103 Test  #31: benchmark_runtime_package_consumer .........   Passed    0.01 sec
+2026-09-29T07:55:30.2535856Z         Start  32: m23_benchmark_runtime_noalloc
+2026-09-29T07:55:47.6132277Z  32/103 Test  #32: m23_benchmark_runtime_noalloc ..............   Passed   17.36 sec
+2026-09-29T07:55:47.6132756Z         Start  33: benchmark_cpu_package_consumer
+2026-09-29T07:55:47.6253005Z  33/103 Test  #33: benchmark_cpu_package_consumer .............   Passed    0.01 sec
+2026-09-29T07:55:47.6253371Z         Start  34: m23_benchmark_cpu_noalloc
+2026-09-29T07:55:47.7145775Z  34/103 Test  #34: m23_benchmark_cpu_noalloc ..................   Passed    0.09 sec
+2026-09-29T07:55:47.7146197Z         Start  35: benchmark_package_consumer
+2026-09-29T07:55:47.7194617Z  35/103 Test  #35: benchmark_package_consumer .................   Passed    0.00 sec
+2026-09-29T07:55:47.7194983Z         Start  36: m23_benchmark_extension_lifecycle
+2026-09-29T07:55:47.7546282Z  36/103 Test  #36: m23_benchmark_extension_lifecycle ..........   Passed    0.03 sec
+2026-09-29T07:55:47.7546922Z         Start  37: m23_benchmark_analysis
+2026-09-29T07:55:50.7642859Z  37/103 Test  #37: m23_benchmark_analysis .....................   Passed    3.01 sec
+2026-09-29T07:55:50.7643498Z         Start  38: m23_benchmark_device_inventory
+2026-09-29T07:55:53.4211660Z  38/103 Test  #38: m23_benchmark_device_inventory .............   Passed    2.66 sec
+2026-09-29T07:55:53.4212211Z         Start  39: m23_benchmark_runtime_inventory
+2026-09-29T07:56:20.1061606Z  39/103 Test  #39: m23_benchmark_runtime_inventory ............   Passed   26.68 sec
+2026-09-29T07:56:20.1062027Z         Start  40: m23_benchmark_cpu_inventory
+2026-09-29T07:56:23.2333571Z  40/103 Test  #40: m23_benchmark_cpu_inventory ................   Passed    3.13 sec
+2026-09-29T07:56:23.2334026Z         Start  41: m23_benchmark_artifact_validator
+2026-09-29T07:56:24.0010381Z  41/103 Test  #41: m23_benchmark_artifact_validator ...........   Passed    0.77 sec
+2026-09-29T07:56:24.0011055Z         Start  42: m24_cuda_benchmark
+2026-09-29T07:56:24.2883113Z  42/103 Test  #42: m24_cuda_benchmark .........................   Passed    0.29 sec
+2026-09-29T07:56:24.2883719Z         Start  43: m24_cuda_benchmark_cli
+2026-09-29T07:56:25.5021294Z  43/103 Test  #43: m24_cuda_benchmark_cli .....................   Passed    1.21 sec
+2026-09-29T07:56:25.5021709Z         Start  44: m23_benchmark
+2026-09-29T07:56:49.8855470Z  44/103 Test  #44: m23_benchmark ..............................   Passed   24.38 sec
+2026-09-29T07:56:49.8856343Z         Start  45: simcore_all
+2026-09-29T07:58:03.0377675Z  45/103 Test  #45: simcore_all ................................   Passed   73.15 sec
+2026-09-29T07:58:03.0378328Z         Start  46: m22_live_control_mailbox
+2026-09-29T07:58:03.4219357Z  46/103 Test  #46: m22_live_control_mailbox ...................   Passed    0.38 sec
+2026-09-29T07:58:03.4220106Z         Start  47: m22_live_control_sdk
+2026-09-29T07:58:03.4530416Z  47/103 Test  #47: m22_live_control_sdk .......................   Passed    0.03 sec
+2026-09-29T07:58:03.4531199Z         Start  48: m22_live_control_stress
+2026-09-29T07:58:03.6534629Z  48/103 Test  #48: m22_live_control_stress ....................   Passed    0.20 sec
+2026-09-29T07:58:03.6535205Z         Start  49: m19_extension_registration
+2026-09-29T07:58:03.7142197Z  49/103 Test  #49: m19_extension_registration .................   Passed    0.06 sec
+2026-09-29T07:58:03.7144027Z         Start  50: m17_command_batch_timeline
+2026-09-29T07:58:04.8842684Z  50/103 Test  #50: m17_command_batch_timeline .................   Passed    1.17 sec
+2026-09-29T07:58:04.8843300Z         Start  51: m17_hal_v2_compatibility
+2026-09-29T07:58:05.5363071Z  51/103 Test  #51: m17_hal_v2_compatibility ...................   Passed    0.65 sec
+2026-09-29T07:58:05.5363603Z         Start  52: m17_heterogeneous_memory_topology
+2026-09-29T07:58:05.6222328Z  52/103 Test  #52: m17_heterogeneous_memory_topology ..........   Passed    0.09 sec
+2026-09-29T07:58:05.6222880Z         Start  53: m17_cuda_graph
+2026-09-29T07:58:15.7813078Z  53/103 Test  #53: m17_cuda_graph .............................   Passed   10.16 sec
+2026-09-29T07:58:15.7813934Z         Start  54: m17_xdma_control
+2026-09-29T07:58:15.8175017Z  54/103 Test  #54: m17_xdma_control ...........................   Passed    0.04 sec
+2026-09-29T07:58:15.8175984Z         Start  55: m16_rate_timeline
+2026-09-29T07:58:16.0927098Z  55/103 Test  #55: m16_rate_timeline ..........................   Passed    0.27 sec
+2026-09-29T07:58:16.0927706Z         Start  56: m21_device_rate_model
+2026-09-29T07:58:16.1431285Z  56/103 Test  #56: m21_device_rate_model ......................   Passed    0.05 sec
+2026-09-29T07:58:16.1431880Z         Start  57: m21_cross_rate_payload
+2026-09-29T07:58:16.1905969Z  57/103 Test  #57: m21_cross_rate_payload .....................   Passed    0.05 sec
+2026-09-29T07:58:16.1906602Z         Start  58: m16_rate_dispatch
+2026-09-29T07:58:16.2699586Z  58/103 Test  #58: m16_rate_dispatch ..........................   Passed    0.08 sec
+2026-09-29T07:58:16.2700493Z         Start  59: m16_shedding_telemetry
+2026-09-29T07:58:16.3491645Z  59/103 Test  #59: m16_shedding_telemetry .....................   Passed    0.08 sec
+2026-09-29T07:58:16.3492088Z         Start  60: m16_cross_rate_data
+2026-09-29T07:58:16.7141615Z  60/103 Test  #60: m16_cross_rate_data ........................   Passed    0.36 sec
+2026-09-29T07:58:16.7142270Z         Start  61: m15_accounting_closure
+2026-09-29T07:58:16.7614109Z  61/103 Test  #61: m15_accounting_closure .....................   Passed    0.05 sec
+2026-09-29T07:58:16.7614712Z         Start  62: m15_stack_lifecycle
+2026-09-29T07:58:16.8019418Z  62/103 Test  #62: m15_stack_lifecycle ........................   Passed    0.04 sec
+2026-09-29T07:58:16.8019786Z         Start  63: m15_cross_category_rollback
+2026-09-29T07:58:16.8455858Z  63/103 Test  #63: m15_cross_category_rollback ................   Passed    0.04 sec
+2026-09-29T07:58:16.8456458Z         Start  64: thread_policy_rollback
+2026-09-29T07:58:16.8594983Z  64/103 Test  #64: thread_policy_rollback .....................   Passed    0.01 sec
+2026-09-29T07:58:16.8595556Z         Start  65: thread_policy_recovery
+2026-09-29T07:58:16.9012209Z  65/103 Test  #65: thread_policy_recovery .....................   Passed    0.04 sec
+2026-09-29T07:58:16.9012614Z         Start  66: sbom_dependencies
+2026-09-29T07:58:16.9280918Z  66/103 Test  #66: sbom_dependencies ..........................   Passed    0.03 sec
+2026-09-29T07:58:16.9281262Z         Start  67: m24_cuda_physics
+2026-09-29T07:58:17.9535792Z  67/103 Test  #67: m24_cuda_physics ...........................   Passed    1.03 sec
+2026-09-29T07:58:17.9536271Z         Start  68: m24_cuda_physics_cli
+2026-09-29T07:58:19.9037769Z  68/103 Test  #68: m24_cuda_physics_cli .......................   Passed    1.95 sec
+2026-09-29T07:58:19.9038232Z         Start  69: m17_cpu_gpu_fpga_cpu_sample
+2026-09-29T07:58:20.0822346Z  69/103 Test  #69: m17_cpu_gpu_fpga_cpu_sample ................   Passed    0.18 sec
+2026-09-29T07:58:20.0822716Z         Start  70: cabi_dlopen
+2026-09-29T07:58:20.0998405Z  70/103 Test  #70: cabi_dlopen ................................   Passed    0.02 sec
+2026-09-29T07:58:20.0998912Z         Start  71: host_adapter
+2026-09-29T07:58:20.1097713Z  71/103 Test  #71: host_adapter ...............................   Passed    0.01 sec
+2026-09-29T07:58:20.1098805Z         Start  72: runtime_profile
+2026-09-29T07:58:20.1845078Z  72/103 Test  #72: runtime_profile ............................   Passed    0.07 sec
+2026-09-29T07:58:20.1845499Z         Start  73: simcore_thread_violation_build
+2026-09-29T07:58:21.2654702Z  73/103 Test  #73: simcore_thread_violation_build .............   Passed    1.08 sec
+2026-09-29T07:58:21.2655288Z         Start  74: xdma_backend
+2026-09-29T07:58:21.2742996Z  74/103 Test  #74: xdma_backend ...............................   Passed    0.01 sec
+2026-09-29T07:58:21.2743517Z         Start  75: m24_cuda_pipeline
+2026-09-29T07:58:30.0742802Z  75/103 Test  #75: m24_cuda_pipeline ..........................   Passed    8.80 sec
+2026-09-29T07:58:30.0743340Z         Start  76: m24_cuda_pipeline_cli
+2026-09-29T07:58:34.2351169Z  76/103 Test  #76: m24_cuda_pipeline_cli ......................   Passed    4.16 sec
+2026-09-29T07:58:34.2351552Z         Start  77: m24_cuda_lifetime
+2026-09-29T07:58:54.8890095Z  77/103 Test  #77: m24_cuda_lifetime ..........................   Passed   20.65 sec
+2026-09-29T07:58:54.8890565Z         Start  78: m24_cuda_lifetime_cli
+2026-09-29T07:59:15.2058897Z  78/103 Test  #78: m24_cuda_lifetime_cli ......................   Passed   20.32 sec
+2026-09-29T07:59:15.2059242Z         Start  79: m24_cuda_capabilities
+2026-09-29T07:59:15.4385946Z  79/103 Test  #79: m24_cuda_capabilities ......................   Passed    0.23 sec
+2026-09-29T07:59:15.4386248Z         Start  80: host_adapter_simulation_timing_noalloc
+2026-09-29T07:59:15.4535843Z  80/103 Test  #80: host_adapter_simulation_timing_noalloc .....   Passed    0.01 sec
+2026-09-29T07:59:15.4536293Z         Start  81: hello_capacity_failure
+2026-09-29T07:59:15.4592547Z  81/103 Test  #81: hello_capacity_failure .....................   Passed    0.01 sec
+2026-09-29T07:59:15.4592948Z         Start  82: hello_step_failure
+2026-09-29T07:59:15.4694059Z  82/103 Test  #82: hello_step_failure .........................   Passed    0.01 sec
+2026-09-29T07:59:15.4695539Z         Start  83: typed_sdk
+2026-09-29T07:59:15.5664320Z  83/103 Test  #83: typed_sdk ..................................   Passed    0.10 sec
+2026-09-29T07:59:15.5664719Z         Start  84: typed_sdk_stop_failure
+2026-09-29T07:59:15.5815125Z  84/103 Test  #84: typed_sdk_stop_failure .....................   Passed    0.01 sec
+2026-09-29T07:59:15.5815783Z         Start  85: backend_authoring_conformance
+2026-09-29T07:59:15.6472248Z  85/103 Test  #85: backend_authoring_conformance ..............   Passed    0.07 sec
+2026-09-29T07:59:15.6472625Z         Start  86: cil_shared_memory_contract
+2026-09-29T07:59:15.6903309Z  86/103 Test  #86: cil_shared_memory_contract .................   Passed    0.04 sec
+2026-09-29T07:59:15.6903703Z         Start  87: host_adapter_contract
+2026-09-29T07:59:15.7346008Z  87/103 Test  #87: host_adapter_contract ......................   Passed    0.04 sec
+2026-09-29T07:59:15.7346346Z         Start  88: host_adapter_golden_system_contract
+2026-09-29T07:59:27.4553994Z  88/103 Test  #88: host_adapter_golden_system_contract ........   Passed   11.72 sec
+2026-09-29T07:59:27.4554753Z         Start  89: host_adapter_golden_system_native
+2026-09-29T07:59:27.8397792Z  89/103 Test  #89: host_adapter_golden_system_native ..........   Passed    0.38 sec
+2026-09-29T07:59:27.8398431Z         Start  90: host_adapter_golden_system_host
+2026-09-29T07:59:28.1245704Z  90/103 Test  #90: host_adapter_golden_system_host ............   Passed    0.28 sec
+2026-09-29T07:59:28.1246144Z         Start  91: host_adapter_golden_system_external
+2026-09-29T07:59:28.5444139Z  91/103 Test  #91: host_adapter_golden_system_external ........   Passed    0.42 sec
+2026-09-29T07:59:28.5444570Z         Start  92: host_adapter_golden_system_process
+2026-09-29T07:59:50.2039355Z  92/103 Test  #92: host_adapter_golden_system_process .........   Passed   21.66 sec
+2026-09-29T07:59:50.2043693Z         Start  93: host_adapter_golden_cuda_contract
+2026-09-29T08:01:50.3202172Z  93/103 Test  #93: host_adapter_golden_cuda_contract ..........***Timeout 120.12 sec
+2026-09-29T08:01:50.3202691Z 
+2026-09-29T08:01:50.3202794Z         Start  94: host_adapter_golden_cuda_native_cpu
+2026-09-29T08:01:50.7414616Z  94/103 Test  #94: host_adapter_golden_cuda_native_cpu ........   Passed    0.42 sec
+2026-09-29T08:01:50.7414979Z         Start  95: host_adapter_golden_cuda_native_kernel
+2026-09-29T08:01:51.1081806Z  95/103 Test  #95: host_adapter_golden_cuda_native_kernel .....   Passed    0.37 sec
+2026-09-29T08:01:51.1082173Z         Start  96: host_adapter_golden_cuda_native_graph
+2026-09-29T08:01:51.5300406Z  96/103 Test  #96: host_adapter_golden_cuda_native_graph ......   Passed    0.42 sec
+2026-09-29T08:01:51.5300844Z         Start  97: host_adapter_golden_cuda_host_cpu
+2026-09-29T08:01:51.8214009Z  97/103 Test  #97: host_adapter_golden_cuda_host_cpu ..........   Passed    0.29 sec
+2026-09-29T08:01:51.8214302Z         Start  98: host_adapter_golden_cuda_host_kernel
+2026-09-29T08:01:52.1212565Z  98/103 Test  #98: host_adapter_golden_cuda_host_kernel .......   Passed    0.30 sec
+2026-09-29T08:01:52.1212961Z         Start  99: host_adapter_golden_cuda_host_graph
+2026-09-29T08:01:52.4201484Z  99/103 Test  #99: host_adapter_golden_cuda_host_graph ........   Passed    0.30 sec
+2026-09-29T08:01:52.4201916Z         Start 100: host_adapter_golden_cuda_external_cpu
+2026-09-29T08:01:52.8562183Z 100/103 Test #100: host_adapter_golden_cuda_external_cpu ......   Passed    0.44 sec
+2026-09-29T08:01:52.8562935Z         Start 101: host_adapter_golden_cuda_external_kernel
+2026-09-29T08:01:53.3999212Z 101/103 Test #101: host_adapter_golden_cuda_external_kernel ...   Passed    0.54 sec
+2026-09-29T08:01:53.3999648Z         Start 102: host_adapter_golden_cuda_external_graph
+2026-09-29T08:01:53.9376248Z 102/103 Test #102: host_adapter_golden_cuda_external_graph ....   Passed    0.54 sec
+2026-09-29T08:01:53.9376795Z         Start 103: host_adapter_golden_cuda_process
+2026-09-29T08:02:15.7057804Z 103/103 Test #103: host_adapter_golden_cuda_process ...........   Passed   21.77 sec
+2026-09-29T08:02:15.7063647Z 
+2026-09-29T08:02:15.7063740Z 99% tests passed, 1 tests failed out of 103
+2026-09-29T08:02:15.7063950Z 
+2026-09-29T08:02:15.7064087Z Total Test time (real) = 442.07 sec
+2026-09-29T08:02:15.7064230Z 
+2026-09-29T08:02:15.7064369Z The following tests FAILED:
+2026-09-29T08:02:15.7064628Z 	 93 - host_adapter_golden_cuda_contract (Timeout)
+2026-09-29T08:02:15.7066889Z Errors while running CTest
+2026-09-29T08:02:15.7084294Z ##[error]Process completed with exit code 8.
+2026-09-29T08:02:15.7179865Z Post job cleanup.
+2026-09-29T08:02:15.7634263Z [command]/usr/bin/git version
+2026-09-29T08:02:15.7657133Z git version 2.55.0
+2026-09-29T08:02:15.7678120Z Temporarily overriding HOME='/home/runner/work/_temp/77ab427b-ef6e-4952-8d5f-7b2e2493e004' before making global git config changes
+2026-09-29T08:02:15.7678780Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-29T08:02:15.7680719Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cpp-rt-car/cpp-rt-car
+2026-09-29T08:02:15.7701459Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-29T08:02:15.7718744Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-29T08:02:15.7820329Z Entering 'external/googletest'
+2026-09-29T08:02:15.7849807Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-29T08:02:15.7862877Z http.https://github.com/.extraheader
+2026-09-29T08:02:15.7869275Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-09-29T08:02:15.7890593Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-29T08:02:15.7993144Z Entering 'external/googletest'
+2026-09-29T08:02:15.8004253Z http.https://github.com/.extraheader
+2026-09-29T08:02:15.8034295Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-29T08:02:15.8057729Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-29T08:02:15.8162245Z Entering 'external/googletest'
+2026-09-29T08:02:15.8174801Z file:/home/runner/work/cpp-rt-car/cpp-rt-car/.git/modules/external/googletest/config	remote.origin.url
+2026-09-29T08:02:15.8187410Z [command]/usr/bin/git config --file /home/runner/work/cpp-rt-car/cpp-rt-car/.git/modules/external/googletest/config --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-29T08:02:15.8298047Z Cleaning up orphan processes
+2026-09-29T08:02:15.8465704Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

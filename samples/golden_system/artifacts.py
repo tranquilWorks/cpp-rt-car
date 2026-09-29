@@ -136,6 +136,13 @@ def inspect(directory):
     require(type(e['peer_responses']) is int and 0 <= e['peer_responses'] <= t//3+1, 'peer count')
     if not e['external']: require(e['peer_responses']==0 and e['peer_status']=='ok' and e['peer_cleanup']=='ok', 'nonexternal peer claims')
     elif e['peer_status']=='ok': require(e['peer_responses']==t//3+1, 'peer completeness')
+    inspect_state(directory,e)
+    return e
+
+def inspect_state(directory,e):
+    """Shared complete state and paired transcript checks; no variant normalization."""
+    ticks=e['ticks'];t=ticks-1
+    controls=sum(x<ticks for x in (1,2,3,12,18))+(1 if e['campaign'] in ('stale_input','control_replaced','peer_missing') else 0)
     b=(directory/'state.bin').read_bytes()
     require(len(b)==18944, 'state size')
     u32=lambda at:struct.unpack_from('<I',b,at)[0]

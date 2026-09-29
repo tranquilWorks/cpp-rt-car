@@ -1,0 +1,19 @@
+samples/golden_cuda/real.cpp: In member function ‘int {anonymous}::NativeResources::open(const golden::cuda::Arguments&)’:
+samples/golden_cuda/real.cpp:68:22: error: ‘cuda_driver_api’ is not a member of ‘rt’; did you mean ‘CudaDriverApi’?
+   68 |     resources = {rt::cuda_driver_api(),
+      |                      ^~~~~~~~~~~~~~~
+      |                      CudaDriverApi
+samples/golden_cuda/real.cpp:73:44: error: no match for ‘operator=’ (operand types are ‘golden::cuda::Resources’ and ‘<brace-enclosed initializer list>’)
+   73 |                  {buffers_[0], buffers_[1]}};
+      |                                            ^
+In file included from samples/golden_cuda/simulated_driver.hpp:2,
+                 from samples/golden_cuda/physics.hpp:2,
+                 from samples/golden_cuda/owner.hpp:3,
+                 from samples/golden_cuda/runner.hpp:7,
+                 from samples/golden_cuda/real.cpp:1:
+samples/golden_cuda/resources.hpp:13:8: note: candidate: ‘constexpr golden::cuda::Resources& golden::cuda::Resources::operator=(const golden::cuda::Resources&)’
+   13 | struct Resources {
+      |        ^~~~~~~~~
+samples/golden_cuda/resources.hpp:13:8: note:   no known conversion for argument 1 from ‘<brace-enclosed initializer list>’ to ‘const golden::cuda::Resources&’
+samples/golden_cuda/resources.hpp:13:8: note: candidate: ‘constexpr golden::cuda::Resources& golden::cuda::Resources::operator=(golden::cuda::Resources&&)’
+samples/golden_cuda/resources.hpp:13:8: note:   no known conversion for argument 1 from ‘<brace-enclosed initializer list>’ to ‘golden::cuda::Resources&&’
