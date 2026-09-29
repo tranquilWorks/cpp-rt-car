@@ -23,7 +23,9 @@ supported replay allocate no ordinary heap memory.
 
 Only the owned deterministic simulator adapter advertises mock semantics. It
 explicitly selects a five-second host scheduling watchdog while preserving the
-one-millisecond logical completion budget and backend command timeout. Native
+one-millisecond logical completion budget and backend command timeout. The new
+CUDA sample explicitly parks idle executor workers; the CPU fallback retains
+its existing default policy. Native
 construction has no simulation policy and disables replay. Logical simulation
 time and this host guard establish no physical deadline or RT qualification.
 

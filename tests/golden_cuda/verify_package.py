@@ -17,7 +17,7 @@ def main():
     work=a.work_directory.resolve();work.mkdir(parents=True,exist_ok=True);sdk=work/'sdk build'
     with tempfile.TemporaryDirectory(prefix='golden CUDA original ',dir=work) as old,tempfile.TemporaryDirectory(prefix='golden CUDA relocated ') as new:
         original=Path(old)/'sdk';relocated=Path(new)
-        run('cmake','-S',ROOT,'-B',sdk,'-DCMAKE_BUILD_TYPE=Release','-DENABLE_TESTS=OFF','-DRTFW_BUILD_EXAMPLES=OFF','-DRTFW_BUILD_RUNTIME_DEMO=OFF','-DRTFW_BUILD_EXPERIMENTAL=OFF','-DRTFW_BUILD_BENCHMARKS=OFF','-DSIM_SANITIZERS=','-DSIM_WERROR=ON','-DCMAKE_INSTALL_INCLUDEDIR=sdk/include','-DCMAKE_INSTALL_DATADIR=custom/data',f'-DCMAKE_INSTALL_PREFIX={original}')
+        run('cmake','-S',ROOT,'-B',sdk,'-DCMAKE_BUILD_TYPE=Release','-DENABLE_TESTS=OFF','-DRTFW_BUILD_EXAMPLES=OFF','-DRTFW_BUILD_RUNTIME_DEMO=OFF','-DRTFW_BUILD_EXPERIMENTAL=OFF','-DRTFW_BUILD_BENCHMARKS=OFF','-DRTFW_ENABLE_CUDA=OFF','-DSIM_SANITIZERS=','-DSIM_WERROR=ON','-DCMAKE_INSTALL_INCLUDEDIR=sdk/include','-DCMAKE_INSTALL_DATADIR=custom/data',f'-DCMAKE_INSTALL_PREFIX={original}')
         run('cmake','--build',sdk,'--config','Release','--parallel','2')
         run('cmake','--install',sdk,'--config','Release','--prefix',original)
         archives=relocated/'archive'

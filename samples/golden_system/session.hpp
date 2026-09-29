@@ -39,7 +39,8 @@ public:
   Session(const Session &) = delete;
   Session &operator=(const Session &) = delete;
   rt::Status
-  prepare(std::size_t retention_capacity = fixed::action_capacity) noexcept {
+  prepare(std::size_t retention_capacity = fixed::action_capacity,
+          const rt::CpuMemoryPolicy *cpu_policy = nullptr) noexcept {
     if (!world.options.valid())
       return rt::Status::invalid_argument;
     rt::RuntimeConfig c;
@@ -77,7 +78,7 @@ public:
       GOLDEN_TRY(r.set_host_executor(jobs_->adapter()));
     }
     GOLDEN_TRY(r.set_memory_provider(memory_.table()));
-    GOLDEN_TRY(r.set_cpu_memory_policy(Memory::policy()));
+    GOLDEN_TRY(r.set_cpu_memory_policy(cpu_policy ? *cpu_policy : Memory::policy()));
     GOLDEN_TRY(
         r.set_rate_execution_policy({128, 26, 1, 1, fixed::action_capacity}));
     GOLDEN_TRY(r.set_mixed_rate_closure_policy(

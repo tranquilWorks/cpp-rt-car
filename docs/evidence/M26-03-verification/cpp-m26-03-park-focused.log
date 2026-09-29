@@ -1,0 +1,94 @@
+Internal ctest changing into directory: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/agent-quick
+Test project /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/agent-quick
+      Start 73: host_adapter_golden_cuda_contract
+ 1/11 Test #73: host_adapter_golden_cuda_contract ..........   Passed   21.30 sec
+      Start 74: host_adapter_golden_cuda_native_cpu
+ 2/11 Test #74: host_adapter_golden_cuda_native_cpu ........***Failed    0.12 sec
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+complete CUDA/shared source inventory and digests
+
+      Start 75: host_adapter_golden_cuda_native_kernel
+ 3/11 Test #75: host_adapter_golden_cuda_native_kernel .....***Failed    0.12 sec
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+complete CUDA/shared source inventory and digests
+
+      Start 76: host_adapter_golden_cuda_native_graph
+ 4/11 Test #76: host_adapter_golden_cuda_native_graph ......***Failed    0.13 sec
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+complete CUDA/shared source inventory and digests
+
+      Start 77: host_adapter_golden_cuda_host_cpu
+ 5/11 Test #77: host_adapter_golden_cuda_host_cpu ..........***Failed    0.11 sec
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+complete CUDA/shared source inventory and digests
+
+      Start 78: host_adapter_golden_cuda_host_kernel
+ 6/11 Test #78: host_adapter_golden_cuda_host_kernel .......***Failed    0.13 sec
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+complete CUDA/shared source inventory and digests
+
+      Start 79: host_adapter_golden_cuda_host_graph
+ 7/11 Test #79: host_adapter_golden_cuda_host_graph ........***Failed    0.11 sec
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+complete CUDA/shared source inventory and digests
+
+      Start 80: host_adapter_golden_cuda_external_cpu
+ 8/11 Test #80: host_adapter_golden_cuda_external_cpu ......***Failed    0.14 sec
+complete CUDA/shared source inventory and digests
+ready plant
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+ready controller
+controller status=ok sent=8
+
+      Start 81: host_adapter_golden_cuda_external_kernel
+ 9/11 Test #81: host_adapter_golden_cuda_external_kernel ...***Failed    0.15 sec
+complete CUDA/shared source inventory and digests
+ready plant
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+ready controller
+controller status=ok sent=8
+
+      Start 82: host_adapter_golden_cuda_external_graph
+10/11 Test #82: host_adapter_golden_cuda_external_graph ....***Failed    0.16 sec
+complete CUDA/shared source inventory and digests
+ready plant
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+ready controller
+controller status=ok sent=8
+
+      Start 83: host_adapter_golden_cuda_process
+11/11 Test #83: host_adapter_golden_cuda_process ...........***Failed    0.14 sec
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+Traceback (most recent call last):
+  File "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/tests/golden_cuda/process_suite.py", line 66, in <module>
+    if __name__=='__main__':main()
+                            ^^^^^^
+  File "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/tests/golden_cuda/process_suite.py", line 34, in main
+    artifacts.validate(out,a.provenance,True);cases+=1
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/samples/golden_cuda/artifacts.py", line 104, in validate
+    p=provenance(provenance_path);run,replay=expected(directory,p)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/samples/golden_cuda/artifacts.py", line 25, in provenance
+    require(p['files']==actual,'complete CUDA/shared source inventory and digests')
+  File "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/samples/golden_system/artifacts.py", line 17, in require
+    raise ValueError(message)
+ValueError: complete CUDA/shared source inventory and digests
+
+
+9% tests passed, 10 tests failed out of 11
+
+Total Test time (real) =  22.62 sec
+
+The following tests FAILED:
+	 74 - host_adapter_golden_cuda_native_cpu (Failed)
+	 75 - host_adapter_golden_cuda_native_kernel (Failed)
+	 76 - host_adapter_golden_cuda_native_graph (Failed)
+	 77 - host_adapter_golden_cuda_host_cpu (Failed)
+	 78 - host_adapter_golden_cuda_host_kernel (Failed)
+	 79 - host_adapter_golden_cuda_host_graph (Failed)
+	 80 - host_adapter_golden_cuda_external_cpu (Failed)
+	 81 - host_adapter_golden_cuda_external_kernel (Failed)
+	 82 - host_adapter_golden_cuda_external_graph (Failed)
+	 83 - host_adapter_golden_cuda_process (Failed)
+Errors while running CTest

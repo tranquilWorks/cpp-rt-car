@@ -36,7 +36,7 @@ struct Owner {
     if (close() != rt::Status::ok)
       std::terminate();
   }
-  rt::Status prepare() noexcept {
+  rt::Status prepare(const rt::CpuMemoryPolicy *cpu_policy = nullptr) noexcept {
     if (!session)
       return rt::Status::invalid_state;
     if (options.host && !jobs_started) {
@@ -45,7 +45,7 @@ struct Owner {
         return status;
       jobs_started = true;
     }
-    return session->prepare();
+    return session->prepare(fixed::action_capacity, cpu_policy);
   }
   rt::Status close() noexcept {
     if (session) {

@@ -5,8 +5,27 @@ if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8
         target_link_libraries(test_golden_cuda PRIVATE psapi)
     endif()
     rtfw_enable_project_warnings(test_golden_cuda)
-    add_test(NAME host_adapter_golden_cuda_contract COMMAND test_golden_cuda)
+    add_test(NAME host_adapter_golden_cuda_contract COMMAND test_golden_cuda --case 0)
     set_tests_properties(host_adapter_golden_cuda_contract PROPERTIES TIMEOUT 120)
+    foreach(case RANGE 1 18)
+        if(case EQUAL 9 OR case EQUAL 18)
+            # Each 1024-tick owner retains its complete originating-owner replay.
+            # Actual checked CPU bytes are a CTest fixture for both device paths.
+            add_test(NAME host_adapter_golden_cuda_parity_${case} COMMAND test_golden_cuda --case ${case}
+                --dispatch cpu --reference ${CMAKE_CURRENT_BINARY_DIR}/reference-${case})
+            set_tests_properties(host_adapter_golden_cuda_parity_${case} PROPERTIES
+                TIMEOUT 120 FIXTURES_SETUP golden_cuda_reference_${case})
+            foreach(dispatch kernel graph)
+                add_test(NAME host_adapter_golden_cuda_parity_${case}_${dispatch} COMMAND test_golden_cuda --case ${case}
+                    --dispatch ${dispatch} --reference ${CMAKE_CURRENT_BINARY_DIR}/reference-${case})
+                set_tests_properties(host_adapter_golden_cuda_parity_${case}_${dispatch} PROPERTIES
+                    TIMEOUT 120 FIXTURES_REQUIRED golden_cuda_reference_${case})
+            endforeach()
+        else()
+            add_test(NAME host_adapter_golden_cuda_parity_${case} COMMAND test_golden_cuda --case ${case})
+            set_tests_properties(host_adapter_golden_cuda_parity_${case} PROPERTIES TIMEOUT 120)
+        endif()
+    endforeach()
     if(TARGET rtfw_host_adapter_tests)
         add_dependencies(rtfw_host_adapter_tests test_golden_cuda)
     endif()

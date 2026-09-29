@@ -1,4 +1,5 @@
 #pragma once
+#include "../golden_system/memory.hpp"
 #include "simulated_driver.hpp"
 namespace golden::cuda {
 // The adapter is an explicit simulator contract around an actual CUDA backend.
@@ -115,6 +116,15 @@ public:
   rt::Status configure(rt::Runtime &r, World &w) noexcept override {
     runtime_ = &r;
     world_ = &w;
+    // This portable device sample parks idle CPU workers while Runtime's
+    // backend lane services a release. It makes no spinning/RT guarantee.
+    auto cpu_policy = Memory::policy();
+    cpu_policy.thread_policy_count = 1;
+    cpu_policy.thread_policies[0].role = rt::thread_role_executor_worker;
+    cpu_policy.thread_policies[0].policy.wait_strategy = rt::WaitStrategy::park;
+    const auto cpu_status = r.set_cpu_memory_policy(cpu_policy);
+    if (cpu_status != rt::Status::ok)
+      return cpu_status;
     if (!resources_.context || !resources_.stream || !resources_.function ||
         (graph_ && !resources_.graph) || !resources_.addresses[0] ||
         !resources_.addresses[1])

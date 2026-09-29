@@ -3,7 +3,10 @@
 #include "../../samples/golden_system/oracle.hpp"
 #include "../cuda_physics/allocation_guard.hpp"
 #include <algorithm>
+#include <charconv>
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
 #include <future>
 #include <iostream>
 
@@ -57,15 +60,59 @@ bool close(Owner &owner) {
   }
   return true;
 }
-bool parity(Options options) {
-  Owner cpu(options, Dispatch::cpu), kernel(options, Dispatch::kernel),
-      graph(options, Dispatch::graph);
-  std::array owners{&cpu, &kernel, &graph};
-  std::array<std::unique_ptr<OwnedReplay>, 3> replays;
-  std::array<std::unique_ptr<Oracle>, 3> oracles;
-  for (std::size_t i = 0; i < owners.size(); ++i) {
-    auto &owner = *owners[i];
-    CHECK(owner.prepare() == Status::ok);
+bool parity(Options options, int selected_dispatch = -1,
+            const std::filesystem::path &reference = {}) {
+  std::cout << "parity host=" << options.host << " count=" << options.count
+            << " ticks=" << options.ticks << " workers=" << options.workers
+            << " grain=" << options.grain << std::endl;
+  // Keep exact CPU bytes from every tick, then compare both device paths.
+  // Only the owner under test runs workers; concurrency has a separate test.
+  std::vector<StateBytes> cpu_states(options.ticks);
+  std::vector<std::byte> cpu_checkpoint;
+  World expected(options);
+  if (selected_dispatch > 0) {
+    std::ifstream states(reference.string() + ".states",
+                         std::ios::binary | std::ios::ate);
+    CHECK(states &&
+          states.tellg() == static_cast<std::streamoff>(cpu_states.size() *
+                                                        sizeof(StateBytes)));
+    states.seekg(0);
+    states.read(
+        reinterpret_cast<char *>(cpu_states.data()),
+        static_cast<std::streamsize>(cpu_states.size() * sizeof(StateBytes)));
+    CHECK(bool(states));
+    std::ifstream checkpoint(reference.string() + ".checkpoint",
+                             std::ios::binary | std::ios::ate);
+    CHECK(checkpoint && checkpoint.tellg() > 0 &&
+          checkpoint.tellg() <=
+              static_cast<std::streamoff>(fixed::checkpoint_bytes));
+    cpu_checkpoint.resize(static_cast<std::size_t>(checkpoint.tellg()));
+    checkpoint.seekg(0);
+    checkpoint.read(reinterpret_cast<char *>(cpu_checkpoint.data()),
+                    static_cast<std::streamsize>(cpu_checkpoint.size()));
+    CHECK(bool(checkpoint));
+  }
+  for (auto dispatch : {Dispatch::cpu, Dispatch::kernel, Dispatch::graph}) {
+    if (selected_dispatch >= 0 && int(dispatch) != selected_dispatch)
+      continue;
+    std::cout << "dispatch=" << int(dispatch) << " begin" << std::endl;
+    Owner owner(options, dispatch);
+    auto policy = Memory::policy();
+    policy.thread_policy_count = 1;
+    policy.thread_policies[0].role = rt::thread_role_executor_worker;
+    policy.thread_policies[0].policy.wait_strategy = rt::WaitStrategy::park;
+    CHECK(owner.prepare(&policy) == Status::ok);
+    rt::CpuMemoryPolicyReport report;
+    CHECK(owner.session->runtime->cpu_memory_policy_report(report));
+    bool parked = false;
+    for (std::size_t i = 0; i < report.thread_count; ++i)
+      if (report.threads[i].role == rt::thread_role_executor_worker)
+        parked =
+            report.threads[i].resolved.wait_strategy == rt::WaitStrategy::park;
+    // Host adapters own their workers; this native-thread request applies only
+    // when Runtime owns the executor threads.
+    if (!options.host)
+      CHECK(parked);
     auto &s = *owner.session;
     CHECK(s.plan.phase_count == 8 &&
           s.plan.registered_state_bytes == state_bytes);
@@ -81,55 +128,68 @@ bool parity(Options options) {
       CHECK(phase.completion_budget_ns == completion_ns &&
             phase.maximum_in_flight == 1);
     }
-    replays[i] = std::make_unique<OwnedReplay>(options.ticks);
-    oracles[i] = std::make_unique<Oracle>(options);
-    CHECK(replays[i]->begin(s) && s.controls());
-  }
-  for (std::size_t tick = 0; tick < options.ticks; ++tick) {
-    for (std::size_t i = 0; i < owners.size(); ++i) {
-      auto &s = *owners[i]->session;
-      replays[i]->record(s, tick);
+    OwnedReplay replay(options.ticks);
+    Oracle oracle(options);
+    CHECK(replay.begin(s) && s.controls());
+    for (std::size_t tick = 0; tick < options.ticks; ++tick) {
+      replay.record(s, tick);
       allocation::begin();
       const auto status = s.step(tick);
       const auto allocations = allocation::end();
       if (status != Status::ok)
         std::cerr << s.runtime->last_error() << '\n';
       CHECK(status == Status::ok && allocations == 0);
-      CHECK(oracles[i]->step(tick, s.world));
+      CHECK(oracle.step(tick, s.world));
+      if (dispatch == Dispatch::cpu)
+        cpu_states[tick] = s.world.canonical;
+      else {
+        expected.canonical = cpu_states[tick];
+        CHECK(expected.decode() && same_semantics(expected, s.world));
+      }
     }
-    CHECK(same_semantics(cpu.session->world, kernel.session->world));
-    CHECK(same_semantics(cpu.session->world, graph.session->world));
-  }
-  for (std::size_t i = 0; i < owners.size(); ++i) {
-    auto &owner = *owners[i];
-    auto &s = *owner.session;
-    CHECK(replays[i]->seal(s));
+    std::cout << "dispatch=" << int(dispatch) << " steps complete" << std::endl;
+    CHECK(replay.seal(s));
     allocation::begin();
-    const bool replayed = replays[i]->verify(s);
+    const bool replayed = replay.verify(s);
     const auto allocations = allocation::end();
     if (!replayed)
       std::cerr << s.runtime->last_error() << '\n';
     CHECK(replayed && allocations == 0);
+    std::cout << "dispatch=" << int(dispatch) << " replay complete"
+              << std::endl;
     if (owner.physics)
       CHECK(counts(owner, 2 * options.ticks));
-    auto bad = replays[i]->trusted;
+    auto bad = replay.trusted;
     bad.back() ^= std::byte{1};
     const auto before = s.world.canonical;
     const auto submissions = owner.driver ? owner.driver->records.load() : 0;
     CHECK(OwnedReplay::apply(s, bad) != Status::ok);
     CHECK(s.world.canonical == before);
     CHECK(!owner.driver || owner.driver->records == submissions);
+    if (dispatch == Dispatch::cpu)
+      cpu_checkpoint = s.checkpoint(options.ticks - 1);
+    else {
+      CHECK(s.runtime->restore_checkpoint(cpu_checkpoint) ==
+            Status::incompatible_artifact);
+      CHECK(s.world.canonical == before &&
+            owner.driver->records == submissions);
+    }
+    CHECK(close(owner));
   }
-  // CPU and device artifacts carry actual incompatible graph identities.
-  const auto cpu_checkpoint = cpu.session->checkpoint(options.ticks - 1);
-  const auto before = graph.session->world.canonical;
-  const auto submissions = graph.driver->records.load();
-  CHECK(graph.session->runtime->restore_checkpoint(cpu_checkpoint) ==
-        Status::incompatible_artifact);
-  CHECK(graph.session->world.canonical == before &&
-        graph.driver->records == submissions);
-  for (auto *owner : owners)
-    CHECK(close(*owner));
+  if (selected_dispatch == 0) {
+    std::ofstream states(reference.string() + ".states", std::ios::binary);
+    states.write(
+        reinterpret_cast<const char *>(cpu_states.data()),
+        static_cast<std::streamsize>(cpu_states.size() * sizeof(StateBytes)));
+    states.close();
+    CHECK(!states.fail());
+    std::ofstream checkpoint(reference.string() + ".checkpoint",
+                             std::ios::binary);
+    checkpoint.write(reinterpret_cast<const char *>(cpu_checkpoint.data()),
+                     static_cast<std::streamsize>(cpu_checkpoint.size()));
+    checkpoint.close();
+    CHECK(!checkpoint.fail());
+  }
   return true;
 }
 
@@ -321,15 +381,15 @@ bool native_contract() {
   {
     SimulatedDriver driver(16);
     ReplayRequest physics(driver.resources());
-    Memory memory;
-    Session session(Options{}, nullptr, memory, &physics);
+    auto memory = std::make_unique<Memory>();
+    Session session(Options{}, nullptr, *memory, &physics);
     const auto status = session.prepare();
     std::cout << "native replay rejected status=" << int(status) << ' '
               << session.runtime->last_error() << '\n';
     CHECK(status == Status::invalid_config && driver.records == 0 &&
           physics.native.providers == 0);
     CHECK(session.close() == Status::ok && driver.clean() &&
-          memory.acquisitions == memory.releases);
+          memory->acquisitions == memory->releases);
   }
   for (unsigned malformed = 0; malformed < 4; ++malformed) {
     SimulatedDriver driver(16);
@@ -401,19 +461,55 @@ bool partial_startup() {
   return true;
 }
 
-int main() {
-  if (!native_contract() || !foreign_artifacts() || !partial_startup())
-    return 1;
-  for (auto dispatch : {Dispatch::kernel, Dispatch::graph}) {
-    if (!negatives(dispatch))
-      return 1;
-    for (bool host : {false, true})
-      for (bool lost : {false, true})
-        if (!recovery(host, dispatch, lost))
-          return 1;
+int main(int argc, char **argv) {
+  std::cout << std::unitbuf;
+  int selected = -1, selected_dispatch = -1;
+  std::filesystem::path reference;
+  if (argc != 1) {
+    if ((argc != 3 && argc != 7) || std::string_view(argv[1]) != "--case")
+      return 64;
+    const std::string_view value = argv[2];
+    const auto parsed =
+        std::from_chars(value.data(), value.data() + value.size(), selected);
+    if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() ||
+        selected < 0 || selected > 18)
+      return 64;
   }
-  if (!independent_owners())
-    return 1;
+  if (argc == 7) {
+    if ((selected != 9 && selected != 18) ||
+        std::string_view(argv[3]) != "--dispatch" ||
+        std::string_view(argv[5]) != "--reference")
+      return 64;
+    const std::string_view dispatch = argv[4];
+    selected_dispatch = dispatch == "cpu"      ? 0
+                        : dispatch == "kernel" ? 1
+                        : dispatch == "graph"  ? 2
+                                               : -1;
+    if (selected_dispatch < 0 || !*argv[6])
+      return 64;
+    reference = argv[6];
+  }
+  if (selected <= 0) {
+    if (!native_contract() || !foreign_artifacts() || !partial_startup())
+      return 1;
+    for (auto dispatch : {Dispatch::kernel, Dispatch::graph}) {
+      if (!negatives(dispatch))
+        return 1;
+      for (bool host : {false, true})
+        for (bool lost : {false, true})
+          if (!recovery(host, dispatch, lost))
+            return 1;
+    }
+    if (!independent_owners())
+      return 1;
+  }
+  int case_number = 0;
+  const auto run_case = [&](Options o) {
+    ++case_number;
+    return selected >= 0 && selected != case_number
+               ? true
+               : parity(o, selected_dispatch, reference);
+  };
   for (bool host : {false, true}) {
     for (std::size_t i = 0; i < 4; ++i) {
       Options o;
@@ -421,7 +517,7 @@ int main() {
       o.count = std::array<std::size_t, 4>{1, 17, 16, 256}[i];
       o.workers = static_cast<std::uint32_t>(i % 3 + 1);
       o.grain = std::array<std::size_t, 4>{1, 4, 16, 64}[i];
-      if (!parity(o))
+      if (!run_case(o))
         return 1;
     }
     for (auto campaign :
@@ -430,7 +526,7 @@ int main() {
       Options o;
       o.host = host;
       o.campaign = campaign;
-      if (!parity(o))
+      if (!run_case(o))
         return 1;
     }
     Options max;
@@ -439,9 +535,8 @@ int main() {
     max.ticks = 1024;
     max.workers = 3;
     max.grain = 64;
-    if (!parity(max))
+    if (!run_case(max))
       return 1;
   }
-  std::cout << "PASS CPU/kernel/Graph semantic parity, exact oracles, "
-               "counters, zero allocation and trusted replay\n";
+  std::cout << "PASS requested golden CUDA test cases\n";
 }
