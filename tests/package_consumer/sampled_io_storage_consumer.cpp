@@ -35,6 +35,12 @@ struct Clock final : rt::RuntimeClock {
   std::atomic<std::uint64_t> now{1000};
   std::uint64_t now_ns() noexcept override { return now.load(); }
 };
+// Borrowed transfer storage deliberately has cache-line alignment. MSVC's
+// padding diagnostic is expected for this fixture, not a layout defect.
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4324)
+#endif
 struct Fixture {
   Clock clock;
   alignas(64) std::array<std::byte, frame_bytes * 4> storage{};
@@ -332,6 +338,10 @@ struct Fixture {
   }
 };
 } // namespace sampled_storage
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
 #ifndef RTFW_SAMPLED_STORAGE_NO_MAIN
 int main(int argc, char **argv) {
   const unsigned slots =
@@ -370,6 +380,13 @@ int main(int argc, char **argv) {
       f.runtime.replay_active(artifact, decltype(f)::apply) != rt::Status::ok ||
       f.state != expected)
     return 6;
+  if (argc > 2) {
+    std::ofstream out(std::string(argv[2]) + ".active", std::ios::binary);
+    out.write(reinterpret_cast<const char *>(artifact.data()),
+              static_cast<std::streamsize>(artifact.size()));
+    if (!out)
+      return 8;
+  }
   if (f.runtime.stop() != rt::Status::ok)
     return 7;
   std::printf("sampled storage slots=%u wrap32 replay PASS\n", slots);
