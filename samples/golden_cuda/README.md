@@ -17,8 +17,8 @@ artifacts. Modes `native` and `host` select CPU execution ownership; both use th
 injected Driver API unless the separate real host is selected.
 
 For optional physical execution, configure `-DGOLDEN_CUDA_REAL=ON` against a CUDA
-Driver-enabled SDK and toolkit, then run `golden_cuda_real --help`. Missing
-hardware exits 3 with NOT_RUN. Native replay is unsupported. Portable protocol
+Driver-enabled SDK and toolkit, then run `golden_cuda_real --help`. The launcher supports help without a driver library; missing
+hardware or driver exits 3 with NOT_RUN. Native replay is unsupported. Portable protocol
 success and a compiled real host do not qualify physical CUDA, RT or performance.
 
 See the installed `golden_cuda.md` for ownership, timing and fault semantics.

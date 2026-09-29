@@ -19,11 +19,11 @@ def rejected(call):
     raise AssertionError('false evidence accepted')
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--plant',type=Path,required=True);p.add_argument('--controller',type=Path,required=True);p.add_argument('--provenance',type=Path,required=True);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--plant',type=Path,required=True);p.add_argument('--controller',type=Path,required=True);p.add_argument('--provenance',type=Path,required=True);p.add_argument('--group',choices=['all','native','host','external'],default='all');a=p.parse_args()
     cases=negatives=0
     with tempfile.TemporaryDirectory(prefix='golden CUDA processes ') as folder:
         root=Path(folder)
-        for mode in ('native','host'):
+        for mode in (() if a.group=='external' else ('native','host') if a.group=='all' else (a.group,)):
             for dispatch in ('cpu','kernel','graph'):
                 campaigns=list(artifacts.CAMPAIGNS)+([] if dispatch=='cpu' else ['device_loss','reset_failure'])
                 for case in campaigns:
@@ -32,6 +32,8 @@ def main():
                     args+=['--fault' if case in ('device_loss','reset_failure') else '--campaign',case]
                     run.command(args)
                     artifacts.validate(out,a.provenance,True);cases+=1
+        if a.group in ('native','host'):
+            print(f'PASS {cases} {a.group} CLI cases',flush=True);return
         for mode in ('native','host'):
             for dispatch in ('cpu','kernel','graph'):
                 out=root/f'external-{mode}-{dispatch}'
@@ -44,6 +46,8 @@ def main():
             print(ho+co,end='');assert h==2
             assert artifacts.validate(out,a.provenance,True)['status']=='FAIL';cases+=1
         out=root/'native-graph-nominal'
+        if a.group=='external':
+            run.command([a.plant,'--dispatch','graph','--output',out]);artifacts.validate(out,a.provenance,True);cases+=1
         path=out/'execution.json';original=path.read_bytes();execution=json.loads(original)
         # Every claimed backend/fault counter is independently constrained.
         for key,value in execution.items():

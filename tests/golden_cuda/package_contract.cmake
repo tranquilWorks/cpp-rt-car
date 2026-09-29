@@ -2,7 +2,7 @@ if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8
     set(golden_cuda_kit "${RTFW_DATA_DIR}/examples/golden_cuda")
     file(GLOB golden_cuda_sources LIST_DIRECTORIES FALSE RELATIVE "${golden_cuda_kit}" "${golden_cuda_kit}/*")
     list(SORT golden_cuda_sources)
-    if(NOT "${golden_cuda_sources}" STREQUAL "CMakeLists.txt;README.md;artifacts.py;main.cpp;owner.hpp;physics.cu;physics.hpp;provenance.json;provenance.py;real.cmake;real.cpp;replay.hpp;resources.hpp;run.py;runner.hpp;simulated_driver.hpp;telemetry.hpp")
+    if(NOT "${golden_cuda_sources}" STREQUAL "CMakeLists.txt;README.md;artifacts.py;main.cpp;native_launcher.cpp;owner.hpp;physics.cu;physics.hpp;provenance.json;provenance.py;real.cmake;real.cpp;replay.hpp;resources.hpp;run.py;runner.hpp;simulated_driver.hpp;telemetry.hpp")
         message(FATAL_ERROR "Golden CUDA source inventory differs from contract")
     endif()
     if(NOT EXISTS "${RTFW_DATA_DIR}/golden_cuda.md")

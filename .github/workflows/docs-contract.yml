@@ -89,4 +89,4 @@ jobs:
       - name: Verify CPack CUDA golden source kit
         run: python3 tests/golden_cuda/verify_package.py --work-directory build-golden-cuda-package
       - name: Analyze CUDA golden public source and tests
-        run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/golden_cuda/main.cpp tests/golden_cuda/test_cuda.cpp
+        run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude samples/golden_cuda/main.cpp tests/golden_cuda/test_cuda.cpp tests/golden_cuda/allocation.cpp

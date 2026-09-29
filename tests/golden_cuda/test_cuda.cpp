@@ -1,7 +1,7 @@
 #include "../../samples/golden_cuda/owner.hpp"
 #include "../../samples/golden_cuda/replay.hpp"
 #include "../../samples/golden_system/oracle.hpp"
-#include "../cuda_physics/allocation_guard.hpp"
+#include "allocation.hpp"
 #include <algorithm>
 #include <charconv>
 #include <cstddef>
@@ -104,15 +104,26 @@ bool parity(Options options, int selected_dispatch = -1,
     CHECK(owner.prepare(&policy) == Status::ok);
     rt::CpuMemoryPolicyReport report;
     CHECK(owner.session->runtime->cpu_memory_policy_report(report));
-    bool parked = false;
-    for (std::size_t i = 0; i < report.thread_count; ++i)
-      if (report.threads[i].role == rt::thread_role_executor_worker)
-        parked =
-            report.threads[i].resolved.wait_strategy == rt::WaitStrategy::park;
-    // Host adapters own their workers; this native-thread request applies only
-    // when Runtime owns the executor threads.
-    if (!options.host)
-      CHECK(parked);
+    bool native_policy = false;
+    if (!options.host) {
+      for (std::size_t i = 0; i < report.thread_count; ++i) {
+        const auto &row = report.threads[i];
+        if (row.role != rt::thread_role_executor_worker)
+          continue;
+        native_policy = true;
+        CHECK(row.requested.wait_strategy == rt::WaitStrategy::park);
+#if defined(__linux__)
+        CHECK(row.resolved.wait_strategy == rt::WaitStrategy::park);
+#else
+        CHECK(row.resolution ==
+              rt::PolicyResolutionState::unsupported_best_effort);
+        CHECK(row.applied == rt::PolicyOperationState::unsupported &&
+              row.verified == rt::PolicyOperationState::unsupported);
+        CHECK(row.resolved.wait_strategy != rt::WaitStrategy::park);
+#endif
+      }
+      CHECK(native_policy);
+    }
     auto &s = *owner.session;
     CHECK(s.plan.phase_count == 8 &&
           s.plan.registered_state_bytes == state_bytes);
@@ -461,6 +472,22 @@ bool partial_startup() {
   return true;
 }
 
+bool allocation_control() {
+  allocation::begin();
+  auto *ordinary = ::operator new(17);
+  *static_cast<volatile unsigned char *>(ordinary) = 17;
+  const auto ordinary_count = allocation::end();
+  ::operator delete(ordinary);
+  CHECK(ordinary_count == 1);
+  allocation::begin();
+  auto *aligned = ::operator new (64, std::align_val_t{64});
+  *static_cast<volatile unsigned char *>(aligned) = 64;
+  const auto aligned_count = allocation::end();
+  ::operator delete (aligned, std::align_val_t{64});
+  CHECK(aligned_count == 1);
+  return true;
+}
+
 int main(int argc, char **argv) {
   std::cout << std::unitbuf;
   int selected = -1, selected_dispatch = -1;
@@ -490,7 +517,8 @@ int main(int argc, char **argv) {
     reference = argv[6];
   }
   if (selected <= 0) {
-    if (!native_contract() || !foreign_artifacts() || !partial_startup())
+    if (!allocation_control() || !native_contract() || !foreign_artifacts() ||
+        !partial_startup())
       return 1;
     for (auto dispatch : {Dispatch::kernel, Dispatch::graph}) {
       if (!negatives(dispatch))

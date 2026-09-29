@@ -1,0 +1,615 @@
+﻿2026-09-29T08:22:59.7319337Z Current runner version: '2.337.0'
+2026-09-29T08:22:59.7345906Z ##[group]Runner Image Provisioner
+2026-09-29T08:22:59.7346950Z Hosted Compute Agent
+2026-09-29T08:22:59.7347577Z Version: 20260828.587
+2026-09-29T08:22:59.7348304Z Commit: abac92662cab4cc7352de4f9f9d2e2419aad9c29
+2026-09-29T08:22:59.7349103Z Build Date: 2026-08-28T16:44:25Z
+2026-09-29T08:22:59.7349821Z Worker ID: {e03ddf3e-972a-429a-8f10-fd22a9cacfe2}
+2026-09-29T08:22:59.7350661Z Azure Region: westus
+2026-09-29T08:22:59.7351274Z ##[endgroup]
+2026-09-29T08:22:59.7353314Z ##[group]Operating System
+2026-09-29T08:22:59.7354054Z Ubuntu
+2026-09-29T08:22:59.7354687Z 22.04.5
+2026-09-29T08:22:59.7355372Z LTS
+2026-09-29T08:22:59.7355932Z ##[endgroup]
+2026-09-29T08:22:59.7356517Z ##[group]Runner Image
+2026-09-29T08:22:59.7357243Z Image: ubuntu-22.04
+2026-09-29T08:22:59.7357866Z Version: 20260920.303.1
+2026-09-29T08:22:59.7359266Z Included Software: https://github.com/actions/runner-images/blob/ubuntu22/20260920.303/images/ubuntu/Ubuntu2204-Readme.md
+2026-09-29T08:22:59.7360908Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu22%2F20260920.303
+2026-09-29T08:22:59.7362024Z ##[endgroup]
+2026-09-29T08:22:59.7363656Z ##[group]GITHUB_TOKEN Permissions
+2026-09-29T08:22:59.7365807Z Contents: read
+2026-09-29T08:22:59.7366484Z Metadata: read
+2026-09-29T08:22:59.7367228Z ##[endgroup]
+2026-09-29T08:22:59.7369519Z Secret source: Actions
+2026-09-29T08:22:59.7370572Z Cache mode: write
+2026-09-29T08:22:59.7371366Z Prepare workflow directory
+2026-09-29T08:22:59.7847914Z Prepare all required actions
+2026-09-29T08:22:59.7895955Z Getting action download info
+2026-09-29T08:23:00.2065270Z Download action repository 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-09-29T08:23:00.2991654Z Download action repository 'anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610' (SHA:e22c389904149dbc22b58101806040fa8d37a610)
+2026-09-29T08:23:00.6477356Z Download action repository 'actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48' (SHA:2031cfc080254a8a887f58cffee85186f0e49e48)
+2026-09-29T08:23:01.1432761Z Complete job name: build-linux (gcc, Debug, ON)
+2026-09-29T08:23:01.2309884Z ##[group]Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+2026-09-29T08:23:01.2311090Z with:
+2026-09-29T08:23:01.2311554Z   submodules: recursive
+2026-09-29T08:23:01.2312100Z   repository: tranquilWorks/cpp-rt-car
+2026-09-29T08:23:01.2316373Z   token: ***
+2026-09-29T08:23:01.2316858Z   ssh-strict: true
+2026-09-29T08:23:01.2317343Z   ssh-user: git
+2026-09-29T08:23:01.2317850Z   persist-credentials: true
+2026-09-29T08:23:01.2318389Z   clean: true
+2026-09-29T08:23:01.2318876Z   sparse-checkout-cone-mode: true
+2026-09-29T08:23:01.2319450Z   fetch-depth: 1
+2026-09-29T08:23:01.2319923Z   fetch-tags: false
+2026-09-29T08:23:01.2320410Z   show-progress: true
+2026-09-29T08:23:01.2320908Z   lfs: false
+2026-09-29T08:23:01.2321392Z   set-safe-directory: true
+2026-09-29T08:23:01.2321947Z   allow-unsafe-pr-checkout: false
+2026-09-29T08:23:01.2323065Z ##[endgroup]
+2026-09-29T08:23:01.3414397Z Syncing repository: tranquilWorks/cpp-rt-car
+2026-09-29T08:23:01.3417609Z ##[group]Getting Git version info
+2026-09-29T08:23:01.3418979Z Working directory is '/home/runner/work/cpp-rt-car/cpp-rt-car'
+2026-09-29T08:23:01.3420867Z [command]/usr/bin/git version
+2026-09-29T08:23:01.3475650Z git version 2.55.0
+2026-09-29T08:23:01.3540420Z ##[endgroup]
+2026-09-29T08:23:01.3551889Z Temporarily overriding HOME='/home/runner/work/_temp/9d0cd9a2-e954-4663-87e9-22ce8c4211e6' before making global git config changes
+2026-09-29T08:23:01.3555168Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-29T08:23:01.3557431Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cpp-rt-car/cpp-rt-car
+2026-09-29T08:23:01.3601491Z Deleting the contents of '/home/runner/work/cpp-rt-car/cpp-rt-car'
+2026-09-29T08:23:01.3623176Z ##[group]Initializing the repository
+2026-09-29T08:23:01.3625601Z [command]/usr/bin/git init /home/runner/work/cpp-rt-car/cpp-rt-car
+2026-09-29T08:23:01.3743214Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-09-29T08:23:01.3760436Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-09-29T08:23:01.3762871Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-09-29T08:23:01.3764197Z hint: call:
+2026-09-29T08:23:01.3765320Z hint:
+2026-09-29T08:23:01.3766353Z hint: 	git config --global init.defaultBranch <name>
+2026-09-29T08:23:01.3767508Z hint:
+2026-09-29T08:23:01.3768636Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-09-29T08:23:01.3769825Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-09-29T08:23:01.3770687Z hint:
+2026-09-29T08:23:01.3771152Z hint: 	git branch -m <name>
+2026-09-29T08:23:01.3771713Z hint:
+2026-09-29T08:23:01.3772787Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-09-29T08:23:01.3774089Z Initialized empty Git repository in /home/runner/work/cpp-rt-car/cpp-rt-car/.git/
+2026-09-29T08:23:01.3776148Z [command]/usr/bin/git remote add origin https://github.com/tranquilWorks/cpp-rt-car
+2026-09-29T08:23:01.3813353Z ##[endgroup]
+2026-09-29T08:23:01.3815136Z ##[group]Disabling automatic garbage collection
+2026-09-29T08:23:01.3817594Z [command]/usr/bin/git config --local gc.auto 0
+2026-09-29T08:23:01.3856687Z ##[endgroup]
+2026-09-29T08:23:01.3858572Z ##[group]Setting up auth
+2026-09-29T08:23:01.3866311Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-29T08:23:01.3906115Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-29T08:23:01.4429870Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-29T08:23:01.4478082Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-29T08:23:01.4763755Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-29T08:23:01.4805236Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-29T08:23:01.5073990Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-09-29T08:23:01.5120458Z ##[endgroup]
+2026-09-29T08:23:01.5121317Z ##[group]Fetching the repository
+2026-09-29T08:23:01.5131426Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +d687e44c316ca6977133eef344e6f16c0c298f80:refs/remotes/pull/277/merge
+2026-09-29T08:23:02.4873566Z From https://github.com/tranquilWorks/cpp-rt-car
+2026-09-29T08:23:02.4876430Z  * [new ref]         d687e44c316ca6977133eef344e6f16c0c298f80 -> pull/277/merge
+2026-09-29T08:23:02.4881946Z ##[endgroup]
+2026-09-29T08:23:02.4884108Z ##[group]Determining the checkout info
+2026-09-29T08:23:02.4886159Z ##[endgroup]
+2026-09-29T08:23:02.4887556Z [command]/usr/bin/git sparse-checkout disable
+2026-09-29T08:23:02.4941709Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-09-29T08:23:02.4989054Z ##[group]Checking out the ref
+2026-09-29T08:23:02.4993255Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/277/merge
+2026-09-29T08:23:02.5914311Z Note: switching to 'refs/remotes/pull/277/merge'.
+2026-09-29T08:23:02.5915430Z 
+2026-09-29T08:23:02.5916265Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-09-29T08:23:02.5918295Z changes and commit them, and you can discard any commits you make in this
+2026-09-29T08:23:02.5920677Z state without impacting any branches by switching back to a branch.
+2026-09-29T08:23:02.5922826Z 
+2026-09-29T08:23:02.5924342Z If you want to create a new branch to retain commits you create, you may
+2026-09-29T08:23:02.5926762Z do so (now or later) by using -c with the switch command. Example:
+2026-09-29T08:23:02.5928143Z 
+2026-09-29T08:23:02.5928810Z   git switch -c <new-branch-name>
+2026-09-29T08:23:02.5929820Z 
+2026-09-29T08:23:02.5930494Z Or undo this operation with:
+2026-09-29T08:23:02.5931507Z 
+2026-09-29T08:23:02.5932130Z   git switch -
+2026-09-29T08:23:02.5933294Z 
+2026-09-29T08:23:02.5935087Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-09-29T08:23:02.5937009Z 
+2026-09-29T08:23:02.5939089Z HEAD is now at d687e44 Merge a44a8c9650c1d9cfa241aaa19289c4b6f6170b42 into c78075e2b30efba48db4f0ca8136110b1399baf5
+2026-09-29T08:23:02.5945694Z ##[endgroup]
+2026-09-29T08:23:02.5947753Z ##[group]Setting up auth for fetching submodules
+2026-09-29T08:23:02.5950008Z [command]/usr/bin/git config --global http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-09-29T08:23:02.5986941Z [command]/usr/bin/git config --global --unset-all url.https://github.com/.insteadOf
+2026-09-29T08:23:02.6025680Z [command]/usr/bin/git config --global --add url.https://github.com/.insteadOf git@github.com:
+2026-09-29T08:23:02.6066188Z [command]/usr/bin/git config --global --add url.https://github.com/.insteadOf org-321916666@github.com:
+2026-09-29T08:23:02.6103670Z ##[endgroup]
+2026-09-29T08:23:02.6106334Z ##[group]Fetching submodules
+2026-09-29T08:23:02.6108442Z [command]/usr/bin/git submodule sync --recursive
+2026-09-29T08:23:02.6384262Z [command]/usr/bin/git -c protocol.version=2 submodule update --init --force --depth=1 --recursive
+2026-09-29T08:23:02.6648601Z Submodule 'external/googletest' (https://github.com/google/googletest.git) registered for path 'external/googletest'
+2026-09-29T08:23:02.6678775Z Cloning into '/home/runner/work/cpp-rt-car/cpp-rt-car/external/googletest'...
+2026-09-29T08:23:04.9153202Z From https://github.com/google/googletest
+2026-09-29T08:23:04.9155274Z  * branch            7e17b15f1547bb8dd9c2fed91043b7af3437387f -> FETCH_HEAD
+2026-09-29T08:23:04.9522060Z Submodule path 'external/googletest': checked out '7e17b15f1547bb8dd9c2fed91043b7af3437387f'
+2026-09-29T08:23:04.9558122Z [command]/usr/bin/git submodule foreach --recursive git config --local gc.auto 0
+2026-09-29T08:23:04.9811271Z Entering 'external/googletest'
+2026-09-29T08:23:04.9865821Z ##[endgroup]
+2026-09-29T08:23:04.9866764Z ##[group]Persisting credentials for submodules
+2026-09-29T08:23:04.9873773Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'url\.https\:\/\/github\.com\/\.insteadOf' && git config --local --unset-all 'url.https://github.com/.insteadOf' || :"
+2026-09-29T08:23:05.0127374Z Entering 'external/googletest'
+2026-09-29T08:23:05.0206183Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local 'http.https://github.com/.extraheader' 'AUTHORIZATION: basic ***' && git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-09-29T08:23:05.0493400Z Entering 'external/googletest'
+2026-09-29T08:23:05.0540492Z file:/home/runner/work/cpp-rt-car/cpp-rt-car/.git/modules/external/googletest/config	remote.origin.url
+2026-09-29T08:23:05.0585788Z [command]/usr/bin/git submodule foreach --recursive git config --local --add 'url.https://github.com/.insteadOf' 'git@github.com:'
+2026-09-29T08:23:05.0838659Z Entering 'external/googletest'
+2026-09-29T08:23:05.0898694Z [command]/usr/bin/git submodule foreach --recursive git config --local --add 'url.https://github.com/.insteadOf' 'org-321916666@github.com:'
+2026-09-29T08:23:05.1152216Z Entering 'external/googletest'
+2026-09-29T08:23:05.1206422Z ##[endgroup]
+2026-09-29T08:23:05.1256740Z [command]/usr/bin/git log -1 --format=%H
+2026-09-29T08:23:05.1289468Z d687e44c316ca6977133eef344e6f16c0c298f80
+2026-09-29T08:23:05.1525605Z ##[group]Run tools/rt_harden.sh
+2026-09-29T08:23:05.1526056Z [36;1mtools/rt_harden.sh[0m
+2026-09-29T08:23:05.1903932Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-29T08:23:05.1904707Z ##[endgroup]
+2026-09-29T08:23:05.2059938Z tools/rt_harden.sh: line 13: ulimit: max locked memory: cannot modify limit: Operation not permitted
+2026-09-29T08:23:05.2061034Z [rt_harden] mlockall may fail (unable to set unlimited lockable memory)
+2026-09-29T08:23:05.2149056Z [rt_harden] transparent hugepages disabled
+2026-09-29T08:23:05.2235849Z [rt_harden] perf_event_paranoid set to 3
+2026-09-29T08:23:05.4665580Z [rt_harden] irqbalance service masked
+2026-09-29T08:23:05.5477898Z [rt_harden] unable to set performance governor
+2026-09-29T08:23:05.5627144Z [rt_harden] unable to disable C-states
+2026-09-29T08:23:05.5699431Z [rt_harden] pinned current process to CPU0
+2026-09-29T08:23:05.5700143Z [rt_harden] real-time hardening setup complete
+2026-09-29T08:23:05.5777253Z ##[group]Run if [ "gcc" = "clang" ]; then
+2026-09-29T08:23:05.5777675Z [36;1mif [ "gcc" = "clang" ]; then[0m
+2026-09-29T08:23:05.5778011Z [36;1m  echo "CC=clang-14" >> "$GITHUB_ENV"[0m
+2026-09-29T08:23:05.5778365Z [36;1m  echo "CXX=clang++-14" >> "$GITHUB_ENV"[0m
+2026-09-29T08:23:05.5778675Z [36;1m  clang++-14 --version[0m
+2026-09-29T08:23:05.5778922Z [36;1melse[0m
+2026-09-29T08:23:05.5779152Z [36;1m  echo "CC=gcc-11" >> "$GITHUB_ENV"[0m
+2026-09-29T08:23:05.5779453Z [36;1m  echo "CXX=g++-11" >> "$GITHUB_ENV"[0m
+2026-09-29T08:23:05.5779733Z [36;1m  g++-11 --version[0m
+2026-09-29T08:23:05.5779957Z [36;1mfi[0m
+2026-09-29T08:23:05.5856543Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-29T08:23:05.5856938Z ##[endgroup]
+2026-09-29T08:23:05.8778058Z g++-11 (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+2026-09-29T08:23:05.8778550Z Copyright (C) 2021 Free Software Foundation, Inc.
+2026-09-29T08:23:05.8779361Z This is free software; see the source for copying conditions.  There is NO
+2026-09-29T08:23:05.8780435Z warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+2026-09-29T08:23:05.8781153Z 
+2026-09-29T08:23:05.8828926Z ##[group]Run SANITIZERS=""
+2026-09-29T08:23:05.8829270Z [36;1mSANITIZERS=""[0m
+2026-09-29T08:23:05.8829554Z [36;1mif [ "Debug" = "Debug" ]; then[0m
+2026-09-29T08:23:05.8829872Z [36;1m  SANITIZERS="address;undefined"[0m
+2026-09-29T08:23:05.8830165Z [36;1mfi[0m
+2026-09-29T08:23:05.8830391Z [36;1mcmake -S . -B build \[0m
+2026-09-29T08:23:05.8830677Z [36;1m  -DCMAKE_BUILD_TYPE=Debug \[0m
+2026-09-29T08:23:05.8830972Z [36;1m  -DENABLE_TESTS=ON \[0m
+2026-09-29T08:23:05.8831285Z [36;1m  -DRTFW_BUILD_EXPERIMENTAL=ON \[0m
+2026-09-29T08:23:05.8831606Z [36;1m  -DRTFW_BUILD_BENCHMARKS=ON \[0m
+2026-09-29T08:23:05.8831906Z [36;1m  -DENABLE_RAPIDCHECK=ON \[0m
+2026-09-29T08:23:05.8832211Z [36;1m  -DSIM_SANITIZERS="$SANITIZERS" \[0m
+2026-09-29T08:23:05.8832868Z [36;1m  -DSIM_ENABLE_AVX2=ON \[0m
+2026-09-29T08:23:05.8833161Z [36;1m  -DSIM_WERROR=ON[0m
+2026-09-29T08:23:05.8905301Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-29T08:23:05.8905689Z env:
+2026-09-29T08:23:05.8905939Z   CC: gcc-11
+2026-09-29T08:23:05.8906167Z   CXX: g++-11
+2026-09-29T08:23:05.8906386Z ##[endgroup]
+2026-09-29T08:23:07.4875044Z -- The C compiler identification is GNU 11.4.0
+2026-09-29T08:23:08.8809718Z -- The CXX compiler identification is GNU 11.4.0
+2026-09-29T08:23:08.9868214Z -- Detecting C compiler ABI info
+2026-09-29T08:23:09.2143198Z -- Detecting C compiler ABI info - done
+2026-09-29T08:23:09.2335618Z -- Check for working C compiler: /usr/bin/gcc-11 - skipped
+2026-09-29T08:23:09.2392800Z -- Detecting C compile features
+2026-09-29T08:23:09.2399856Z -- Detecting C compile features - done
+2026-09-29T08:23:09.2661544Z -- Detecting CXX compiler ABI info
+2026-09-29T08:23:09.4657054Z -- Detecting CXX compiler ABI info - done
+2026-09-29T08:23:09.4838487Z -- Check for working CXX compiler: /usr/bin/g++-11 - skipped
+2026-09-29T08:23:09.4843185Z -- Detecting CXX compile features
+2026-09-29T08:23:09.4850194Z -- Detecting CXX compile features - done
+2026-09-29T08:23:09.5290958Z -- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+2026-09-29T08:23:09.7356707Z -- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+2026-09-29T08:23:09.7460981Z -- Found Threads: TRUE
+2026-09-29T08:23:09.7464685Z -- Enabling sanitizers: address;undefined
+2026-09-29T08:23:17.0833291Z -- Sanitizer runtimes for rtfw_shared: using fallback /usr/lib/gcc/x86_64-linux-gnu/11/libasan.so;/usr/lib/gcc/x86_64-linux-gnu/11/libubsan.so
+2026-09-29T08:23:17.2552596Z -- Found Python3: /usr/bin/python3.10 (found version "3.10.12") found components: Interpreter
+2026-09-29T08:23:17.8349535Z -- Configuring done (11.6s)
+2026-09-29T08:23:18.0679833Z -- Generating done (0.2s)
+2026-09-29T08:23:18.0684551Z -- Build files have been written to: /home/runner/work/cpp-rt-car/cpp-rt-car/build
+2026-09-29T08:23:18.0857580Z ##[group]Run cmake --build build --config Debug -- -j2
+2026-09-29T08:23:18.0858087Z [36;1mcmake --build build --config Debug -- -j2[0m
+2026-09-29T08:23:18.0929534Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-29T08:23:18.0929936Z env:
+2026-09-29T08:23:18.0930143Z   CC: gcc-11
+2026-09-29T08:23:18.0930379Z   CXX: g++-11
+2026-09-29T08:23:18.0930598Z ##[endgroup]
+2026-09-29T08:23:18.1245169Z [  1%] Building CXX object CMakeFiles/simcore_platform.dir/src/platform_init.cpp.o
+2026-09-29T08:23:18.1259035Z [  1%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/compiled_graph.cpp.o
+2026-09-29T08:23:21.4609487Z [  2%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/cross_rate_data.cpp.o
+2026-09-29T08:23:21.6587345Z [  2%] Building CXX object CMakeFiles/simcore_platform.dir/src/metrics.cpp.o
+2026-09-29T08:23:23.4514607Z [  2%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/command_batch.cpp.o
+2026-09-29T08:23:24.2061724Z [  2%] Linking CXX static library libsimcore_platform.a
+2026-09-29T08:23:24.2123217Z [  2%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/hal_v2.cpp.o
+2026-09-29T08:23:25.1683913Z [  3%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/heterogeneous_memory.cpp.o
+2026-09-29T08:23:26.2427741Z [  3%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/device_manager.cpp.o
+2026-09-29T08:23:29.3539170Z [  3%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/executor.cpp.o
+2026-09-29T08:23:30.7218570Z [  3%] Built target simcore_platform
+2026-09-29T08:23:30.7300857Z [  3%] Building CXX object CMakeFiles/rtfw_cuda_backend.dir/rt/src/cuda_backend.cpp.o
+2026-09-29T08:23:31.8315076Z [  3%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/extension_registration.cpp.o
+2026-09-29T08:23:32.6704389Z [  3%] Linking CXX static library librtfw_cuda_backend.a
+2026-09-29T08:23:32.7889708Z [  3%] Built target rtfw_cuda_backend
+2026-09-29T08:23:32.7916002Z [  4%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/host_runtime.cpp.o
+2026-09-29T08:23:33.0498123Z [  4%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/live_control_actions.cpp.o
+2026-09-29T08:23:33.8961655Z [  4%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/live_control_mailbox.cpp.o
+2026-09-29T08:23:38.2938840Z [  4%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/live_control_replay.cpp.o
+2026-09-29T08:23:39.6899915Z [  5%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/memory_policy.cpp.o
+2026-09-29T08:23:41.0623070Z [  5%] Building CXX object CMakeFiles/rtfw_xdma_backend.dir/rt/src/xdma_backend.cpp.o
+2026-09-29T08:23:43.0218182Z [  6%] Linking CXX static library librtfw_xdma_backend.a
+2026-09-29T08:23:43.1448201Z [  6%] Built target rtfw_xdma_backend
+2026-09-29T08:23:43.1533196Z [  6%] Building CXX object CMakeFiles/trace_dump.dir/src/trace_dump.cpp.o
+2026-09-29T08:23:44.5298795Z [  7%] Linking CXX executable trace_dump
+2026-09-29T08:23:44.6698455Z [  7%] Built target trace_dump
+2026-09-29T08:23:44.6783512Z [  8%] Building CXX object _deps/googletest/googletest/CMakeFiles/gtest.dir/src/gtest-all.cc.o
+2026-09-29T08:23:48.3562894Z [  8%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/mixed_rate_actions.cpp.o
+2026-09-29T08:23:49.1392002Z [  8%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/mixed_rate_replay.cpp.o
+2026-09-29T08:23:50.3131493Z [  9%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/mock_device.cpp.o
+2026-09-29T08:23:51.4533183Z [  9%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/native_platform_preflight.cpp.o
+2026-09-29T08:23:52.2033601Z [  9%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/observability_export.cpp.o
+2026-09-29T08:23:53.2659218Z [  9%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/rate_dispatch.cpp.o
+2026-09-29T08:23:53.9750419Z [  9%] Linking CXX static library ../../../lib/libgtest.a
+2026-09-29T08:23:54.1832546Z [  9%] Built target gtest
+2026-09-29T08:23:54.1931276Z [  9%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/BeforeMinimalTestCase.cpp.o
+2026-09-29T08:23:54.2117943Z [  9%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Check.cpp.o
+2026-09-29T08:23:54.9975332Z [  9%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Classify.cpp.o
+2026-09-29T08:23:55.6353042Z [ 10%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/GenerationFailure.cpp.o
+2026-09-29T08:23:55.7841733Z [ 10%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Log.cpp.o
+2026-09-29T08:23:56.4110142Z [ 10%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Random.cpp.o
+2026-09-29T08:23:56.9813047Z [ 11%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/rate_telemetry.cpp.o
+2026-09-29T08:23:57.3465198Z [ 12%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/Show.cpp.o
+2026-09-29T08:23:57.7576738Z [ 12%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/rate_timeline.cpp.o
+2026-09-29T08:23:57.7914932Z [ 12%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Any.cpp.o
+2026-09-29T08:23:58.2205656Z [ 12%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Assertions.cpp.o
+2026-09-29T08:23:58.6721241Z [ 12%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Base64.cpp.o
+2026-09-29T08:23:58.9690047Z [ 13%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Configuration.cpp.o
+2026-09-29T08:23:59.2284012Z [ 13%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/resource_policy.cpp.o
+2026-09-29T08:24:00.1365697Z [ 13%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/DefaultTestListener.cpp.o
+2026-09-29T08:24:00.8488656Z [ 13%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/runtime_compat.cpp.o
+2026-09-29T08:24:00.8661215Z [ 13%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/FrequencyMap.cpp.o
+2026-09-29T08:24:01.0959601Z [ 13%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/ImplicitParam.cpp.o
+2026-09-29T08:24:01.5279679Z [ 14%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/runtime_profile.cpp.o
+2026-09-29T08:24:01.6159343Z [ 15%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/LogTestListener.cpp.o
+2026-09-29T08:24:02.1870728Z [ 15%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/MapParser.cpp.o
+2026-09-29T08:24:02.5253154Z [ 15%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/sampled_io.cpp.o
+2026-09-29T08:24:02.7304067Z [ 15%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/MulticastTestListener.cpp.o
+2026-09-29T08:24:03.3595378Z [ 16%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/ParseException.cpp.o
+2026-09-29T08:24:03.5379400Z [ 16%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Platform.cpp.o
+2026-09-29T08:24:03.9517332Z [ 16%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Property.cpp.o
+2026-09-29T08:24:04.3730302Z [ 16%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/loopback_backend.cpp.o
+2026-09-29T08:24:05.4418283Z [ 16%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/PropertyContext.cpp.o
+2026-09-29T08:24:05.7719615Z [ 17%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/ReproduceListener.cpp.o
+2026-09-29T08:24:05.9541116Z [ 18%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/snapshot_codec.cpp.o
+2026-09-29T08:24:06.7567249Z [ 18%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Results.cpp.o
+2026-09-29T08:24:07.2177396Z [ 18%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/telemetry.cpp.o
+2026-09-29T08:24:08.0094354Z [ 18%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Serialization.cpp.o
+2026-09-29T08:24:08.2141366Z [ 18%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/thread_policy.cpp.o
+2026-09-29T08:24:08.2245722Z [ 18%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/StringSerialization.cpp.o
+2026-09-29T08:24:09.1040105Z [ 19%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/TestMetadata.cpp.o
+2026-09-29T08:24:09.3163204Z [ 19%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/TestParams.cpp.o
+2026-09-29T08:24:09.6488254Z [ 19%] Building CXX object CMakeFiles/rtfw_runtime.dir/rt/src/watchdog_monitor.cpp.o
+2026-09-29T08:24:09.7609726Z [ 19%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/detail/Testing.cpp.o
+2026-09-29T08:24:10.9748560Z [ 20%] Linking CXX static library librtfw_runtime.a
+2026-09-29T08:24:11.1599901Z [ 21%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/Numeric.cpp.o
+2026-09-29T08:24:11.5523499Z [ 21%] Built target rtfw_runtime
+2026-09-29T08:24:11.5608422Z [ 21%] Building CXX object samples/CMakeFiles/sample_particles.dir/particles.cpp.o
+2026-09-29T08:24:12.2272757Z [ 22%] Linking CXX executable sample_particles
+2026-09-29T08:24:12.2876487Z [ 22%] Built target sample_particles
+2026-09-29T08:24:12.2960985Z [ 23%] Building CXX object samples/CMakeFiles/sample_tyre_belt.dir/tyre_belt_kernel.cpp.o
+2026-09-29T08:24:12.8619809Z [ 23%] Linking CXX executable sample_tyre_belt
+2026-09-29T08:24:12.9230170Z [ 23%] Built target sample_tyre_belt
+2026-09-29T08:24:12.9318693Z [ 24%] Building CXX object samples/CMakeFiles/sample_async_gpu.dir/async_gpu_stub.cpp.o
+2026-09-29T08:24:13.3794740Z [ 24%] Linking CXX executable sample_async_gpu
+2026-09-29T08:24:13.4422106Z [ 24%] Built target sample_async_gpu
+2026-09-29T08:24:13.4506667Z [ 25%] Building CXX object samples/CMakeFiles/sample_embed_cpp.dir/embed_cpp/mini_app.cpp.o
+2026-09-29T08:24:14.3323415Z [ 25%] Linking CXX executable sample_embed_cpp
+2026-09-29T08:24:14.8975549Z [ 25%] Built target sample_embed_cpp
+2026-09-29T08:24:14.9058680Z [ 25%] Building CXX object samples/CMakeFiles/sample_device_mock.dir/device_mock.cpp.o
+2026-09-29T08:24:15.8662263Z [ 25%] Linking CXX executable sample_device_mock
+2026-09-29T08:24:15.9731400Z [ 25%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/Text.cpp.o
+2026-09-29T08:24:16.4503408Z [ 25%] Built target sample_device_mock
+2026-09-29T08:24:16.4587132Z [ 25%] Building CXX object samples/CMakeFiles/sample_cpu_gpu_fpga_cpu.dir/cpu_gpu_fpga_cpu.cpp.o
+2026-09-29T08:24:17.7238312Z [ 25%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/detail/ExecHandler.cpp.o
+2026-09-29T08:24:18.2533779Z [ 25%] Linking CXX executable sample_cpu_gpu_fpga_cpu
+2026-09-29T08:24:18.4996519Z [ 25%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/detail/GenerationHandler.cpp.o
+2026-09-29T08:24:18.8740653Z [ 25%] Built target sample_cpu_gpu_fpga_cpu
+2026-09-29T08:24:18.8828244Z [ 25%] Building CXX object samples/CMakeFiles/sample_live_control_typed.dir/live_control_typed.cpp.o
+2026-09-29T08:24:18.9118167Z [ 26%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/detail/Recipe.cpp.o
+2026-09-29T08:24:19.8571852Z [ 26%] Building CXX object _deps/rapidcheck-build/CMakeFiles/rapidcheck.dir/src/gen/detail/ScaleInteger.cpp.o
+2026-09-29T08:24:20.3526336Z [ 26%] Linking CXX static library librapidcheck.a
+2026-09-29T08:24:20.4077219Z [ 26%] Linking CXX executable sample_live_control_typed
+2026-09-29T08:24:20.7210168Z [ 26%] Built target rapidcheck
+2026-09-29T08:24:20.7292494Z [ 26%] Building CXX object samples/CMakeFiles/sample_cuda_lifetime.dir/cuda_physics/lifetime/main.cpp.o
+2026-09-29T08:24:20.9735889Z [ 26%] Built target sample_live_control_typed
+2026-09-29T08:24:20.9821599Z [ 26%] Building CXX object samples/CMakeFiles/sample_hello_runtime.dir/hello_runtime/main.cpp.o
+2026-09-29T08:24:21.7446280Z [ 26%] Linking CXX executable sample_hello_runtime
+2026-09-29T08:24:22.3374038Z [ 26%] Built target sample_hello_runtime
+2026-09-29T08:24:22.3463824Z [ 26%] Building CXX object samples/CMakeFiles/sample_typed_runtime.dir/typed_runtime/main.cpp.o
+2026-09-29T08:24:23.1310186Z [ 27%] Linking CXX executable sample_cuda_lifetime
+2026-09-29T08:24:23.4301801Z [ 27%] Linking CXX executable sample_typed_runtime
+2026-09-29T08:24:23.7820131Z [ 27%] Built target sample_cuda_lifetime
+2026-09-29T08:24:23.7906721Z [ 27%] Building CXX object samples/CMakeFiles/sample_backend_authoring.dir/backend_authoring/main.cpp.o
+2026-09-29T08:24:24.0112597Z [ 27%] Built target sample_typed_runtime
+2026-09-29T08:24:24.0198798Z [ 27%] Building CXX object samples/CMakeFiles/sample_cil_plant.dir/cil_shared_memory/plant.cpp.o
+2026-09-29T08:24:25.4141424Z [ 28%] Linking CXX executable sample_cil_plant
+2026-09-29T08:24:25.4807795Z [ 28%] Linking CXX executable sample_backend_authoring
+2026-09-29T08:24:26.0103503Z [ 28%] Built target sample_cil_plant
+2026-09-29T08:24:26.0189075Z [ 29%] Building CXX object samples/CMakeFiles/sample_cil_controller.dir/cil_shared_memory/controller.cpp.o
+2026-09-29T08:24:26.0855693Z [ 29%] Built target sample_backend_authoring
+2026-09-29T08:24:26.0941447Z [ 29%] Building CXX object samples/CMakeFiles/sample_host_adapter.dir/host_adapter/main.cpp.o
+2026-09-29T08:24:27.2170973Z [ 29%] Linking CXX executable sample_cil_controller
+2026-09-29T08:24:27.2876774Z [ 29%] Built target sample_cil_controller
+2026-09-29T08:24:27.2962020Z [ 29%] Building CXX object samples/CMakeFiles/sample_golden_system.dir/golden_system/main.cpp.o
+2026-09-29T08:24:27.7982772Z [ 30%] Linking CXX executable sample_host_adapter
+2026-09-29T08:24:28.3884237Z [ 30%] Built target sample_host_adapter
+2026-09-29T08:24:28.3969959Z [ 30%] Building CXX object samples/CMakeFiles/sample_golden_controller.dir/golden_system/controller.cpp.o
+2026-09-29T08:24:29.6090037Z [ 30%] Linking CXX executable sample_golden_controller
+2026-09-29T08:24:29.6785319Z [ 30%] Built target sample_golden_controller
+2026-09-29T08:24:29.6868785Z [ 31%] Building CXX object samples/CMakeFiles/sample_golden_cuda.dir/golden_cuda/main.cpp.o
+2026-09-29T08:24:32.1819266Z [ 32%] Linking CXX executable sample_golden_system
+2026-09-29T08:24:32.8310326Z [ 32%] Built target sample_golden_system
+2026-09-29T08:24:32.8398685Z [ 32%] Building CXX object samples/recipes/CMakeFiles/recipe_raw_cpp.dir/__/__/tests/package_consumer/cpp_consumer.cpp.o
+2026-09-29T08:24:33.8392895Z [ 32%] Linking CXX executable recipe_raw_cpp
+2026-09-29T08:24:34.4302772Z [ 32%] Built target recipe_raw_cpp
+2026-09-29T08:24:34.4387281Z [ 32%] Building CXX object samples/recipes/CMakeFiles/recipe_profile.dir/__/__/tests/package_consumer/profile_consumer.cpp.o
+2026-09-29T08:24:35.1896707Z [ 32%] Linking CXX executable recipe_profile
+2026-09-29T08:24:35.7705893Z [ 32%] Built target recipe_profile
+2026-09-29T08:24:35.7792111Z [ 33%] Building CXX object samples/recipes/CMakeFiles/recipe_mixed_rate.dir/__/__/tests/package_consumer/mixed_rate_consumer.cpp.o
+2026-09-29T08:24:36.0973761Z [ 33%] Linking CXX executable sample_golden_cuda
+2026-09-29T08:24:36.8333945Z [ 33%] Built target sample_golden_cuda
+2026-09-29T08:24:36.8393613Z [ 33%] Building CXX object samples/recipes/CMakeFiles/recipe_live_control.dir/__/__/tests/package_consumer/live_control_consumer.cpp.o
+2026-09-29T08:24:37.5081194Z [ 33%] Linking CXX executable recipe_mixed_rate
+2026-09-29T08:24:37.7159252Z [ 33%] Linking CXX executable recipe_live_control
+2026-09-29T08:24:38.1395384Z [ 33%] Built target recipe_mixed_rate
+2026-09-29T08:24:38.1483408Z [ 34%] Building CXX object samples/recipes/CMakeFiles/recipe_replay.dir/__/__/tests/package_consumer/live_control_replay_consumer.cpp.o
+2026-09-29T08:24:38.3173492Z [ 34%] Built target recipe_live_control
+2026-09-29T08:24:38.3260386Z [ 34%] Building CXX object samples/recipes/CMakeFiles/recipe_cuda_boundary.dir/__/__/tests/package_consumer/cuda_consumer.cpp.o
+2026-09-29T08:24:38.8683927Z [ 35%] Linking CXX executable recipe_cuda_boundary
+2026-09-29T08:24:38.9532265Z [ 35%] Built target recipe_cuda_boundary
+2026-09-29T08:24:38.9614973Z [ 35%] Building CXX object samples/recipes/CMakeFiles/recipe_xdma_boundary.dir/__/__/tests/package_consumer/xdma_consumer.cpp.o
+2026-09-29T08:24:39.2459466Z [ 35%] Linking CXX executable recipe_replay
+2026-09-29T08:24:39.4901173Z [ 36%] Linking CXX executable recipe_xdma_boundary
+2026-09-29T08:24:39.5779744Z [ 36%] Built target recipe_xdma_boundary
+2026-09-29T08:24:39.5863348Z [ 37%] Building CXX object bench/CMakeFiles/rtfw_benchmark.dir/src/benchmark.cpp.o
+2026-09-29T08:24:39.8458149Z [ 37%] Built target recipe_replay
+2026-09-29T08:24:39.8543480Z [ 37%] Building CXX object bench/CMakeFiles/bench_aosoa_vs_soa.dir/bench_aosoa_vs_soa.cpp.o
+2026-09-29T08:24:41.4935170Z [ 37%] Linking CXX executable bench_aosoa_vs_soa
+2026-09-29T08:24:41.5657815Z [ 37%] Built target bench_aosoa_vs_soa
+2026-09-29T08:24:41.5747162Z [ 37%] Building C object tests/CMakeFiles/test_extension_fixture.dir/extension_fixture.c.o
+2026-09-29T08:24:41.7734582Z [ 37%] Linking C shared library libextension_fixture.so
+2026-09-29T08:24:41.7997939Z [ 37%] Built target test_extension_fixture
+2026-09-29T08:24:41.8085535Z [ 37%] Building C object tests/CMakeFiles/test_extension_fixture_bad.dir/extension_fixture_bad.c.o
+2026-09-29T08:24:41.8438111Z [ 38%] Linking C shared library libextension_fixture_bad.so
+2026-09-29T08:24:41.8702834Z [ 38%] Built target test_extension_fixture_bad
+2026-09-29T08:24:41.8789809Z [ 38%] Building C object tests/CMakeFiles/test_sample_plugin.dir/sample_plugin.c.o
+2026-09-29T08:24:41.9068865Z [ 38%] Linking C shared library libsample_plugin.so
+2026-09-29T08:24:41.9344329Z [ 38%] Built target test_sample_plugin
+2026-09-29T08:24:41.9434077Z [ 39%] Building C object tests/CMakeFiles/test_incompatible_plugin.dir/sample_plugin_bad.c.o
+2026-09-29T08:24:41.9657960Z [ 39%] Linking C shared library libbad_plugin.so
+2026-09-29T08:24:41.9920431Z [ 39%] Built target test_incompatible_plugin
+2026-09-29T08:24:42.0004884Z [ 39%] Building CXX object tests/CMakeFiles/rtfw_cuda_physics_tests.dir/test_cuda_physics.cpp.o
+2026-09-29T08:24:43.5946994Z [ 39%] Linking CXX static library librtfw_benchmark.a
+2026-09-29T08:24:43.7372997Z [ 39%] Built target rtfw_benchmark
+2026-09-29T08:24:43.7457043Z [ 39%] Building CXX object tests/CMakeFiles/rtfw_cpu_gpu_fpga_cpu_sample_tests.dir/test_cpu_gpu_fpga_cpu_sample.cpp.o
+2026-09-29T08:24:44.8463954Z [ 39%] Linking CXX executable rtfw_cuda_physics_tests
+2026-09-29T08:24:45.4947083Z [ 39%] Built target rtfw_cuda_physics_tests
+2026-09-29T08:24:45.5031240Z [ 39%] Building CXX object tests/golden_system/CMakeFiles/test_golden_system.dir/test_system.cpp.o
+2026-09-29T08:24:45.9080786Z [ 40%] Linking CXX executable rtfw_cpu_gpu_fpga_cpu_sample_tests
+2026-09-29T08:24:46.5373244Z [ 40%] Built target rtfw_cpu_gpu_fpga_cpu_sample_tests
+2026-09-29T08:24:46.5456038Z [ 40%] Building CXX object tests/golden_cuda/CMakeFiles/test_golden_cuda.dir/test_cuda.cpp.o
+2026-09-29T08:24:49.5848796Z [ 41%] Linking CXX executable test_golden_system
+2026-09-29T08:24:50.2252135Z [ 41%] Built target test_golden_system
+2026-09-29T08:24:50.2339214Z [ 42%] Building CXX object tests/CMakeFiles/rtfw_simulation_timing_noalloc.dir/device_rate_simulation/noalloc.cpp.o
+2026-09-29T08:24:51.7809913Z [ 42%] Linking CXX executable rtfw_simulation_timing_noalloc
+2026-09-29T08:24:52.3588546Z [ 42%] Built target rtfw_simulation_timing_noalloc
+2026-09-29T08:24:52.3675479Z [ 42%] Building CXX object tests/host_adapter/CMakeFiles/test_host_adapter.dir/test_host.cpp.o
+2026-09-29T08:24:54.4060522Z [ 42%] Linking CXX executable test_host_adapter
+2026-09-29T08:24:55.0120130Z [ 42%] Built target test_host_adapter
+2026-09-29T08:24:55.0203475Z [ 42%] Building CXX object tests/CMakeFiles/rtfw_runtime_profile_tests.dir/runtime_profile_tests.cpp.o
+2026-09-29T08:24:55.9428655Z In file included from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/test_cuda.cpp:4:
+2026-09-29T08:24:55.9440960Z In function ‘void operator delete(void*, std::size_t)’,
+2026-09-29T08:24:55.9443967Z     inlined from ‘typename std::_MakeUniq<_Tp>::__single_object std::make_unique(_Args&& ...) [with _Tp = rt::CudaDeviceBackend; _Args = {rt::CudaDriverApi&, rt::CudaBackendConfig&}]’ at /usr/include/c++/11/bits/unique_ptr.h:962:30,
+2026-09-29T08:24:55.9447064Z     inlined from ‘virtual rt::Status golden::cuda::CudaPhysics::configure(rt::Runtime&, golden::World&)’ at /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/physics.hpp:144:57:
+2026-09-29T08:24:55.9450033Z /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../cuda_physics/allocation_guard.hpp:143:14: error: ‘void free(void*)’ called on pointer returned from a mismatched allocation function [-Werror=mismatched-new-delete]
+2026-09-29T08:24:55.9451703Z   143 |     std::free(storage);
+2026-09-29T08:24:55.9452109Z       |     ~~~~~~~~~^~~~~~~~~
+2026-09-29T08:24:55.9452913Z In file included from /usr/include/c++/11/memory:76,
+2026-09-29T08:24:55.9453664Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/rt/include/rt/runtime.hpp:9,
+2026-09-29T08:24:55.9454916Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/../golden_system/jobs.hpp:7,
+2026-09-29T08:24:55.9456433Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/../golden_system/session.hpp:2,
+2026-09-29T08:24:55.9457858Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/owner.hpp:2,
+2026-09-29T08:24:55.9459061Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/test_cuda.cpp:1:
+2026-09-29T08:24:55.9460759Z /usr/include/c++/11/bits/unique_ptr.h: In member function ‘virtual rt::Status golden::cuda::CudaPhysics::configure(rt::Runtime&, golden::World&)’:
+2026-09-29T08:24:55.9462854Z /usr/include/c++/11/bits/unique_ptr.h:962:30: note: returned from ‘void* operator new(std::size_t)’
+2026-09-29T08:24:55.9463855Z   962 |     { return unique_ptr<_Tp>(new _Tp(std::forward<_Args>(__args)...)); }
+2026-09-29T08:24:55.9464592Z       |                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2026-09-29T08:24:55.9718698Z [ 43%] Linking CXX executable rtfw_runtime_profile_tests
+2026-09-29T08:24:56.5539513Z [ 43%] Built target rtfw_runtime_profile_tests
+2026-09-29T08:24:56.5624974Z [ 43%] Building CXX object tests/CMakeFiles/rtfw_xdma_backend_tests.dir/xdma_backend_tests.cpp.o
+2026-09-29T08:24:57.6281729Z In file included from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/test_cuda.cpp:4:
+2026-09-29T08:24:57.6283942Z In function ‘void operator delete(void*, std::size_t)’,
+2026-09-29T08:24:57.6286402Z     inlined from ‘typename std::_MakeUniq<_Tp>::__single_object std::make_unique(_Args&& ...) [with _Tp = golden::cuda::CudaPhysics; _Args = {const golden::cuda::Resources&, bool}]’ at /usr/include/c++/11/bits/unique_ptr.h:962:30,
+2026-09-29T08:24:57.6289654Z     inlined from ‘golden::cuda::Owner::Owner(golden::Options, golden::cuda::Dispatch, const golden::cuda::Resources*)’ at /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/owner.hpp:24:48:
+2026-09-29T08:24:57.6293321Z /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../cuda_physics/allocation_guard.hpp:143:14: error: ‘void free(void*)’ called on pointer returned from a mismatched allocation function [-Werror=mismatched-new-delete]
+2026-09-29T08:24:57.6295348Z   143 |     std::free(storage);
+2026-09-29T08:24:57.6303608Z       |     ~~~~~~~~~^~~~~~~~~
+2026-09-29T08:24:57.6304574Z In file included from /usr/include/c++/11/memory:76,
+2026-09-29T08:24:57.6305641Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/rt/include/rt/runtime.hpp:9,
+2026-09-29T08:24:57.6307168Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/../golden_system/jobs.hpp:7,
+2026-09-29T08:24:57.6308973Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/../golden_system/session.hpp:2,
+2026-09-29T08:24:57.6311048Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/owner.hpp:2,
+2026-09-29T08:24:57.6312870Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/test_cuda.cpp:1:
+2026-09-29T08:24:57.6315077Z /usr/include/c++/11/bits/unique_ptr.h: In constructor ‘golden::cuda::Owner::Owner(golden::Options, golden::cuda::Dispatch, const golden::cuda::Resources*)’:
+2026-09-29T08:24:57.6317216Z /usr/include/c++/11/bits/unique_ptr.h:962:30: note: returned from ‘void* operator new(std::size_t)’
+2026-09-29T08:24:57.6318541Z   962 |     { return unique_ptr<_Tp>(new _Tp(std::forward<_Args>(__args)...)); }
+2026-09-29T08:24:57.6319549Z       |                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2026-09-29T08:24:57.6324128Z In file included from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/test_cuda.cpp:4:
+2026-09-29T08:24:57.6325296Z In function ‘void operator delete(void*, std::size_t)’,
+2026-09-29T08:24:57.6327228Z     inlined from ‘typename std::_MakeUniq<_Tp>::__single_object std::make_unique(_Args&& ...) [with _Tp = golden::cuda::SimulatedDriver; _Args = {long unsigned int&}]’ at /usr/include/c++/11/bits/unique_ptr.h:962:30,
+2026-09-29T08:24:57.6330317Z     inlined from ‘golden::cuda::Owner::Owner(golden::Options, golden::cuda::Dispatch, const golden::cuda::Resources*)’ at /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/owner.hpp:26:51:
+2026-09-29T08:24:57.6333674Z /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../cuda_physics/allocation_guard.hpp:143:14: error: ‘void free(void*)’ called on pointer returned from a mismatched allocation function [-Werror=mismatched-new-delete]
+2026-09-29T08:24:57.6335403Z   143 |     std::free(storage);
+2026-09-29T08:24:57.6335828Z       |     ~~~~~~~~~^~~~~~~~~
+2026-09-29T08:24:57.6336534Z In file included from /usr/include/c++/11/memory:76,
+2026-09-29T08:24:57.6337432Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/rt/include/rt/runtime.hpp:9,
+2026-09-29T08:24:57.6338830Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/../golden_system/jobs.hpp:7,
+2026-09-29T08:24:57.6340560Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/../golden_system/session.hpp:2,
+2026-09-29T08:24:57.6342210Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/owner.hpp:2,
+2026-09-29T08:24:57.6343803Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/test_cuda.cpp:1:
+2026-09-29T08:24:57.6345758Z /usr/include/c++/11/bits/unique_ptr.h: In constructor ‘golden::cuda::Owner::Owner(golden::Options, golden::cuda::Dispatch, const golden::cuda::Resources*)’:
+2026-09-29T08:24:57.6347780Z /usr/include/c++/11/bits/unique_ptr.h:962:30: note: returned from ‘void* operator new(std::size_t)’
+2026-09-29T08:24:57.6349012Z   962 |     { return unique_ptr<_Tp>(new _Tp(std::forward<_Args>(__args)...)); }
+2026-09-29T08:24:57.6349912Z       |                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2026-09-29T08:24:57.6380749Z In file included from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/test_cuda.cpp:4:
+2026-09-29T08:24:57.6382066Z In function ‘void rtfw_physics_allocation::deallocate_aligned(void*)’,
+2026-09-29T08:24:57.6384051Z     inlined from ‘void operator delete(void*, std::align_val_t)’ at /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../cuda_physics/allocation_guard.hpp:151:48,
+2026-09-29T08:24:57.6387266Z     inlined from ‘typename std::_MakeUniq<_Tp>::__single_object std::make_unique(_Args&& ...) [with _Tp = golden::Session; _Args = {golden::Options&, golden::Jobs*, golden::Memory&, golden::cuda::CudaPhysics*}]’ at /usr/include/c++/11/bits/unique_ptr.h:962:30,
+2026-09-29T08:24:57.6390519Z     inlined from ‘golden::cuda::Owner::Owner(golden::Options, golden::cuda::Dispatch, const golden::cuda::Resources*)’ at /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/owner.hpp:30:40:
+2026-09-29T08:24:57.6394068Z /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../cuda_physics/allocation_guard.hpp:62:14: error: ‘void free(void*)’ called on pointer returned from a mismatched allocation function [-Werror=mismatched-new-delete]
+2026-09-29T08:24:57.6395763Z    62 |     std::free(storage);
+2026-09-29T08:24:57.6396171Z       |     ~~~~~~~~~^~~~~~~~~
+2026-09-29T08:24:57.6396646Z In file included from /usr/include/c++/11/memory:76,
+2026-09-29T08:24:57.6397394Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/rt/include/rt/runtime.hpp:9,
+2026-09-29T08:24:57.6398618Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/../golden_system/jobs.hpp:7,
+2026-09-29T08:24:57.6400147Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/../golden_system/session.hpp:2,
+2026-09-29T08:24:57.6401567Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/owner.hpp:2,
+2026-09-29T08:24:57.6403019Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/test_cuda.cpp:1:
+2026-09-29T08:24:57.6404888Z /usr/include/c++/11/bits/unique_ptr.h: In constructor ‘golden::cuda::Owner::Owner(golden::Options, golden::cuda::Dispatch, const golden::cuda::Resources*)’:
+2026-09-29T08:24:57.6406775Z /usr/include/c++/11/bits/unique_ptr.h:962:30: note: returned from ‘void* operator new(std::size_t, std::align_val_t)’
+2026-09-29T08:24:57.6407890Z   962 |     { return unique_ptr<_Tp>(new _Tp(std::forward<_Args>(__args)...)); }
+2026-09-29T08:24:57.6408632Z       |                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2026-09-29T08:24:57.7967197Z [ 43%] Linking CXX executable rtfw_xdma_backend_tests
+2026-09-29T08:24:57.8809201Z [ 43%] Built target rtfw_xdma_backend_tests
+2026-09-29T08:24:57.8902168Z [ 44%] Building CXX object tests/CMakeFiles/rtfw_cuda_pipeline_tests.dir/test_cuda_pipeline.cpp.o
+2026-09-29T08:25:01.3268535Z [ 44%] Linking CXX executable rtfw_cuda_pipeline_tests
+2026-09-29T08:25:01.9574220Z [ 44%] Built target rtfw_cuda_pipeline_tests
+2026-09-29T08:25:01.9657535Z [ 44%] Building CXX object tests/CMakeFiles/rtfw_cuda_lifetime_tests.dir/test_cuda_lifetime.cpp.o
+2026-09-29T08:25:04.2903919Z [ 44%] Linking CXX executable rtfw_cuda_lifetime_tests
+2026-09-29T08:25:04.9095638Z [ 44%] Built target rtfw_cuda_lifetime_tests
+2026-09-29T08:25:04.9181506Z [ 44%] Building CXX object tests/hello_runtime/CMakeFiles/hello_capacity_failure.dir/capacity.cpp.o
+2026-09-29T08:25:05.6843907Z [ 44%] Linking CXX executable hello_capacity_failure
+2026-09-29T08:25:06.2646373Z [ 44%] Built target hello_capacity_failure
+2026-09-29T08:25:06.2734969Z [ 44%] Building CXX object tests/hello_runtime/CMakeFiles/hello_step_failure.dir/step.cpp.o
+2026-09-29T08:25:07.0522913Z [ 45%] Linking CXX executable hello_step_failure
+2026-09-29T08:25:07.6432137Z [ 45%] Built target hello_step_failure
+2026-09-29T08:25:07.6520083Z [ 46%] Building CXX object tests/typed_runtime/CMakeFiles/test_typed_sdk.dir/test_sdk.cpp.o
+2026-09-29T08:25:09.4469378Z [ 46%] Linking CXX executable test_typed_sdk
+2026-09-29T08:25:10.0412278Z [ 46%] Built target test_typed_sdk
+2026-09-29T08:25:10.0498987Z [ 46%] Building CXX object tests/backend_authoring/CMakeFiles/test_backend_authoring.dir/test_backend.cpp.o
+2026-09-29T08:25:12.3153659Z [ 46%] Linking CXX executable test_backend_authoring
+2026-09-29T08:25:12.9261383Z [ 46%] Built target test_backend_authoring
+2026-09-29T08:25:12.9348612Z [ 46%] Building CXX object tests/cil_shared_memory/CMakeFiles/test_cil_shared_memory.dir/test_cil.cpp.o
+2026-09-29T08:25:14.7457571Z [ 47%] Linking CXX executable test_cil_shared_memory
+2026-09-29T08:25:15.3453964Z [ 47%] Built target test_cil_shared_memory
+2026-09-29T08:25:15.3540122Z [ 47%] Building CXX object CMakeFiles/simcore_rt.dir/rt/src/runtime.cpp.o
+2026-09-29T08:25:19.9273521Z [ 48%] Building CXX object CMakeFiles/simcore_rt.dir/rt/src/fiber_pool.cpp.o
+2026-09-29T08:25:21.2655321Z [ 48%] Linking CXX static library libsimcore_rt.a
+2026-09-29T08:25:21.4142563Z [ 48%] Built target simcore_rt
+2026-09-29T08:25:21.4227596Z [ 48%] Building CXX object CMakeFiles/rtfw_shared.dir/src/c_abi.cpp.o
+2026-09-29T08:25:23.3824027Z [ 48%] Linking CXX shared library librtfw.so
+2026-09-29T08:25:23.9660730Z [ 48%] Built target rtfw_shared
+2026-09-29T08:25:23.9744464Z [ 48%] Building CXX object CMakeFiles/rtfw_static.dir/src/c_abi.cpp.o
+2026-09-29T08:25:25.9608178Z [ 48%] Linking CXX static library librtfw_static.a
+2026-09-29T08:25:26.0820558Z [ 48%] Built target rtfw_static
+2026-09-29T08:25:26.0904004Z [ 48%] Building CXX object CMakeFiles/simcore_app.dir/src/main.cpp.o
+2026-09-29T08:25:35.2136531Z [ 48%] Linking CXX executable rtfw_demo
+2026-09-29T08:25:35.4351934Z [ 48%] Built target simcore_app
+2026-09-29T08:25:35.4435884Z [ 48%] Building CXX object CMakeFiles/rtfw_runtime_demo.dir/src/runtime_profile_demo.cpp.o
+2026-09-29T08:25:37.2353317Z [ 48%] Linking CXX executable rtfw_runtime_demo
+2026-09-29T08:25:37.8309166Z [ 48%] Built target rtfw_runtime_demo
+2026-09-29T08:25:37.8396788Z [ 50%] Building CXX object _deps/googletest/googlemock/CMakeFiles/gmock.dir/src/gmock-all.cc.o
+2026-09-29T08:25:41.9443031Z [ 50%] Linking CXX static library ../../../lib/libgmock.a
+2026-09-29T08:25:42.0843882Z [ 50%] Built target gmock
+2026-09-29T08:25:42.0928991Z [ 50%] Building CXX object _deps/googletest/googletest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o
+2026-09-29T08:25:43.4288010Z [ 51%] Linking CXX static library ../../../lib/libgtest_main.a
+2026-09-29T08:25:43.5326657Z [ 51%] Built target gtest_main
+2026-09-29T08:25:43.5410408Z [ 51%] Building CXX object samples/CMakeFiles/sample_cuda_pipeline.dir/cuda_physics/pipeline/main.cpp.o
+2026-09-29T08:25:45.4668782Z [ 52%] Linking CXX executable sample_cuda_pipeline
+2026-09-29T08:25:46.0903548Z [ 52%] Built target sample_cuda_pipeline
+2026-09-29T08:25:46.0988520Z [ 52%] Building CXX object samples/CMakeFiles/sample_cuda_physics.dir/cuda_physics/main.cpp.o
+2026-09-29T08:25:47.6516920Z [ 52%] Linking CXX executable sample_cuda_physics
+2026-09-29T08:25:48.2693768Z [ 52%] Built target sample_cuda_physics
+2026-09-29T08:25:48.2778866Z [ 53%] Building C object samples/CMakeFiles/sample_embed_c.dir/embed_c/mini_app.c.o
+2026-09-29T08:25:48.3427975Z [ 53%] Linking C executable sample_embed_c
+2026-09-29T08:25:48.3957400Z [ 53%] Built target sample_embed_c
+2026-09-29T08:25:48.4044186Z [ 53%] Building C object samples/CMakeFiles/sample_embed_c_static.dir/embed_c/mini_app.c.o
+2026-09-29T08:25:48.4689248Z [ 53%] Linking CXX executable sample_embed_c_static
+2026-09-29T08:25:49.0835122Z [ 53%] Built target sample_embed_c_static
+2026-09-29T08:25:49.0924718Z [ 54%] Building C object samples/recipes/CMakeFiles/recipe_raw_c.dir/__/__/tests/package_consumer/c_consumer.c.o
+2026-09-29T08:25:49.1206544Z [ 54%] Linking CXX executable recipe_raw_c
+2026-09-29T08:25:49.7211521Z [ 54%] Built target recipe_raw_c
+2026-09-29T08:25:49.7312761Z [ 54%] Building CXX object bench/CMakeFiles/rtfw_benchmark_device.dir/providers/device_provider.cpp.o
+2026-09-29T08:25:53.7032059Z [ 55%] Linking CXX static library librtfw_benchmark_device.a
+2026-09-29T08:25:53.8452712Z [ 55%] Built target rtfw_benchmark_device
+2026-09-29T08:25:53.8539481Z [ 55%] Building CXX object bench/CMakeFiles/rtfw_benchmark_cpu.dir/providers/cpu_provider.cpp.o
+2026-09-29T08:25:56.2291336Z [ 55%] Linking CXX static library librtfw_benchmark_cpu.a
+2026-09-29T08:25:56.3541691Z [ 55%] Built target rtfw_benchmark_cpu
+2026-09-29T08:25:56.3629577Z [ 55%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_provider.cpp.o
+2026-09-29T08:25:58.1250085Z [ 55%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/rates.cpp.o
+2026-09-29T08:26:02.7228113Z [ 55%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/controls.cpp.o
+2026-09-29T08:26:18.6608269Z [ 56%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/checkpoint.cpp.o
+2026-09-29T08:26:20.3402651Z [ 56%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/replay.cpp.o
+2026-09-29T08:26:22.4198890Z [ 56%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/observability.cpp.o
+2026-09-29T08:26:37.2498611Z In file included from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/test_cuda.cpp:1:
+2026-09-29T08:26:37.2504382Z /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/owner.hpp:20:3: note: variable tracking size limit exceeded with ‘-fvar-tracking-assignments’, retrying without
+2026-09-29T08:26:37.2506025Z    20 |   Owner(Options o, Dispatch d, const Resources *native = nullptr)
+2026-09-29T08:26:37.2506643Z       |   ^~~~~
+2026-09-29T08:26:41.8302221Z In file included from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/test_cuda.cpp:4:
+2026-09-29T08:26:41.8307189Z In function ‘void operator delete(void*, std::size_t)’,
+2026-09-29T08:26:41.8309265Z     inlined from ‘typename std::_MakeUniq<_Tp>::__single_object std::make_unique(_Args&& ...) [with _Tp = golden::cuda::Owner; _Args = {golden::Options&, golden::cuda::Dispatch&}]’ at /usr/include/c++/11/bits/unique_ptr.h:962:30,
+2026-09-29T08:26:41.8311677Z     inlined from ‘bool recovery(bool, golden::cuda::Dispatch, bool)’ at /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/test_cuda.cpp:199:49:
+2026-09-29T08:26:41.8314401Z /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../cuda_physics/allocation_guard.hpp:143:14: error: ‘void free(void*)’ called on pointer returned from a mismatched allocation function [-Werror=mismatched-new-delete]
+2026-09-29T08:26:41.8315978Z   143 |     std::free(storage);
+2026-09-29T08:26:41.8316392Z       |     ~~~~~~~~~^~~~~~~~~
+2026-09-29T08:26:41.8316869Z In file included from /usr/include/c++/11/memory:76,
+2026-09-29T08:26:41.8317621Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/rt/include/rt/runtime.hpp:9,
+2026-09-29T08:26:41.8318812Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/../golden_system/jobs.hpp:7,
+2026-09-29T08:26:41.8320253Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/../golden_system/session.hpp:2,
+2026-09-29T08:26:41.8321623Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/../../samples/golden_cuda/owner.hpp:2,
+2026-09-29T08:26:41.8322995Z                  from /home/runner/work/cpp-rt-car/cpp-rt-car/tests/golden_cuda/test_cuda.cpp:1:
+2026-09-29T08:26:41.8324303Z /usr/include/c++/11/bits/unique_ptr.h: In function ‘bool recovery(bool, golden::cuda::Dispatch, bool)’:
+2026-09-29T08:26:41.8325627Z /usr/include/c++/11/bits/unique_ptr.h:962:30: note: returned from ‘void* operator new(std::size_t)’
+2026-09-29T08:26:41.8326577Z   962 |     { return unique_ptr<_Tp>(new _Tp(std::forward<_Args>(__args)...)); }
+2026-09-29T08:26:41.8327273Z       |                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2026-09-29T08:26:49.3900668Z cc1plus: all warnings being treated as errors
+2026-09-29T08:26:49.4464674Z gmake[2]: *** [tests/golden_cuda/CMakeFiles/test_golden_cuda.dir/build.make:79: tests/golden_cuda/CMakeFiles/test_golden_cuda.dir/test_cuda.cpp.o] Error 1
+2026-09-29T08:26:49.4466555Z gmake[1]: *** [CMakeFiles/Makefile2:3668: tests/golden_cuda/CMakeFiles/test_golden_cuda.dir/all] Error 2
+2026-09-29T08:26:49.4467688Z gmake[1]: *** Waiting for unfinished jobs....
+2026-09-29T08:26:49.4494853Z [ 57%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/capacity.cpp.o
+2026-09-29T08:26:51.0403047Z [ 57%] Building CXX object bench/CMakeFiles/rtfw_benchmark_runtime.dir/providers/runtime_cases/device.cpp.o
+2026-09-29T08:28:20.5592168Z [ 57%] Linking CXX static library librtfw_benchmark_runtime.a
+2026-09-29T08:28:21.2233700Z [ 57%] Built target rtfw_benchmark_runtime
+2026-09-29T08:28:21.2240451Z gmake: *** [Makefile:166: all] Error 2
+2026-09-29T08:28:21.2267002Z ##[error]Process completed with exit code 2.
+2026-09-29T08:28:21.2432839Z Post job cleanup.
+2026-09-29T08:28:21.3421916Z [command]/usr/bin/git version
+2026-09-29T08:28:21.3470492Z git version 2.55.0
+2026-09-29T08:28:21.3518439Z Temporarily overriding HOME='/home/runner/work/_temp/9855b2cd-6863-495f-815c-7986edd3ac34' before making global git config changes
+2026-09-29T08:28:21.3519864Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-29T08:28:21.3525580Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cpp-rt-car/cpp-rt-car
+2026-09-29T08:28:21.3573169Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-29T08:28:21.3614975Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-29T08:28:21.3895338Z Entering 'external/googletest'
+2026-09-29T08:28:21.3972892Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-29T08:28:21.4005843Z http.https://github.com/.extraheader
+2026-09-29T08:28:21.4019847Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-09-29T08:28:21.4062012Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-29T08:28:21.4353286Z Entering 'external/googletest'
+2026-09-29T08:28:21.4384204Z http.https://github.com/.extraheader
+2026-09-29T08:28:21.4447813Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-29T08:28:21.4497508Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-29T08:28:21.4788897Z Entering 'external/googletest'
+2026-09-29T08:28:21.4810730Z file:/home/runner/work/cpp-rt-car/cpp-rt-car/.git/modules/external/googletest/config	remote.origin.url
+2026-09-29T08:28:21.4850221Z [command]/usr/bin/git config --file /home/runner/work/cpp-rt-car/cpp-rt-car/.git/modules/external/googletest/config --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-29T08:28:21.5065207Z Cleaning up orphan processes
+2026-09-29T08:28:21.5390204Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

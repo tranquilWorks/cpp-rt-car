@@ -1390,6 +1390,7 @@ install(FILES
     samples/golden_cuda/README.md
     samples/golden_cuda/artifacts.py
     samples/golden_cuda/main.cpp
+    samples/golden_cuda/native_launcher.cpp
     samples/golden_cuda/owner.hpp
     samples/golden_cuda/physics.cu
     samples/golden_cuda/physics.hpp

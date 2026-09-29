@@ -1,0 +1,1055 @@
+repository=/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24
+mode=full
+started=2026-09-29T08:14:41+00:00
+head=a44a8c9650c1d9cfa241aaa19289c4b6f6170b42
+
+>>> [contract] git diff --check
+
+>>> [contract] python3 tools/check_docs_contract.py
+PASS: SDK manual/API/source inventory and local fragments (116 files)
+Documentation contract OK
+
+>>> [contract] python3 tools/generate_golden_config.py --check
+PASS: compiled golden constants match frozen contract
+
+>>> [contract] python3 -m unittest discover -s tests/golden_system -p "test_*.py"
+.........................
+----------------------------------------------------------------------
+Ran 25 tests in 0.274s
+
+OK
+
+>>> [contract] python3 -m unittest discover -s tests/installed_docs -p "test_*.py"
+.....+ ["/usr/bin/python3", "-c", "import sys;print(sys.argv[1])", "path with spaces $(never-execute) `literal`"]
+path with spaces $(never-execute) `literal`
+.+ ["/usr/bin/python3", "-c", "raise SystemExit(3)"]
++ ["/usr/bin/python3", "-c", "print(\"actual\")"]
+actual
+.
+----------------------------------------------------------------------
+Ran 7 tests in 0.071s
+
+OK
+
+>>> [contract] python3 tools/check_release_contract.py
+Release contract OK
+
+>>> [contract] python3 tests/test_release_tools.py
+...................................
+----------------------------------------------------------------------
+Ran 35 tests in 0.951s
+
+OK
+
+>>> [contract] python3 tools/check_c_abi.py
+C ABI v8 verified: 70 symbols, fingerprint 0xd0e7a5a14bf35f97
+
+>>> [contract] python3 tools/sbom.py verify-dependencies --policy tools/sbom_expected.json
+{"dependencies": [{"identity": "7e17b15f1547bb8dd9c2fed91043b7af3437387f", "license": "BSD-3-Clause", "name": "googletest", "purpose": "build/test only"}, {"identity": "6e8dadfdafa3a74eabb52ead87f8787f72eccd0b", "license": "BSD-2-Clause", "name": "rapidcheck", "purpose": "build/test only"}, {"identity": "3f7e1436a0b11806abbddce274164a491091223e", "license": "MIT", "name": "vcpkg", "purpose": "build input only"}], "identity_only": true, "schema_version": 1, "vulnerability_clearance": false, "workflow_actions": [{"commit": "11d5960a326750d5838078e36cf38b85af677262", "name": "actions/checkout"}, {"commit": "2031cfc080254a8a887f58cffee85186f0e49e48", "name": "actions/dependency-review-action"}, {"commit": "d3f86a106a0bac45b974a628896c90dbdf5c8093", "name": "actions/download-artifact"}, {"commit": "a26af69be951a213d495a4c3e4e4022e16d87065", "name": "actions/setup-python"}, {"commit": "ea165f8d65b6e75b540449e92b4886f43607fa02", "name": "actions/upload-artifact"}, {"commit": "e22c389904149dbc22b58101806040fa8d37a610", "name": "anchore/sbom-action"}]}
+
+>>> [contract] python3 tools/provenance.py verify-fixture --repo-root . --policy release/portable-assurance-policy.json
+{"cryptographic_fixture_verified": true, "current_revocation_checked": false, "key_id": "b1833d5789db9754f9af98125ca2320e7fcbf69d5b57fc300a782485e3612ccf", "schema_version": 1, "target_authenticated": false}
+
+>>> [quick] cmake -S . -B build/agent-quick -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF -DSIM_WERROR=OFF
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/agent-quick
+
+>>> [quick] cmake --build build/agent-quick --parallel 2
+[  1%] Built target rtfw_cuda_backend
+[  2%] Built target rtfw_xdma_backend
+[ 19%] Built target rtfw_runtime
+[ 20%] Built target gtest
+[ 21%] Built target recipe_cuda_boundary
+[ 22%] Built target recipe_xdma_boundary
+[ 23%] Built target test_extension_fixture
+[ 24%] Built target test_extension_fixture_bad
+[ 25%] Built target rtfw_cuda_physics_tests
+[ 26%] Built target rtfw_cpu_gpu_fpga_cpu_sample_tests
+[ 27%] Building CXX object tests/golden_cuda/CMakeFiles/test_golden_cuda.dir/test_cuda.cpp.o
+[ 28%] Building CXX object tests/golden_system/CMakeFiles/test_golden_system.dir/test_system.cpp.o
+[ 28%] Linking CXX executable test_golden_system
+[ 28%] Built target test_golden_system
+[ 29%] Built target rtfw_simulation_timing_noalloc
+[ 30%] Built target test_host_adapter
+[ 31%] Built target rtfw_runtime_profile_tests
+[ 32%] Built target rtfw_xdma_backend_tests
+[ 33%] Built target rtfw_cuda_pipeline_tests
+[ 34%] Built target rtfw_cuda_lifetime_tests
+[ 34%] Building CXX object tests/hello_runtime/CMakeFiles/hello_capacity_failure.dir/capacity.cpp.o
+[ 35%] Linking CXX executable hello_capacity_failure
+[ 35%] Built target hello_capacity_failure
+[ 36%] Building CXX object tests/hello_runtime/CMakeFiles/hello_step_failure.dir/step.cpp.o
+[ 36%] Linking CXX executable hello_step_failure
+[ 36%] Built target hello_step_failure
+[ 38%] Built target test_typed_sdk
+[ 39%] Built target test_backend_authoring
+[ 40%] Built target test_cil_shared_memory
+[ 42%] Built target simcore_rt
+[ 42%] Linking CXX shared library librtfw.so
+[ 42%] Linking CXX executable test_golden_cuda
+[ 43%] Built target rtfw_shared
+[ 44%] Built target rtfw_static
+[ 45%] Built target rtfw_runtime_demo
+[ 46%] Built target gmock
+[ 46%] Built target test_golden_cuda
+[ 47%] Built target sample_cuda_pipeline
+[ 48%] Built target gtest_main
+[ 49%] Built target sample_cuda_physics
+[ 49%] Linking C executable sample_embed_c
+[ 50%] Built target sample_embed_c_static
+[ 51%] Built target sample_embed_cpp
+[ 52%] Built target sample_embed_c
+[ 53%] Built target sample_device_mock
+[ 54%] Built target sample_cpu_gpu_fpga_cpu
+[ 55%] Built target sample_live_control_typed
+[ 56%] Built target sample_cuda_lifetime
+[ 57%] Built target sample_hello_runtime
+[ 58%] Built target sample_typed_runtime
+[ 59%] Built target sample_backend_authoring
+[ 61%] Built target sample_cil_plant
+[ 62%] Built target sample_cil_controller
+[ 63%] Built target sample_host_adapter
+[ 64%] Built target sample_golden_system
+[ 65%] Built target sample_golden_controller
+[ 66%] Building CXX object samples/CMakeFiles/sample_golden_cuda.dir/golden_cuda/main.cpp.o
+[ 67%] Built target recipe_raw_c
+[ 68%] Built target recipe_raw_cpp
+[ 70%] Built target recipe_profile
+[ 71%] Built target recipe_mixed_rate
+[ 72%] Built target recipe_live_control
+[ 73%] Built target recipe_replay
+[ 92%] Built target simcore_tests
+[ 93%] Built target rtfw_thread_policy_rollback_test
+native replay rejected status=-3 active replay requires deterministic mock/loopback backends
+foreign rejected=-16 
+foreign rejected=-16 
+[ 94%] Linking CXX executable sample_golden_cuda
+[ 94%] Built target sample_golden_cuda
+golden state, controls, replay, recovery, allocation: PASS
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+PASS: portable golden run/state/replay; hardware and RT qualification not performed
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+PASS: portable golden run/state/replay; hardware and RT qualification not performed
+[ 94%] Built target golden_determinism_check
+[ 95%] Built target test_cabi_dlopen
+[ 96%] Built target rtfw_host_adapter_tests
+[ 97%] Built target gmock_main
+parity host=0 count=1 ticks=24 workers=1 grain=1
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=17 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=16 ticks=24 workers=3 grain=16
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=256 ticks=24 workers=1 grain=64
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=256 ticks=1024 workers=3 grain=64
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=1 ticks=24 workers=1 grain=1
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=17 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=16 ticks=24 workers=3 grain=16
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=256 ticks=24 workers=1 grain=64
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=256 ticks=1024 workers=3 grain=64
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+PASS requested golden CUDA test cases
+[ 97%] Built target golden_cuda_determinism_check
+[100%] Built target rtfw_determinism_artifact
+
+>>> [quick] ctest --test-dir build/agent-quick --output-on-failure
+Internal ctest changing into directory: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/agent-quick
+Test project /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/agent-quick
+        Start   1: sample_cuda_pipeline
+  1/105 Test   #1: sample_cuda_pipeline ........................   Passed    0.02 sec
+        Start   2: sample_cuda_physics
+  2/105 Test   #2: sample_cuda_physics .........................   Passed    0.02 sec
+        Start   3: sample_embed_c
+  3/105 Test   #3: sample_embed_c ..............................   Passed    0.02 sec
+        Start   4: sample_embed_c_static
+  4/105 Test   #4: sample_embed_c_static .......................   Passed    0.03 sec
+        Start   5: sample_embed_cpp
+  5/105 Test   #5: sample_embed_cpp ............................   Passed    0.02 sec
+        Start   6: sample_device_mock
+  6/105 Test   #6: sample_device_mock ..........................   Passed    0.01 sec
+        Start   7: sample_live_control_typed
+  7/105 Test   #7: sample_live_control_typed ...................   Passed    0.02 sec
+        Start   8: sample_cpu_gpu_fpga_cpu
+  8/105 Test   #8: sample_cpu_gpu_fpga_cpu .....................   Passed    0.02 sec
+        Start   9: sample_cuda_lifetime
+  9/105 Test   #9: sample_cuda_lifetime ........................   Passed   21.32 sec
+        Start  10: hello_runtime_output
+ 10/105 Test  #10: hello_runtime_output ........................   Passed    0.02 sec
+        Start  11: typed_runtime_output
+ 11/105 Test  #11: typed_runtime_output ........................   Passed    0.02 sec
+        Start  12: backend_authoring_output
+ 12/105 Test  #12: backend_authoring_output ....................   Passed    0.03 sec
+        Start  13: cil_shared_memory_processes
+ 13/105 Test  #13: cil_shared_memory_processes .................   Passed   15.28 sec
+        Start  14: host_adapter_native
+ 14/105 Test  #14: host_adapter_native .........................   Passed    0.04 sec
+        Start  15: host_adapter_host
+ 15/105 Test  #15: host_adapter_host ...........................   Passed    0.02 sec
+        Start  16: recipe_raw_c
+ 16/105 Test  #16: recipe_raw_c ................................   Passed    0.01 sec
+        Start  17: recipe_raw_cpp
+ 17/105 Test  #17: recipe_raw_cpp ..............................   Passed    0.01 sec
+        Start  18: recipe_profile
+ 18/105 Test  #18: recipe_profile ..............................   Passed    0.00 sec
+        Start  19: recipe_mixed_rate
+ 19/105 Test  #19: recipe_mixed_rate ...........................   Passed    0.02 sec
+        Start  20: recipe_live_control
+ 20/105 Test  #20: recipe_live_control .........................   Passed    0.01 sec
+        Start  21: recipe_replay
+ 21/105 Test  #21: recipe_replay ...............................   Passed    0.01 sec
+        Start  22: recipe_replay_replaced
+ 22/105 Test  #22: recipe_replay_replaced ......................   Passed    0.01 sec
+        Start  23: recipe_replay_rejected
+ 23/105 Test  #23: recipe_replay_rejected ......................   Passed    0.01 sec
+        Start  24: recipe_cuda_boundary
+ 24/105 Test  #24: recipe_cuda_boundary ........................   Passed    0.00 sec
+        Start  25: recipe_xdma_boundary
+ 25/105 Test  #25: recipe_xdma_boundary ........................   Passed    0.00 sec
+        Start  26: simcore_all
+ 26/105 Test  #26: simcore_all .................................   Passed   14.87 sec
+        Start  27: m22_live_control_mailbox
+ 27/105 Test  #27: m22_live_control_mailbox ....................   Passed    0.33 sec
+        Start  28: m22_live_control_sdk
+ 28/105 Test  #28: m22_live_control_sdk ........................   Passed    0.01 sec
+        Start  29: m22_live_control_stress
+ 29/105 Test  #29: m22_live_control_stress .....................   Passed    0.20 sec
+        Start  30: m19_extension_registration
+ 30/105 Test  #30: m19_extension_registration ..................   Passed    0.03 sec
+        Start  31: m17_command_batch_timeline
+ 31/105 Test  #31: m17_command_batch_timeline ..................   Passed    1.58 sec
+        Start  32: m17_hal_v2_compatibility
+ 32/105 Test  #32: m17_hal_v2_compatibility ....................   Passed    0.24 sec
+        Start  33: m17_heterogeneous_memory_topology
+ 33/105 Test  #33: m17_heterogeneous_memory_topology ...........   Passed    0.10 sec
+        Start  34: m17_cuda_graph
+ 34/105 Test  #34: m17_cuda_graph ..............................   Passed   10.23 sec
+        Start  35: m17_xdma_control
+ 35/105 Test  #35: m17_xdma_control ............................   Passed    0.02 sec
+        Start  36: m16_rate_timeline
+ 36/105 Test  #36: m16_rate_timeline ...........................   Passed    0.08 sec
+        Start  37: m21_device_rate_model
+ 37/105 Test  #37: m21_device_rate_model .......................   Passed    0.03 sec
+        Start  38: m21_cross_rate_payload
+ 38/105 Test  #38: m21_cross_rate_payload ......................   Passed    0.04 sec
+        Start  39: m16_rate_dispatch
+ 39/105 Test  #39: m16_rate_dispatch ...........................   Passed    0.08 sec
+        Start  40: m16_shedding_telemetry
+ 40/105 Test  #40: m16_shedding_telemetry ......................   Passed    0.05 sec
+        Start  41: m16_cross_rate_data
+ 41/105 Test  #41: m16_cross_rate_data .........................   Passed    0.07 sec
+        Start  42: m15_accounting_closure
+ 42/105 Test  #42: m15_accounting_closure ......................   Passed    0.03 sec
+        Start  43: m15_stack_lifecycle
+ 43/105 Test  #43: m15_stack_lifecycle .........................   Passed    0.02 sec
+        Start  44: m15_cross_category_rollback
+ 44/105 Test  #44: m15_cross_category_rollback .................   Passed    0.02 sec
+        Start  45: thread_policy_rollback
+ 45/105 Test  #45: thread_policy_rollback ......................   Passed    0.01 sec
+        Start  46: thread_policy_recovery
+ 46/105 Test  #46: thread_policy_recovery ......................   Passed    0.07 sec
+        Start  47: sbom_dependencies
+ 47/105 Test  #47: sbom_dependencies ...........................   Passed    0.07 sec
+        Start  48: m24_cuda_physics
+ 48/105 Test  #48: m24_cuda_physics ............................   Passed    0.33 sec
+        Start  49: m24_cuda_physics_cli
+ 49/105 Test  #49: m24_cuda_physics_cli ........................   Passed    0.37 sec
+        Start  50: m17_cpu_gpu_fpga_cpu_sample
+ 50/105 Test  #50: m17_cpu_gpu_fpga_cpu_sample .................   Passed    0.22 sec
+        Start  51: cabi_dlopen
+ 51/105 Test  #51: cabi_dlopen .................................   Passed    0.02 sec
+        Start  52: host_adapter
+ 52/105 Test  #52: host_adapter ................................   Passed    0.01 sec
+        Start  53: runtime_profile
+ 53/105 Test  #53: runtime_profile .............................   Passed    0.01 sec
+        Start  54: xdma_backend
+ 54/105 Test  #54: xdma_backend ................................   Passed    0.01 sec
+        Start  55: m24_cuda_pipeline
+ 55/105 Test  #55: m24_cuda_pipeline ...........................   Passed    1.30 sec
+        Start  56: m24_cuda_pipeline_cli
+ 56/105 Test  #56: m24_cuda_pipeline_cli .......................   Passed    0.57 sec
+        Start  57: m24_cuda_lifetime
+ 57/105 Test  #57: m24_cuda_lifetime ...........................   Passed   21.46 sec
+        Start  58: m24_cuda_lifetime_cli
+ 58/105 Test  #58: m24_cuda_lifetime_cli .......................   Passed   20.30 sec
+        Start  59: m24_cuda_capabilities
+ 59/105 Test  #59: m24_cuda_capabilities .......................   Passed    0.60 sec
+        Start  60: host_adapter_simulation_timing_noalloc
+ 60/105 Test  #60: host_adapter_simulation_timing_noalloc ......   Passed    0.06 sec
+        Start  61: hello_capacity_failure
+ 61/105 Test  #61: hello_capacity_failure ......................   Passed    0.02 sec
+        Start  62: hello_step_failure
+ 62/105 Test  #62: hello_step_failure ..........................   Passed    0.02 sec
+        Start  63: typed_sdk
+ 63/105 Test  #63: typed_sdk ...................................   Passed    0.04 sec
+        Start  64: typed_sdk_stop_failure
+ 64/105 Test  #64: typed_sdk_stop_failure ......................   Passed    0.03 sec
+        Start  65: backend_authoring_conformance
+ 65/105 Test  #65: backend_authoring_conformance ...............   Passed    0.14 sec
+        Start  66: cil_shared_memory_contract
+ 66/105 Test  #66: cil_shared_memory_contract ..................   Passed    0.05 sec
+        Start  67: host_adapter_contract
+ 67/105 Test  #67: host_adapter_contract .......................   Passed    0.05 sec
+        Start  68: host_adapter_golden_system_contract
+ 68/105 Test  #68: host_adapter_golden_system_contract .........   Passed    1.83 sec
+        Start  69: host_adapter_golden_system_native
+ 69/105 Test  #69: host_adapter_golden_system_native ...........   Passed    0.15 sec
+        Start  70: host_adapter_golden_system_host
+ 70/105 Test  #70: host_adapter_golden_system_host .............   Passed    0.12 sec
+        Start  71: host_adapter_golden_system_external
+ 71/105 Test  #71: host_adapter_golden_system_external .........   Passed    0.15 sec
+        Start  72: host_adapter_golden_system_process
+ 72/105 Test  #72: host_adapter_golden_system_process ..........   Passed   14.02 sec
+        Start  73: host_adapter_golden_cuda_contract
+ 73/105 Test  #73: host_adapter_golden_cuda_contract ...........   Passed   11.03 sec
+        Start  74: host_adapter_golden_cuda_parity_1
+ 74/105 Test  #74: host_adapter_golden_cuda_parity_1 ...........   Passed    0.24 sec
+        Start  75: host_adapter_golden_cuda_parity_2
+ 75/105 Test  #75: host_adapter_golden_cuda_parity_2 ...........   Passed    0.21 sec
+        Start  76: host_adapter_golden_cuda_parity_3
+ 76/105 Test  #76: host_adapter_golden_cuda_parity_3 ...........   Passed    0.20 sec
+        Start  77: host_adapter_golden_cuda_parity_4
+ 77/105 Test  #77: host_adapter_golden_cuda_parity_4 ...........   Passed    0.18 sec
+        Start  78: host_adapter_golden_cuda_parity_5
+ 78/105 Test  #78: host_adapter_golden_cuda_parity_5 ...........   Passed    0.25 sec
+        Start  79: host_adapter_golden_cuda_parity_6
+ 79/105 Test  #79: host_adapter_golden_cuda_parity_6 ...........   Passed    0.18 sec
+        Start  80: host_adapter_golden_cuda_parity_7
+ 80/105 Test  #80: host_adapter_golden_cuda_parity_7 ...........   Passed    0.24 sec
+        Start  81: host_adapter_golden_cuda_parity_8
+ 81/105 Test  #81: host_adapter_golden_cuda_parity_8 ...........   Passed    0.21 sec
+        Start  82: host_adapter_golden_cuda_parity_9
+ 82/105 Test  #82: host_adapter_golden_cuda_parity_9 ...........   Passed    1.67 sec
+        Start  83: host_adapter_golden_cuda_parity_9_kernel
+ 83/105 Test  #83: host_adapter_golden_cuda_parity_9_kernel ....   Passed    2.41 sec
+        Start  84: host_adapter_golden_cuda_parity_9_graph
+ 84/105 Test  #84: host_adapter_golden_cuda_parity_9_graph .....   Passed    2.35 sec
+        Start  85: host_adapter_golden_cuda_parity_10
+ 85/105 Test  #85: host_adapter_golden_cuda_parity_10 ..........   Passed    0.12 sec
+        Start  86: host_adapter_golden_cuda_parity_11
+ 86/105 Test  #86: host_adapter_golden_cuda_parity_11 ..........   Passed    0.16 sec
+        Start  87: host_adapter_golden_cuda_parity_12
+ 87/105 Test  #87: host_adapter_golden_cuda_parity_12 ..........   Passed    0.14 sec
+        Start  88: host_adapter_golden_cuda_parity_13
+ 88/105 Test  #88: host_adapter_golden_cuda_parity_13 ..........   Passed    0.14 sec
+        Start  89: host_adapter_golden_cuda_parity_14
+ 89/105 Test  #89: host_adapter_golden_cuda_parity_14 ..........   Passed    0.15 sec
+        Start  90: host_adapter_golden_cuda_parity_15
+ 90/105 Test  #90: host_adapter_golden_cuda_parity_15 ..........   Passed    0.13 sec
+        Start  91: host_adapter_golden_cuda_parity_16
+ 91/105 Test  #91: host_adapter_golden_cuda_parity_16 ..........   Passed    0.14 sec
+        Start  92: host_adapter_golden_cuda_parity_17
+ 92/105 Test  #92: host_adapter_golden_cuda_parity_17 ..........   Passed    0.14 sec
+        Start  93: host_adapter_golden_cuda_parity_18
+ 93/105 Test  #93: host_adapter_golden_cuda_parity_18 ..........   Passed    0.92 sec
+        Start  94: host_adapter_golden_cuda_parity_18_kernel
+ 94/105 Test  #94: host_adapter_golden_cuda_parity_18_kernel ...   Passed    1.00 sec
+        Start  95: host_adapter_golden_cuda_parity_18_graph
+ 95/105 Test  #95: host_adapter_golden_cuda_parity_18_graph ....   Passed    0.99 sec
+        Start  96: host_adapter_golden_cuda_native_cpu
+ 96/105 Test  #96: host_adapter_golden_cuda_native_cpu .........   Passed    0.13 sec
+        Start  97: host_adapter_golden_cuda_native_kernel
+ 97/105 Test  #97: host_adapter_golden_cuda_native_kernel ......   Passed    0.15 sec
+        Start  98: host_adapter_golden_cuda_native_graph
+ 98/105 Test  #98: host_adapter_golden_cuda_native_graph .......   Passed    0.17 sec
+        Start  99: host_adapter_golden_cuda_host_cpu
+ 99/105 Test  #99: host_adapter_golden_cuda_host_cpu ...........   Passed    0.16 sec
+        Start 100: host_adapter_golden_cuda_host_kernel
+100/105 Test #100: host_adapter_golden_cuda_host_kernel ........   Passed    0.14 sec
+        Start 101: host_adapter_golden_cuda_host_graph
+101/105 Test #101: host_adapter_golden_cuda_host_graph .........   Passed    0.14 sec
+        Start 102: host_adapter_golden_cuda_external_cpu
+102/105 Test #102: host_adapter_golden_cuda_external_cpu .......   Passed    0.18 sec
+        Start 103: host_adapter_golden_cuda_external_kernel
+103/105 Test #103: host_adapter_golden_cuda_external_kernel ....   Passed    0.20 sec
+        Start 104: host_adapter_golden_cuda_external_graph
+104/105 Test #104: host_adapter_golden_cuda_external_graph .....   Passed    0.21 sec
+        Start 105: host_adapter_golden_cuda_process
+105/105 Test #105: host_adapter_golden_cuda_process ............   Passed   10.28 sec
+
+100% tests passed, 0 tests failed out of 105
+
+Total Test time (real) = 162.16 sec
+
+>>> [quick] ./build/agent-quick/rtfw_runtime_demo --config configs/default_safe.json --run 20ms --rt --metrics-json-interval
+{"ok":true,"profile_schema_version":1,"profile_id":"autotune.c9006976199ff4d9","runtime_config_schema":7,"runtime_version":"1.2.1","config_id":4514517619591334796,"seed":1,"self_paced":true,"worker_override":false,"frames":20,"period_ns":1000000,"p50_frame_ms":0.086394,"p95_frame_ms":0.094007,"p99_frame_ms":0.120825,"mean_frame_ms":0.089020,"stdev_frame_ms":0.007797,"missed_frames":0,"watchdog_trips":0,"trace_events_dropped":0,"log_drops":0,"queue_rejections":0,"checksum":407893.106650,"phases":{"frame":{"p50_ms":0.086394,"p95_ms":0.094007,"p99_ms":0.120825}},"counters":{"missed_frames":0,"watchdog_trips":0,"trace.events_dropped":0,"log_drops":0,"executor.queue_rejections":0},"executor":{"policy":"static_deterministic","worker_count":1,"queue_capacity":128,"submitted_tasks":1380,"successful_steals":0}}
+
+>>> [quick] test "$(./build/agent-quick/rtfw_runtime_demo --version)" = "$(cat VERSION.txt)"
+
+>>> [quick] if ./build/agent-quick/rtfw_runtime_demo --definitely-not-an-option >/dev/null 2>&1; then echo "runtime demo accepted an unknown option" >&2; exit 1; fi
+
+>>> [full] cmake -S . -B build/agent-full -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=ON -DENABLE_RAPIDCHECK=ON -DSIM_SANITIZERS= -DSIM_WERROR=ON
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/agent-full
+
+>>> [full] cmake --build build/agent-full --parallel 2
+[  1%] Built target simcore_platform
+[ 10%] Built target rtfw_runtime
+[ 11%] Built target rtfw_cuda_backend
+[ 11%] Built target rtfw_xdma_backend
+[ 12%] Built target rtfw_static
+[ 12%] Linking CXX shared library librtfw.so
+[ 13%] Built target trace_dump
+[ 14%] Built target rtfw_runtime_demo
+[ 15%] Built target gtest
+[ 15%] Built target rtfw_shared
+[ 26%] Built target rapidcheck
+[ 27%] Built target sample_cuda_pipeline
+[ 27%] Built target sample_cuda_physics
+[ 28%] Built target sample_particles
+[ 29%] Built target sample_tyre_belt
+[ 29%] Linking C executable sample_embed_c
+[ 29%] Built target sample_async_gpu
+[ 30%] Built target sample_embed_c_static
+[ 31%] Built target sample_embed_c
+[ 31%] Built target sample_embed_cpp
+[ 31%] Built target sample_device_mock
+[ 31%] Built target sample_live_control_typed
+[ 32%] Built target sample_cpu_gpu_fpga_cpu
+[ 33%] Built target sample_cuda_lifetime
+[ 34%] Built target sample_hello_runtime
+[ 34%] Built target sample_typed_runtime
+[ 35%] Built target sample_backend_authoring
+[ 35%] Built target sample_cil_plant
+[ 36%] Built target sample_cil_controller
+[ 37%] Built target sample_host_adapter
+[ 38%] Built target sample_golden_controller
+[ 38%] Building CXX object samples/CMakeFiles/sample_golden_system.dir/golden_system/main.cpp.o
+[ 38%] Building CXX object samples/CMakeFiles/sample_golden_cuda.dir/golden_cuda/main.cpp.o
+[ 38%] Linking CXX executable sample_golden_system
+[ 38%] Built target sample_golden_system
+[ 39%] Built target recipe_raw_c
+[ 40%] Built target recipe_raw_cpp
+[ 40%] Built target recipe_profile
+[ 41%] Built target recipe_mixed_rate
+[ 42%] Built target recipe_live_control
+[ 42%] Built target recipe_replay
+[ 42%] Built target recipe_cuda_boundary
+[ 43%] Built target recipe_xdma_boundary
+[ 44%] Built target test_incompatible_plugin
+[ 44%] Built target test_extension_fixture
+[ 45%] Built target test_extension_fixture_bad
+[ 45%] Built target test_sample_plugin
+[ 45%] Built target rtfw_cuda_physics_tests
+[ 45%] Built target rtfw_cpu_gpu_fpga_cpu_sample_tests
+[ 45%] Building CXX object tests/golden_cuda/CMakeFiles/test_golden_cuda.dir/test_cuda.cpp.o
+[ 46%] Linking CXX executable sample_golden_cuda
+[ 46%] Built target sample_golden_cuda
+[ 46%] Building CXX object tests/golden_system/CMakeFiles/test_golden_system.dir/test_system.cpp.o
+[ 46%] Linking CXX executable test_golden_system
+[ 46%] Built target test_golden_system
+[ 46%] Built target test_cabi_dlopen
+[ 47%] Built target rtfw_simulation_timing_noalloc
+[ 48%] Built target test_host_adapter
+[ 49%] Built target rtfw_runtime_profile_tests
+[ 50%] Built target rtfw_xdma_backend_tests
+[ 51%] Built target rtfw_cuda_pipeline_tests
+[ 52%] Built target rtfw_cuda_lifetime_tests
+[ 53%] Building CXX object tests/hello_runtime/CMakeFiles/hello_capacity_failure.dir/capacity.cpp.o
+[ 53%] Linking CXX executable hello_capacity_failure
+[ 53%] Built target hello_capacity_failure
+[ 53%] Building CXX object tests/hello_runtime/CMakeFiles/hello_step_failure.dir/step.cpp.o
+[ 54%] Linking CXX executable test_golden_cuda
+[ 54%] Built target test_golden_cuda
+[ 55%] Built target test_typed_sdk
+[ 56%] Built target test_backend_authoring
+[ 57%] Built target test_cil_shared_memory
+[ 58%] Built target simcore_rt
+[ 58%] Built target gmock
+[ 58%] Built target gtest_main
+native replay rejected status=-3 active replay requires deterministic mock/loopback backends
+foreign rejected=-16 
+foreign rejected=-16 
+[ 59%] Linking CXX executable hello_step_failure
+[ 59%] Built target hello_step_failure
+golden state, controls, replay, recovery, allocation: PASS
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+PASS: portable golden run/state/replay; hardware and RT qualification not performed
+golden ticks=24 callbacks=108 replay=24 peer=ok cleanup=ok
+PASS: portable golden run/state/replay; hardware and RT qualification not performed
+[ 59%] Built target golden_determinism_check
+[ 60%] Built target rtfw_host_adapter_tests
+[ 61%] Built target rtfw_experimental
+[ 62%] Built target simcore_app
+[ 63%] Built target gmock_main
+[ 97%] Built target simcore_tests
+[ 98%] Built target rtfw_thread_policy_rollback_test
+parity host=0 count=1 ticks=24 workers=1 grain=1
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=17 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=16 ticks=24 workers=3 grain=16
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=256 ticks=24 workers=1 grain=64
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=0 count=256 ticks=1024 workers=3 grain=64
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=1 ticks=24 workers=1 grain=1
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=17 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=16 ticks=24 workers=3 grain=16
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=256 ticks=24 workers=1 grain=64
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=16 ticks=24 workers=2 grain=4
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+parity host=1 count=256 ticks=1024 workers=3 grain=64
+dispatch=0 begin
+dispatch=0 steps complete
+dispatch=0 replay complete
+dispatch=1 begin
+dispatch=1 steps complete
+dispatch=1 replay complete
+dispatch=2 begin
+dispatch=2 steps complete
+dispatch=2 replay complete
+PASS requested golden CUDA test cases
+[ 98%] Built target golden_cuda_determinism_check
+[100%] Built target rtfw_determinism_artifact
+
+>>> [full] ctest --test-dir build/agent-full --output-on-failure
+Internal ctest changing into directory: /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/agent-full
+Test project /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/agent-full
+        Start   1: sample_cuda_pipeline
+  1/109 Test   #1: sample_cuda_pipeline ........................   Passed    0.02 sec
+        Start   2: sample_cuda_physics
+  2/109 Test   #2: sample_cuda_physics .........................   Passed    0.02 sec
+        Start   3: sample_particles
+  3/109 Test   #3: sample_particles ............................   Passed    0.00 sec
+        Start   4: sample_tyre_belt
+  4/109 Test   #4: sample_tyre_belt ............................   Passed    0.00 sec
+        Start   5: sample_async_gpu
+  5/109 Test   #5: sample_async_gpu ............................   Passed    0.00 sec
+        Start   6: sample_embed_c
+  6/109 Test   #6: sample_embed_c ..............................   Passed    0.02 sec
+        Start   7: sample_embed_c_static
+  7/109 Test   #7: sample_embed_c_static .......................   Passed    0.02 sec
+        Start   8: sample_embed_cpp
+  8/109 Test   #8: sample_embed_cpp ............................   Passed    0.02 sec
+        Start   9: sample_device_mock
+  9/109 Test   #9: sample_device_mock ..........................   Passed    0.01 sec
+        Start  10: sample_live_control_typed
+ 10/109 Test  #10: sample_live_control_typed ...................   Passed    0.01 sec
+        Start  11: sample_cpu_gpu_fpga_cpu
+ 11/109 Test  #11: sample_cpu_gpu_fpga_cpu .....................   Passed    0.01 sec
+        Start  12: sample_cuda_lifetime
+ 12/109 Test  #12: sample_cuda_lifetime ........................   Passed   21.11 sec
+        Start  13: hello_runtime_output
+ 13/109 Test  #13: hello_runtime_output ........................   Passed    0.02 sec
+        Start  14: typed_runtime_output
+ 14/109 Test  #14: typed_runtime_output ........................   Passed    0.02 sec
+        Start  15: backend_authoring_output
+ 15/109 Test  #15: backend_authoring_output ....................   Passed    0.03 sec
+        Start  16: cil_shared_memory_processes
+ 16/109 Test  #16: cil_shared_memory_processes .................   Passed   15.30 sec
+        Start  17: host_adapter_native
+ 17/109 Test  #17: host_adapter_native .........................   Passed    0.05 sec
+        Start  18: host_adapter_host
+ 18/109 Test  #18: host_adapter_host ...........................   Passed    0.02 sec
+        Start  19: recipe_raw_c
+ 19/109 Test  #19: recipe_raw_c ................................   Passed    0.01 sec
+        Start  20: recipe_raw_cpp
+ 20/109 Test  #20: recipe_raw_cpp ..............................   Passed    0.01 sec
+        Start  21: recipe_profile
+ 21/109 Test  #21: recipe_profile ..............................   Passed    0.00 sec
+        Start  22: recipe_mixed_rate
+ 22/109 Test  #22: recipe_mixed_rate ...........................   Passed    0.02 sec
+        Start  23: recipe_live_control
+ 23/109 Test  #23: recipe_live_control .........................   Passed    0.01 sec
+        Start  24: recipe_replay
+ 24/109 Test  #24: recipe_replay ...............................   Passed    0.01 sec
+        Start  25: recipe_replay_replaced
+ 25/109 Test  #25: recipe_replay_replaced ......................   Passed    0.01 sec
+        Start  26: recipe_replay_rejected
+ 26/109 Test  #26: recipe_replay_rejected ......................   Passed    0.01 sec
+        Start  27: recipe_cuda_boundary
+ 27/109 Test  #27: recipe_cuda_boundary ........................   Passed    0.00 sec
+        Start  28: recipe_xdma_boundary
+ 28/109 Test  #28: recipe_xdma_boundary ........................   Passed    0.00 sec
+        Start  29: simcore_all
+ 29/109 Test  #29: simcore_all .................................   Passed  130.60 sec
+        Start  30: m22_live_control_mailbox
+ 30/109 Test  #30: m22_live_control_mailbox ....................   Passed    0.38 sec
+        Start  31: m22_live_control_sdk
+ 31/109 Test  #31: m22_live_control_sdk ........................   Passed    0.01 sec
+        Start  32: m22_live_control_stress
+ 32/109 Test  #32: m22_live_control_stress .....................   Passed    0.19 sec
+        Start  33: m19_extension_registration
+ 33/109 Test  #33: m19_extension_registration ..................   Passed    0.03 sec
+        Start  34: m17_command_batch_timeline
+ 34/109 Test  #34: m17_command_batch_timeline ..................   Passed    1.48 sec
+        Start  35: m17_hal_v2_compatibility
+ 35/109 Test  #35: m17_hal_v2_compatibility ....................   Passed    0.22 sec
+        Start  36: m17_heterogeneous_memory_topology
+ 36/109 Test  #36: m17_heterogeneous_memory_topology ...........   Passed    0.07 sec
+        Start  37: m17_cuda_graph
+ 37/109 Test  #37: m17_cuda_graph ..............................   Passed   10.19 sec
+        Start  38: m17_xdma_control
+ 38/109 Test  #38: m17_xdma_control ............................   Passed    0.02 sec
+        Start  39: m16_rate_timeline
+ 39/109 Test  #39: m16_rate_timeline ...........................   Passed    0.08 sec
+        Start  40: m21_device_rate_model
+ 40/109 Test  #40: m21_device_rate_model .......................   Passed    0.02 sec
+        Start  41: m21_cross_rate_payload
+ 41/109 Test  #41: m21_cross_rate_payload ......................   Passed    0.03 sec
+        Start  42: m16_rate_dispatch
+ 42/109 Test  #42: m16_rate_dispatch ...........................   Passed    0.08 sec
+        Start  43: m16_shedding_telemetry
+ 43/109 Test  #43: m16_shedding_telemetry ......................   Passed    0.06 sec
+        Start  44: m16_cross_rate_data
+ 44/109 Test  #44: m16_cross_rate_data .........................   Passed    0.07 sec
+        Start  45: m15_accounting_closure
+ 45/109 Test  #45: m15_accounting_closure ......................   Passed    0.03 sec
+        Start  46: m15_stack_lifecycle
+ 46/109 Test  #46: m15_stack_lifecycle .........................   Passed    0.03 sec
+        Start  47: m15_cross_category_rollback
+ 47/109 Test  #47: m15_cross_category_rollback .................   Passed    0.02 sec
+        Start  48: thread_policy_rollback
+ 48/109 Test  #48: thread_policy_rollback ......................   Passed    0.01 sec
+        Start  49: thread_policy_recovery
+ 49/109 Test  #49: thread_policy_recovery ......................   Passed    0.07 sec
+        Start  50: sbom_dependencies
+ 50/109 Test  #50: sbom_dependencies ...........................   Passed    0.06 sec
+        Start  51: m24_cuda_physics
+ 51/109 Test  #51: m24_cuda_physics ............................   Passed    0.36 sec
+        Start  52: m24_cuda_physics_cli
+ 52/109 Test  #52: m24_cuda_physics_cli ........................   Passed    0.68 sec
+        Start  53: m17_cpu_gpu_fpga_cpu_sample
+ 53/109 Test  #53: m17_cpu_gpu_fpga_cpu_sample .................   Passed    0.19 sec
+        Start  54: cabi_dlopen
+ 54/109 Test  #54: cabi_dlopen .................................   Passed    0.02 sec
+        Start  55: host_adapter
+ 55/109 Test  #55: host_adapter ................................   Passed    0.01 sec
+        Start  56: runtime_profile
+ 56/109 Test  #56: runtime_profile .............................   Passed    0.01 sec
+        Start  57: simcore_thread_violation_build
+ 57/109 Test  #57: simcore_thread_violation_build ..............   Passed    3.56 sec
+        Start  58: xdma_backend
+ 58/109 Test  #58: xdma_backend ................................   Passed    0.01 sec
+        Start  59: m24_cuda_pipeline
+ 59/109 Test  #59: m24_cuda_pipeline ...........................   Passed    1.97 sec
+        Start  60: m24_cuda_pipeline_cli
+ 60/109 Test  #60: m24_cuda_pipeline_cli .......................   Passed    0.88 sec
+        Start  61: m24_cuda_lifetime
+ 61/109 Test  #61: m24_cuda_lifetime ...........................   Passed   21.19 sec
+        Start  62: m24_cuda_lifetime_cli
+ 62/109 Test  #62: m24_cuda_lifetime_cli .......................   Passed   20.33 sec
+        Start  63: m24_cuda_capabilities
+ 63/109 Test  #63: m24_cuda_capabilities .......................   Passed    0.61 sec
+        Start  64: host_adapter_simulation_timing_noalloc
+ 64/109 Test  #64: host_adapter_simulation_timing_noalloc ......   Passed    0.02 sec
+        Start  65: hello_capacity_failure
+ 65/109 Test  #65: hello_capacity_failure ......................   Passed    0.01 sec
+        Start  66: hello_step_failure
+ 66/109 Test  #66: hello_step_failure ..........................   Passed    0.02 sec
+        Start  67: typed_sdk
+ 67/109 Test  #67: typed_sdk ...................................   Passed    0.05 sec
+        Start  68: typed_sdk_stop_failure
+ 68/109 Test  #68: typed_sdk_stop_failure ......................   Passed    0.02 sec
+        Start  69: backend_authoring_conformance
+ 69/109 Test  #69: backend_authoring_conformance ...............   Passed    0.12 sec
+        Start  70: cil_shared_memory_contract
+ 70/109 Test  #70: cil_shared_memory_contract ..................   Passed    0.04 sec
+        Start  71: host_adapter_contract
+ 71/109 Test  #71: host_adapter_contract .......................   Passed    0.04 sec
+        Start  72: host_adapter_golden_system_contract
+ 72/109 Test  #72: host_adapter_golden_system_contract .........   Passed    1.87 sec
+        Start  73: host_adapter_golden_system_native
+ 73/109 Test  #73: host_adapter_golden_system_native ...........   Passed    0.13 sec
+        Start  74: host_adapter_golden_system_host
+ 74/109 Test  #74: host_adapter_golden_system_host .............   Passed    0.12 sec
+        Start  75: host_adapter_golden_system_external
+ 75/109 Test  #75: host_adapter_golden_system_external .........   Passed    0.16 sec
+        Start  76: host_adapter_golden_system_process
+ 76/109 Test  #76: host_adapter_golden_system_process ..........   Passed   13.75 sec
+        Start  77: host_adapter_golden_cuda_contract
+ 77/109 Test  #77: host_adapter_golden_cuda_contract ...........   Passed   11.20 sec
+        Start  78: host_adapter_golden_cuda_parity_1
+ 78/109 Test  #78: host_adapter_golden_cuda_parity_1 ...........   Passed    0.18 sec
+        Start  79: host_adapter_golden_cuda_parity_2
+ 79/109 Test  #79: host_adapter_golden_cuda_parity_2 ...........   Passed    0.19 sec
+        Start  80: host_adapter_golden_cuda_parity_3
+ 80/109 Test  #80: host_adapter_golden_cuda_parity_3 ...........   Passed    0.25 sec
+        Start  81: host_adapter_golden_cuda_parity_4
+ 81/109 Test  #81: host_adapter_golden_cuda_parity_4 ...........   Passed    0.16 sec
+        Start  82: host_adapter_golden_cuda_parity_5
+ 82/109 Test  #82: host_adapter_golden_cuda_parity_5 ...........   Passed    0.23 sec
+        Start  83: host_adapter_golden_cuda_parity_6
+ 83/109 Test  #83: host_adapter_golden_cuda_parity_6 ...........   Passed    0.24 sec
+        Start  84: host_adapter_golden_cuda_parity_7
+ 84/109 Test  #84: host_adapter_golden_cuda_parity_7 ...........   Passed    0.23 sec
+        Start  85: host_adapter_golden_cuda_parity_8
+ 85/109 Test  #85: host_adapter_golden_cuda_parity_8 ...........   Passed    0.23 sec
+        Start  86: host_adapter_golden_cuda_parity_9
+ 86/109 Test  #86: host_adapter_golden_cuda_parity_9 ...........   Passed    1.76 sec
+        Start  87: host_adapter_golden_cuda_parity_9_kernel
+ 87/109 Test  #87: host_adapter_golden_cuda_parity_9_kernel ....   Passed    2.47 sec
+        Start  88: host_adapter_golden_cuda_parity_9_graph
+ 88/109 Test  #88: host_adapter_golden_cuda_parity_9_graph .....   Passed    2.15 sec
+        Start  89: host_adapter_golden_cuda_parity_10
+ 89/109 Test  #89: host_adapter_golden_cuda_parity_10 ..........   Passed    0.14 sec
+        Start  90: host_adapter_golden_cuda_parity_11
+ 90/109 Test  #90: host_adapter_golden_cuda_parity_11 ..........   Passed    0.14 sec
+        Start  91: host_adapter_golden_cuda_parity_12
+ 91/109 Test  #91: host_adapter_golden_cuda_parity_12 ..........   Passed    0.14 sec
+        Start  92: host_adapter_golden_cuda_parity_13
+ 92/109 Test  #92: host_adapter_golden_cuda_parity_13 ..........   Passed    0.12 sec
+        Start  93: host_adapter_golden_cuda_parity_14
+ 93/109 Test  #93: host_adapter_golden_cuda_parity_14 ..........   Passed    0.17 sec
+        Start  94: host_adapter_golden_cuda_parity_15
+ 94/109 Test  #94: host_adapter_golden_cuda_parity_15 ..........   Passed    0.16 sec
+        Start  95: host_adapter_golden_cuda_parity_16
+ 95/109 Test  #95: host_adapter_golden_cuda_parity_16 ..........   Passed    0.14 sec
+        Start  96: host_adapter_golden_cuda_parity_17
+ 96/109 Test  #96: host_adapter_golden_cuda_parity_17 ..........   Passed    0.16 sec
+        Start  97: host_adapter_golden_cuda_parity_18
+ 97/109 Test  #97: host_adapter_golden_cuda_parity_18 ..........   Passed    0.99 sec
+        Start  98: host_adapter_golden_cuda_parity_18_kernel
+ 98/109 Test  #98: host_adapter_golden_cuda_parity_18_kernel ...   Passed    1.00 sec
+        Start  99: host_adapter_golden_cuda_parity_18_graph
+ 99/109 Test  #99: host_adapter_golden_cuda_parity_18_graph ....   Passed    1.42 sec
+        Start 100: host_adapter_golden_cuda_native_cpu
+100/109 Test #100: host_adapter_golden_cuda_native_cpu .........   Passed    0.14 sec
+        Start 101: host_adapter_golden_cuda_native_kernel
+101/109 Test #101: host_adapter_golden_cuda_native_kernel ......   Passed    0.16 sec
+        Start 102: host_adapter_golden_cuda_native_graph
+102/109 Test #102: host_adapter_golden_cuda_native_graph .......   Passed    0.18 sec
+        Start 103: host_adapter_golden_cuda_host_cpu
+103/109 Test #103: host_adapter_golden_cuda_host_cpu ...........   Passed    0.13 sec
+        Start 104: host_adapter_golden_cuda_host_kernel
+104/109 Test #104: host_adapter_golden_cuda_host_kernel ........   Passed    0.14 sec
+        Start 105: host_adapter_golden_cuda_host_graph
+105/109 Test #105: host_adapter_golden_cuda_host_graph .........   Passed    0.14 sec
+        Start 106: host_adapter_golden_cuda_external_cpu
+106/109 Test #106: host_adapter_golden_cuda_external_cpu .......   Passed    0.17 sec
+        Start 107: host_adapter_golden_cuda_external_kernel
+107/109 Test #107: host_adapter_golden_cuda_external_kernel ....   Passed    0.23 sec
+        Start 108: host_adapter_golden_cuda_external_graph
+108/109 Test #108: host_adapter_golden_cuda_external_graph .....   Passed    0.18 sec
+        Start 109: host_adapter_golden_cuda_process
+109/109 Test #109: host_adapter_golden_cuda_process ............   Passed    9.93 sec
+
+100% tests passed, 0 tests failed out of 109
+
+Total Test time (real) = 282.06 sec
+
+completed=2026-09-29T08:23:21+00:00
+log=/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/docs/evidence/local/verify-full-20260929T081441Z.log

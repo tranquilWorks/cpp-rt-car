@@ -50,6 +50,9 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'tests/golden_cuda/allocation.cpp',
+    'tests/golden_cuda/allocation.hpp',
+    'samples/golden_cuda/native_launcher.cpp',
     'docs/golden_cuda.md',
     'samples/golden_cuda/CMakeLists.txt',
     'samples/golden_cuda/README.md',

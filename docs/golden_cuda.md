@@ -4,7 +4,8 @@ M26-03 replaces only the frozen golden scenario's physics phase with a Runtime
 HAL-v2 command-batch phase. CPU fallback, kernel and Graph paths retain all
 integer state, tails, controls, channel identities, rates and the independent
 C++ and Python oracles. The sibling CPU kit remains usable with its original
-commands. This batch is under verification; it is not yet integrated.
+commands. Final exact-head validation and integration identities are recorded in
+[PR277](https://github.com/tranquilWorks/cpp-rt-car/pull/277).
 
 The installed `examples/golden_cuda` source kit uses public Runtime and CUDA
 backend APIs and the installed sibling `golden_system` source kit. Run
@@ -24,7 +25,8 @@ supported replay allocate no ordinary heap memory.
 Only the owned deterministic simulator adapter advertises mock semantics. It
 explicitly selects a five-second host scheduling watchdog while preserving the
 one-millisecond logical completion budget and backend command timeout. The new
-CUDA sample explicitly parks idle executor workers; the CPU fallback retains
+CUDA sample requests parked idle executor workers where supported; Windows
+reports its existing unsupported-policy fallback. The CPU fallback retains
 its existing default policy. Native
 construction has no simulation policy and disables replay. Logical simulation
 time and this host guard establish no physical deadline or RT qualification.
@@ -47,7 +49,9 @@ status, health, operations, publications, fault counts and per-owner timeline.
 
 Optional `-DGOLDEN_CUDA_REAL=ON` builds the native host plus PTX integer kernel
 using a toolkit and Driver-enabled SDK. `golden_cuda_real --help` does not open
-a device. Missing device/driver reports NOT_RUN with exit3. The host owns its
+a device or require a driver library. A small control-plane launcher checks driver
+library availability before starting the linked native host. Missing device/driver
+reports NOT_RUN with exit3. The host owns its
 actual context, stream, two device buffers and optional Graph. It uses the same
 scenario/physics graph, disables replay and only writes native state/execution
 evidence into a fresh output directory after checked cleanup. It cannot emit

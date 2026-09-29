@@ -1,20 +1,34 @@
-# M26-03 CUDA physics reactivated
+# M26-03 CUDA golden physics
 
-The simulator timing prerequisite is merged as [target PR278](https://github.com/tranquilWorks/cpp-rt-car/pull/278)
-at c78075e2b30efba48db4f0ca8136110b1399baf5 after all32 exact-head checks,
-local quick72/full76, focused/sanitizers60, allocation, static, relocated SDK,
-ABI and unchanged default artifacts. Canonical [control PR555](https://github.com/tranquilWorks/portfolio-control/pull/555)
-merged at 7ce76ddfd4d3061b3b55bfffc88f6e8ca11e9548, blob ef229993dec359b6e35662100475473bb2760350.
+The [CUDA source kit](golden_cuda.md) implements CPU fallback and actual Runtime
+CUDA kernel/Graph command batches through an explicitly owned injected Driver API.
+It preserves the frozen golden model, rates, controls, channels and independent
+state oracles. Native/host execution, actual CIL processes, originating-owner
+trusted replay and fresh-owner checkpoint recovery after device faults are covered.
+The optional native host compiles its actual integer PTX kernel, disables replay,
+and reports missing driver/device as NOT_RUN/exit3 through a driver-independent
+launcher. Physical CUDA remains unqualified and NOT RUN.
 
-Reconcile and finish preserved [feature PR277](https://github.com/tranquilWorks/cpp-rt-car/pull/277).
-Its sample-owned deterministic driver alone selects a five-second host watchdog;
-the frozen one-millisecond logical budget and native/default semantics remain.
-The CUDA feature is still incomplete: finish parity/replay, fault/recovery,
-truthful artifacts, optional real-host compilation and installed-kit verification,
-then all local and32 exact-head hosted gates. Preserve [initial failures](evidence/M26-03-2026-09-29.md)
-and [repair evidence](evidence/M26-03R-2026-09-29.md).
-M26-04 XDMA, M26-05 showcase and M26-06 audit remain inactive. Human/physical/RT,
-Unreal, controlled performance and signing/release/deployment remain separate.
+The simulator timing prerequisite [PR278](https://github.com/tranquilWorks/cpp-rt-car/pull/278)
+merged at c78075e2b30efba48db4f0ca8136110b1399baf5. Canonical
+[control555](https://github.com/tranquilWorks/portfolio-control/pull/555) is
+7ce76ddfd4d3061b3b55bfffc88f6e8ca11e9548, blob ef229993dec359b6e35662100475473bb2760350.
+Only the sample-owned deterministic adapter selects the five-second host watchdog;
+the logical and command completion budgets stay one millisecond. Native capability
+and replay semantics, Runtime, stable ABIs and protected prior tests remain intact.
+
+[Feature PR277](https://github.com/tranquilWorks/cpp-rt-car/pull/277) records the
+final exact-head full/hosted checks, reviewed merge guards and integration identity.
+See [acceptance/evidence](evidence/M26-03-2026-09-29.md) and
+[risk review](evidence/M26-03-risk-review.md). Local numerical, fault, ownership,
+replay, allocation, process, sanitizer, static and relocated SDK checks pass;
+the PR remains the authoritative record of the final integration gates. All
+original failures, source corrections and intermediate runs are retained.
+
+M26-04 XDMA, M26-05 showcase and M26-06 audit remain separate and inactive.
+Independent human review, physical CUDA/XDMA/HIL, RT1/RT2, controlled performance,
+Unreal, signing/release and deployment remain separate. This is portable protocol
+software evidence and optional native-host compile evidence, not CAP-M26 closure.
 
 ## Historical M26-02 checkpoint
 

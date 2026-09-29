@@ -1,5 +1,5 @@
 if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8)
-    add_executable(test_golden_cuda test_cuda.cpp)
+    add_executable(test_golden_cuda test_cuda.cpp allocation.cpp)
     target_link_libraries(test_golden_cuda PRIVATE rtfw::runtime rtfw::cuda_backend)
     if(WIN32)
         target_link_libraries(test_golden_cuda PRIVATE psapi)
@@ -61,6 +61,13 @@ if(TARGET sample_golden_cuda)
     add_test(NAME host_adapter_golden_cuda_process COMMAND ${RTFW_PYTHON_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/process_suite.py --plant $<TARGET_FILE:sample_golden_cuda>
         --controller $<TARGET_FILE:sample_golden_controller>
-        --provenance ${PROJECT_BINARY_DIR}/golden-cuda-provenance.json)
+        --provenance ${PROJECT_BINARY_DIR}/golden-cuda-provenance.json --group external)
     set_tests_properties(host_adapter_golden_cuda_process PROPERTIES TIMEOUT 120)
+    foreach(mode native host)
+        add_test(NAME host_adapter_golden_cuda_process_${mode} COMMAND ${RTFW_PYTHON_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/process_suite.py --plant $<TARGET_FILE:sample_golden_cuda>
+            --controller $<TARGET_FILE:sample_golden_controller>
+            --provenance ${PROJECT_BINARY_DIR}/golden-cuda-provenance.json --group ${mode})
+        set_tests_properties(host_adapter_golden_cuda_process_${mode} PROPERTIES TIMEOUT 120)
+    endforeach()
 endif()

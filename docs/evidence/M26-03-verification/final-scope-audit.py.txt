@@ -1,0 +1,14 @@
+from pathlib import Path
+import subprocess,fnmatch,json,hashlib,yaml
+root=Path('/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24')
+def git(*a):return subprocess.check_output(['git',*a],cwd=root,text=True).strip()
+batch=yaml.safe_load((root/'contracts/active-batch.yaml').read_text());base='c78075e2b30efba48db4f0ca8136110b1399baf5'
+files=set(git('diff','--name-only',base).splitlines())|set(git('ls-files','--others','--exclude-standard').splitlines())
+def matches(path,pattern):return path.startswith(pattern) if pattern.endswith('/') else fnmatch.fnmatchcase(path,pattern)
+for p in sorted(files):
+ assert any(matches(p,a) for a in batch['scope']['allowed_paths']),('outside scope',p)
+ assert not any(matches(p,a) for a in batch['scope']['forbidden_paths']),('forbidden',p)
+assert not git('diff','--name-only','--diff-filter=D',base)
+print('PASS allowed paths, all forbidden paths unchanged, no deletion;',len(files),'changed/new paths')
+manifest={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(files) if not p.startswith('docs/evidence/') and p!='release/rtfw-release-contract.json'}
+(root/'docs/evidence/M26-03-verification/final-source-hashes.json').write_text(json.dumps({'baseline':base,'canonical_revision':batch['approval']['canonical_revision'] if 'approval' in batch else '7ce76ddfd4d3061b3b55bfffc88f6e8ca11e9548','sources':manifest},indent=2)+'\n')
