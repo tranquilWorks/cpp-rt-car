@@ -50,6 +50,11 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'samples/golden_system/contract.json',
+    'samples/golden_system/README.md',
+    'docs/golden_system.md',
+    'tools/check_golden_contract.py',
+    'tests/golden_system/test_contract.py',
     'docs/sdk/inventory.json',
     'docs/sdk/recipes.md',
     'samples/recipes/CMakeLists.txt',

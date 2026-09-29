@@ -3300,6 +3300,11 @@ def main() -> int:
     check_version()
     check_license()
     check_markdown_links()
+    import check_golden_contract
+    try:
+        check_golden_contract.validate(check_golden_contract.read())
+    except (OSError, ValueError) as exc:
+        fail(f"golden scenario design contract: {exc}")
     import check_sdk_docs
     try:
         check_sdk_docs.verify()

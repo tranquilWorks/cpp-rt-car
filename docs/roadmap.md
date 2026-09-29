@@ -1,3 +1,11 @@
+# M26-01 checked design contract
+
+The [golden scenario specification](golden_system.md) freezes M26-01. Runtime
+scenario execution remains M26-02 onward; five later batches remain unactivated.
+M25 human acceptance and physical/RT/Unreal/performance/release remain separate.
+
+## Historical roadmap checkpoints
+
 # RTFW Completion Roadmap
 
 M21 through M24 portable software and M25-01 through M25-04 are merged. M25-05
@@ -49,7 +57,7 @@ pass; file presence or a passing smoke test is not sufficient.
 | M23 | Complete | M23-01 through M23-05 merged, including offline analysis and the extension source kit; physical/controlled evidence remains separate |
 | M24 | Portable closure | Runtime CUDA model, oracle, failure/lifetime, benchmarks, host correlations and capability coverage40/44 with37/37 critical; final hosted/integration evidence is retained in the M24-04 PR; physical M18 gates remain |
 | M25 | Software delivery | M25-01 through M25-05 merged; M25-06 adds installed docs/API/recipes with final gates retained in its PR/closure. Independent novice acceptance remains unperformed |
-| M26 | Planned | Golden full-system scenario, fault/benchmark/replay/documentation and final software audit |
+| M26 | Specification | M26-01 checked golden scenario/lever contract; M26-02 through M26-06 remain |
 
 ## M0 — Product contract and truth reset
 

@@ -1,3 +1,19 @@
+# M26-01 golden scenario specification
+
+M25 software merged through target PR274 at62e61474c2d2efa6d673a9db31c45e2f35974ada.
+Canonical plan PR544 merged at3850342958f8daa9607c9ba2e5f82e49efbe40d6, blobacd6b1b1589de95a638f91fe41866125243c4d40.
+M26-01 freezes the [golden scenario/lever contract](golden_system.md), with offline
+shape, numerical, graph/rate/channel/control/fault/identity checks and mutation
+negatives. This is design validation, not execution of the future scenario.
+Final local/hosted/integration results are retained in its PR and control closure.
+
+M26-02 portable implementation, M26-03 CUDA, M26-04 XDMA, M26-05 benchmarks/faults
+and M26-06 living docs/audit remain separate and unactivated. M25 independent
+human acceptance remains UNPERFORMED; physical/RT, controlled performance,
+Unreal and signing/release/deployment remain separately gated.
+
+## Historical M25-06 checkpoint
+
 # M25-06 installed documentation and recipes
 
 M25-05 merged as PR273 at98ecca5a6572dd83d59e26063716f6d76b7a5d4f.

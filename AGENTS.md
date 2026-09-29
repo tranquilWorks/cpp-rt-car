@@ -403,3 +403,12 @@ Preserve production, SDK/ABI and prior sources/evidence. All32 target checks rem
 required. Standing scoped publication/integration authority persists. Close M25
 software only; human first-use, physical/RT/performance/Unreal/release stay separate.
 Do not activate M26. Earlier activation paragraphs are historical.
+
+## M26-01 scenario contract activation
+
+The owner requested M26-01. Canonical control PR544 merged at 3850342958f8daa9607c9ba2e5f82e49efbe40d6.
+Freeze and validate the sample-owned golden scenario/lever specification only.
+Preserve all production, ABI, SDK, earlier source kits and evidence, and require
+all32 exact-head target gates. Standing scoped publication/integration authority
+persists. M26-02 through M26-06 remain inactive; M25 human acceptance is
+UNPERFORMED. Do not claim golden execution, hardware/RT, Unreal or release.

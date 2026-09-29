@@ -20,6 +20,10 @@ jobs:
           python-version: "3.11"
       - name: Validate static contract
         run: python3 tools/check_docs_contract.py
+      - name: Validate golden scenario specification and negative controls
+        run: |
+          python3 tools/check_golden_contract.py
+          python3 -m unittest discover -s tests/golden_system -p 'test_*.py'
       - name: Validate portable release contract
         run: python3 tools/check_release_contract.py
       - name: Test release tooling
