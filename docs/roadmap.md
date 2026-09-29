@@ -1,7 +1,11 @@
-# M26-01 checked design contract
+# M26-02 portable golden reference
 
-The [golden scenario specification](golden_system.md) freezes M26-01. Runtime
-scenario execution remains M26-02 onward; five later batches remain unactivated.
+The [golden source kit](golden_system.md) implements the frozen M26-01 scenario
+with native/host CPU execution, external CIL, controls and checkpoint/replay.
+See [M26-02 evidence](evidence/M26-02-2026-09-29.md) and
+[PR276](https://github.com/tranquilWorks/cpp-rt-car/pull/276) for exact validation
+and integration status. Four later batches remain unactivated: CUDA, XDMA,
+benchmark/fault/control showcase and living documentation/final audit.
 M25 human acceptance and physical/RT/Unreal/performance/release remain separate.
 
 ## Historical roadmap checkpoints

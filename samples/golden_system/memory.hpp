@@ -7,8 +7,11 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <psapi.h>
+// psapi.h requires the Windows types; preserve this include order.
+// clang-format off
 #include <windows.h>
+#include <psapi.h>
+// clang-format on
 #elif defined(__linux__)
 #include <sys/mman.h>
 #include <unistd.h>
