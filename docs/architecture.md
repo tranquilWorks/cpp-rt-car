@@ -611,3 +611,7 @@ correlation is introduced. Slot-owned terminal validation checks logical expiry
 before success, and the independent wall watchdog bounds pending work. Active
 replay retains recorded logical decisions. Absent policy leaves default/native
 semantics and artifact identities unchanged. See [device backend](device_backend.md).
+
+## Native command capacity resolution
+
+The additive C++ device capacity policy separates conservative aggregate rate reservations from each native command backend storage bound. It is opt-in before backend registration, uses validated copied capabilities, and changes no RuntimeConfig schema, C ABI, artifact format, native backend or admission algorithm. Existing DeviceManager slot ranges carry actual per-backend counts without changing its object layout.

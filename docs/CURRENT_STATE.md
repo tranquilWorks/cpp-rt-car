@@ -1,3 +1,16 @@
+# M26-04R2 active: explicit per-backend capacity
+
+M26-04R2 capacity repair is active after explicit owner approval of the retained
+proposal and request to finish. Canonical control564 revision 494f9c86619e65e8ef041823b075554960fb9011,
+blob d75d8d152e39fe416f503cf3f115d58a0b3bc88a. Preserve uniform defaults, all ABIs/schemas/native backends,
+prior tests/evidence and storage repair280. Implement opt-in native per-backend
+bounds, pass all32 target gates and integrate separately; then canonically
+reactivate and finish retained feature279 at c939b017ba81de9e80471a593d875d6e62cee729.
+M26-05/M26-06 remain inactive. Standing scoped publication/merge authority persists.
+No physical/RT/human/Unreal/performance/release claim. Earlier activation notes are history.
+
+## Earlier checkpoint
+
 # M26-04R active: bounded four-slot sampled storage
 
 Owner approved repair and resume/complete. Canonical plan561 merged at

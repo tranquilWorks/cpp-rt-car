@@ -2486,6 +2486,14 @@ struct RuntimeTraceReadResult {
     std::uint64_t remaining_sequence_count = 0;
 };
 
+// Uniform preserves the original per-backend RuntimeConfig requirements.
+// The opt-in resolves native command bounds from copied capabilities while
+// RuntimeConfig continues to bound aggregate rate admission.
+enum class DeviceCapacityPolicy : std::uint8_t {
+    uniform = 0,
+    native_per_backend = 1,
+};
+
 // Host-driven lifecycle introduced by M1. Control methods are single-host-
 // thread operations. A step invokes callbacks synchronously and never paces or
 // sleeps; self-paced execution uses the separate M5 run_periodic API.
@@ -2503,6 +2511,12 @@ public:
     Runtime& operator=(const Runtime&) = delete;
 
     [[nodiscard]] Status configure(const RuntimeConfig& config) noexcept;
+    // Select before registering any backend. Only native HAL-v2 backends with
+    // memory/topology and command/timeline extensions support the opt-in.
+    // Frozen after finalize; existing config, C ABI and artifact layouts remain
+    // unchanged. Default uniform identities and memory accounting are preserved.
+    [[nodiscard]] Status set_device_capacity_policy(
+        DeviceCapacityPolicy policy) noexcept;
     // Copies the bounded C++ policy model. Schema-7 JSON profiles and stable
     // C ABI v8 intentionally do not include this additive source API.
     // Validation and portable resolution occur transactionally in finalize().
