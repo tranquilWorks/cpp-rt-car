@@ -2172,7 +2172,7 @@ void DeviceManager::service_loop() noexcept {
                                     state == kBatchEarlyReady))) &&
                     monotonic_now_ns() >= slot.deadline_ns) {
                     auto expected = state;
-                    const auto target = slot.rate_owned && state != kBatchQueued
+                    const auto target = slot.rate_owned
                         ? kBatchRateQuarantineOwned
                         : kBatchOwned;
                     if (!slot.state.compare_exchange_strong(
@@ -2181,8 +2181,10 @@ void DeviceManager::service_loop() noexcept {
                         continue;
                     }
                     if (state == kBatchQueued) {
-                        // No vendor callback owns an unsent batch.
-                        finish_batch_slot(slot, Status::device_timeout, false);
+                        // No vendor callback owns an unsent batch, but the
+                        // submission lane may hold a selected-slot pointer.
+                        // Keep its storage until checked stop joins that lane.
+                        finish_rate_quarantine(slot, Status::device_timeout);
                         continue;
                     }
                     if (!slot.cancellation_requested.exchange(

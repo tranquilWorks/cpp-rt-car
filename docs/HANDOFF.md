@@ -6,8 +6,10 @@ and source-binding amendment PR554 are merged; active canonical revision
 isolated from M26-02 main; preserve M26-03 feature draft277 and all timeout
 failures. The additive policy keeps logical budgets/backend command timeouts
 and all default/native semantics while bounding simulator host liveness.
-No repair or M26-03 completion is claimed before full local and all32 exact-head
-hosted checks and separate integration. After repair merge, canonically
+The implementation and acceptance mapping are retained in
+[evidence](evidence/M26-03R-2026-09-29.md) and draft
+[PR278](https://github.com/tranquilWorks/cpp-rt-car/pull/278). Final local and all32
+exact-head hosted gates plus separate integration govern closure. After repair merge, canonically
 reactivate and finish feature277. M26-04..06 remain inactive; human/physical/RT,
 Unreal and release/signing/deployment remain separate.
 

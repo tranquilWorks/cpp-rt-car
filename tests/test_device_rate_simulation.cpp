@@ -304,13 +304,23 @@ TEST(CommandBatch, SimulationQueuedWatchdogExpiresBehindBlockedSubmit) {
   });
   std::this_thread::sleep_for(100ms);
   f.backend.release_submit = true;
+  // A failed sibling can end the frame before this independent completion.
+  // Wait for the actual timeline publication; do not assume run.get orders it.
+  const bool first_completed = wait_for([&] { return f.completed() == 1; });
   EXPECT_TRUE(both);
+  EXPECT_TRUE(first_completed);
   EXPECT_EQ(run.get(), rt::Status::device_timeout) << f.runtime.last_error();
   EXPECT_EQ(f.backend.submitted.load(),
             1u); // Second batch never reached vendor code.
   EXPECT_EQ(f.publications, 0u);
   EXPECT_EQ(f.completed(), 1u);
+  // The submission lane may still hold a selected queued-slot pointer.
+  // Retain the expired slot until checked stop joins that lane.
+  EXPECT_EQ(f.runtime.reset_device(f.device), rt::Status::invalid_state);
+  EXPECT_EQ(f.backend.canceled.load(), 0u); // Never cancel the unsent batch.
+  EXPECT_EQ(f.backend.unregistered.load(), 0u);
   EXPECT_EQ(f.runtime.stop(), rt::Status::ok);
+  EXPECT_EQ(f.backend.unregistered.load(), 1u);
 }
 TEST(CommandBatch, SimulationFailedBackendCompletionCannotAdvanceTimeline) {
   Fixture f;
