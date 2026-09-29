@@ -1,3 +1,15 @@
+# M26-04R2 locally complete; exact-head integration required
+
+Opt-in native per-backend capacities pass local full109+113, focused113,
+sanitizers51+51, zero-allocation/static/relocated SDK and exact default
+MemoryPlan/checkpoint/active checks. See evidence/M26-04R2-2026-09-29.md and
+PR281 for exact-head hosted/merge closure. Require all32 successful checks and
+guarded repair integration, then canonically reactivate and complete feature279.
+Native CUDA1/XDMA2 with aggregate3 now executes the retained parity/replay probe.
+Feature acceptance is still incomplete; M26-05/M26-06 remain inactive.
+
+## Earlier activation and history
+
 # M26-04R2 active: explicit per-backend capacity
 
 M26-04R2 capacity repair is active after explicit owner approval of the retained

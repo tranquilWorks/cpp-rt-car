@@ -169,7 +169,7 @@ struct Backend {
       c->max_wait_points = c->max_signal_points = 1;
       c->max_timelines = 4;
       c->completion_batch_capacity = self(p).malformed ? 0 : self(p).completion_capacity;
-      c->backend_control_storage_bytes = 256;
+      c->backend_control_storage_bytes = sizeof(Backend);
       return rt::HalV2Status::ok;
     };
     a.submit = [](void *p, const rt::DeviceCommandBatch *b) {

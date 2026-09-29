@@ -14,6 +14,7 @@ TEST(RateDispatch, DeviceCapacityActualOneTwoSlotsAggregateThree) {
   Fixture f; ready(f);
   rt::MemoryPlan plan; ASSERT_TRUE(f.runtime.memory_plan(plan));
   EXPECT_EQ(plan.device_batch_queue_slots, 3u);
+  EXPECT_EQ(plan.device_backend_reported_bytes, 2 * sizeof(device_capacity::Backend));
   EXPECT_EQ(plan.device_outstanding_capacity, 3u);
   EXPECT_EQ(f.backends[0].requested, 1u); EXPECT_EQ(f.backends[1].requested, 2u);
   rt::DeviceRateAdmissionReport report;

@@ -1,6 +1,6 @@
 # M26-04R2 capacity policy review
 
-Candidate review; integration and complete gates remain pending.
+Local review complete. Exact-final-head hosted verification and guarded integration are recorded in PR281 before merge.
 
 The opt-in is selected before any successful backend registration. Unknown enum
 values and adapted-v1/core-only/missing-extension backends reject without backend
@@ -15,8 +15,7 @@ sum drives MemoryPlan and the DeviceManager estimator. Shared completion scratch
 stays global-sized; opted-in polling and count validation use the native bound.
 Uniform polling remains exactly global-sized, including configure-after-register
 behavior. Policy booleans occupy existing alignment padding; Linux baseline
-checkpoint and active replay bytes match exactly after the change. Other hosted
-platform checks remain pending. No existing public structure was resized.
+checkpoint and active replay bytes match exactly after the change. Other platform gates must also pass at the exact final head before integration. No existing public structure was resized.
 
 Conditional graph/config markers bind the opt-in and resolved counts. Default
 hash inputs remain unchanged. Tests cover same-topology policy mismatch,
@@ -34,6 +33,6 @@ and24 ticks. That probe is prerequisite proof, not completion of the feature mat
 
 Native backends, prior fixtures, config/C ABI/device ABI/SONAME, rate admission
 algorithm, deadlines, sampled safe acknowledgement and old CUDA event pools are
-unchanged. Remaining risk is concurrency/platform behavior until sanitizer,
-static, full/package and all32 exact-head gates finish. No physical/HIL/RT/human/
+unchanged. Local sanitizer/static/full/package gates pass; hosted platform gates and
+clean/head/base/review/fetched-tree checks remain required before merge. No physical/HIL/RT/human/
 Unreal/performance/release claim. M26-05/M26-06 remain inactive.
