@@ -469,3 +469,14 @@ native backends and all repair/prior tests and evidence remain protected. Finish
 all CUDA feature acceptance with fresh local/all32 hosted gates before integration.
 M26-04..06 remain inactive; standing scoped publication/merge authority persists.
 Historical activation/checkpoint text above does not reopen completed repairs.
+
+## M26-04R sampled storage repair activation
+
+Owner explicitly approved separate four-slot repair and resume/complete of M26-04.
+Canonical plan561 merged at 5ad722d8316037b77fe741b56e2d673408ca0fa9, blob b465fac6bd653073c7fcea74fae0bb947f0181f1.
+Implement bounded opt-in ring4 through the existing field; preserve default2,
+public layouts/ABIs/schemas, native backends, earlier sources/tests/evidence.
+Feature draft279 at998ec43035229406e93e6294e0834a0b4204b767 remains preserved.
+Require all32 target gates and guarded integration, then canonically reactivate
+and complete draft279 under continuing scoped publication/merge authorization.
+No later-batch, physical/RT/human/Unreal/performance/release activation or claim.

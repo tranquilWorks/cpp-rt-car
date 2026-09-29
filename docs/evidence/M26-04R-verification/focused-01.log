@@ -1,0 +1,119 @@
+Running main() from /home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/external/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = *SampledStorage*:SampledIo.*:CrossRateData.*:MixedRateReplay.*
+[==========] Running 35 tests from 5 test suites.
+[----------] Global test environment set-up.
+[----------] 1 test from MemoryPlan
+[ RUN      ] MemoryPlan.SampledStorageExactPayloadAndControlDeltas
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/tests/test_sampled_io_storage.cpp:56: Failure
+Expected equality of these values:
+  rejected.runtime.finalize()
+    Which is: 4-byte object <FD-FF FF-FF>
+  rt::Status::resource_exhausted
+    Which is: 4-byte object <FA-FF FF-FF>
+
+[  FAILED  ] MemoryPlan.SampledStorageExactPayloadAndControlDeltas (7 ms)
+[----------] 1 test from MemoryPlan (7 ms total)
+
+[----------] 8 tests from MixedRateReplay
+[ RUN      ] MixedRateReplay.SimulationPolicyIdentityRejectsForeignCheckpointBeforeMutation
+[       OK ] MixedRateReplay.SimulationPolicyIdentityRejectsForeignCheckpointBeforeMutation (16 ms)
+[ RUN      ] MixedRateReplay.SimulationReplayUsesRecordedTimeAndKeepsHostWatchdog
+[       OK ] MixedRateReplay.SimulationReplayUsesRecordedTimeAndKeepsHostWatchdog (61 ms)
+[ RUN      ] MixedRateReplay.SimulationFailedCompletionRetainsBackendTimestamp
+[       OK ] MixedRateReplay.SimulationFailedCompletionRetainsBackendTimestamp (38 ms)
+[ RUN      ] MixedRateReplay.WatchdogTransitionsPreserveActualPriorLevelAtSaturation
+[       OK ] MixedRateReplay.WatchdogTransitionsPreserveActualPriorLevelAtSaturation (41 ms)
+[ RUN      ] MixedRateReplay.LiveControlWatchdogReplayClosesSaturatedFrames
+[       OK ] MixedRateReplay.LiveControlWatchdogReplayClosesSaturatedFrames (60 ms)
+[ RUN      ] MixedRateReplay.ActiveArtifactRoundTripsAndDrivesTranscriptDecisions
+[       OK ] MixedRateReplay.ActiveArtifactRoundTripsAndDrivesTranscriptDecisions (5 ms)
+[ RUN      ] MixedRateReplay.ParserRejectsMutationTrailingBytesAndShortOutput
+[       OK ] MixedRateReplay.ParserRejectsMutationTrailingBytesAndShortOutput (4 ms)
+[ RUN      ] MixedRateReplay.SampledStorageOriginReplayAndForeignCapacityRejection
+[       OK ] MixedRateReplay.SampledStorageOriginReplayAndForeignCapacityRejection (70 ms)
+[----------] 8 tests from MixedRateReplay (298 ms total)
+
+[----------] 12 tests from CrossRateData
+[ RUN      ] CrossRateData.PublicModelCopiesAndFreezesWithLifecycleInspectors
+[       OK ] CrossRateData.PublicModelCopiesAndFreezesWithLifecycleInspectors (20 ms)
+[ RUN      ] CrossRateData.SelectionMatchesIndependentCompleteSupercycle
+[       OK ] CrossRateData.SelectionMatchesIndependentCompleteSupercycle (10 ms)
+[ RUN      ] CrossRateData.SelectionAgreementCoversRateAndRegistrationPermutations
+[       OK ] CrossRateData.SelectionAgreementCoversRateAndRegistrationPermutations (6 ms)
+[ RUN      ] CrossRateData.SameTimestampVisibilityAndFreshnessBoundariesAreExact
+[       OK ] CrossRateData.SameTimestampVisibilityAndFreshnessBoundariesAreExact (12 ms)
+[ RUN      ] CrossRateData.ValidationIsOwnedBoundedTransactionalAndCorrectable
+[       OK ] CrossRateData.ValidationIsOwnedBoundedTransactionalAndCorrectable (1 ms)
+[ RUN      ] CrossRateData.AggregateCapacityFailsBeforeProviderAndCanBeCorrected
+[       OK ] CrossRateData.AggregateCapacityFailsBeforeProviderAndCanBeCorrected (1 ms)
+[ RUN      ] CrossRateData.DeviceEndpointIsRejectedBeforeOwnershipOrExecution
+[       OK ] CrossRateData.DeviceEndpointIsRejectedBeforeOwnershipOrExecution (0 ms)
+[ RUN      ] CrossRateData.SnapshotStoreIsExactBoundedAndNeverSubstitutes
+[       OK ] CrossRateData.SnapshotStoreIsExactBoundedAndNeverSubstitutes (0 ms)
+[ RUN      ] CrossRateData.SnapshotStoreSpscConcurrencyHasDeterministicBytes
+[       OK ] CrossRateData.SnapshotStoreSpscConcurrencyHasDeterministicBytes (9 ms)
+[ RUN      ] CrossRateData.SnapshotStoreSpscContentionPublishesCompleteGenerations
+[       OK ] CrossRateData.SnapshotStoreSpscContentionPublishesCompleteGenerations (15 ms)
+[ RUN      ] CrossRateData.TwoRuntimeHandlesSamplesAndStoresRemainIsolated
+[       OK ] CrossRateData.TwoRuntimeHandlesSamplesAndStoresRemainIsolated (7 ms)
+[ RUN      ] CrossRateData.SampledStorageSlotSelectionRejectsTransactionally
+[       OK ] CrossRateData.SampledStorageSlotSelectionRejectsTransactionally (0 ms)
+[----------] 12 tests from CrossRateData (85 ms total)
+
+[----------] 7 tests from RateDispatch
+[ RUN      ] RateDispatch.SampledStorageFourRealSlotsAndRepeatedWrap
+[       OK ] RateDispatch.SampledStorageFourRealSlotsAndRepeatedWrap (50 ms)
+[ RUN      ] RateDispatch.SampledStorageInvalidCountsCorrectBeforeStart
+[       OK ] RateDispatch.SampledStorageInvalidCountsCorrectBeforeStart (65 ms)
+[ RUN      ] RateDispatch.SampledStorageDuplicateForeignAndShapeRejectBeforeEffects
+[       OK ] RateDispatch.SampledStorageDuplicateForeignAndShapeRejectBeforeEffects (11 ms)
+[ RUN      ] RateDispatch.SampledStorageUnderrunOverrunAndSafeStopRetry
+[       OK ] RateDispatch.SampledStorageUnderrunOverrunAndSafeStopRetry (13 ms)
+[ RUN      ] RateDispatch.SampledStorageMalformedDeviceNeverPublishes
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/tests/test_sampled_io_storage.cpp:160: Failure
+Expected equality of these values:
+  status.accepted_frames
+    Which is: 2
+  1u
+    Which is: 1
+
+[  FAILED  ] RateDispatch.SampledStorageMalformedDeviceNeverPublishes (12 ms)
+[ RUN      ] RateDispatch.SampledStorageConcurrentOwnersRemainIsolated
+[       OK ] RateDispatch.SampledStorageConcurrentOwnersRemainIsolated (40 ms)
+[ RUN      ] RateDispatch.SampledStorageAggregateBytesAreBoundedAndRetryable
+/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/tests/test_sampled_io_storage.cpp:333: Failure
+Expected equality of these values:
+  runtime.register_device_batch_phase( {"aggregate.device." + std::to_string(i), device, [](void *, const rt::DeviceCallbackContext &, rt::DeviceCommandBatch &) { return rt::CallbackResult::error; }, nullptr, declaration}, phase)
+    Which is: 4-byte object <FF-FF FF-FF>
+  rt::Status::ok
+    Which is: 4-byte object <00-00 00-00>
+
+[  FAILED  ] RateDispatch.SampledStorageAggregateBytesAreBoundedAndRetryable (0 ms)
+[----------] 7 tests from RateDispatch (193 ms total)
+
+[----------] 7 tests from SampledIo
+[ RUN      ] SampledIo.CompilesExactInputDescriptorAndDirectMap
+[       OK ] SampledIo.CompilesExactInputDescriptorAndDirectMap (0 ms)
+[ RUN      ] SampledIo.FailureIsTransactionalAndCorrectionIsRetryable
+[       OK ] SampledIo.FailureIsTransactionalAndCorrectionIsRetryable (0 ms)
+[ RUN      ] SampledIo.RejectsMalformedDescriptorsAndEndpointDisagreement
+[       OK ] SampledIo.RejectsMalformedDescriptorsAndEndpointDisagreement (0 ms)
+[ RUN      ] SampledIo.OutputRequiresExactSafeFramesAndSignalOnlyPhase
+[       OK ] SampledIo.OutputRequiresExactSafeFramesAndSignalOnlyPhase (0 ms)
+[ RUN      ] SampledIo.FrameValidationAcceptsUnalignedStorageWithoutAliasing
+[       OK ] SampledIo.FrameValidationAcceptsUnalignedStorageWithoutAliasing (0 ms)
+[ RUN      ] SampledIo.FrameValidationRejectsEveryCorrelatedFieldAndChecksumDrift
+[       OK ] SampledIo.FrameValidationRejectsEveryCorrelatedFieldAndChecksumDrift (0 ms)
+[ RUN      ] SampledIo.RuntimeLoopbackAcknowledgesSafeAndPublishesTerminalInput
+[       OK ] SampledIo.RuntimeLoopbackAcknowledgesSafeAndPublishesTerminalInput (11 ms)
+[----------] 7 tests from SampledIo (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 35 tests from 5 test suites ran. (597 ms total)
+[  PASSED  ] 32 tests.
+[  FAILED  ] 3 tests, listed below:
+[  FAILED  ] MemoryPlan.SampledStorageExactPayloadAndControlDeltas
+[  FAILED  ] RateDispatch.SampledStorageMalformedDeviceNeverPublishes
+[  FAILED  ] RateDispatch.SampledStorageAggregateBytesAreBoundedAndRetryable
+
+ 3 FAILED TESTS

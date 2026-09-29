@@ -1917,6 +1917,8 @@ struct SampledIoChannelRegistration {
     std::uint64_t clock_domain_identity = 0;
     SampledIoTriggerMode trigger_mode = SampledIoTriggerMode::periodic;
     std::uint64_t trigger_identity = 0;
+    // Explicit bounded snapshot storage: 2 preserves the original plan; 4
+    // opts this sampled channel into four real slots. Other counts reject.
     std::uint32_t ring_capacity = 0;
     std::uint64_t initial_sequence = 0;
     std::uint64_t maximum_age_ns = 0;

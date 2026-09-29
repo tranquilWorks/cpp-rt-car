@@ -318,8 +318,23 @@ Status compile_cross_rate_data(
     const CompiledDeviceRatePlan* device_rate_plan,
     std::span<const CrossRateDeviceBufferSource> device_buffers,
     CompiledCrossRatePlan& output,
-    CrossRateCompileDiagnostic& diagnostic) noexcept {
+    CrossRateCompileDiagnostic& diagnostic,
+    std::span<const std::size_t> snapshot_slot_counts) noexcept {
     diagnostic = {};
+    // The public sampled-I/O descriptor is the only Runtime opt-in. Ordinary
+    // callers omit this private override and retain the exact two-slot plan.
+    if ((!snapshot_slot_counts.empty() &&
+         snapshot_slot_counts.size() != channels.size()) ||
+        std::any_of(snapshot_slot_counts.begin(), snapshot_slot_counts.end(),
+                    [](std::size_t count) { return count != 2 && count != 4; })) {
+        diagnostic = {Status::invalid_argument,
+                      "cross-rate snapshot slot counts are invalid"};
+        return diagnostic.status;
+    }
+    const auto snapshot_slots = [&](std::size_t index) {
+        return snapshot_slot_counts.empty() ? cross_rate_snapshot_slot_count
+                                           : snapshot_slot_counts[index];
+    };
     if (channels.empty()) {
         output = {};
         return Status::ok;
@@ -573,7 +588,7 @@ Status compile_cross_rate_data(
                 initial_bytes > cross_rate_initial_bytes_capacity ||
                 !checked_multiply(
                     channel.payload_size,
-                    cross_rate_snapshot_slot_count,
+                    snapshot_slots(index),
                     channel_snapshot_bytes) ||
                 !checked_add(
                     snapshot_bytes,
@@ -817,7 +832,7 @@ Status compile_cross_rate_data(
             descriptor.maximum_age_ns = channel.maximum_age_ns;
             descriptor.first_selection_index = candidate.selections.size();
             descriptor.selection_count = first.size() * 2;
-            descriptor.snapshot_slot_count = cross_rate_snapshot_slot_count;
+            descriptor.snapshot_slot_count = snapshot_slots(channel_index);
             descriptor.producer_device = channel.producer_device;
             descriptor.consumer_device = channel.consumer_device;
             if (has_device_endpoint) {
@@ -858,7 +873,7 @@ Status compile_cross_rate_data(
             SnapshotStore store;
             const auto store_status = SnapshotStore::create(
                 channel.payload_size,
-                cross_rate_snapshot_slot_count,
+                descriptor.snapshot_slot_count,
                 store);
             if (store_status != Status::ok) {
                 diagnostic = {

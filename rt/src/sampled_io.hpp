@@ -75,6 +75,15 @@ struct SampledIoCompileDiagnostic {
     CrossRateChannelHandle channel{};
 };
 
+// Resolve only bounded explicit capacities before snapshot allocation. The
+// destination is transactional; ordinary channels retain the default count.
+[[nodiscard]] Status sampled_io_snapshot_slots(
+    std::uint32_t graph_owner,
+    std::span<const SampledIoChannelSpec> specifications,
+    std::span<const CrossRateChannelSpec> cross_rate_specs,
+    std::span<std::size_t> slot_counts,
+    SampledIoCompileDiagnostic& diagnostic) noexcept;
+
 [[nodiscard]] Status compile_sampled_io(
     std::uint32_t graph_owner,
     std::span<const SampledIoChannelSpec> specifications,
