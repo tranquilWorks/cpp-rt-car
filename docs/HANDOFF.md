@@ -1,3 +1,16 @@
+# M26-04 software locally verified; integration pending
+
+The installed golden XDMA/combined source kit runs actual Runtime sampled
+channels and native backend batches with owned simulated drivers, CPU/kernel/
+Graph physics, native/host/external execution, full-state parity, owner replay,
+checkpoint recovery, faults, safe acknowledgements and bounded ownership.
+Full148+152, focused37, ASan/UBSan/leaks25, TSan25, allocation/static and actual
+CPack65 SDK/embedding/negative gates pass. See
+[evidence](evidence/M26-04-final-verification/acceptance.md) and PR279.
+Exact-final-head full/all32 and guarded integration/canonical closure remain.
+M26-05 showcase and M26-06 documentation/audit remain inactive; no physical,
+RT/human/Unreal/controlled-performance/release claim. Earlier notes are history.
+
 # M26-04 feature resumed after sampled timing and completion cleanup repair
 
 Repair283 is merged at 3ecf5695f67b604504a6caa7d5fc6073c3984a92; all32 final checks and local full111+115,

@@ -1,3 +1,25 @@
+# M26-04 final agent risk review
+
+Local disposition: complete; final-head hosted and guarded integration pending.
+This is an agent review, not independent human qualification. Full148+152,
+focused37, sanitizer25+25/allocation, static and actual CPack65 SDK/embedding/
+negative gates pass. Reviewed source hashes and acceptance map are in
+M26-04-final-verification. Native drivers, Runtime, public formats/ABI/defaults,
+prior kits/tests and protected CI equal the integrated repair baseline.
+
+Remaining risks: owned simulated drivers do not establish physical safe-state,
+latency or RT qualification; a host watchdog bounds simulator scheduling only.
+Borrowed resources require successful checked cleanup; failed stops retain them.
+Trusted replay is original-owner bound; compatible recovery uses paired artifacts.
+Artifact hashes establish consistency, not authenticated physical execution.
+Prior scheduler-sensitive baseline Windows/benchmark findings remain separate.
+
+No unresolved scoped source finding remains. Require exact final full/all32 and
+clean/head/base/no-unresolved-review/fetched-tree equality before integration,
+then record canonical closure. M26-05/M26-06 remain separate inactive scopes.
+
+## Historical draft review
+
 # M26-04 draft checkpoint risk review
 
 Disposition: do not merge. High-risk feature acceptance remains blocked at
