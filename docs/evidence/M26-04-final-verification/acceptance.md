@@ -20,7 +20,9 @@ is portable injected-driver protocol execution, not physical XDMA/CUDA or RT.
 | Final integration | Exact final-head full/all32 names/multiplicity, clean/head/base/review and fetched-tested-tree guards still required before target merge; canonical closure afterward. |
 
 The sanitizer-only300s harness applies only to new complete1024-tick cases9/18;
-other new/earlier timeouts and all workloads/assertions remain intact. This is
+the new native CLI aggregate also uses120+3*300=1020s under sanitizers, as
+explained in ../M26-04-process-sanitizer-correction/correction.md. All other
+timeouts and all workloads/assertions remain intact. This is
 functional instrumentation overhead, not a controlled-performance claim.
 M26-05/M26-06 remain inactive. Human, physical/HIL/RT, Unreal, controlled
 performance, signing/release and deployment remain separate.

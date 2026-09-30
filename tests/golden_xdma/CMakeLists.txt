@@ -86,6 +86,15 @@ if(TARGET sample_golden_xdma)
             ${CMAKE_CURRENT_SOURCE_DIR}/process_suite.py --plant $<TARGET_FILE:sample_golden_xdma>
             --controller $<TARGET_FILE:sample_golden_controller>
             --provenance ${PROJECT_BINARY_DIR}/golden-xdma-provenance.json --group ${mode})
-        set_tests_properties(host_adapter_golden_xdma_process_${mode} PROPERTIES TIMEOUT 120)
+        # This aggregate includes 40 short cases plus three complete 1024-tick
+        # CLI runs. Under sanitizers retain each child's existing 300-s bound
+        # plus the original 120-s budget for the short cases. Ordinary runs,
+        # all other tests, and Runtime logical/watchdog deadlines are unchanged.
+        set(golden_xdma_process_timeout 120)
+        if(SIM_SANITIZERS AND mode STREQUAL "native")
+            math(EXPR golden_xdma_process_timeout "120 + 3 * 300")
+        endif()
+        set_tests_properties(host_adapter_golden_xdma_process_${mode} PROPERTIES
+            TIMEOUT ${golden_xdma_process_timeout})
     endforeach()
 endif()
