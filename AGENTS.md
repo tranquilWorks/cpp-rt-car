@@ -603,3 +603,13 @@ Preserve every Runtime/native/repair source, prior test and failed evidence.
 Frozen ring4, native CUDA1/XDMA2 with combined aggregate3, safe8ms remain fixed.
 M26-05/M26-06 stay inactive. Standing scoped publication/merge authority persists.
 No physical/HIL/RT/human/Unreal/performance/release claim. Earlier notes are history.
+
+## M26-05 activation
+
+Canonical [plan576](https://github.com/tranquilWorks/portfolio-control/pull/576)
+merged at 1ee6e9571a49047f42f2d20f0b3c6aed053fea4a, blob fa6006e7c40d23e420d85642a2707026ccff3a5b. Target baseline is merged
+M26-04 PR279 at 6d6dbc98a4f1d6eb438d61cbeecc2a0f1d1ba252. Only M26-05
+is active. Implementation and acceptance are incomplete. Preserve frozen scenario,
+all prior kits/tests, Runtime/native sources and ABI. All32 target gates remain
+mandatory under standing scoped publication/integration authorization. M26-06
+remains inactive; physical/RT/human/Unreal/performance/release remain separate.

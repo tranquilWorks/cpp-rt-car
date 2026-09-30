@@ -1436,3 +1436,40 @@ install(FILES
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/golden-xdma-provenance.json"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_xdma RENAME provenance.json)
 install(FILES docs/golden_xdma.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+
+# Optional source-only showcase; default Runtime installation stays unchanged.
+if(RTFW_BUILD_BENCHMARKS)
+    execute_process(COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/samples/golden_showcase/provenance.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/golden-showcase-provenance.json"
+        RESULT_VARIABLE golden_showcase_provenance_result)
+    if(NOT golden_showcase_provenance_result EQUAL 0)
+        message(FATAL_ERROR "Golden showcase source provenance generation failed")
+    endif()
+    install(FILES
+        samples/golden_showcase/CMakeLists.txt
+        samples/golden_showcase/README.md
+        samples/golden_showcase/artifacts.py
+        samples/golden_showcase/experiment_main.cpp
+        samples/golden_showcase/experiments.cpp
+        samples/golden_showcase/experiments.hpp
+        samples/golden_showcase/main.cpp
+        samples/golden_showcase/probes.hpp
+        samples/golden_showcase/provenance.py
+        samples/golden_showcase/provider.cpp
+        samples/golden_showcase/provider.hpp
+        samples/golden_showcase/replay.hpp
+        samples/golden_showcase/replay_gate.hpp
+        samples/golden_showcase/report.py
+        samples/golden_showcase/run.py
+        samples/golden_showcase/session.hpp
+        samples/golden_showcase/state.py
+        samples/golden_showcase/telemetry_loss.cpp
+        samples/golden_showcase/test.py
+        samples/golden_showcase/variants.cpp
+        samples/golden_showcase/variants.hpp
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_showcase)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/golden-showcase-provenance.json"
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_showcase RENAME provenance.json)
+    install(FILES docs/golden_showcase.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+endif()
