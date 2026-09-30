@@ -1,3 +1,39 @@
+# M26-04R4 local verification complete; integration pending
+
+Sampled simulator timing and checked-stop completion repair passes full111+115,
+focused123/new13, sanitizer13+13, allocation0/positive1, static36+delta1 and
+fixture analysis, relocated full56 SDK/embedding/negatives and exact default
+MemoryPlan/checkpoint/active bytes. See evidence/M26-04R4-2026-09-29.md and PR283.
+Require exact-final-head full/all32 and guarded merge, then canonically
+reactivate and FINISH feature279. M26-05/M26-06 remain inactive.
+No physical/HIL/RT/human/release claim. Earlier checkpoints are historical.
+
+## Earlier activation and history
+
+# M26-04R4 local verification complete; integration pending
+
+Sampled simulator timing and checked-stop completion repair passes full111+115,
+focused123/new13, sanitizer13+13, allocation0/positive1, static36+delta1 and
+fixture analysis, relocated full56 SDK/embedding/negatives and exact default
+MemoryPlan/checkpoint/active bytes. See evidence/M26-04R4-2026-09-29.md and PR283.
+Require exact-final-head full/all32 and guarded merge, then canonically
+reactivate and FINISH feature279. M26-05/M26-06 remain inactive.
+No physical/HIL/RT/human/release claim. Earlier checkpoints are historical.
+
+## Earlier activation and history
+
+# M26-04R4 sampled simulator lifecycle timing repair
+
+Canonical control570 is merged. The private safe-transition submission now forwards
+the matching phase's existing explicit mock policy. Safe8ms logical/backend
+timeout and native/default behavior remain fixed. Independent baseline startup,
+failure and shutdown negatives and repaired probes are retained. Full local,
+sanitizer/static/package and all32 exact-head target gates remain pending.
+Feature279 is preserved at b241ede; canonically reactivate and complete it after
+separate repair integration. M26-05/M26-06 inactive; no physical/RT/human/release claim.
+
+## Earlier checkpoint
+
 # M26-04R3 local verification complete; integration required
 
 Sampled cleanup/checkpoint repair passes full110+114, focused110 including11

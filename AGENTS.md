@@ -504,3 +504,24 @@ and exact32 gates; integrate, canonically reactivate and complete the feature.
 No public format/design expansion without a separate explicit decision.
 M26-05/M26-06 inactive; standing scoped publication/integration persists.
 Earlier feature checkpoints are historical, not closure.
+
+## M26-04R4 private sampled simulator timing repair
+
+Canonical control570 merged at f779fec5252e66b1a5a695b877811f5863b62869, blob 60932302a05ffad6a8b39d6a314d78833d60f857.
+The owner approved repair and finish. Forward only the existing explicit mock
+simulation timing to sampled startup/failure/shutdown submissions, preserving
+safe8ms logical/backend deadlines, native/default behavior and all prior repairs.
+Feature279 is saved at b241ede0aeff76385225d5503c2ae204334a1a0b. Require baseline
+negatives, fresh local/all32 gates and separate guarded integration, then
+canonically reactivate and complete the full feature. No new public policy or
+format, later-batch activation or physical/RT/human/release claim.
+Standing scoped publication/integration authority persists.
+
+Canonical R4 cleanup amendment571 merged at a78293d9884c8fe73d615d3cc9c4615514443ccd, blob ebc6262ada9fe74f239f54bdb67f0785dbe4fa9c.
+Also allow private device_manager.cpp checked-stop completion collection after
+submission/service lane quiescence, bounded by existing backend/completion
+capacities. Never acknowledge timed-out safety or free unfinished native work.
+Retain pending ownership until subsequent checked stop collects actual terminal
+completion. Controlled native default/selected baseline negatives are retained.
+Preserve native sources, public formats/deadlines and all earlier tests/evidence.
+Fresh local/all32 gates and completion of feature279 remain mandatory.
