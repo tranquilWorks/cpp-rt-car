@@ -57,3 +57,25 @@ delta and public fixture analysis, relocated CPack56 SDK/embedding/negatives,
 ABI/default MemoryPlan and exact checkpoint/active bytes. No unresolved
 production finding remains in the scoped diff. Final-head full/all32 and
 clean/head/base/review/fetched-tree integration guards remain required.
+
+## Windows checkpoint correction
+
+Windows Debug correctly returned device_timeout before driver event entry in
+new unselected-native and host-watchdog negatives. Their old assertion wrongly
+required host scheduling before the deadline. New tests retain device_timeout,
+all original durations, exact injected clock and unknown safety. If the event
+enters, its backend timeout must still be exactly8ms; if it does not, require
+zero native event timeout/ACK/readback. The gate helper joins when the operation
+returns instead of spinning its2s setup bound after a valid queued timeout.
+No production change. Old protected CPU-to-device/MixedRateConformance timing
+failures and an existing one-shot poll-overflow fixture failure also occurred
+in that job and remain retained; all final-head hosted checks must pass.
+
+## Completed local review
+
+Combined correction passes full111+115, focused123/new13, ASan/UBSan/leaks13,
+TSan13, three allocation controls, production static36 plus final DeviceManager
+delta and public fixture analysis, relocated CPack56 SDK/embedding/negatives,
+ABI/default MemoryPlan and exact checkpoint/active bytes. No unresolved
+production finding remains in the scoped diff. Final-head full/all32 and
+clean/head/base/review/fetched-tree integration guards remain required.

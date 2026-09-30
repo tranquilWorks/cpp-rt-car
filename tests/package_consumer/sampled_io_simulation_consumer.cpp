@@ -614,7 +614,7 @@ struct Gate {
   Card &card;
   Clock &clock;
   std::thread worker;
-  std::atomic<bool> observed{false};
+  std::atomic<bool> observed{false}, finished{false};
   Gate(Fixture &f, bool expire_logical = false, unsigned hold_ms = 30)
       : card(f.backend.card), clock(f.clock) {
     card.entered = false;
@@ -622,7 +622,7 @@ struct Gate {
     worker = std::thread([this, expire_logical, hold_ms] {
       const auto limit =
           std::chrono::steady_clock::now() + std::chrono::seconds(2);
-      while (!card.entered && std::chrono::steady_clock::now() < limit)
+      while (!card.entered && !finished && std::chrono::steady_clock::now() < limit)
         std::this_thread::yield();
       observed = card.entered.load();
       if (observed) {
@@ -633,10 +633,12 @@ struct Gate {
       card.hold = false;
     });
   }
-  ~Gate() {
-    worker.join();
+  void finish() {
+    finished = true;
+    if (worker.joinable()) worker.join();
     card.hold = false;
   }
+  ~Gate() { finish(); }
 };
 inline rt::Status checked_cleanup(Fixture &f) {
   // Timeout rollback may retain native ownership. Complete the public checked
@@ -696,11 +698,24 @@ inline bool run_case(unsigned id) {
     {
       Gate gate(f, id == 6, id == 7 ? 200u : 30u);
       status = f.runtime.start();
+      gate.finish();
       entered = gate.observed;
     }
     const auto wanted = id == 0 ? Status::ok : Status::device_timeout;
     const auto timeout = f.backend.card.event_timeout.load();
-    const bool good = entered && status == wanted && timeout == 8'000'000;
+    // Native/default wall deadlines and the simulator host watchdog can expire
+    // before the native event is entered. That is valid timeout coverage, not a
+    // promise that a host worker runs before its deadline. Keep exact event
+    // timeout checks when entered, and require zero ACK/readback otherwise.
+    const bool queued_timeout = (id == 4 || id == 5 || id == 7) && !entered &&
+        timeout == 0 && f.backend.card.acks == 0 && f.backend.card.downloads == 0;
+    const bool event_path = entered && timeout == 8'000'000;
+    rt::SampledIoChannelStatus info;
+    const auto safety = id == 0 ? rt::SampledIoSafetyState::startup_acknowledged
+                                : rt::SampledIoSafetyState::unknown;
+    const bool good = status == wanted && (event_path || queued_timeout) &&
+        f.clock.now == (id == 6 ? 8'001'001u : 1000u) &&
+        f.runtime.sampled_io_channel_status(f.output, info) && info.safety_state == safety;
     const auto cleanup = checked_cleanup(f);
     std::printf("startup case=%u status=%d expected=%d native_timeout=%llu "
                 "entered=%d cleanup=%d live=%d\n",

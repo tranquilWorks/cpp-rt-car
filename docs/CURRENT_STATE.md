@@ -10,6 +10,18 @@ No physical/HIL/RT/human/release claim. Earlier checkpoints are historical.
 
 ## Earlier activation and history
 
+# M26-04R4 local verification complete; integration pending
+
+Sampled simulator timing and checked-stop completion repair passes full111+115,
+focused123/new13, sanitizer13+13, allocation0/positive1, static36+delta1 and
+fixture analysis, relocated full56 SDK/embedding/negatives and exact default
+MemoryPlan/checkpoint/active bytes. See evidence/M26-04R4-2026-09-29.md and PR283.
+Require exact-final-head full/all32 and guarded merge, then canonically
+reactivate and FINISH feature279. M26-05/M26-06 remain inactive.
+No physical/HIL/RT/human/release claim. Earlier checkpoints are historical.
+
+## Earlier activation and history
+
 # M26-04R4 sampled simulator lifecycle timing repair
 
 Canonical control570 is merged. The private safe-transition submission now forwards
