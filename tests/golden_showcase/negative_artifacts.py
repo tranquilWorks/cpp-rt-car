@@ -46,6 +46,17 @@ def main():
         r['result_sha256']=a.sha(tool.canonical({k:v for k,v in r.items() if k!='result_sha256'}));result.write_bytes(tool.canonical(r))
         tool.validate_bundle(bench/'benchmark',a.benchmark_tool()[1])
     reject([inv,raw,result],false_counter,lambda:a.benchmark(bench))
+    # A self-consistent M23 identity must still match the executed variant.
+    device=root/'benchmarks/sim_cuda-graph-native';result=device/'benchmark/result.json';device_raw=device/'benchmark/raw.json'
+    def false_backend():
+        r=a.load(result);r['identity']['backend']='cpu';r['identity']['driver']='none'
+        context=dict(descriptor_sha256=r['descriptor_sha256'],identity=r['identity'],start_utc=r['start_utc'])
+        r['run_context_sha256']=a.sha(tool.canonical(context)[:-1])
+        samples=a.load(device_raw);samples['run_context_sha256']=r['run_context_sha256'];device_raw.write_bytes(tool.canonical(samples))
+        r['raw_sha256']=a.sha(device_raw.read_bytes())
+        r['result_sha256']=a.sha(tool.canonical({k:v for k,v in r.items() if k!='result_sha256'}));result.write_bytes(tool.canonical(r))
+        tool.validate_bundle(device/'benchmark',a.benchmark_tool()[1])
+    reject([result,device_raw],false_backend,lambda:a.benchmark(device))
     path=root/'benchmarks/golden-replay/invocations/golden-replay/2/trusted.bin'
     other=path.parent.parent/'3/trusted.bin'
     reject([path],lambda:path.write_bytes(other.read_bytes()))

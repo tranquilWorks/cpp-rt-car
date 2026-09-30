@@ -613,3 +613,14 @@ is active. Implementation and acceptance are incomplete. Preserve frozen scenari
 all prior kits/tests, Runtime/native sources and ABI. All32 target gates remain
 mandatory under standing scoped publication/integration authorization. M26-06
 remains inactive; physical/RT/human/Unreal/performance/release remain separate.
+
+## M26-05 implementation candidate
+
+The golden showcase implementation and its focused, ASan/UBSan/leak, complete
+TSan, static, relocated package, fake/steady and independent mutation gates pass.
+PR284 retains final full-profile/all32 exact-head and guarded integration evidence;
+all remain mandatory before integration. The new TSan process aggregate uses900s
+following its retained300s timeout and complete453.64s measured pass. Every child
+bound, prior test, Runtime deadline and instrumentation remains unchanged.
+M26-06 audit remains separate/inactive; no CAP-M26/human/physical/RT/Unreal/
+controlled-performance/release claim. Standing scoped integration authority persists.

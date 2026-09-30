@@ -1,3 +1,29 @@
+# M26-05 golden showcase implemented
+
+The optional public-SDK kit provides fifteen meaningful M23 cases, CPU and
+owned simulated CUDA/XDMA/combined variants with native, independent host and
+actual external-controller execution. All36 settings across13 frozen levers and
+all11 fault campaigns execute, including measured telemetry loss, pre-effect
+replay refusal and paired fresh-owner recovery. Independently validated raw,
+state, replay, fault and coverage artifacts retain actual failures and scope.
+
+Focused2/2, ASan/UBSan/leaks2/2, TSan contract plus complete454-second process
+workflow,14 mutation controls, Clang14 static7 and relocated CPack71 optional SDK
+consumers/embedding/negative checks pass. See the [guide](golden_showcase.md),
+[evidence](evidence/M26-05-2026-09-30.md) and
+[PR284](https://github.com/tranquilWorks/cpp-rt-car/pull/284) for complete repository,
+exact-head hosted and guarded integration disposition. Final acceptance requires
+all32 hosted records and complete repository validation; no gate is waived.
+
+M26-06 documentation/feature-completion audit is the next software batch and
+remains separately inactive. CAP-M26 closure, independent human review,
+physical CUDA/XDMA/HIL, RT1/RT2, controlled performance, Unreal, signing/release
+and deployment remain separate. Preserve all prior Runtime/native/kit/test
+sources, identities, ABIs and failed evidence. Known protected fixture findings
+remain separately tracked; this batch does not repair them.
+
+## Historical checkpoints
+
 # M26-05 benchmark, fault and control showcase
 
 Canonical [plan576](https://github.com/tranquilWorks/portfolio-control/pull/576)

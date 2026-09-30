@@ -53,7 +53,8 @@ int main(int argc, char **argv) {
     if (fake) { clock.kind = b::ClockKind::fake; clock.user = &clock_value;
       clock.read_ns = [](void *p,std::uint64_t &n) { auto &v = *static_cast<std::uint64_t *>(p); v += 100; n = v; return true; }; }
     auto identity = b::capture_identity();
-    identity.backend = "cpu"; identity.driver = "none";
+    identity.backend = variant;
+    identity.driver = variant == "cpu" ? "none" : "owned-simulated-driver";
     const auto result = runner.run("rtfw.golden",id,clock,identity);
     const auto published = b::publish(result,output / "benchmark");
     const auto removed = runner.unregister_provider(handle);

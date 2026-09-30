@@ -125,6 +125,8 @@ def benchmark(directory):
     require(d['workload_kind']==workload and d['workload_sha256']==sha((FROZEN+':'+workload).encode()),'named workload identity')
     configurations=('cpu-cpu','sim_cuda-kernel','sim_cuda-graph','sim_xdma-cpu','sim_combined-kernel','sim_combined-graph') if i==14 else ('bounded-cpu-phase-experiment',) if i<7 else ('frozen-golden-cpu-scenario',)
     require(d['configuration'] in configurations,'configuration scope')
+    variant=d['configuration'].split('-')[0] if i==14 else 'cpu'
+    require(result['identity']['backend']==variant and result['identity']['driver']==('none' if variant=='cpu' else 'owned-simulated-driver'),'actual benchmark backend/driver identity')
     source_digests={}
     for ordinal in range(7):
         path=paths/str(ordinal);v=load(path/'invocation.json')
