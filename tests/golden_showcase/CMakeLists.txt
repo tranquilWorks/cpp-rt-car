@@ -11,7 +11,7 @@ endif()
 if(TARGET sample_golden_showcase AND TARGET sample_golden_system)
     add_test(NAME host_adapter_golden_showcase_process COMMAND ${RTFW_PYTHON_EXECUTABLE}
         "${PROJECT_SOURCE_DIR}/tests/golden_showcase/process_suite.py" --build "${PROJECT_BINARY_DIR}"
-        --provenance "${PROJECT_BINARY_DIR}/golden-showcase-provenance.json")
+        --provenance "${PROJECT_BINARY_DIR}/golden-showcase-provenance.json" --config "$<CONFIG>")
     set(golden_showcase_process_timeout 300)
     if(SIM_SANITIZERS MATCHES "thread")
         # The complete 175-invocation aggregate exceeded 300s under TSan.

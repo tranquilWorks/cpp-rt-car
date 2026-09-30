@@ -47,5 +47,5 @@ else()
 endif()
 enable_testing()
 add_test(NAME golden_showcase_kit COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/test.py"
-    --build "${CMAKE_CURRENT_BINARY_DIR}" --provenance "${golden_showcase_provenance}")
+    --build "${CMAKE_CURRENT_BINARY_DIR}" --provenance "${golden_showcase_provenance}" --config "$<CONFIG>")
 set_tests_properties(golden_showcase_kit PROPERTIES TIMEOUT 300)

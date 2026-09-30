@@ -12,10 +12,10 @@ import run
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--evidence',type=Path,required=True);p.add_argument('--provenance',type=Path,required=True);p.add_argument('--build',type=Path,required=True);args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--evidence',type=Path,required=True);p.add_argument('--provenance',type=Path,required=True);p.add_argument('--build',type=Path,required=True);p.add_argument('--config');args=p.parse_args()
     root=args.evidence
     names=('golden_showcase','golden_experiment','golden_telemetry_loss','golden_system','golden_cuda','golden_xdma','golden_controller')
-    binaries={name:run.executable(args.build,name) for name in names}
+    binaries={name:run.executable(args.build,name,args.config) for name in names}
     validate=lambda:report.validate(root,args.provenance,binaries=binaries)
     validate();count=0
     def reject(paths,change,check=validate):

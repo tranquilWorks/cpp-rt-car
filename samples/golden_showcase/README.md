@@ -29,3 +29,8 @@ python3 report.py /path/to/evidence --binaries-build build --provenance provenan
 
 See the installed `golden_showcase.md` guide for timing scopes, requested/effective
 settings, capacity outcomes, telemetry loss and the remaining M26-06 audit.
+
+Use `--config Debug` or `--config RelWithDebInfo` when selecting an existing
+multi-configuration build. CTest passes its selected CMake configuration. Without
+`--config`, discovery accepts exactly one matching executable and rejects ambiguous
+builds; a requested missing configuration never falls back to another one.

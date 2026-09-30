@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -19,12 +20,18 @@ def command(args,timeout=300,quiet=False):
     if r.returncode:raise RuntimeError(f'exit {r.returncode}: {args}')
     return r.stdout
 
-def executable(build,name):
-    for directory,base in [(build,name),(build/'Release',name),(build/'bench','sample_'+name),(build/'bench/Release','sample_'+name),(build/'samples','sample_'+name),(build/'samples/Release','sample_'+name)]:
-        for suffix in ('','.exe'):
-            candidate=directory/(base+suffix)
-            if candidate.is_file():return candidate.resolve()
-    raise ValueError('missing executable '+name)
+def executable(build,name,configuration=None):
+    if configuration:a.require(re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]*',configuration) is not None,'invalid build configuration')
+    configs=(configuration,) if configuration else ('Release','Debug','RelWithDebInfo','MinSizeRel')
+    found=set()
+    for directory,base in ((build,name),(build/'bench','sample_'+name),(build/'samples','sample_'+name)):
+        for location in (directory,*(directory/c for c in configs)):
+            for suffix in ('','.exe'):
+                candidate=location/(base+suffix)
+                if candidate.is_file():found.add(candidate.resolve())
+    if not found:raise ValueError('missing executable '+name+' for configuration '+str(configuration))
+    if len(found)!=1:raise ValueError('ambiguous executable '+name+'; select --config or use a separate build directory')
+    return found.pop()
 
 def peer_benchmark(args,controller):
     # Read stdout in a thread so a broken child cannot make readline unbounded.
@@ -55,12 +62,12 @@ def peer_benchmark(args,controller):
             if process.poll() is None:process.kill();process.communicate(timeout=5)
         reader.join(timeout=5)
 
-def execute(build,output,provenance,clock):
+def execute(build,output,provenance,clock,configuration=None):
     a.require(not output.exists(),'output already exists')
     source=a.provenance(provenance)
     output.mkdir(parents=True)
     names=('golden_showcase','golden_experiment','golden_telemetry_loss','golden_system','golden_cuda','golden_xdma','golden_controller')
-    binaries={name:executable(build,name) for name in names}
+    binaries={name:executable(build,name,configuration) for name in names}
     inputs={name:a.sha(path.read_bytes()) for name,path in binaries.items()}
     descriptors=[json.loads(line) for line in command([binaries['golden_showcase'],'--list'],quiet=True).splitlines() if line.strip()]
     a.require([d['case_id'] for d in descriptors]==list(a.IDS),'exact case inventory')
@@ -105,13 +112,14 @@ def execute(build,output,provenance,clock):
     print('PASS golden showcase; physical, RT, controlled performance and final CAP-M26 audit remain separate')
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',type=Path,default=HERE/'build');p.add_argument('--binaries-build',type=Path);p.add_argument('--prefix',type=Path);p.add_argument('--output',type=Path,default=HERE/'output');p.add_argument('--provenance',type=Path,default=HERE/'provenance.json');p.add_argument('--clock',choices=('fake','steady'),default='fake');args=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',type=Path,default=HERE/'build');p.add_argument('--binaries-build',type=Path);p.add_argument('--prefix',type=Path);p.add_argument('--output',type=Path,default=HERE/'output');p.add_argument('--provenance',type=Path,default=HERE/'provenance.json');p.add_argument('--clock',choices=('fake','steady'),default='fake');p.add_argument('--config');args=p.parse_args()
     try:
         build=args.binaries_build
         if build is None:
-            config=['cmake','-S',HERE,'-B',args.build,'-DCMAKE_BUILD_TYPE=Release']
+            args.config=args.config or 'Release'
+            config=['cmake','-S',HERE,'-B',args.build,'-DCMAKE_BUILD_TYPE='+args.config]
             if args.prefix:config.append('-DCMAKE_PREFIX_PATH='+str(args.prefix.resolve()))
-            command(config);command(['cmake','--build',args.build,'--config','Release','--parallel','2']);build=args.build
-        execute(build.resolve(),args.output.resolve(),args.provenance.resolve(),args.clock)
+            command(config);command(['cmake','--build',args.build,'--config',args.config,'--parallel','2']);build=args.build
+        execute(build.resolve(),args.output.resolve(),args.provenance.resolve(),args.clock,args.config)
     except (OSError,ValueError,RuntimeError,KeyError,subprocess.SubprocessError,queue.Empty) as e:p.exit(1,str(e)+'\n')
 if __name__=='__main__':main()

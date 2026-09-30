@@ -126,10 +126,10 @@ def validate(directory,provenance,publish=False,binaries=None):
     return coverage
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('directory',type=Path);p.add_argument('--provenance',type=Path,default=a.HERE/'provenance.json');p.add_argument('--binaries-build',type=Path,required=True);args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('directory',type=Path);p.add_argument('--provenance',type=Path,default=a.HERE/'provenance.json');p.add_argument('--binaries-build',type=Path,required=True);p.add_argument('--config');args=p.parse_args()
     import run
     names=('golden_showcase','golden_experiment','golden_telemetry_loss','golden_system','golden_cuda','golden_xdma','golden_controller')
-    try:validate(args.directory,args.provenance,binaries={name:run.executable(args.binaries_build,name) for name in names})
+    try:validate(args.directory,args.provenance,binaries={name:run.executable(args.binaries_build,name,args.config) for name in names})
     except (OSError,ValueError,KeyError,TypeError) as e:p.exit(1,str(e)+'\n')
     print('PASS independently recomputed report, faults, coverage and executable/source binding')
 if __name__=='__main__':main()

@@ -116,3 +116,9 @@ steady execution and replay. Owner setup and report/benchmark orchestration may
 allocate. Borrowed owners remain alive through a failed checked stop and explicit
 retry. Prior Runtime/native source, schemas, ABIs, fixed budgets, all prior tests
 and the 32 exact-head hosted gates remain mandatory and unchanged.
+
+For multi-configuration generators, `run.py --config Debug` selects the same
+configuration for build and all seven executables; `report.py --config Debug`
+selects those exact binaries during revalidation. CTest supplies `$<CONFIG>`.
+Without an explicit selection, discovery requires a unique matching executable.
+Missing or ambiguous configurations are rejected before benchmark execution.
