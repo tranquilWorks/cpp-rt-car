@@ -1240,3 +1240,10 @@ exporters (04), continuous fuzz/security tooling (05), test-identity signing and
 provenance verification (06), native golden XDMA host preparation (07), and
 platform/migration/portable soak readiness (08). Only01 is active. Separate Unreal,
 physical/RT, unfamiliar-consumer and release/deployment acceptance remains open.
+
+## M27-02 selected after M27-01 closure
+
+Control586 activates startup/device-poll conservation on target286/control585.
+The private polling repair and controlled startup ownership classification require
+fresh full local/all32 hosted and guarded integration. Only02 is selected;03..08
+and external qualification/Unreal/signing/release remain separate.

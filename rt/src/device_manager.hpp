@@ -324,10 +324,15 @@ private:
     };
 
     struct BatchBackendState {
+        static_assert(std::atomic<Status>::is_always_lock_free);
         std::size_t slot_offset = 0;
         std::size_t slot_count = 0;
         std::size_t lane_index = std::numeric_limits<std::size_t>::max();
         std::atomic_flag admission = ATOMIC_FLAG_INIT;
+        // Retain an otherwise unclaimed callback/count failure without
+        // disabling polling needed to reap retired native work. On supported
+        // 64-bit targets this occupies the former alignment padding.
+        std::atomic<Status> poll_failure{Status::ok};
         std::atomic<std::uint64_t> wake_sequence{0};
         std::atomic<std::uint64_t> next_sequence{1};
     };
@@ -369,7 +374,7 @@ private:
         BatchSlot& slot,
         Status status) noexcept;
     void release_rate_slots_after_shutdown() noexcept;
-    void fail_backend_batches(std::size_t backend_index, Status status) noexcept;
+    bool fail_backend_batches(std::size_t backend_index, Status status) noexcept;
     void record_failure(Status status) noexcept;
     [[nodiscard]] Outstanding* acquire_outstanding() noexcept;
     void emit(const DeviceEvent& event) noexcept;

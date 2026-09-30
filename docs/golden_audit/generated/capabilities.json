@@ -61,7 +61,7 @@
         }
       ],
       "id": "protected-fixture-findings",
-      "next_action": "Separately investigate the M23 timing-sensitive submission fixture, R4 startup -2 versus expected -18 with cleanup/live0, experimental SimCore 4/8-thread timeouts, and one-shot native poll-overflow result. Retain failures and unchanged later passes; an idle-poll injection window is an inference, not established root cause.",
+      "next_action": "M27-02 independently reproduces and retains one-shot command poll failures until an eligible batch receives them, while preserving idle polling needed to reap late native completions. Controlled startup shows invalid_state(-2) correctly retains unfinished native cleanup while channel status preserves device_timeout(-18); old fixtures assume immediate cleanup and remain unchanged. Retain those earlier failures and any later passes. M23 timing-sensitive submission and experimental SimCore 4/8-thread timeouts remain separate open investigations.",
       "status": "open"
     },
     {

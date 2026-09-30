@@ -1,0 +1,335 @@
+[
+  {
+    "label": "focused-build",
+    "command": [
+      "cmake",
+      "--build",
+      "build/agent-quick",
+      "--target",
+      "simcore_tests",
+      "rtfw_startup_poll_tests",
+      "--parallel",
+      "2"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "focused-final",
+    "command": [
+      "ctest",
+      "--test-dir",
+      "build/agent-quick",
+      "-R",
+      "^host_adapter_startup_poll",
+      "--output-on-failure"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "preserved",
+    "command": [
+      "build/agent-quick/tests/simcore_tests",
+      "--gtest_filter=CommandBatch.*:RateDispatch.*:MixedRateReplay.*:TraceNoAlloc.*:MemoryPlan.*"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-0",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-1",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-2",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "baseline-defaults-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-O1",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/package_consumer/sampled_io_recovery_consumer.cpp",
+      "/tmp/cpp-m27-02-baseline-runtime.a",
+      "build/agent-quick/librtfw_xdma_backend.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-02-baseline-defaults"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "baseline-defaults",
+    "command": [
+      "/tmp/cpp-m27-02-baseline-defaults",
+      "--defaults",
+      "/tmp/cpp-m27-02-baseline.checkpoint"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repaired-defaults-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-O1",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/package_consumer/sampled_io_recovery_consumer.cpp",
+      "build/agent-quick/librtfw_runtime.a",
+      "build/agent-quick/librtfw_xdma_backend.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-02-repaired-defaults"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repaired-defaults",
+    "command": [
+      "/tmp/cpp-m27-02-repaired-defaults",
+      "--defaults",
+      "/tmp/cpp-m27-02-repaired.checkpoint"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "asan-runtime-build",
+    "command": [
+      "cmake",
+      "--build",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-asan",
+      "--target",
+      "rtfw_runtime",
+      "rtfw_xdma_backend",
+      "--parallel",
+      "2"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "asan-suite-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-g",
+      "-O1",
+      "-fno-pie",
+      "-no-pie",
+      "-fsanitize=address,undefined",
+      "-fno-omit-frame-pointer",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/startup_poll_reliability/main.cpp",
+      "tests/golden_cuda/allocation.cpp",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-asan/librtfw_runtime.a",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-asan/librtfw_xdma_backend.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-02-asan-suite"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "asan-suite-attempt01",
+    "command": [
+      "/tmp/cpp-m27-02-asan-suite"
+    ],
+    "exit": 0,
+    "expected": null
+  },
+  {
+    "label": "tsan-runtime-build",
+    "command": [
+      "cmake",
+      "--build",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-tsan",
+      "--target",
+      "rtfw_runtime",
+      "rtfw_xdma_backend",
+      "--parallel",
+      "2"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "tsan-suite-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-g",
+      "-O1",
+      "-fno-pie",
+      "-no-pie",
+      "-fsanitize=thread",
+      "-fno-omit-frame-pointer",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/startup_poll_reliability/main.cpp",
+      "tests/golden_cuda/allocation.cpp",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-tsan/librtfw_runtime.a",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-tsan/librtfw_xdma_backend.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-02-tsan-suite"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "tsan-suite-attempt01",
+    "command": [
+      "/tmp/cpp-m27-02-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt02",
+    "command": [
+      "/tmp/cpp-m27-02-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt03",
+    "command": [
+      "/tmp/cpp-m27-02-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt04",
+    "command": [
+      "/tmp/cpp-m27-02-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt05",
+    "command": [
+      "/tmp/cpp-m27-02-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt06",
+    "command": [
+      "/tmp/cpp-m27-02-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt07",
+    "command": [
+      "/tmp/cpp-m27-02-tsan-suite"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt08",
+    "command": [
+      "/tmp/cpp-m27-02-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt09",
+    "command": [
+      "/tmp/cpp-m27-02-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt10",
+    "command": [
+      "/tmp/cpp-m27-02-tsan-suite"
+    ],
+    "exit": 0,
+    "expected": null
+  },
+  {
+    "label": "static",
+    "command": [
+      "python3",
+      "tools/check_static_analysis.py",
+      "--compile-commands",
+      "build/m26-04r-static/compile_commands.json",
+      "--source-manifest",
+      "tools/static_analysis_sources.txt",
+      "--clang-tidy",
+      "clang-tidy-14",
+      "--output",
+      "/tmp/cpp-m27-02-static-report.json"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "static-fixture",
+    "command": [
+      "clang++-14",
+      "--analyze",
+      "-std=c++20",
+      "-Xanalyzer",
+      "-analyzer-output=text",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/startup_poll_reliability/main.cpp",
+      "-o",
+      "/tmp/cpp-m27-02-fixture.plist"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "package",
+    "command": [
+      "python3",
+      "tests/startup_poll_reliability/verify_package.py",
+      "--work-directory",
+      "build/m27-02-package01"
+    ],
+    "exit": 0,
+    "expected": 0
+  }
+]

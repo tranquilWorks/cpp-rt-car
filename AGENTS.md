@@ -652,3 +652,20 @@ the reproduced baseline capture failure. Require full local/sanitizer/static/
 allocation/relocated SDK/all32 exact-head gates and guarded target/canonical
 closure under standing scoped publication/merge authorization. Later M27 and
 Unreal/hardware/signing/release work stay inactive. Earlier activations are history.
+
+## M27-02 activation
+
+M27-01 target286/control585 is complete. Canonical activation586 merged at
+df8426233eace65317bf52f10e291e1a18f93a8a, blob 0b77558b4b211a3dea89e33de22b29e9575514d7. The owner selected02.
+Baseline677fae6976f8eddd6ed7e060f222c3535a9e7ae2 independently reproduces idle
+backend polling consuming a one-shot fault before its work is published.
+A controlled native startup also proves -2 retains cleanup ownership while the
+channel preserves -18; this status must not be suppressed. Repair only the
+private polling gap and validate both lifecycle outcomes, preserving original
+fixtures, safe8ms, native sources, public ABI/defaults and earlier evidence.
+Full local and all32 exact-head gates plus guarded integration/closure remain
+mandatory under standing authorization. Later M27 and external qualification,
+Unreal/signing/release/deployment work remain inactive.
+
+Canonical hash-binding amendment587 merged at 4bae99f263db49f865817b4f3d9226d085d217b7, blob 64f7a153aa082d960f160fccd19c02f6454477f5;
+refresh only existing CUDA capability source hashes for this private repair.

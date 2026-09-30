@@ -627,3 +627,25 @@ The additive C++ device capacity policy separates conservative aggregate rate re
 ## Sampled lifecycle and checkpoint recovery
 
 Sampled shutdown acknowledgement and backend teardown are separate private lifecycle stages. Once every stop-time safe output acknowledges, a failed later teardown retains that completion stage for checked retry. Produced sampled checkpoint payloads retain enough validated frame/rate metadata to reconstruct exact producer provenance before continuation.
+
+## M27-02 command polling and startup error ownership
+
+The shared device service lane continues polling idle command backends so late
+native completions can be reaped before recovery. A bounded per-backend atomic
+retains the first unclaimed callback-status/count-overflow failure until an
+eligible batch actually receives it. Both before-poll and after-poll checks
+cover publication during a callback before successful completion is accepted.
+Publishing only the global outstanding
+count cannot discard that error before the batch slot becomes visible. This
+private state occupies existing control padding on supported 64-bit targets;
+default MemoryPlan and public layouts remain unchanged. Completion matching
+checks published slot state before reading batch identity, excluding construction
+and retired storage; the pending status atomic is compile-time lock-free. Successful explicit
+reset or backend shutdown clears the retained failure. Checked stop keeps the
+original bounded native completion drain after lane quiescence.
+
+A sampled startup timeout and its rollback outcome are distinct: channel status
+retains device_timeout and unknown safety, while start may return invalid_state
+when native work still owns storage. Repeated checked stop retains that ownership
+until actual completion permits unregister/shutdown. An immediate-timeout-only
+assertion cannot prove native cleanup finishes before the host is scheduled again.

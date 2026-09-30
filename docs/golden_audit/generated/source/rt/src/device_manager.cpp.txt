@@ -483,6 +483,8 @@ Status DeviceManager::shutdown_backends() noexcept {
              device_status == HalV2Status::invalid_state)) {
             initialized_backends_[backend_index] =
                 kBackendOwnershipNone;
+            batch_backends_[backend_index].poll_failure.store(
+                Status::ok, std::memory_order_release);
         } else if (first_failure == Status::ok) {
             first_failure = status;
         }
@@ -1764,12 +1766,13 @@ Status DeviceManager::release_rate_batch(
     return Status::ok;
 }
 
-void DeviceManager::fail_backend_batches(
+bool DeviceManager::fail_backend_batches(
     std::size_t backend_index, Status status) noexcept {
     if (backend_index >= backends_.size() ||
         !backends_[backend_index].command_state) {
-        return;
+        return false;
     }
+    bool delivered = false;
     auto& control = batch_backends_[backend_index];
     for (std::size_t offset = 0; offset < control.slot_count; ++offset) {
         auto& slot = batch_slots_[control.slot_offset + offset];
@@ -1796,6 +1799,7 @@ void DeviceManager::fail_backend_batches(
             if (slot.state.compare_exchange_strong(
                     expected, kBatchEarlyReady, std::memory_order_release,
                     std::memory_order_relaxed)) {
+                delivered = true;
                 continue;
             }
             state = expected;
@@ -1806,6 +1810,7 @@ void DeviceManager::fail_backend_batches(
                     expected, kBatchOwned, std::memory_order_acq_rel,
                     std::memory_order_relaxed)) {
                 finish_batch_slot(slot, status, false);
+                delivered = true;
             }
         } else if (state == kBatchCompletionReady) {
             auto expected = kBatchCompletionReady;
@@ -1823,6 +1828,7 @@ void DeviceManager::fail_backend_batches(
             }
         }
     }
+    return delivered;
 }
 
 void DeviceManager::submission_loop(std::size_t backend_index) noexcept {
@@ -1932,13 +1938,13 @@ void DeviceManager::process_batch_completion(
     for (std::size_t offset = 0; offset < control.slot_count; ++offset) {
         auto& slot = batch_slots_[control.slot_offset + offset];
         auto state = slot.state.load(std::memory_order_acquire);
-        if (slot.batch.batch_id == completion.batch_id &&
-            (state == kBatchRateQuarantineOwned ||
-             state == kBatchRateQuarantined)) {
+        if ((state == kBatchRateQuarantineOwned ||
+             state == kBatchRateQuarantined) &&
+            slot.batch.batch_id == completion.batch_id) {
             return;
         }
-        if (slot.batch.batch_id != completion.batch_id ||
-            (state != kBatchSubmitting && state != kBatchSubmitted)) {
+        if ((state != kBatchSubmitting && state != kBatchSubmitted) ||
+            slot.batch.batch_id != completion.batch_id) {
             continue;
         }
         if (state == kBatchSubmitting) {
@@ -1975,6 +1981,16 @@ void DeviceManager::poll_batch_completions(
     if (!command_state) {
         return;
     }
+    auto& pending_failure = batch_backends_[backend_index].poll_failure;
+    auto pending = pending_failure.load(std::memory_order_acquire);
+    if (pending != Status::ok && fail_backend_batches(backend_index, pending)) {
+        (void)pending_failure.compare_exchange_strong(
+            pending, Status::ok, std::memory_order_acq_rel,
+            std::memory_order_relaxed);
+        return;
+    }
+    // Keep polling even without a published Runtime slot: a timed-out
+    // non-rate batch may still have a native completion that must be reaped.
     const auto poll_capacity = native_per_backend_ ? std::min(
         completion_batch_, static_cast<std::size_t>(
             command_state->capabilities.completion_batch_capacity))
@@ -1997,10 +2013,30 @@ void DeviceManager::poll_batch_completions(
     const auto callback_runtime_status =
         hal_v2_status_to_runtime(callback_status);
     if (callback_runtime_status != Status::ok || count > poll_capacity) {
-        fail_backend_batches(
-            backend_index, callback_runtime_status == Status::ok
-                               ? Status::device_error
-                               : callback_runtime_status);
+        const auto failure = callback_runtime_status == Status::ok
+            ? Status::device_error : callback_runtime_status;
+        auto first = Status::ok;
+        (void)pending_failure.compare_exchange_strong(
+            first, failure, std::memory_order_acq_rel,
+            std::memory_order_relaxed);
+        // Preserve the first unclaimed error across the interval between
+        // outstanding-count publication and a batch becoming visible.
+        auto retained = first == Status::ok ? failure : first;
+        if (fail_backend_batches(backend_index, retained)) {
+            (void)pending_failure.compare_exchange_strong(
+                retained, Status::ok, std::memory_order_acq_rel,
+                std::memory_order_relaxed);
+        }
+        return;
+    }
+    // A provider can publish while poll is in flight. An earlier unclaimed
+    // error must settle that newly visible batch before this poll's success
+    // completion can publish its timeline or retire it as successful.
+    pending = pending_failure.load(std::memory_order_acquire);
+    if (pending != Status::ok && fail_backend_batches(backend_index, pending)) {
+        (void)pending_failure.compare_exchange_strong(
+            pending, Status::ok, std::memory_order_acq_rel,
+            std::memory_order_relaxed);
         return;
     }
     bool valid = true;
@@ -2028,10 +2064,10 @@ void DeviceManager::poll_batch_completions(
              ++offset) {
             auto& slot = batch_slots_[control.slot_offset + offset];
             const auto state = slot.state.load(std::memory_order_acquire);
-            if (slot.batch.batch_id == completion.batch_id &&
-                (state == kBatchSubmitting || state == kBatchSubmitted ||
+            if ((state == kBatchSubmitting || state == kBatchSubmitted ||
                  state == kBatchRateQuarantineOwned ||
-                 state == kBatchRateQuarantined)) {
+                 state == kBatchRateQuarantined) &&
+                slot.batch.batch_id == completion.batch_id) {
                 matched = &slot;
                 break;
             }
@@ -2324,6 +2360,8 @@ Status DeviceManager::reset(std::size_t backend_index) noexcept {
     }
     const auto status = hal_v2_status_to_runtime(device_status);
     if (status == Status::ok) {
+        batch_backends_[backend_index].poll_failure.store(
+            Status::ok, std::memory_order_release);
         resets_.fetch_add(1, std::memory_order_relaxed);
         auto reset_event = DeviceEvent{
             DeviceEventKind::reset,
