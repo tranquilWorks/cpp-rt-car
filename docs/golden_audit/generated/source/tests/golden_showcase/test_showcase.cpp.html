@@ -1,0 +1,107 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/golden_showcase/test_showcase.cpp</title><h1>tests/golden_showcase/test_showcase.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;../../samples/golden_showcase/provider.hpp&quot;</span>
+<span id="L2">#include &quot;../../samples/golden_showcase/probes.hpp&quot;</span>
+<span id="L3">#include &quot;../../samples/golden_showcase/session.hpp&quot;</span>
+<span id="L4">#include &quot;../../samples/golden_showcase/replay.hpp&quot;</span>
+<span id="L5">#include &quot;../../samples/golden_system/oracle.hpp&quot;</span>
+<span id="L6">#include &quot;../../samples/golden_system/replay.hpp&quot;</span>
+<span id="L7">#include &quot;../golden_cuda/allocation.hpp&quot;</span>
+<span id="L8">#include &lt;filesystem&gt;</span>
+<span id="L9">#include &lt;iostream&gt;</span>
+<span id="L10">#include &lt;memory&gt;</span>
+<span id="L11">#include &lt;new&gt;</span>
+<span id="L12">using namespace golden;</span>
+<span id="L13">namespace s = golden::showcase;</span>
+<span id="L14">namespace b = rtfw::benchmark;</span>
+<span id="L15">namespace alloc = rtfw_physics_allocation;</span>
+<span id="L16">#define CHECK(x) do { if (!(x)) { std::cerr &lt;&lt; &quot;line &quot; &lt;&lt; __LINE__ &lt;&lt; &quot;: &quot; #x &quot;\n&quot;; return false; } } while (false)</span>
+<span id="L17">bool metadata() {</span>
+<span id="L18">  const auto path=std::filesystem::temp_directory_path()/&quot;golden-showcase-metadata-must-not-exist&quot;;</span>
+<span id="L19">  CHECK(!std::filesystem::exists(path));</span>
+<span id="L20">  s::Provider provider({},path);</span>
+<span id="L21">  auto table=provider.table();</span>
+<span id="L22">  b::Runner runner; b::ProviderHandle handle;</span>
+<span id="L23">  CHECK(runner.register_provider(table,handle)==b::Status::ok);</span>
+<span id="L24">  CHECK(runner.list().size()==15);</span>
+<span id="L25">  for (std::size_t i=0;i&lt;15;++i) {</span>
+<span id="L26">    b::Descriptor d;</span>
+<span id="L27">    CHECK(runner.describe(&quot;rtfw.golden&quot;,s::case_ids[i],d)==b::Status::ok);</span>
+<span id="L28">    CHECK(d.subsystem==s::subsystems[i] &amp;&amp; d.warmup==2 &amp;&amp; d.repetitions==5 &amp;&amp; d.retain_raw);</span>
+<span id="L29">  }</span>
+<span id="L30">  b::Observation observation;</span>
+<span id="L31">  CHECK(table.invoke(table.user,&quot;golden-loop&quot;,1,observation)==b::Status::invalid);</span>
+<span id="L32">  CHECK(table.invoke(table.user,&quot;foreign&quot;,0,observation)==b::Status::not_found);</span>
+<span id="L33">  CHECK(table.invoke(table.user,&quot;golden-external&quot;,0,observation)==b::Status::not_run);</span>
+<span id="L34">  CHECK(!std::filesystem::exists(path));</span>
+<span id="L35">  CHECK(runner.unregister_provider(handle)==b::Status::ok);</span>
+<span id="L36">  CHECK(runner.unregister_provider(handle)==b::Status::stale);</span>
+<span id="L37">  return true;</span>
+<span id="L38">}</span>
+<span id="L39">bool probes() {</span>
+<span id="L40">  for (std::size_t kind=0;kind&lt;7;++kind) {</span>
+<span id="L41">    Options options;options.count=17;</span>
+<span id="L42">    auto probe=std::make_unique&lt;s::Probe&gt;(options,kind);</span>
+<span id="L43">    rt::Runtime runtime;</span>
+<span id="L44">    rt::RuntimeConfig config;config.callback_capacity=1;config.worker_count=3;</span>
+<span id="L45">    config.executor_queue_capacity=1024;config.scratch_bytes=config.task_scratch_bytes=64;config.task_scratch_slots=1024;</span>
+<span id="L46">    rt::PhaseHandle phase;</span>
+<span id="L47">    CHECK(runtime.configure(config)==rt::Status::ok);</span>
+<span id="L48">    CHECK(runtime.register_callback({&quot;probe&quot;,s::Probe::invoke,probe.get()},phase)==rt::Status::ok);</span>
+<span id="L49">    CHECK(runtime.finalize()==rt::Status::ok &amp;&amp; runtime.start()==rt::Status::ok);</span>
+<span id="L50">    for (std::size_t tick=0;tick&lt;24;++tick) {</span>
+<span id="L51">      alloc::begin();</span>
+<span id="L52">      const auto status=runtime.step({tick,std::chrono::nanoseconds(fixed::tick_ns),std::nullopt,std::nullopt});</span>
+<span id="L53">      const auto allocations=alloc::end();</span>
+<span id="L54">      CHECK(status==rt::Status::ok &amp;&amp; allocations==0 &amp;&amp; probe-&gt;verify());</span>
+<span id="L55">    }</span>
+<span id="L56">    CHECK(runtime.stop()==rt::Status::ok);</span>
+<span id="L57">  }</span>
+<span id="L58">  return true;</span>
+<span id="L59">}</span>
+<span id="L60">bool default_equivalence(bool host) {</span>
+<span id="L61">  Options options;options.host=host;options.count=17;options.workers=3;options.grain=1;</span>
+<span id="L62">  auto memory=std::make_unique&lt;Memory&gt;(), derived_memory=std::make_unique&lt;Memory&gt;();</span>
+<span id="L63">  auto jobs=std::make_unique&lt;Jobs&gt;(), derived_jobs=std::make_unique&lt;Jobs&gt;();</span>
+<span id="L64">  if(host) CHECK(jobs-&gt;start(3)==rt::Status::ok &amp;&amp; derived_jobs-&gt;start(3)==rt::Status::ok);</span>
+<span id="L65">  auto original=std::make_unique&lt;Session&gt;(options,host?jobs.get():nullptr,*memory);</span>
+<span id="L66">  auto derived=std::make_unique&lt;s::Session&gt;(options,host?derived_jobs.get():nullptr,*derived_memory);</span>
+<span id="L67">  CHECK(original-&gt;prepare()==rt::Status::ok &amp;&amp; derived-&gt;prepare()==rt::Status::ok);</span>
+<span id="L68">  rt::RuntimeMetricSnapshot a,b;</span>
+<span id="L69">  CHECK(original-&gt;runtime-&gt;metrics_snapshot(rt::RuntimeMetricWindow::cumulative,nullptr,a)==rt::Status::ok);</span>
+<span id="L70">  CHECK(derived-&gt;runtime-&gt;metrics_snapshot(rt::RuntimeMetricWindow::cumulative,nullptr,b)==rt::Status::ok);</span>
+<span id="L71">  CHECK(a.metadata.config_id==b.metadata.config_id &amp;&amp; a.metadata.runtime_id!=b.metadata.runtime_id);</span>
+<span id="L72">  CHECK(original-&gt;plan.planned_bytes==derived-&gt;plan.planned_bytes);</span>
+<span id="L73">  CHECK(original-&gt;plan.trace_storage_bytes==derived-&gt;plan.trace_storage_bytes);</span>
+<span id="L74">  Replay replay(options.ticks);s::Replay derived_replay(options.ticks);</span>
+<span id="L75">  CHECK(replay.begin(*original) &amp;&amp; derived_replay.begin(*derived));</span>
+<span id="L76">  CHECK(original-&gt;controls() &amp;&amp; derived-&gt;controls());</span>
+<span id="L77">  Oracle oracle(options);</span>
+<span id="L78">  for(std::size_t tick=0;tick&lt;options.ticks;++tick) {</span>
+<span id="L79">    replay.record(*original,tick);derived_replay.record(*derived,tick);</span>
+<span id="L80">    alloc::begin();const auto x=original-&gt;step(tick);const auto y=derived-&gt;step(tick);const auto n=alloc::end();</span>
+<span id="L81">    CHECK(x==rt::Status::ok &amp;&amp; y==rt::Status::ok &amp;&amp; n==0);</span>
+<span id="L82">    CHECK(original-&gt;world.canonical==derived-&gt;world.canonical &amp;&amp; oracle.step(tick,original-&gt;world));</span>
+<span id="L83">  }</span>
+<span id="L84">  CHECK(replay.seal(*original) &amp;&amp; derived_replay.seal(*derived));</span>
+<span id="L85">  const auto untouched=derived-&gt;world.canonical;</span>
+<span id="L86">  CHECK(derived-&gt;runtime-&gt;replay_live_control(replay.trusted,s::Replay::input,derived.get())!=rt::Status::ok);</span>
+<span id="L87">  CHECK(derived-&gt;world.canonical==untouched);</span>
+<span id="L88">  alloc::begin();const auto x=replay.verify(*original),y=derived_replay.verify(*derived);const auto n=alloc::end();</span>
+<span id="L89">  CHECK(x &amp;&amp; y &amp;&amp; n==0);</span>
+<span id="L90">  // Failed off-lane rollback retains borrowed Memory until an explicit retry.</span>
+<span id="L91">  derived_memory-&gt;fail_rollback=1;</span>
+<span id="L92">  CHECK(derived-&gt;close()!=rt::Status::ok &amp;&amp; derived_memory-&gt;live_count()&gt;0);</span>
+<span id="L93">  CHECK(derived-&gt;close()==rt::Status::ok &amp;&amp; original-&gt;close()==rt::Status::ok);</span>
+<span id="L94">  CHECK(memory-&gt;acquisitions==memory-&gt;releases &amp;&amp; derived_memory-&gt;acquisitions==derived_memory-&gt;releases);</span>
+<span id="L95">  if(host) CHECK(jobs-&gt;close()==rt::Status::ok &amp;&amp; derived_jobs-&gt;close()==rt::Status::ok &amp;&amp; jobs-&gt;accepted==jobs-&gt;completed &amp;&amp; derived_jobs-&gt;accepted==derived_jobs-&gt;completed);</span>
+<span id="L96">  return true;</span>
+<span id="L97">}</span>
+<span id="L98">bool positives() {</span>
+<span id="L99">  alloc::begin();void *p=::operator new(64);const auto ordinary=alloc::end();::operator delete(p);CHECK(ordinary&gt;0);</span>
+<span id="L100">  alloc::begin();p=::operator new(128,std::align_val_t{64});const auto aligned=alloc::end();::operator delete(p,std::align_val_t{64});CHECK(aligned&gt;0);</span>
+<span id="L101">  return true;</span>
+<span id="L102">}</span>
+<span id="L103">int main() {</span>
+<span id="L104">  try { if(!positives() || !metadata() || !probes() || !default_equivalence(false) || !default_equivalence(true)) return 1; }</span>
+<span id="L105">  catch(const std::exception &amp;e) {std::cerr&lt;&lt;e.what()&lt;&lt;&#x27;\n&#x27;;return 1;}</span>
+<span id="L106">  std::cout&lt;&lt;&quot;PASS metadata, exact default/state/config parity, borrowed ownership, originating replay and steady ordinary/aligned zero allocation\n&quot;;</span>
+<span id="L107">}</span></pre></html>

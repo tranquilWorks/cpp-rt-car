@@ -1,0 +1,142 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/installed_docs/verify_package.py</title><h1>tests/installed_docs/verify_package.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#!/usr/bin/env python3</span>
+<span id="L2">&quot;&quot;&quot;Verify actual CPack archives, offline documentation and executable recipes.&quot;&quot;&quot;</span>
+<span id="L3">import argparse</span>
+<span id="L4">import json</span>
+<span id="L5">from pathlib import Path</span>
+<span id="L6">import shutil</span>
+<span id="L7">import subprocess</span>
+<span id="L8">import sys</span>
+<span id="L9">import tempfile</span>
+<span id="L10"></span>
+<span id="L11">ROOT = Path(__file__).resolve().parents[2]</span>
+<span id="L12">sys.path.insert(0, str(ROOT / &#x27;tools&#x27;))</span>
+<span id="L13">import check_sdk_docs as docs</span>
+<span id="L14"></span>
+<span id="L15"></span>
+<span id="L16">def run(*command, failure=None):</span>
+<span id="L17">    argv = list(map(str, command))</span>
+<span id="L18">    print(&#x27;+&#x27;, json.dumps(argv), flush=True)</span>
+<span id="L19">    result = subprocess.run(argv, text=True, stdout=subprocess.PIPE,</span>
+<span id="L20">                            stderr=subprocess.STDOUT, timeout=900)</span>
+<span id="L21">    print(result.stdout, end=&#x27;&#x27;, flush=True)</span>
+<span id="L22">    if failure is None:</span>
+<span id="L23">        if result.returncode:</span>
+<span id="L24">            raise RuntimeError(f&#x27;command failed ({result.returncode}): {argv}&#x27;)</span>
+<span id="L25">    elif not result.returncode or failure not in result.stdout:</span>
+<span id="L26">        raise RuntimeError(f&#x27;expected failure {failure!r}: {argv}&#x27;)</span>
+<span id="L27">    return result.stdout</span>
+<span id="L28"></span>
+<span id="L29"></span>
+<span id="L30">def build_test(source, build, *flags):</span>
+<span id="L31">    run(&#x27;cmake&#x27;, &#x27;-S&#x27;, source, &#x27;-B&#x27;, build, &#x27;-DCMAKE_BUILD_TYPE=Release&#x27;, *flags)</span>
+<span id="L32">    run(&#x27;cmake&#x27;, &#x27;--build&#x27;, build, &#x27;--config&#x27;, &#x27;Release&#x27;, &#x27;--parallel&#x27;, &#x27;2&#x27;)</span>
+<span id="L33">    run(&#x27;ctest&#x27;, &#x27;--test-dir&#x27;, build, &#x27;-C&#x27;, &#x27;Release&#x27;, &#x27;--output-on-failure&#x27;, &#x27;--no-tests=error&#x27;)</span>
+<span id="L34"></span>
+<span id="L35"></span>
+<span id="L36">def recipe_inventory(build, benchmark):</span>
+<span id="L37">    data = json.loads(run(&#x27;ctest&#x27;, &#x27;--test-dir&#x27;, build, &#x27;-C&#x27;, &#x27;Release&#x27;, &#x27;--show-only=json-v1&#x27;))</span>
+<span id="L38">    names = {t[&#x27;name&#x27;] for t in data[&#x27;tests&#x27;] if t[&#x27;name&#x27;].startswith(&#x27;recipe_&#x27;)}</span>
+<span id="L39">    expected = {&#x27;recipe_&#x27; + name for name in (&#x27;raw_c&#x27;, &#x27;raw_cpp&#x27;, &#x27;profile&#x27;, &#x27;mixed_rate&#x27;,</span>
+<span id="L40">                &#x27;live_control&#x27;, &#x27;replay&#x27;, &#x27;replay_replaced&#x27;, &#x27;replay_rejected&#x27;, &#x27;cuda_boundary&#x27;, &#x27;xdma_boundary&#x27;)}</span>
+<span id="L41">    if benchmark:</span>
+<span id="L42">        expected.add(&#x27;recipe_benchmark&#x27;)</span>
+<span id="L43">    if names != expected:</span>
+<span id="L44">        raise RuntimeError(f&#x27;recipe test inventory differs: {names}&#x27;)</span>
+<span id="L45"></span>
+<span id="L46"></span>
+<span id="L47">def check_no_private_paths(build, forbidden):</span>
+<span id="L48">    commands = build / &#x27;compile_commands.json&#x27;</span>
+<span id="L49">    if commands.exists():</span>
+<span id="L50">        for entry in json.loads(commands.read_text()):</span>
+<span id="L51">            command = entry.get(&#x27;command&#x27;, &#x27; &#x27;.join(entry.get(&#x27;arguments&#x27;, []))).replace(&#x27;\\&#x27;, &#x27;/&#x27;)</span>
+<span id="L52">            for path in forbidden:</span>
+<span id="L53">                if path.as_posix() in command:</span>
+<span id="L54">                    raise RuntimeError(&#x27;private/original compile path leaked: &#x27; + str(path))</span>
+<span id="L55"></span>
+<span id="L56"></span>
+<span id="L57">def must_reject_bundle(data, relative):</span>
+<span id="L58">    path = data / relative</span>
+<span id="L59">    saved = path.read_bytes()</span>
+<span id="L60">    try:</span>
+<span id="L61">        path.unlink()</span>
+<span id="L62">        try:</span>
+<span id="L63">            docs.verify(data_root=data)</span>
+<span id="L64">        except ValueError:</span>
+<span id="L65">            print(&#x27;PASS: missing installed artifact rejected:&#x27;, relative, flush=True)</span>
+<span id="L66">        else:</span>
+<span id="L67">            raise RuntimeError(&#x27;missing installed artifact was accepted&#x27;)</span>
+<span id="L68">    finally:</span>
+<span id="L69">        path.write_bytes(saved)</span>
+<span id="L70"></span>
+<span id="L71"></span>
+<span id="L72">def main():</span>
+<span id="L73">    parser = argparse.ArgumentParser()</span>
+<span id="L74">    parser.add_argument(&#x27;--work-directory&#x27;, type=Path, required=True)</span>
+<span id="L75">    args = parser.parse_args()</span>
+<span id="L76">    work = args.work_directory.resolve()</span>
+<span id="L77">    work.mkdir(parents=True, exist_ok=True)</span>
+<span id="L78">    sdk = work / &#x27;sdk build&#x27;</span>
+<span id="L79">    with tempfile.TemporaryDirectory(prefix=&#x27;manual original &#x27;, dir=work) as original_name, tempfile.TemporaryDirectory(prefix=&#x27;manual relocated &#x27;) as relocated_name:</span>
+<span id="L80">        original, relocated = Path(original_name) / &#x27;sdk&#x27;, Path(relocated_name)</span>
+<span id="L81">        for benchmark in (False, True):</span>
+<span id="L82">            mode = &#x27;benchmark&#x27; if benchmark else &#x27;default&#x27;</span>
+<span id="L83">            option = &#x27;ON&#x27; if benchmark else &#x27;OFF&#x27;</span>
+<span id="L84">            run(&#x27;cmake&#x27;, &#x27;-S&#x27;, ROOT, &#x27;-B&#x27;, sdk, &#x27;-DCMAKE_BUILD_TYPE=Release&#x27;,</span>
+<span id="L85">                &#x27;-DENABLE_TESTS=OFF&#x27;, &#x27;-DRTFW_BUILD_EXAMPLES=OFF&#x27;, &#x27;-DRTFW_BUILD_RUNTIME_DEMO=OFF&#x27;,</span>
+<span id="L86">                &#x27;-DRTFW_BUILD_EXPERIMENTAL=OFF&#x27;, f&#x27;-DRTFW_BUILD_BENCHMARKS={option}&#x27;,</span>
+<span id="L87">                &#x27;-DSIM_SANITIZERS=&#x27;, &#x27;-DSIM_WERROR=ON&#x27;, &#x27;-DCMAKE_INSTALL_INCLUDEDIR=sdk/include&#x27;,</span>
+<span id="L88">                &#x27;-DCMAKE_INSTALL_DATADIR=custom/data&#x27;, f&#x27;-DCMAKE_INSTALL_PREFIX={original}&#x27;)</span>
+<span id="L89">            run(&#x27;cmake&#x27;, &#x27;--build&#x27;, sdk, &#x27;--config&#x27;, &#x27;Release&#x27;, &#x27;--parallel&#x27;, &#x27;2&#x27;)</span>
+<span id="L90">            run(&#x27;cmake&#x27;, &#x27;--install&#x27;, sdk, &#x27;--config&#x27;, &#x27;Release&#x27;, &#x27;--prefix&#x27;, original)</span>
+<span id="L91">            archive_dir = relocated / (&#x27;archive &#x27; + mode)</span>
+<span id="L92">            run(&#x27;cpack&#x27;, &#x27;--config&#x27;, sdk / &#x27;CPackConfig.cmake&#x27;, &#x27;-C&#x27;, &#x27;Release&#x27;,</span>
+<span id="L93">                &#x27;-B&#x27;, archive_dir, &#x27;-D&#x27;, &#x27;CPACK_PACKAGING_INSTALL_PREFIX=/&#x27;,</span>
+<span id="L94">                &#x27;-D&#x27;, &#x27;CPACK_PACKAGE_FILE_NAME=rtfw-manual-&#x27; + mode)</span>
+<span id="L95">            archive = archive_dir / (&#x27;rtfw-manual-&#x27; + mode + (&#x27;.zip&#x27; if sys.platform == &#x27;win32&#x27; else &#x27;.tar.gz&#x27;))</span>
+<span id="L96">            if not archive.is_file():</span>
+<span id="L97">                raise RuntimeError(&#x27;CPack archive missing&#x27;)</span>
+<span id="L98">            shutil.rmtree(original)</span>
+<span id="L99">            prefix = relocated / (&#x27;sdk &#x27; + mode)</span>
+<span id="L100">            run(sys.executable, ROOT / &#x27;tools/extract_release_archive.py&#x27;, &#x27;--artifact-dir&#x27;, archive_dir, &#x27;--destination&#x27;, prefix)</span>
+<span id="L101">            data = prefix / &#x27;custom/data/rtfw&#x27;</span>
+<span id="L102">            docs.verify(data_root=data)</span>
+<span id="L103">            kit = data / &#x27;examples/recipes&#x27;</span>
+<span id="L104">            consumer = relocated / (&#x27;consumer &#x27; + mode)</span>
+<span id="L105">            run(sys.executable, kit / &#x27;run_transcripts.py&#x27;, &#x27;--prefix&#x27;, prefix, &#x27;--build&#x27;, consumer, &#x27;--benchmark&#x27;, option)</span>
+<span id="L106">            recipe_inventory(consumer, benchmark)</span>
+<span id="L107">            check_no_private_paths(consumer, [ROOT, sdk, original])</span>
+<span id="L108">            build_test(ROOT / &#x27;tests/package_consumer&#x27;, relocated / (&#x27;full SDK &#x27; + mode),</span>
+<span id="L109">                       f&#x27;-DCMAKE_PREFIX_PATH={prefix}&#x27;, f&#x27;-DRTFW_TEST_BENCHMARK={option}&#x27;)</span>
+<span id="L110">            recipe_inventory(relocated / (&#x27;full SDK &#x27; + mode), benchmark)</span>
+<span id="L111">            embedded = relocated / (&#x27;embedded &#x27; + mode)</span>
+<span id="L112">            run(sys.executable, kit / &#x27;run_transcripts.py&#x27;, &#x27;--prefix&#x27;, prefix, &#x27;--build&#x27;, embedded,</span>
+<span id="L113">                &#x27;--source&#x27;, ROOT, &#x27;--benchmark&#x27;, option)</span>
+<span id="L114">            recipe_inventory(embedded, benchmark)</span>
+<span id="L115">            if not benchmark:</span>
+<span id="L116">                must_reject_bundle(data, &#x27;manual/api/rt__runtime.hpp.html&#x27;)</span>
+<span id="L117">                must_reject_bundle(data, &#x27;examples/recipes/mixed_rate_conformance.hpp&#x27;)</span>
+<span id="L118">                # An altered independent expected count must fail actual execution.</span>
+<span id="L119">                variant = relocated / &#x27;false oracle source&#x27;</span>
+<span id="L120">                shutil.copytree(kit, variant)</span>
+<span id="L121">                driver = variant / &#x27;package_consumer/mixed_rate_consumer.cpp&#x27;</span>
+<span id="L122">                text = driver.read_text()</span>
+<span id="L123">                before = &#x27;result.callback_counts[0] == 9&#x27;</span>
+<span id="L124">                if text.count(before) != 1:</span>
+<span id="L125">                    raise RuntimeError(&#x27;ambiguous recipe oracle mutation&#x27;)</span>
+<span id="L126">                driver.write_text(text.replace(before, &#x27;result.callback_counts[0] == 8&#x27;))</span>
+<span id="L127">                build = relocated / &#x27;false oracle build&#x27;</span>
+<span id="L128">                run(&#x27;cmake&#x27;, &#x27;-S&#x27;, variant, &#x27;-B&#x27;, build, &#x27;-DCMAKE_BUILD_TYPE=Release&#x27;, f&#x27;-DCMAKE_PREFIX_PATH={prefix}&#x27;)</span>
+<span id="L129">                run(&#x27;cmake&#x27;, &#x27;--build&#x27;, build, &#x27;--config&#x27;, &#x27;Release&#x27;, &#x27;--target&#x27;, &#x27;recipe_mixed_rate&#x27;, &#x27;--parallel&#x27;, &#x27;2&#x27;)</span>
+<span id="L130">                run(&#x27;ctest&#x27;, &#x27;--test-dir&#x27;, build, &#x27;-C&#x27;, &#x27;Release&#x27;, &#x27;--output-on-failure&#x27;,</span>
+<span id="L131">                    &#x27;--no-tests=error&#x27;, &#x27;-R&#x27;, &#x27;^recipe_mixed_rate$&#x27;, failure=&#x27;Failed&#x27;)</span>
+<span id="L132">                # Missing support source must also fail a real clean consumer build.</span>
+<span id="L133">                (variant / &#x27;mixed_rate_conformance.hpp&#x27;).unlink()</span>
+<span id="L134">                missing = relocated / &#x27;missing support build&#x27;</span>
+<span id="L135">                run(&#x27;cmake&#x27;, &#x27;-S&#x27;, variant, &#x27;-B&#x27;, missing, &#x27;-DCMAKE_BUILD_TYPE=Release&#x27;, f&#x27;-DCMAKE_PREFIX_PATH={prefix}&#x27;)</span>
+<span id="L136">                run(&#x27;cmake&#x27;, &#x27;--build&#x27;, missing, &#x27;--config&#x27;, &#x27;Release&#x27;, &#x27;--target&#x27;, &#x27;recipe_mixed_rate&#x27;,</span>
+<span id="L137">                    &#x27;--parallel&#x27;, &#x27;2&#x27;, failure=&#x27;mixed_rate_conformance.hpp&#x27;)</span>
+<span id="L138">        print(&#x27;PASS: default/optional CPack manuals, recipes, full SDK, embedding and four archive negatives&#x27;, flush=True)</span>
+<span id="L139"></span>
+<span id="L140"></span>
+<span id="L141">if __name__ == &#x27;__main__&#x27;:</span>
+<span id="L142">    main()</span></pre></html>

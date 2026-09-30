@@ -1,0 +1,74 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_benchmark_runner.cpp</title><h1>tests/test_benchmark_runner.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;benchmark_fixtures/provider.hpp&quot;</span>
+<span id="L2">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L3">#include &lt;thread&gt;</span>
+<span id="L4">using namespace benchmark_test;</span>
+<span id="L5"></span>
+<span id="L6">TEST(BenchmarkRunner, ExactFakeClockWarmupSamplesAndCanonicalBytes) {</span>
+<span id="L7">    Fixture f,g;</span>
+<span id="L8">    const auto r=result(f), s=result(g);</span>
+<span id="L9">    ASSERT_EQ(r.status,b::Status::ok); ASSERT_EQ(r.samples.size(),5U);</span>
+<span id="L10">    EXPECT_EQ(f.calls,7U); EXPECT_EQ(f.clock_calls,14U); EXPECT_EQ(r.warmup_completed,2U);</span>
+<span id="L11">    EXPECT_EQ(r.samples[0].start_ns,40U); EXPECT_EQ(r.samples[4].end_ns,130U);</span>
+<span id="L12">    const auto encoded=b::encode(r), repeated=b::encode(s);</span>
+<span id="L13">    EXPECT_EQ(encoded.descriptor,repeated.descriptor); EXPECT_EQ(encoded.raw,repeated.raw); EXPECT_EQ(encoded.summary,repeated.summary);</span>
+<span id="L14">    EXPECT_NE(encoded.summary.find(&quot;\&quot;operations\&quot;:5&quot;),std::string::npos);</span>
+<span id="L15">    EXPECT_NE(encoded.summary.find(&quot;\&quot;p95_ns\&quot;:10&quot;),std::string::npos);</span>
+<span id="L16">    EXPECT_NE(encoded.summary.find(&quot;\&quot;total_ns\&quot;:50&quot;),std::string::npos);</span>
+<span id="L17">}</span>
+<span id="L18">TEST(BenchmarkRunner, ZeroWarmupAndMaximumRepetitionBound) {</span>
+<span id="L19">    Fixture f; f.descriptor.warmup=0; f.descriptor.repetitions=1;</span>
+<span id="L20">    auto r=result(f); ASSERT_EQ(r.status,b::Status::ok); EXPECT_EQ(f.calls,1U); EXPECT_EQ(r.samples[0].start_ns,0U);</span>
+<span id="L21">    Fixture g; g.descriptor.warmup=b::max_warmup; g.descriptor.repetitions=b::max_repetitions;</span>
+<span id="L22">    r=result(g); EXPECT_EQ(r.status,b::Status::ok); EXPECT_EQ(g.calls,11000U); EXPECT_EQ(r.samples.size(),10000U);</span>
+<span id="L23">    EXPECT_NO_THROW((void)b::encode(r));</span>
+<span id="L24">}</span>
+<span id="L25">TEST(BenchmarkRunner, CallbackClockAndInvariantFailureRemainFailed) {</span>
+<span id="L26">    Fixture f; f.throw_invoke=true; auto r=result(f);</span>
+<span id="L27">    EXPECT_EQ(r.status,b::Status::provider_error); EXPECT_TRUE(r.samples.empty());</span>
+<span id="L28">    EXPECT_EQ(b::encode(r).summary.find(&quot;secret&quot;),std::string::npos);</span>
+<span id="L29">    Fixture g; g.wrong=true; r=result(g); EXPECT_EQ(r.status,b::Status::invariant_failed);</span>
+<span id="L30">    EXPECT_NE(b::encode(r).summary.find(&quot;\&quot;statistics\&quot;:null&quot;),std::string::npos);</span>
+<span id="L31">    Fixture h; h.unavailable=true; r=result(h); EXPECT_EQ(r.status,b::Status::not_run);</span>
+<span id="L32">    EXPECT_NO_THROW((void)b::encode(r));</span>
+<span id="L33">    Fixture k; k.throw_clock=true; r=result(k); EXPECT_EQ(r.status,b::Status::clock_error); EXPECT_EQ(k.calls,0U);</span>
+<span id="L34">    Fixture l; l.ticks=100; l.backward=true; r=result(l); EXPECT_EQ(r.status,b::Status::clock_error);</span>
+<span id="L35">}</span>
+<span id="L36">TEST(BenchmarkRunner, MissingSelectionAndInvalidIdentityNeverInvoke) {</span>
+<span id="L37">    Fixture f; b::Runner r; b::ProviderHandle h;</span>
+<span id="L38">    ASSERT_EQ(r.register_provider(f.table(),h),b::Status::ok);</span>
+<span id="L39">    EXPECT_EQ(r.run(&quot;missing&quot;,&quot;case&quot;,f.clock(),{}).status,b::Status::not_found);</span>
+<span id="L40">    b::Identity bad; bad.backend=&quot;../../device&quot;;</span>
+<span id="L41">    EXPECT_EQ(r.run(&quot;fixture&quot;,&quot;case&quot;,f.clock(),bad).status,b::Status::invalid);</span>
+<span id="L42">    auto c=f.clock(); c.version=0;</span>
+<span id="L43">    EXPECT_EQ(r.run(&quot;fixture&quot;,&quot;case&quot;,c,{}).status,b::Status::invalid);</span>
+<span id="L44">    EXPECT_EQ(f.calls,0U);</span>
+<span id="L45">}</span>
+<span id="L46">TEST(BenchmarkRunner, ReentrancyAndIndependentInstances) {</span>
+<span id="L47">    Fixture f; b::Runner r; b::ProviderHandle h; f.reenter=&amp;r;</span>
+<span id="L48">    ASSERT_EQ(r.register_provider(f.table(),h),b::Status::ok);</span>
+<span id="L49">    EXPECT_EQ(r.run(&quot;fixture&quot;,&quot;case&quot;,f.clock(),{}).status,b::Status::ok);</span>
+<span id="L50">    EXPECT_EQ(r.unregister_provider(h),b::Status::ok);</span>
+<span id="L51">    b::Status statuses[2]{b::Status::invalid,b::Status::invalid};</span>
+<span id="L52">    std::thread one([&amp;]{Fixture local; statuses[0]=result(local).status;});</span>
+<span id="L53">    std::thread two([&amp;]{Fixture local; statuses[1]=result(local).status;});</span>
+<span id="L54">    one.join(); two.join(); EXPECT_EQ(statuses[0],b::Status::ok); EXPECT_EQ(statuses[1],b::Status::ok);</span>
+<span id="L55">}</span>
+<span id="L56">TEST(BenchmarkRunner, RealClockIsCharacterizationOnly) {</span>
+<span id="L57">    Fixture f; b::Runner r; b::ProviderHandle h;</span>
+<span id="L58">    ASSERT_EQ(r.register_provider(f.table(),h),b::Status::ok);</span>
+<span id="L59">    const auto output=r.run(&quot;fixture&quot;,&quot;case&quot;,b::steady_clock(),b::capture_identity());</span>
+<span id="L60">    ASSERT_EQ(output.status,b::Status::ok);</span>
+<span id="L61">    std::uint64_t elapsed=0;</span>
+<span id="L62">    for (const auto&amp; s:output.samples) { EXPECT_GE(s.end_ns,s.start_ns); elapsed+=s.end_ns-s.start_ns; }</span>
+<span id="L63">    EXPECT_GT(elapsed,0U);  // observation, not a performance threshold</span>
+<span id="L64">    EXPECT_NE(b::encode(output).summary.find(&quot;portable_characterization&quot;),std::string::npos);</span>
+<span id="L65">    EXPECT_NE(b::encode(output).summary.find(&quot;\&quot;qualification\&quot;:\&quot;none\&quot;&quot;),std::string::npos);</span>
+<span id="L66">}</span>
+<span id="L67">TEST(BenchmarkRunner, TamperedResultCannotBeSerialized) {</span>
+<span id="L68">    Fixture f; const auto original=result(f);</span>
+<span id="L69">    auto r=original; r.samples[0].index=5; EXPECT_THROW((void)b::encode(r),std::invalid_argument);</span>
+<span id="L70">    r=original; r.samples.pop_back(); EXPECT_THROW((void)b::encode(r),std::invalid_argument);</span>
+<span id="L71">    r=original; r.samples[0].end_ns=0; EXPECT_THROW((void)b::encode(r),std::invalid_argument);</span>
+<span id="L72">    r=original; r.samples[0].observation.counters[0]=2; EXPECT_THROW((void)b::encode(r),std::invalid_argument);</span>
+<span id="L73">    r=original; r.clock=static_cast&lt;b::ClockKind&gt;(8); EXPECT_THROW((void)b::encode(r),std::invalid_argument);</span>
+<span id="L74">}</span></pre></html>

@@ -1,0 +1,940 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_thread_policy.cpp</title><h1>tests/test_thread_policy.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;array&gt;</span>
+<span id="L5">#include &lt;atomic&gt;</span>
+<span id="L6">#include &lt;cerrno&gt;</span>
+<span id="L7">#include &lt;chrono&gt;</span>
+<span id="L8">#include &lt;cstddef&gt;</span>
+<span id="L9">#include &lt;cstdint&gt;</span>
+<span id="L10">#include &lt;string_view&gt;</span>
+<span id="L11"></span>
+<span id="L12">#if defined(__linux__)</span>
+<span id="L13">#include &lt;pthread.h&gt;</span>
+<span id="L14">#include &lt;sched.h&gt;</span>
+<span id="L15">#include &lt;unistd.h&gt;</span>
+<span id="L16">#endif</span>
+<span id="L17"></span>
+<span id="L18">#include &lt;rt/mock_device.hpp&gt;</span>
+<span id="L19">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L20"></span>
+<span id="L21">#include &quot;rt/src/thread_policy.hpp&quot;</span>
+<span id="L22"></span>
+<span id="L23">namespace {</span>
+<span id="L24"></span>
+<span id="L25">#if defined(ENOTSUP)</span>
+<span id="L26">constexpr std::int32_t unsupported_error = ENOTSUP;</span>
+<span id="L27">#else</span>
+<span id="L28">constexpr std::int32_t unsupported_error = EINVAL;</span>
+<span id="L29">#endif</span>
+<span id="L30"></span>
+<span id="L31">enum class InjectedOutcome : std::uint8_t {</span>
+<span id="L32">    success,</span>
+<span id="L33">    create_failure,</span>
+<span id="L34">    apply_failure,</span>
+<span id="L35">    unsupported,</span>
+<span id="L36">    mismatch,</span>
+<span id="L37">    stack_success,</span>
+<span id="L38">    stack_failure,</span>
+<span id="L39">    stack_mismatch,</span>
+<span id="L40">};</span>
+<span id="L41"></span>
+<span id="L42">constexpr std::size_t event_capacity = 128;</span>
+<span id="L43">constexpr std::uint32_t event_resolve = 1&#x27;000;</span>
+<span id="L44">constexpr std::uint32_t event_create = 2&#x27;000;</span>
+<span id="L45">constexpr std::uint32_t event_apply = 3&#x27;000;</span>
+<span id="L46">constexpr std::uint32_t event_verify = 4&#x27;000;</span>
+<span id="L47">constexpr std::uint32_t event_join = 5&#x27;000;</span>
+<span id="L48"></span>
+<span id="L49">std::uint32_t event(</span>
+<span id="L50">    std::uint32_t kind,</span>
+<span id="L51">    rt::ThreadRoleId role,</span>
+<span id="L52">    std::size_t instance = 0) {</span>
+<span id="L53">    return kind + (role.value * 32u) +</span>
+<span id="L54">        static_cast&lt;std::uint32_t&gt;(instance);</span>
+<span id="L55">}</span>
+<span id="L56"></span>
+<span id="L57">class InjectedPolicyProvider final : public rt::detail::ThreadPolicyProvider {</span>
+<span id="L58">public:</span>
+<span id="L59">    rt::ThreadRoleId failure_role{};</span>
+<span id="L60">    std::size_t failure_instance = 0;</span>
+<span id="L61">    InjectedOutcome outcome = InjectedOutcome::success;</span>
+<span id="L62">    rt::ThreadRoleId cleanup_failure_role =</span>
+<span id="L63">        rt::thread_role_executor_worker;</span>
+<span id="L64">    std::size_t cleanup_failure_instance = 0;</span>
+<span id="L65">    std::size_t cleanup_failures_remaining = 0;</span>
+<span id="L66">    std::size_t cleanup_attempt_count = 0;</span>
+<span id="L67"></span>
+<span id="L68">    void clear_events() noexcept {</span>
+<span id="L69">        event_count_.store(0, std::memory_order_relaxed);</span>
+<span id="L70">    }</span>
+<span id="L71"></span>
+<span id="L72">    void clear_failure() noexcept {</span>
+<span id="L73">        failure_role = {};</span>
+<span id="L74">        failure_instance = 0;</span>
+<span id="L75">        outcome = InjectedOutcome::success;</span>
+<span id="L76">    }</span>
+<span id="L77"></span>
+<span id="L78">    [[nodiscard]] std::size_t event_count() const noexcept {</span>
+<span id="L79">        return event_count_.load(std::memory_order_acquire);</span>
+<span id="L80">    }</span>
+<span id="L81"></span>
+<span id="L82">    [[nodiscard]] std::uint32_t event_at(std::size_t index) const noexcept {</span>
+<span id="L83">        return events_[index];</span>
+<span id="L84">    }</span>
+<span id="L85"></span>
+<span id="L86">    [[nodiscard]] std::size_t count_kind(std::uint32_t kind) const noexcept {</span>
+<span id="L87">        std::size_t count = 0;</span>
+<span id="L88">        for (std::size_t index = 0; index &lt; event_count(); ++index) {</span>
+<span id="L89">            const auto value = events_[index];</span>
+<span id="L90">            count += value &gt;= kind &amp;&amp; value &lt; kind + 1&#x27;000 ? 1u : 0u;</span>
+<span id="L91">        }</span>
+<span id="L92">        return count;</span>
+<span id="L93">    }</span>
+<span id="L94"></span>
+<span id="L95">    [[nodiscard]] rt::Status resolve(</span>
+<span id="L96">        rt::ThreadRoleId role,</span>
+<span id="L97">        rt::PolicyApplicationMode mode,</span>
+<span id="L98">        bool active,</span>
+<span id="L99">        bool observable,</span>
+<span id="L100">        bool has_request,</span>
+<span id="L101">        const rt::ThreadPolicy&amp; requested,</span>
+<span id="L102">        const rt::ThreadPolicy&amp; role_default,</span>
+<span id="L103">        rt::ThreadPolicy&amp; resolved,</span>
+<span id="L104">        rt::PolicyResolutionState&amp; resolution,</span>
+<span id="L105">        std::int32_t&amp; system_error) noexcept override {</span>
+<span id="L106">        record(event(event_resolve, role));</span>
+<span id="L107">        resolved = role_default;</span>
+<span id="L108">        resolved.requirement = requested.requirement;</span>
+<span id="L109">        system_error = 0;</span>
+<span id="L110">        if (!active) {</span>
+<span id="L111">            resolution = rt::PolicyResolutionState::inactive;</span>
+<span id="L112">            if (has_request &amp;&amp;</span>
+<span id="L113">                requested.requirement == rt::PolicyRequirement::strict) {</span>
+<span id="L114">                system_error = ENODEV;</span>
+<span id="L115">                return rt::Status::invalid_config;</span>
+<span id="L116">            }</span>
+<span id="L117">            return rt::Status::ok;</span>
+<span id="L118">        }</span>
+<span id="L119">        if (mode == rt::PolicyApplicationMode::verify_only &amp;&amp; !observable) {</span>
+<span id="L120">            resolution = rt::PolicyResolutionState::external_verify_only;</span>
+<span id="L121">            if (has_request) {</span>
+<span id="L122">                system_error = unsupported_error;</span>
+<span id="L123">            }</span>
+<span id="L124">            return has_request &amp;&amp;</span>
+<span id="L125">                    requested.requirement == rt::PolicyRequirement::strict</span>
+<span id="L126">                ? rt::Status::invalid_config</span>
+<span id="L127">                : rt::Status::ok;</span>
+<span id="L128">        }</span>
+<span id="L129">        if (requested.cpu_set.count != 0) {</span>
+<span id="L130">            resolved.cpu_set = requested.cpu_set;</span>
+<span id="L131">        }</span>
+<span id="L132">        if (requested.scheduling_class != rt::SchedulingClass::inherit) {</span>
+<span id="L133">            resolved.scheduling_class = requested.scheduling_class;</span>
+<span id="L134">            resolved.scheduling_priority = requested.scheduling_priority;</span>
+<span id="L135">        }</span>
+<span id="L136">        resolved.numa_node = requested.numa_node;</span>
+<span id="L137">        if (requested.wait_strategy != rt::WaitStrategy::inherit) {</span>
+<span id="L138">            resolved.wait_strategy = requested.wait_strategy;</span>
+<span id="L139">        }</span>
+<span id="L140">        if (requested.stack_bytes != 0) {</span>
+<span id="L141">            resolved.stack_bytes = requested.stack_bytes;</span>
+<span id="L142">        }</span>
+<span id="L143">        if (requested.guard_bytes != 0) {</span>
+<span id="L144">            resolved.guard_bytes = requested.guard_bytes;</span>
+<span id="L145">        }</span>
+<span id="L146">        if (requested.name.front() != &#x27;\0&#x27;) {</span>
+<span id="L147">            resolved.name = requested.name;</span>
+<span id="L148">        }</span>
+<span id="L149">        resolution = rt::PolicyResolutionState::native_supported;</span>
+<span id="L150">        return rt::Status::ok;</span>
+<span id="L151">    }</span>
+<span id="L152"></span>
+<span id="L153">    [[nodiscard]] rt::Status before_create(</span>
+<span id="L154">        rt::ThreadRoleId role,</span>
+<span id="L155">        std::size_t instance,</span>
+<span id="L156">        const rt::detail::ThreadRolePlan&amp;,</span>
+<span id="L157">        std::int32_t&amp; system_error) noexcept override {</span>
+<span id="L158">        record(event(event_create, role, instance));</span>
+<span id="L159">        if (matches_failure(role, instance, InjectedOutcome::create_failure)) {</span>
+<span id="L160">            system_error = EAGAIN;</span>
+<span id="L161">            return rt::Status::resource_exhausted;</span>
+<span id="L162">        }</span>
+<span id="L163">        system_error = 0;</span>
+<span id="L164">        return rt::Status::ok;</span>
+<span id="L165">    }</span>
+<span id="L166"></span>
+<span id="L167">    void apply_and_verify_current(</span>
+<span id="L168">        rt::ThreadRoleId role,</span>
+<span id="L169">        std::size_t instance,</span>
+<span id="L170">        const rt::detail::ThreadRolePlan&amp; plan,</span>
+<span id="L171">        rt::detail::ThreadStartupResult&amp; result) noexcept override {</span>
+<span id="L172">        record(event(event_apply, role, instance));</span>
+<span id="L173">        result.read_back = plan.resolved;</span>
+<span id="L174">        if (matches_failure(role, instance, InjectedOutcome::apply_failure)) {</span>
+<span id="L175">            result.applied = rt::PolicyOperationState::failed;</span>
+<span id="L176">            result.verified = rt::PolicyOperationState::failed;</span>
+<span id="L177">            result.apply_error = EPERM;</span>
+<span id="L178">            result.used_default_fallback = true;</span>
+<span id="L179">            return;</span>
+<span id="L180">        }</span>
+<span id="L181">        if (matches_failure(role, instance, InjectedOutcome::unsupported)) {</span>
+<span id="L182">            result.applied = rt::PolicyOperationState::unsupported;</span>
+<span id="L183">            result.verified = rt::PolicyOperationState::unsupported;</span>
+<span id="L184">            result.apply_error = unsupported_error;</span>
+<span id="L185">            result.verify_error = unsupported_error;</span>
+<span id="L186">            result.used_default_fallback = true;</span>
+<span id="L187">            return;</span>
+<span id="L188">        }</span>
+<span id="L189">        result.applied = rt::PolicyOperationState::succeeded;</span>
+<span id="L190">        if (matches_failure(role, instance, InjectedOutcome::mismatch)) {</span>
+<span id="L191">            result.verified = rt::PolicyOperationState::mismatched;</span>
+<span id="L192">            result.verify_error = EPROTO;</span>
+<span id="L193">            result.read_back.wait_strategy =</span>
+<span id="L194">                plan.resolved.wait_strategy == rt::WaitStrategy::spin</span>
+<span id="L195">                ? rt::WaitStrategy::yield</span>
+<span id="L196">                : rt::WaitStrategy::spin;</span>
+<span id="L197">            return;</span>
+<span id="L198">        }</span>
+<span id="L199">        result.verified = rt::PolicyOperationState::succeeded;</span>
+<span id="L200">    }</span>
+<span id="L201"></span>
+<span id="L202">    void verify_current(</span>
+<span id="L203">        rt::ThreadRoleId role,</span>
+<span id="L204">        const rt::detail::ThreadRolePlan&amp; plan,</span>
+<span id="L205">        rt::detail::ThreadStartupResult&amp; result) noexcept override {</span>
+<span id="L206">        record(event(event_verify, role));</span>
+<span id="L207">        result.applied = rt::PolicyOperationState::not_attempted;</span>
+<span id="L208">        result.verified = rt::PolicyOperationState::succeeded;</span>
+<span id="L209">        result.read_back = plan.resolved;</span>
+<span id="L210">    }</span>
+<span id="L211"></span>
+<span id="L212">    void apply_and_verify_stack_current(</span>
+<span id="L213">        rt::ThreadRoleId role,</span>
+<span id="L214">        std::size_t instance,</span>
+<span id="L215">        const rt::detail::ThreadRolePlan&amp; plan,</span>
+<span id="L216">        rt::detail::ThreadStartupResult&amp; result) noexcept override {</span>
+<span id="L217">        if (!matches_failure(role, instance, InjectedOutcome::stack_success) &amp;&amp;</span>
+<span id="L218">            !matches_failure(role, instance, InjectedOutcome::stack_failure) &amp;&amp;</span>
+<span id="L219">            !matches_failure(role, instance, InjectedOutcome::stack_mismatch)) {</span>
+<span id="L220">            ThreadPolicyProvider::apply_and_verify_stack_current(</span>
+<span id="L221">                role,</span>
+<span id="L222">                instance,</span>
+<span id="L223">                plan,</span>
+<span id="L224">                result);</span>
+<span id="L225">            return;</span>
+<span id="L226">        }</span>
+<span id="L227">        const bool unavailable = matches_failure(</span>
+<span id="L228">            role,</span>
+<span id="L229">            instance,</span>
+<span id="L230">            InjectedOutcome::stack_failure);</span>
+<span id="L231">        if (!unavailable) {</span>
+<span id="L232">            result.stack_mapping_base = reinterpret_cast&lt;std::byte*&gt;(0x10000u);</span>
+<span id="L233">            result.stack_mapping_bytes = 8192;</span>
+<span id="L234">            result.stack_usable_bytes = 4096;</span>
+<span id="L235">            result.stack_guard_bytes = 4096;</span>
+<span id="L236">            result.stack_resident_bytes = 4096;</span>
+<span id="L237">        }</span>
+<span id="L238">        result.stack_applied = unavailable</span>
+<span id="L239">            ? rt::PolicyOperationState::failed</span>
+<span id="L240">            : rt::PolicyOperationState::succeeded;</span>
+<span id="L241">        result.stack_verified =</span>
+<span id="L242">            unavailable</span>
+<span id="L243">                ? rt::PolicyOperationState::failed</span>
+<span id="L244">                : matches_failure(</span>
+<span id="L245">                      role,</span>
+<span id="L246">                      instance,</span>
+<span id="L247">                      InjectedOutcome::stack_mismatch)</span>
+<span id="L248">                    ? rt::PolicyOperationState::mismatched</span>
+<span id="L249">                    : rt::PolicyOperationState::succeeded;</span>
+<span id="L250">        result.stack_apply_error = result.stack_applied ==</span>
+<span id="L251">                rt::PolicyOperationState::failed</span>
+<span id="L252">            ? EPERM</span>
+<span id="L253">            : 0;</span>
+<span id="L254">        result.stack_verify_error = result.stack_verified ==</span>
+<span id="L255">                rt::PolicyOperationState::succeeded</span>
+<span id="L256">            ? 0</span>
+<span id="L257">            : EPROTO;</span>
+<span id="L258">    }</span>
+<span id="L259"></span>
+<span id="L260">    [[nodiscard]] rt::Status cleanup_stack_current(</span>
+<span id="L261">        rt::ThreadRoleId role,</span>
+<span id="L262">        std::size_t instance,</span>
+<span id="L263">        const rt::detail::ThreadRolePlan&amp; plan,</span>
+<span id="L264">        rt::detail::ThreadStartupResult&amp; result) noexcept override {</span>
+<span id="L265">        if (role == cleanup_failure_role &amp;&amp;</span>
+<span id="L266">            instance == cleanup_failure_instance) {</span>
+<span id="L267">            ++cleanup_attempt_count;</span>
+<span id="L268">            if (cleanup_failures_remaining != 0) {</span>
+<span id="L269">                --cleanup_failures_remaining;</span>
+<span id="L270">                result.stack_cleanup = rt::PolicyOperationState::failed;</span>
+<span id="L271">                result.stack_cleanup_error = EIO;</span>
+<span id="L272">                return rt::Status::internal_error;</span>
+<span id="L273">            }</span>
+<span id="L274">        }</span>
+<span id="L275">        return ThreadPolicyProvider::cleanup_stack_current(</span>
+<span id="L276">            role,</span>
+<span id="L277">            instance,</span>
+<span id="L278">            plan,</span>
+<span id="L279">            result);</span>
+<span id="L280">    }</span>
+<span id="L281"></span>
+<span id="L282">    void after_join(</span>
+<span id="L283">        rt::ThreadRoleId role,</span>
+<span id="L284">        std::size_t instance) noexcept override {</span>
+<span id="L285">        record(event(event_join, role, instance));</span>
+<span id="L286">    }</span>
+<span id="L287"></span>
+<span id="L288">private:</span>
+<span id="L289">    [[nodiscard]] bool matches_failure(</span>
+<span id="L290">        rt::ThreadRoleId role,</span>
+<span id="L291">        std::size_t instance,</span>
+<span id="L292">        InjectedOutcome expected) const noexcept {</span>
+<span id="L293">        return outcome == expected &amp;&amp; role == failure_role &amp;&amp;</span>
+<span id="L294">               instance == failure_instance;</span>
+<span id="L295">    }</span>
+<span id="L296"></span>
+<span id="L297">    void record(std::uint32_t value) noexcept {</span>
+<span id="L298">        const auto index = event_count_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L299">        if (index &lt; events_.size()) {</span>
+<span id="L300">            events_[index] = value;</span>
+<span id="L301">        }</span>
+<span id="L302">    }</span>
+<span id="L303"></span>
+<span id="L304">    std::array&lt;std::uint32_t, event_capacity&gt; events_{};</span>
+<span id="L305">    std::atomic&lt;std::size_t&gt; event_count_{0};</span>
+<span id="L306">};</span>
+<span id="L307"></span>
+<span id="L308">const rt::ThreadPolicyReport* find_thread(</span>
+<span id="L309">    const rt::CpuMemoryPolicyReport&amp; report,</span>
+<span id="L310">    rt::ThreadRoleId role) {</span>
+<span id="L311">    for (std::size_t index = 0; index &lt; report.thread_count; ++index) {</span>
+<span id="L312">        if (report.threads[index].role == role) {</span>
+<span id="L313">            return &amp;report.threads[index];</span>
+<span id="L314">        }</span>
+<span id="L315">    }</span>
+<span id="L316">    return nullptr;</span>
+<span id="L317">}</span>
+<span id="L318"></span>
+<span id="L319">const rt::MemoryPolicyReport* find_memory(</span>
+<span id="L320">    const rt::CpuMemoryPolicyReport&amp; report,</span>
+<span id="L321">    rt::MemoryRegionId region) {</span>
+<span id="L322">    for (std::size_t index = 0; index &lt; report.memory_count; ++index) {</span>
+<span id="L323">        if (report.memory[index].region == region) {</span>
+<span id="L324">            return &amp;report.memory[index];</span>
+<span id="L325">        }</span>
+<span id="L326">    }</span>
+<span id="L327">    return nullptr;</span>
+<span id="L328">}</span>
+<span id="L329"></span>
+<span id="L330">rt::CallbackResult count_callback(</span>
+<span id="L331">    void* data,</span>
+<span id="L332">    const rt::CallbackContext&amp;) {</span>
+<span id="L333">    ++*static_cast&lt;std::size_t*&gt;(data);</span>
+<span id="L334">    return rt::CallbackResult::ok;</span>
+<span id="L335">}</span>
+<span id="L336"></span>
+<span id="L337">rt::RuntimeConfig threaded_config(bool device = false) {</span>
+<span id="L338">    rt::RuntimeConfig config;</span>
+<span id="L339">    config.callback_capacity = 1;</span>
+<span id="L340">    config.worker_count = 2;</span>
+<span id="L341">    config.executor_queue_capacity = 8;</span>
+<span id="L342">    config.task_scratch_slots = 8;</span>
+<span id="L343">    config.watchdog_timeout_ns = 1&#x27;000&#x27;000;</span>
+<span id="L344">    if (device) {</span>
+<span id="L345">        config.device_backend_capacity = 1;</span>
+<span id="L346">        config.device_buffer_capacity = 1;</span>
+<span id="L347">        config.device_outstanding_capacity = 2;</span>
+<span id="L348">        config.device_completion_batch = 2;</span>
+<span id="L349">    }</span>
+<span id="L350">    return config;</span>
+<span id="L351">}</span>
+<span id="L352"></span>
+<span id="L353">void add_strict_role(rt::CpuMemoryPolicy&amp; policy, rt::ThreadRoleId role) {</span>
+<span id="L354">    auto&amp; request = policy.thread_policies[policy.thread_policy_count++];</span>
+<span id="L355">    request.role = role;</span>
+<span id="L356">    request.policy.requirement = rt::PolicyRequirement::strict;</span>
+<span id="L357">}</span>
+<span id="L358"></span>
+<span id="L359">void add_runtime_stack_policy(</span>
+<span id="L360">    rt::CpuMemoryPolicy&amp; policy,</span>
+<span id="L361">    rt::PolicyRequirement requirement) {</span>
+<span id="L362">    auto&amp; request = policy.memory_policies[policy.memory_policy_count++];</span>
+<span id="L363">    request.region = rt::memory_region_runtime_thread_stack;</span>
+<span id="L364">    request.policy.requirement = requirement;</span>
+<span id="L365">}</span>
+<span id="L366"></span>
+<span id="L367">} // namespace</span>
+<span id="L368"></span>
+<span id="L369">TEST(ThreadPolicy, AppliesEveryRuntimeOwnedInstanceBeforeCommitAndJoinsReverse) {</span>
+<span id="L370">    InjectedPolicyProvider provider;</span>
+<span id="L371">    rt::Runtime runtime;</span>
+<span id="L372">    rt::detail::RuntimeThreadPolicyTestAccess::set_provider(runtime, provider);</span>
+<span id="L373">    ASSERT_EQ(runtime.configure(threaded_config(true)), rt::Status::ok);</span>
+<span id="L374">    std::size_t callbacks = 0;</span>
+<span id="L375">    ASSERT_EQ(</span>
+<span id="L376">        runtime.register_callback({&quot;thread.sequence&quot;, &amp;count_callback, &amp;callbacks}),</span>
+<span id="L377">        rt::Status::ok);</span>
+<span id="L378">    rt::MockDeviceBackend backend({2, 1, 1, 1&#x27;000});</span>
+<span id="L379">    rt::DeviceBackendHandle backend_handle;</span>
+<span id="L380">    ASSERT_EQ(</span>
+<span id="L381">        runtime.register_device_backend(</span>
+<span id="L382">            {&quot;thread.mock&quot;, backend.api()},</span>
+<span id="L383">            backend_handle),</span>
+<span id="L384">        rt::Status::ok);</span>
+<span id="L385">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L386">    EXPECT_EQ(provider.count_kind(event_create), 0u);</span>
+<span id="L387">    EXPECT_EQ(provider.count_kind(event_apply), 0u);</span>
+<span id="L388"></span>
+<span id="L389">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L390">    EXPECT_EQ(callbacks, 0u);</span>
+<span id="L391">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L392">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L393">    const auto* frame = find_thread(report, rt::thread_role_frame);</span>
+<span id="L394">    const auto* executor = find_thread(report, rt::thread_role_executor_worker);</span>
+<span id="L395">    const auto* watchdog = find_thread(report, rt::thread_role_watchdog);</span>
+<span id="L396">    const auto* device = find_thread(report, rt::thread_role_device_service);</span>
+<span id="L397">    ASSERT_NE(frame, nullptr);</span>
+<span id="L398">    ASSERT_NE(executor, nullptr);</span>
+<span id="L399">    ASSERT_NE(watchdog, nullptr);</span>
+<span id="L400">    ASSERT_NE(device, nullptr);</span>
+<span id="L401">    EXPECT_EQ(frame-&gt;applied, rt::PolicyOperationState::not_attempted);</span>
+<span id="L402">    EXPECT_EQ(frame-&gt;verified, rt::PolicyOperationState::succeeded);</span>
+<span id="L403">    EXPECT_EQ(executor-&gt;attempted_instance_count, 2u);</span>
+<span id="L404">    EXPECT_EQ(executor-&gt;applied_instance_count, 2u);</span>
+<span id="L405">    EXPECT_EQ(executor-&gt;verified_instance_count, 2u);</span>
+<span id="L406">    EXPECT_EQ(executor-&gt;applied, rt::PolicyOperationState::succeeded);</span>
+<span id="L407">    EXPECT_EQ(executor-&gt;verified, rt::PolicyOperationState::succeeded);</span>
+<span id="L408">    EXPECT_EQ(watchdog-&gt;verified, rt::PolicyOperationState::succeeded);</span>
+<span id="L409">    EXPECT_EQ(device-&gt;verified, rt::PolicyOperationState::succeeded);</span>
+<span id="L410"></span>
+<span id="L411">    ASSERT_EQ(</span>
+<span id="L412">        runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L413">        rt::Status::ok);</span>
+<span id="L414">    EXPECT_EQ(callbacks, 1u);</span>
+<span id="L415">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L416"></span>
+<span id="L417">    const std::array&lt;std::uint32_t, 4&gt; expected_joins{</span>
+<span id="L418">        event(event_join, rt::thread_role_device_service, 0),</span>
+<span id="L419">        event(event_join, rt::thread_role_executor_worker, 1),</span>
+<span id="L420">        event(event_join, rt::thread_role_executor_worker, 0),</span>
+<span id="L421">        event(event_join, rt::thread_role_watchdog, 0),</span>
+<span id="L422">    };</span>
+<span id="L423">    std::array&lt;std::uint32_t, 4&gt; actual_joins{};</span>
+<span id="L424">    std::size_t join_count = 0;</span>
+<span id="L425">    for (std::size_t index = 0; index &lt; provider.event_count(); ++index) {</span>
+<span id="L426">        const auto value = provider.event_at(index);</span>
+<span id="L427">        if (value &gt;= event_join &amp;&amp; value &lt; event_join + 1&#x27;000) {</span>
+<span id="L428">            ASSERT_LT(join_count, actual_joins.size());</span>
+<span id="L429">            actual_joins[join_count++] = value;</span>
+<span id="L430">        }</span>
+<span id="L431">    }</span>
+<span id="L432">    EXPECT_EQ(join_count, expected_joins.size());</span>
+<span id="L433">    EXPECT_EQ(actual_joins, expected_joins);</span>
+<span id="L434">}</span>
+<span id="L435"></span>
+<span id="L436">TEST(ThreadPolicy, StrictFailuresRollbackWithoutCallbacksAndCanRecover) {</span>
+<span id="L437">    const std::array&lt;std::pair&lt;rt::ThreadRoleId, InjectedOutcome&gt;, 4&gt; cases{{</span>
+<span id="L438">        {rt::thread_role_watchdog, InjectedOutcome::apply_failure},</span>
+<span id="L439">        {rt::thread_role_executor_worker, InjectedOutcome::create_failure},</span>
+<span id="L440">        {rt::thread_role_executor_worker, InjectedOutcome::mismatch},</span>
+<span id="L441">        {rt::thread_role_device_service, InjectedOutcome::mismatch},</span>
+<span id="L442">    }};</span>
+<span id="L443">    for (const auto&amp; [failed_role, outcome] : cases) {</span>
+<span id="L444">        SCOPED_TRACE(failed_role.value);</span>
+<span id="L445">        InjectedPolicyProvider provider;</span>
+<span id="L446">        provider.failure_role = failed_role;</span>
+<span id="L447">        provider.failure_instance =</span>
+<span id="L448">            failed_role == rt::thread_role_executor_worker ? 1u : 0u;</span>
+<span id="L449">        provider.outcome = outcome;</span>
+<span id="L450">        rt::Runtime runtime;</span>
+<span id="L451">        rt::detail::RuntimeThreadPolicyTestAccess::set_provider(runtime, provider);</span>
+<span id="L452">        ASSERT_EQ(runtime.configure(threaded_config(true)), rt::Status::ok);</span>
+<span id="L453">        std::size_t callbacks = 0;</span>
+<span id="L454">        ASSERT_EQ(</span>
+<span id="L455">            runtime.register_callback(</span>
+<span id="L456">                {&quot;thread.rollback&quot;, &amp;count_callback, &amp;callbacks}),</span>
+<span id="L457">            rt::Status::ok);</span>
+<span id="L458">        rt::MockDeviceBackend backend({2, 1, 1, 1&#x27;000});</span>
+<span id="L459">        rt::DeviceBackendHandle backend_handle;</span>
+<span id="L460">        ASSERT_EQ(</span>
+<span id="L461">            runtime.register_device_backend(</span>
+<span id="L462">                {&quot;rollback.mock&quot;, backend.api()},</span>
+<span id="L463">                backend_handle),</span>
+<span id="L464">            rt::Status::ok);</span>
+<span id="L465">        rt::CpuMemoryPolicy policy;</span>
+<span id="L466">        add_strict_role(policy, failed_role);</span>
+<span id="L467">        ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L468">        ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L469"></span>
+<span id="L470">        EXPECT_NE(runtime.start(), rt::Status::ok);</span>
+<span id="L471">        EXPECT_EQ(runtime.state(), rt::RuntimeState::finalized);</span>
+<span id="L472">        EXPECT_EQ(callbacks, 0u);</span>
+<span id="L473">        rt::CpuMemoryPolicyReport report;</span>
+<span id="L474">        ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L475">        const auto* failed = find_thread(report, failed_role);</span>
+<span id="L476">        ASSERT_NE(failed, nullptr);</span>
+<span id="L477">        EXPECT_NE(failed-&gt;verified, rt::PolicyOperationState::succeeded);</span>
+<span id="L478">        provider.clear_failure();</span>
+<span id="L479">        provider.clear_events();</span>
+<span id="L480">        ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L481">        ASSERT_EQ(</span>
+<span id="L482">            runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L483">            rt::Status::ok);</span>
+<span id="L484">        EXPECT_EQ(callbacks, 1u);</span>
+<span id="L485">        EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L486">    }</span>
+<span id="L487">}</span>
+<span id="L488"></span>
+<span id="L489">TEST(ThreadPolicy, BestEffortFailureRemainsObservableAndContinues) {</span>
+<span id="L490">    InjectedPolicyProvider provider;</span>
+<span id="L491">    provider.failure_role = rt::thread_role_executor_worker;</span>
+<span id="L492">    provider.failure_instance = 1;</span>
+<span id="L493">    provider.outcome = InjectedOutcome::unsupported;</span>
+<span id="L494">    rt::Runtime runtime;</span>
+<span id="L495">    rt::detail::RuntimeThreadPolicyTestAccess::set_provider(runtime, provider);</span>
+<span id="L496">    ASSERT_EQ(runtime.configure(threaded_config()), rt::Status::ok);</span>
+<span id="L497">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L498">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L499"></span>
+<span id="L500">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L501">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L502">    const auto* executor = find_thread(report, rt::thread_role_executor_worker);</span>
+<span id="L503">    ASSERT_NE(executor, nullptr);</span>
+<span id="L504">    EXPECT_EQ(executor-&gt;attempted_instance_count, 2u);</span>
+<span id="L505">    EXPECT_EQ(executor-&gt;applied_instance_count, 1u);</span>
+<span id="L506">    EXPECT_EQ(executor-&gt;verified_instance_count, 1u);</span>
+<span id="L507">    EXPECT_EQ(executor-&gt;fallback_instance_count, 1u);</span>
+<span id="L508">    EXPECT_EQ(executor-&gt;applied, rt::PolicyOperationState::unsupported);</span>
+<span id="L509">    EXPECT_EQ(executor-&gt;verified, rt::PolicyOperationState::unsupported);</span>
+<span id="L510">    EXPECT_EQ(executor-&gt;apply_error, unsupported_error);</span>
+<span id="L511">    EXPECT_EQ(executor-&gt;verify_error, unsupported_error);</span>
+<span id="L512">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L513">}</span>
+<span id="L514"></span>
+<span id="L515">TEST(ThreadPolicy, LiveRuntimeStackAccountingIsExactBoundedAndIsolated) {</span>
+<span id="L516">    rt::Runtime first;</span>
+<span id="L517">    auto first_config = threaded_config();</span>
+<span id="L518">    first_config.worker_count = 1;</span>
+<span id="L519">    first_config.watchdog_timeout_ns = 0;</span>
+<span id="L520">    ASSERT_EQ(first.configure(first_config), rt::Status::ok);</span>
+<span id="L521">    ASSERT_EQ(first.finalize(), rt::Status::ok);</span>
+<span id="L522"></span>
+<span id="L523">    rt::Runtime second;</span>
+<span id="L524">    auto second_config = threaded_config();</span>
+<span id="L525">    second_config.worker_count = 2;</span>
+<span id="L526">    ASSERT_EQ(second.configure(second_config), rt::Status::ok);</span>
+<span id="L527">    ASSERT_EQ(second.finalize(), rt::Status::ok);</span>
+<span id="L528"></span>
+<span id="L529">    ASSERT_EQ(first.start(), rt::Status::ok);</span>
+<span id="L530">    ASSERT_EQ(second.start(), rt::Status::ok);</span>
+<span id="L531">    rt::CpuMemoryPolicyReport first_report;</span>
+<span id="L532">    rt::CpuMemoryPolicyReport second_report;</span>
+<span id="L533">    ASSERT_TRUE(first.cpu_memory_policy_report(first_report));</span>
+<span id="L534">    ASSERT_TRUE(second.cpu_memory_policy_report(second_report));</span>
+<span id="L535">    const auto* first_stack = find_memory(</span>
+<span id="L536">        first_report,</span>
+<span id="L537">        rt::memory_region_runtime_thread_stack);</span>
+<span id="L538">    const auto* second_stack = find_memory(</span>
+<span id="L539">        second_report,</span>
+<span id="L540">        rt::memory_region_runtime_thread_stack);</span>
+<span id="L541">    ASSERT_NE(first_stack, nullptr);</span>
+<span id="L542">    ASSERT_NE(second_stack, nullptr);</span>
+<span id="L543">    EXPECT_EQ(first_stack-&gt;logical_region_count, 1u);</span>
+<span id="L544">    EXPECT_EQ(second_stack-&gt;logical_region_count, 3u);</span>
+<span id="L545">#if defined(__linux__)</span>
+<span id="L546">    EXPECT_EQ(</span>
+<span id="L547">        first_stack-&gt;accounting_exactness,</span>
+<span id="L548">        rt::ResourceAccountingExactness::exact);</span>
+<span id="L549">    EXPECT_EQ(</span>
+<span id="L550">        second_stack-&gt;accounting_exactness,</span>
+<span id="L551">        rt::ResourceAccountingExactness::exact);</span>
+<span id="L552">    EXPECT_GT(first_stack-&gt;committed_bytes, 0u);</span>
+<span id="L553">    EXPECT_GT(second_stack-&gt;committed_bytes, first_stack-&gt;committed_bytes);</span>
+<span id="L554">    EXPECT_EQ(first_stack-&gt;accounted_bytes, first_stack-&gt;committed_bytes);</span>
+<span id="L555">    EXPECT_EQ(second_stack-&gt;accounted_bytes, second_stack-&gt;committed_bytes);</span>
+<span id="L556">    EXPECT_LE(</span>
+<span id="L557">        first_stack-&gt;resident_bytes,</span>
+<span id="L558">        first_stack-&gt;committed_bytes - first_stack-&gt;actual_guard_bytes_before);</span>
+<span id="L559">    EXPECT_LE(</span>
+<span id="L560">        second_stack-&gt;resident_bytes,</span>
+<span id="L561">        second_stack-&gt;committed_bytes - second_stack-&gt;actual_guard_bytes_before);</span>
+<span id="L562">#else</span>
+<span id="L563">    EXPECT_EQ(</span>
+<span id="L564">        first_stack-&gt;accounting_exactness,</span>
+<span id="L565">        rt::ResourceAccountingExactness::unknown);</span>
+<span id="L566">    EXPECT_EQ(</span>
+<span id="L567">        second_stack-&gt;accounting_exactness,</span>
+<span id="L568">        rt::ResourceAccountingExactness::unknown);</span>
+<span id="L569">#endif</span>
+<span id="L570"></span>
+<span id="L571">    const auto second_bytes = second_stack-&gt;accounted_bytes;</span>
+<span id="L572">    ASSERT_EQ(first.stop(), rt::Status::ok);</span>
+<span id="L573">    ASSERT_TRUE(second.cpu_memory_policy_report(second_report));</span>
+<span id="L574">    second_stack = find_memory(</span>
+<span id="L575">        second_report,</span>
+<span id="L576">        rt::memory_region_runtime_thread_stack);</span>
+<span id="L577">    ASSERT_NE(second_stack, nullptr);</span>
+<span id="L578">    EXPECT_EQ(second_stack-&gt;accounted_bytes, second_bytes);</span>
+<span id="L579">    ASSERT_EQ(second.stop(), rt::Status::ok);</span>
+<span id="L580">}</span>
+<span id="L581"></span>
+<span id="L582">TEST(ThreadPolicy, StrictRuntimeStackMismatchRollsBackAndRecovers) {</span>
+<span id="L583">    InjectedPolicyProvider provider;</span>
+<span id="L584">    provider.failure_role = rt::thread_role_executor_worker;</span>
+<span id="L585">    provider.outcome = InjectedOutcome::stack_mismatch;</span>
+<span id="L586">    rt::Runtime runtime;</span>
+<span id="L587">    rt::detail::RuntimeThreadPolicyTestAccess::set_provider(runtime, provider);</span>
+<span id="L588">    auto config = threaded_config();</span>
+<span id="L589">    config.worker_count = 1;</span>
+<span id="L590">    config.watchdog_timeout_ns = 0;</span>
+<span id="L591">    ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L592">    std::size_t callbacks = 0;</span>
+<span id="L593">    ASSERT_EQ(</span>
+<span id="L594">        runtime.register_callback(</span>
+<span id="L595">            {&quot;stack.strict&quot;, &amp;count_callback, &amp;callbacks}),</span>
+<span id="L596">        rt::Status::ok);</span>
+<span id="L597">    rt::CpuMemoryPolicy policy;</span>
+<span id="L598">    add_runtime_stack_policy(policy, rt::PolicyRequirement::strict);</span>
+<span id="L599">    policy.memory_policies[0].policy.residency_verification =</span>
+<span id="L600">        rt::PolicyToggle::enabled;</span>
+<span id="L601">    ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L602">#if defined(__linux__)</span>
+<span id="L603">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L604"></span>
+<span id="L605">    EXPECT_EQ(runtime.start(), rt::Status::internal_error);</span>
+<span id="L606">    EXPECT_EQ(runtime.state(), rt::RuntimeState::finalized);</span>
+<span id="L607">    EXPECT_EQ(callbacks, 0u);</span>
+<span id="L608">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L609">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L610">    const auto* stack = find_memory(</span>
+<span id="L611">        report,</span>
+<span id="L612">        rt::memory_region_runtime_thread_stack);</span>
+<span id="L613">    ASSERT_NE(stack, nullptr);</span>
+<span id="L614">    EXPECT_EQ(stack-&gt;verified, rt::PolicyOperationState::mismatched);</span>
+<span id="L615">    EXPECT_EQ(stack-&gt;verify_error, EPROTO);</span>
+<span id="L616"></span>
+<span id="L617">    provider.outcome = InjectedOutcome::stack_success;</span>
+<span id="L618">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L619">    ASSERT_EQ(</span>
+<span id="L620">        runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L621">        rt::Status::ok);</span>
+<span id="L622">    EXPECT_EQ(callbacks, 1u);</span>
+<span id="L623">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L624">#else</span>
+<span id="L625">    EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L626">    EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L627">    EXPECT_EQ(callbacks, 0u);</span>
+<span id="L628">    EXPECT_EQ(provider.count_kind(event_create), 0u);</span>
+<span id="L629">    EXPECT_EQ(provider.count_kind(event_apply), 0u);</span>
+<span id="L630">    EXPECT_EQ(provider.count_kind(event_verify), 0u);</span>
+<span id="L631">    EXPECT_EQ(provider.count_kind(event_join), 0u);</span>
+<span id="L632">#endif</span>
+<span id="L633">}</span>
+<span id="L634"></span>
+<span id="L635">TEST(ThreadPolicy, FailedStartCleanupRetryClearsRetainedStackError) {</span>
+<span id="L636">    InjectedPolicyProvider provider;</span>
+<span id="L637">    provider.failure_role = rt::thread_role_executor_worker;</span>
+<span id="L638">    provider.outcome = InjectedOutcome::stack_mismatch;</span>
+<span id="L639">    provider.cleanup_failures_remaining = 1;</span>
+<span id="L640">    rt::Runtime runtime;</span>
+<span id="L641">    rt::detail::RuntimeThreadPolicyTestAccess::set_provider(runtime, provider);</span>
+<span id="L642">    auto config = threaded_config();</span>
+<span id="L643">    config.worker_count = 1;</span>
+<span id="L644">    config.watchdog_timeout_ns = 0;</span>
+<span id="L645">    ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L646">    rt::CpuMemoryPolicy policy;</span>
+<span id="L647">    add_runtime_stack_policy(policy, rt::PolicyRequirement::strict);</span>
+<span id="L648">    policy.memory_policies[0].policy.residency_verification =</span>
+<span id="L649">        rt::PolicyToggle::enabled;</span>
+<span id="L650">    ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L651">#if defined(__linux__)</span>
+<span id="L652">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L653"></span>
+<span id="L654">    EXPECT_EQ(runtime.start(), rt::Status::internal_error);</span>
+<span id="L655">    EXPECT_EQ(runtime.state(), rt::RuntimeState::finalized);</span>
+<span id="L656">    EXPECT_EQ(provider.cleanup_attempt_count, 1u);</span>
+<span id="L657">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L658">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L659">    const auto* stack = find_memory(</span>
+<span id="L660">        report,</span>
+<span id="L661">        rt::memory_region_runtime_thread_stack);</span>
+<span id="L662">    ASSERT_NE(stack, nullptr);</span>
+<span id="L663">    EXPECT_EQ(stack-&gt;rollback_error, EIO);</span>
+<span id="L664"></span>
+<span id="L665">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L666">    EXPECT_EQ(runtime.state(), rt::RuntimeState::stopped);</span>
+<span id="L667">    EXPECT_EQ(provider.cleanup_attempt_count, 2u);</span>
+<span id="L668">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L669">    stack = find_memory(report, rt::memory_region_runtime_thread_stack);</span>
+<span id="L670">    ASSERT_NE(stack, nullptr);</span>
+<span id="L671">    EXPECT_EQ(stack-&gt;rollback_error, 0);</span>
+<span id="L672">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L673">#else</span>
+<span id="L674">    EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L675">    EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L676">    EXPECT_EQ(provider.cleanup_attempt_count, 0u);</span>
+<span id="L677">    EXPECT_EQ(provider.count_kind(event_create), 0u);</span>
+<span id="L678">    EXPECT_EQ(provider.count_kind(event_apply), 0u);</span>
+<span id="L679">    EXPECT_EQ(provider.count_kind(event_verify), 0u);</span>
+<span id="L680">    EXPECT_EQ(provider.count_kind(event_join), 0u);</span>
+<span id="L681">#endif</span>
+<span id="L682">}</span>
+<span id="L683"></span>
+<span id="L684">TEST(ThreadPolicy, BestEffortRuntimeStackFailureIsReportedWithoutCommitBlock) {</span>
+<span id="L685">    InjectedPolicyProvider provider;</span>
+<span id="L686">    provider.failure_role = rt::thread_role_executor_worker;</span>
+<span id="L687">    provider.outcome = InjectedOutcome::stack_failure;</span>
+<span id="L688">    rt::Runtime runtime;</span>
+<span id="L689">    rt::detail::RuntimeThreadPolicyTestAccess::set_provider(runtime, provider);</span>
+<span id="L690">    auto config = threaded_config();</span>
+<span id="L691">    config.worker_count = 1;</span>
+<span id="L692">    config.watchdog_timeout_ns = 0;</span>
+<span id="L693">    ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L694">    rt::CpuMemoryPolicy policy;</span>
+<span id="L695">    add_runtime_stack_policy(policy, rt::PolicyRequirement::best_effort);</span>
+<span id="L696">    policy.memory_policies[0].policy.locking = rt::PolicyToggle::enabled;</span>
+<span id="L697">    ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L698">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L699">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L700"></span>
+<span id="L701">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L702">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L703">    const auto* stack = find_memory(</span>
+<span id="L704">        report,</span>
+<span id="L705">        rt::memory_region_runtime_thread_stack);</span>
+<span id="L706">    ASSERT_NE(stack, nullptr);</span>
+<span id="L707">    EXPECT_EQ(stack-&gt;applied, rt::PolicyOperationState::failed);</span>
+<span id="L708">    EXPECT_EQ(stack-&gt;verified, rt::PolicyOperationState::failed);</span>
+<span id="L709">    EXPECT_EQ(stack-&gt;apply_error, EPERM);</span>
+<span id="L710">    EXPECT_EQ(stack-&gt;verify_error, EPROTO);</span>
+<span id="L711">    EXPECT_EQ(stack-&gt;accounted_bytes, 0u);</span>
+<span id="L712">    EXPECT_EQ(</span>
+<span id="L713">        stack-&gt;accounting_exactness,</span>
+<span id="L714">        rt::ResourceAccountingExactness::unknown);</span>
+<span id="L715">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L716">}</span>
+<span id="L717"></span>
+<span id="L718">#if defined(__linux__)</span>
+<span id="L719">TEST(ThreadPolicy, StrictStackLockingCannotClaimIndependentReadback) {</span>
+<span id="L720">    rt::Runtime runtime;</span>
+<span id="L721">    auto config = threaded_config();</span>
+<span id="L722">    config.worker_count = 1;</span>
+<span id="L723">    config.watchdog_timeout_ns = 0;</span>
+<span id="L724">    ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L725">    std::size_t callbacks = 0;</span>
+<span id="L726">    ASSERT_EQ(</span>
+<span id="L727">        runtime.register_callback(</span>
+<span id="L728">            {&quot;stack.lock-readback&quot;, &amp;count_callback, &amp;callbacks}),</span>
+<span id="L729">        rt::Status::ok);</span>
+<span id="L730">    rt::CpuMemoryPolicy policy;</span>
+<span id="L731">    add_runtime_stack_policy(policy, rt::PolicyRequirement::strict);</span>
+<span id="L732">    policy.memory_policies[0].policy.locking = rt::PolicyToggle::enabled;</span>
+<span id="L733">    ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L734">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L735"></span>
+<span id="L736">    EXPECT_EQ(runtime.start(), rt::Status::internal_error);</span>
+<span id="L737">    EXPECT_EQ(runtime.state(), rt::RuntimeState::finalized);</span>
+<span id="L738">    EXPECT_EQ(callbacks, 0u);</span>
+<span id="L739">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L740">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L741">    const auto* stack = find_memory(</span>
+<span id="L742">        report,</span>
+<span id="L743">        rt::memory_region_runtime_thread_stack);</span>
+<span id="L744">    ASSERT_NE(stack, nullptr);</span>
+<span id="L745">    EXPECT_EQ(stack-&gt;locked_bytes, 0u);</span>
+<span id="L746">    EXPECT_NE(stack-&gt;verified, rt::PolicyOperationState::succeeded);</span>
+<span id="L747">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L748">}</span>
+<span id="L749">#endif</span>
+<span id="L750"></span>
+<span id="L751">TEST(ThreadPolicy, SpinYieldAndParkWakeForWorkAndStop) {</span>
+<span id="L752">    for (const auto wait : {</span>
+<span id="L753">             rt::WaitStrategy::spin,</span>
+<span id="L754">             rt::WaitStrategy::yield,</span>
+<span id="L755">             rt::WaitStrategy::park}) {</span>
+<span id="L756">        SCOPED_TRACE(static_cast&lt;unsigned&gt;(wait));</span>
+<span id="L757">        InjectedPolicyProvider provider;</span>
+<span id="L758">        rt::Runtime runtime;</span>
+<span id="L759">        rt::detail::RuntimeThreadPolicyTestAccess::set_provider(runtime, provider);</span>
+<span id="L760">        auto config = threaded_config();</span>
+<span id="L761">        config.watchdog_timeout_ns = 0;</span>
+<span id="L762">        ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L763">        std::size_t callbacks = 0;</span>
+<span id="L764">        ASSERT_EQ(</span>
+<span id="L765">            runtime.register_callback(</span>
+<span id="L766">                {&quot;thread.wait&quot;, &amp;count_callback, &amp;callbacks}),</span>
+<span id="L767">            rt::Status::ok);</span>
+<span id="L768">        rt::CpuMemoryPolicy policy;</span>
+<span id="L769">        policy.thread_policy_count = 1;</span>
+<span id="L770">        policy.thread_policies[0].role = rt::thread_role_executor_worker;</span>
+<span id="L771">        policy.thread_policies[0].policy.wait_strategy = wait;</span>
+<span id="L772">        ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L773">        ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L774">        ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L775">        ASSERT_EQ(</span>
+<span id="L776">            runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L777">            rt::Status::ok);</span>
+<span id="L778">        EXPECT_EQ(callbacks, 1u);</span>
+<span id="L779">        EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L780">    }</span>
+<span id="L781">}</span>
+<span id="L782"></span>
+<span id="L783">TEST(ThreadPolicy, StrictExternalAndUnavailableRequestsFailDuringFinalize) {</span>
+<span id="L784">    {</span>
+<span id="L785">        rt::Runtime runtime;</span>
+<span id="L786">        rt::CpuMemoryPolicy policy;</span>
+<span id="L787">        add_strict_role(</span>
+<span id="L788">            policy,</span>
+<span id="L789">            rt::ThreadRoleId{rt::thread_role_custom_first + 11});</span>
+<span id="L790">        ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L791">        EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L792">        EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L793">    }</span>
+<span id="L794">#if defined(__linux__)</span>
+<span id="L795">    {</span>
+<span id="L796">        rt::Runtime runtime;</span>
+<span id="L797">        rt::CpuMemoryPolicy policy;</span>
+<span id="L798">        add_strict_role(policy, rt::thread_role_executor_worker);</span>
+<span id="L799">        auto&amp; request = policy.thread_policies[0].policy;</span>
+<span id="L800">        request.cpu_set.count = 1;</span>
+<span id="L801">        request.cpu_set.cpu_ids[0] = CPU_SETSIZE;</span>
+<span id="L802">        ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L803">        EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L804">        EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L805">    }</span>
+<span id="L806">    {</span>
+<span id="L807">        rt::Runtime runtime;</span>
+<span id="L808">        rt::CpuMemoryPolicy policy;</span>
+<span id="L809">        add_strict_role(policy, rt::thread_role_executor_worker);</span>
+<span id="L810">        policy.thread_policies[0].policy.numa_node = 1&#x27;000&#x27;000;</span>
+<span id="L811">        ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L812">        EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L813">        EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L814">    }</span>
+<span id="L815">#endif</span>
+<span id="L816"></span>
+<span id="L817">}</span>
+<span id="L818"></span>
+<span id="L819">#if defined(__linux__)</span>
+<span id="L820">TEST(ThreadPolicy, LinuxAppliesAndReadsBackAvailableNativeFields) {</span>
+<span id="L821">    cpu_set_t allowed;</span>
+<span id="L822">    CPU_ZERO(&amp;allowed);</span>
+<span id="L823">    if (sched_getaffinity(0, sizeof(allowed), &amp;allowed) != 0) {</span>
+<span id="L824">        GTEST_SKIP() &lt;&lt; &quot;sched_getaffinity unavailable&quot;;</span>
+<span id="L825">    }</span>
+<span id="L826">    int selected_cpu = -1;</span>
+<span id="L827">    for (int cpu = 0; cpu &lt; CPU_SETSIZE; ++cpu) {</span>
+<span id="L828">        if (CPU_ISSET(cpu, &amp;allowed)) {</span>
+<span id="L829">            selected_cpu = cpu;</span>
+<span id="L830">            break;</span>
+<span id="L831">        }</span>
+<span id="L832">    }</span>
+<span id="L833">    if (selected_cpu &lt; 0) {</span>
+<span id="L834">        GTEST_SKIP() &lt;&lt; &quot;no allowed CPU&quot;;</span>
+<span id="L835">    }</span>
+<span id="L836">    const long page = sysconf(_SC_PAGESIZE);</span>
+<span id="L837">    ASSERT_GT(page, 0);</span>
+<span id="L838"></span>
+<span id="L839">    rt::Runtime runtime;</span>
+<span id="L840">    auto config = threaded_config();</span>
+<span id="L841">    config.worker_count = 1;</span>
+<span id="L842">    config.watchdog_timeout_ns = 0;</span>
+<span id="L843">    ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L844">    rt::CpuMemoryPolicy policy;</span>
+<span id="L845">    add_strict_role(policy, rt::thread_role_executor_worker);</span>
+<span id="L846">    auto&amp; requested = policy.thread_policies[0].policy;</span>
+<span id="L847">    requested.cpu_set.count = 1;</span>
+<span id="L848">    requested.cpu_set.cpu_ids[0] = static_cast&lt;std::uint32_t&gt;(selected_cpu);</span>
+<span id="L849">    requested.scheduling_class = rt::SchedulingClass::normal;</span>
+<span id="L850">    requested.scheduling_priority = 0;</span>
+<span id="L851">    requested.wait_strategy = rt::WaitStrategy::yield;</span>
+<span id="L852">    requested.stack_bytes = static_cast&lt;std::size_t&gt;(PTHREAD_STACK_MIN) * 4u;</span>
+<span id="L853">    requested.guard_bytes = static_cast&lt;std::size_t&gt;(page);</span>
+<span id="L854">    constexpr std::string_view name = &quot;rtfw-m15&quot;;</span>
+<span id="L855">    std::copy(name.begin(), name.end(), requested.name.begin());</span>
+<span id="L856">    ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L857">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L858">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L859"></span>
+<span id="L860">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L861">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L862">    const auto* executor = find_thread(report, rt::thread_role_executor_worker);</span>
+<span id="L863">    ASSERT_NE(executor, nullptr);</span>
+<span id="L864">    EXPECT_EQ(executor-&gt;resolution, rt::PolicyResolutionState::native_supported);</span>
+<span id="L865">    EXPECT_EQ(executor-&gt;applied, rt::PolicyOperationState::succeeded);</span>
+<span id="L866">    EXPECT_EQ(executor-&gt;verified, rt::PolicyOperationState::succeeded);</span>
+<span id="L867">    EXPECT_EQ(executor-&gt;read_back.cpu_set.count, 1u);</span>
+<span id="L868">    EXPECT_EQ(</span>
+<span id="L869">        executor-&gt;read_back.cpu_set.cpu_ids[0],</span>
+<span id="L870">        static_cast&lt;std::uint32_t&gt;(selected_cpu));</span>
+<span id="L871">    EXPECT_EQ(executor-&gt;read_back.scheduling_class, rt::SchedulingClass::normal);</span>
+<span id="L872">    EXPECT_EQ(executor-&gt;read_back.scheduling_priority, 0);</span>
+<span id="L873">    EXPECT_EQ(executor-&gt;read_back.wait_strategy, rt::WaitStrategy::yield);</span>
+<span id="L874">    EXPECT_EQ(executor-&gt;read_back.stack_bytes, requested.stack_bytes);</span>
+<span id="L875">    EXPECT_EQ(executor-&gt;read_back.guard_bytes, requested.guard_bytes);</span>
+<span id="L876">    EXPECT_EQ(executor-&gt;read_back.name, requested.name);</span>
+<span id="L877">    const auto* stack = find_memory(</span>
+<span id="L878">        report,</span>
+<span id="L879">        rt::memory_region_runtime_thread_stack);</span>
+<span id="L880">    ASSERT_NE(stack, nullptr);</span>
+<span id="L881">    EXPECT_EQ(</span>
+<span id="L882">        stack-&gt;committed_bytes,</span>
+<span id="L883">        requested.stack_bytes);</span>
+<span id="L884">    EXPECT_EQ(stack-&gt;actual_guard_bytes_before, requested.guard_bytes);</span>
+<span id="L885">    EXPECT_EQ(stack-&gt;logical_region_count, 1u);</span>
+<span id="L886">    EXPECT_EQ(</span>
+<span id="L887">        stack-&gt;accounting_exactness,</span>
+<span id="L888">        rt::ResourceAccountingExactness::exact);</span>
+<span id="L889">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L890">}</span>
+<span id="L891">#endif</span>
+<span id="L892"></span>
+<span id="L893">#if defined(RTFW_STANDALONE_ROLLBACK_TEST)</span>
+<span id="L894">TEST(ThreadPolicy, StrictFailureJoinsCreatedLanesInReverseBeforeReturning) {</span>
+<span id="L895">    InjectedPolicyProvider provider;</span>
+<span id="L896">    provider.failure_role = rt::thread_role_device_service;</span>
+<span id="L897">    provider.outcome = InjectedOutcome::mismatch;</span>
+<span id="L898">    rt::Runtime runtime;</span>
+<span id="L899">    rt::detail::RuntimeThreadPolicyTestAccess::set_provider(runtime, provider);</span>
+<span id="L900">    ASSERT_EQ(runtime.configure(threaded_config(true)), rt::Status::ok);</span>
+<span id="L901">    std::size_t callbacks = 0;</span>
+<span id="L902">    ASSERT_EQ(</span>
+<span id="L903">        runtime.register_callback(</span>
+<span id="L904">            {&quot;thread.abort-order&quot;, &amp;count_callback, &amp;callbacks}),</span>
+<span id="L905">        rt::Status::ok);</span>
+<span id="L906">    rt::MockDeviceBackend backend({2, 1, 1, 1&#x27;000});</span>
+<span id="L907">    rt::DeviceBackendHandle backend_handle;</span>
+<span id="L908">    ASSERT_EQ(</span>
+<span id="L909">        runtime.register_device_backend(</span>
+<span id="L910">            {&quot;abort-order.mock&quot;, backend.api()},</span>
+<span id="L911">            backend_handle),</span>
+<span id="L912">        rt::Status::ok);</span>
+<span id="L913">    rt::CpuMemoryPolicy policy;</span>
+<span id="L914">    add_strict_role(policy, rt::thread_role_device_service);</span>
+<span id="L915">    ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L916">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L917"></span>
+<span id="L918">    EXPECT_NE(runtime.start(), rt::Status::ok);</span>
+<span id="L919">    EXPECT_EQ(runtime.state(), rt::RuntimeState::finalized);</span>
+<span id="L920">    EXPECT_EQ(callbacks, 0u);</span>
+<span id="L921"></span>
+<span id="L922">    const std::array&lt;std::uint32_t, 4&gt; expected_joins{</span>
+<span id="L923">        event(event_join, rt::thread_role_device_service, 0),</span>
+<span id="L924">        event(event_join, rt::thread_role_executor_worker, 1),</span>
+<span id="L925">        event(event_join, rt::thread_role_executor_worker, 0),</span>
+<span id="L926">        event(event_join, rt::thread_role_watchdog, 0),</span>
+<span id="L927">    };</span>
+<span id="L928">    std::array&lt;std::uint32_t, 4&gt; actual_joins{};</span>
+<span id="L929">    std::size_t join_count = 0;</span>
+<span id="L930">    for (std::size_t index = 0; index &lt; provider.event_count(); ++index) {</span>
+<span id="L931">        const auto value = provider.event_at(index);</span>
+<span id="L932">        if (value &gt;= event_join &amp;&amp; value &lt; event_join + 1&#x27;000) {</span>
+<span id="L933">            ASSERT_LT(join_count, actual_joins.size());</span>
+<span id="L934">            actual_joins[join_count++] = value;</span>
+<span id="L935">        }</span>
+<span id="L936">    }</span>
+<span id="L937">    EXPECT_EQ(join_count, expected_joins.size());</span>
+<span id="L938">    EXPECT_EQ(actual_joins, expected_joins);</span>
+<span id="L939">}</span>
+<span id="L940">#endif</span></pre></html>

@@ -1,0 +1,281 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>scripts/verify-portable-assurance.sh</title><h1>scripts/verify-portable-assurance.sh</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#!/usr/bin/env bash</span>
+<span id="L2">set -Eeuo pipefail</span>
+<span id="L3"></span>
+<span id="L4">usage() {</span>
+<span id="L5">  echo &quot;usage: $0 {dependencies|static|fuzz|artifacts|all} --build-dir PATH --source-commit SHA [--repo-root PATH]&quot; &gt;&amp;2</span>
+<span id="L6">  exit 2</span>
+<span id="L7">}</span>
+<span id="L8"></span>
+<span id="L9">[[ $# -ge 1 ]] || usage</span>
+<span id="L10">MODE=&quot;$1&quot;</span>
+<span id="L11">shift</span>
+<span id="L12">case &quot;$MODE&quot; in</span>
+<span id="L13">  dependencies|static|fuzz|artifacts|all) ;;</span>
+<span id="L14">  *) usage ;;</span>
+<span id="L15">esac</span>
+<span id="L16"></span>
+<span id="L17">REPO_ROOT=&quot;$(git rev-parse --show-toplevel)&quot;</span>
+<span id="L18">BUILD_DIR=&quot;&quot;</span>
+<span id="L19">SOURCE_COMMIT=&quot;&quot;</span>
+<span id="L20">while [[ $# -gt 0 ]]; do</span>
+<span id="L21">  case &quot;$1&quot; in</span>
+<span id="L22">    --repo-root)</span>
+<span id="L23">      [[ $# -ge 2 ]] || usage</span>
+<span id="L24">      REPO_ROOT=&quot;$2&quot;</span>
+<span id="L25">      shift 2</span>
+<span id="L26">      ;;</span>
+<span id="L27">    --build-dir)</span>
+<span id="L28">      [[ $# -ge 2 ]] || usage</span>
+<span id="L29">      BUILD_DIR=&quot;$2&quot;</span>
+<span id="L30">      shift 2</span>
+<span id="L31">      ;;</span>
+<span id="L32">    --source-commit)</span>
+<span id="L33">      [[ $# -ge 2 ]] || usage</span>
+<span id="L34">      SOURCE_COMMIT=&quot;$2&quot;</span>
+<span id="L35">      shift 2</span>
+<span id="L36">      ;;</span>
+<span id="L37">    *) usage ;;</span>
+<span id="L38">  esac</span>
+<span id="L39">done</span>
+<span id="L40"></span>
+<span id="L41">[[ -n &quot;$BUILD_DIR&quot; &amp;&amp; -n &quot;$SOURCE_COMMIT&quot; ]] || usage</span>
+<span id="L42">[[ &quot;$SOURCE_COMMIT&quot; =~ ^[0-9a-fA-F]{40}$ ]] || {</span>
+<span id="L43">  echo &quot;source commit must be a complete 40-character Git SHA&quot; &gt;&amp;2</span>
+<span id="L44">  exit 2</span>
+<span id="L45">}</span>
+<span id="L46">REPO_ROOT=&quot;$(realpath &quot;$REPO_ROOT&quot;)&quot;</span>
+<span id="L47">BUILD_DIR=&quot;$(realpath -m &quot;$BUILD_DIR&quot;)&quot;</span>
+<span id="L48">[[ -d &quot;$REPO_ROOT/.git&quot; || -f &quot;$REPO_ROOT/.git&quot; ]] || {</span>
+<span id="L49">  echo &quot;repository root is not a Git worktree: $REPO_ROOT&quot; &gt;&amp;2</span>
+<span id="L50">  exit 2</span>
+<span id="L51">}</span>
+<span id="L52">case &quot;$BUILD_DIR&quot; in</span>
+<span id="L53">  /|&quot;$REPO_ROOT&quot;)</span>
+<span id="L54">    echo &quot;refusing broad or source-tree build directory: $BUILD_DIR&quot; &gt;&amp;2</span>
+<span id="L55">    exit 2</span>
+<span id="L56">    ;;</span>
+<span id="L57">esac</span>
+<span id="L58">mkdir -p &quot;$BUILD_DIR&quot;</span>
+<span id="L59"></span>
+<span id="L60">DEPENDENCY_POLICY=&quot;$REPO_ROOT/tools/sbom_expected.json&quot;</span>
+<span id="L61">ASSURANCE_POLICY=&quot;$REPO_ROOT/release/portable-assurance-policy.json&quot;</span>
+<span id="L62"></span>
+<span id="L63">run_dependencies() {</span>
+<span id="L64">  local output=&quot;$BUILD_DIR/dependency-report.json&quot;</span>
+<span id="L65">  [[ ! -e &quot;$output&quot; ]] || {</span>
+<span id="L66">    echo &quot;dependency output already exists: $output&quot; &gt;&amp;2</span>
+<span id="L67">    return 2</span>
+<span id="L68">  }</span>
+<span id="L69">  python3 &quot;$REPO_ROOT/tools/sbom.py&quot; verify-dependencies \</span>
+<span id="L70">    --repo-root &quot;$REPO_ROOT&quot; \</span>
+<span id="L71">    --policy &quot;$DEPENDENCY_POLICY&quot; \</span>
+<span id="L72">    --output &quot;$output&quot;</span>
+<span id="L73">}</span>
+<span id="L74"></span>
+<span id="L75">run_static() {</span>
+<span id="L76">  command -v clang-14 &gt;/dev/null</span>
+<span id="L77">  command -v clang++-14 &gt;/dev/null</span>
+<span id="L78">  command -v clang-tidy-14 &gt;/dev/null</span>
+<span id="L79">  command -v cmake &gt;/dev/null</span>
+<span id="L80">  local static_build=&quot;$BUILD_DIR/static&quot;</span>
+<span id="L81">  CC=clang-14 CXX=clang++-14 cmake \</span>
+<span id="L82">    -S &quot;$REPO_ROOT&quot; \</span>
+<span id="L83">    -B &quot;$static_build&quot; \</span>
+<span id="L84">    -DCMAKE_BUILD_TYPE=RelWithDebInfo \</span>
+<span id="L85">    -DENABLE_TESTS=OFF \</span>
+<span id="L86">    -DRTFW_BUILD_EXPERIMENTAL=OFF \</span>
+<span id="L87">    -DRTFW_BUILD_EXAMPLES=OFF \</span>
+<span id="L88">    -DRTFW_BUILD_RUNTIME_DEMO=OFF \</span>
+<span id="L89">    -DSIM_DOWNLOAD_GTEST=OFF \</span>
+<span id="L90">    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \</span>
+<span id="L91">    -DSIM_WERROR=ON</span>
+<span id="L92">  python3 &quot;$REPO_ROOT/tools/check_static_analysis.py&quot; \</span>
+<span id="L93">    --repo-root &quot;$REPO_ROOT&quot; \</span>
+<span id="L94">    --compile-commands &quot;$static_build/compile_commands.json&quot; \</span>
+<span id="L95">    --source-manifest &quot;$REPO_ROOT/tools/static_analysis_sources.txt&quot; \</span>
+<span id="L96">    --clang-tidy clang-tidy-14 \</span>
+<span id="L97">    --output &quot;$BUILD_DIR/static-report.json&quot;</span>
+<span id="L98">}</span>
+<span id="L99"></span>
+<span id="L100">run_fuzz() {</span>
+<span id="L101">  command -v clang-14 &gt;/dev/null</span>
+<span id="L102">  command -v clang++-14 &gt;/dev/null</span>
+<span id="L103">  command -v cmake &gt;/dev/null</span>
+<span id="L104">  local fuzz_build=&quot;$BUILD_DIR/fuzz&quot;</span>
+<span id="L105">  CC=clang-14 CXX=clang++-14 cmake \</span>
+<span id="L106">    -S &quot;$REPO_ROOT&quot; \</span>
+<span id="L107">    -B &quot;$fuzz_build&quot; \</span>
+<span id="L108">    -DCMAKE_BUILD_TYPE=RelWithDebInfo \</span>
+<span id="L109">    -DENABLE_TESTS=ON \</span>
+<span id="L110">    -DRTFW_BUILD_EXPERIMENTAL=ON \</span>
+<span id="L111">    -DENABLE_RAPIDCHECK=OFF \</span>
+<span id="L112">    -DSIM_BUILD_FUZZERS=ON \</span>
+<span id="L113">    -DSIM_DOWNLOAD_GTEST=OFF \</span>
+<span id="L114">    -DSIM_SANITIZERS= \</span>
+<span id="L115">    -DSIM_WERROR=ON</span>
+<span id="L116">  cmake --build &quot;$fuzz_build&quot; \</span>
+<span id="L117">    --target snapshot_fuzz runtime_profile_fuzz jobqueue_fuzz \</span>
+<span id="L118">    --parallel 2</span>
+<span id="L119">  python3 &quot;$REPO_ROOT/tools/run_fuzz_smoke.py&quot; \</span>
+<span id="L120">    --build-dir &quot;$fuzz_build&quot; \</span>
+<span id="L121">    --corpus-root &quot;$REPO_ROOT/tests/fuzz&quot; \</span>
+<span id="L122">    --output-dir &quot;$BUILD_DIR/fuzz-artifacts&quot; \</span>
+<span id="L123">    --seed 424242</span>
+<span id="L124">}</span>
+<span id="L125"></span>
+<span id="L126">source_tree_state() {</span>
+<span id="L127">  if [[ -n &quot;$(git -C &quot;$REPO_ROOT&quot; status --porcelain --untracked-files=all)&quot; ]]; then</span>
+<span id="L128">    echo dirty</span>
+<span id="L129">  else</span>
+<span id="L130">    echo clean</span>
+<span id="L131">  fi</span>
+<span id="L132">}</span>
+<span id="L133"></span>
+<span id="L134">run_artifacts() {</span>
+<span id="L135">  command -v clang-14 &gt;/dev/null</span>
+<span id="L136">  command -v clang++-14 &gt;/dev/null</span>
+<span id="L137">  command -v cmake &gt;/dev/null</span>
+<span id="L138">  command -v cpack &gt;/dev/null</span>
+<span id="L139">  local package_build=&quot;$BUILD_DIR/package&quot;</span>
+<span id="L140">  local cpack_output=&quot;$BUILD_DIR/cpack&quot;</span>
+<span id="L141">  local candidate_a=&quot;$BUILD_DIR/candidate-a&quot;</span>
+<span id="L142">  local candidate_b=&quot;$BUILD_DIR/candidate-b&quot;</span>
+<span id="L143">  local relocated=&quot;$BUILD_DIR/relocated&quot;</span>
+<span id="L144">  local consumer=&quot;$BUILD_DIR/consumer&quot;</span>
+<span id="L145">  for path in &quot;$cpack_output&quot; &quot;$candidate_a&quot; &quot;$candidate_b&quot; &quot;$relocated&quot; &quot;$consumer&quot;; do</span>
+<span id="L146">    [[ ! -e &quot;$path&quot; ]] || {</span>
+<span id="L147">      echo &quot;artifact-mode output already exists: $path&quot; &gt;&amp;2</span>
+<span id="L148">      return 2</span>
+<span id="L149">    }</span>
+<span id="L150">  done</span>
+<span id="L151"></span>
+<span id="L152">  CC=clang-14 CXX=clang++-14 cmake \</span>
+<span id="L153">    -S &quot;$REPO_ROOT&quot; \</span>
+<span id="L154">    -B &quot;$package_build&quot; \</span>
+<span id="L155">    -DCMAKE_BUILD_TYPE=Release \</span>
+<span id="L156">    -DENABLE_TESTS=OFF \</span>
+<span id="L157">    -DRTFW_BUILD_EXPERIMENTAL=OFF \</span>
+<span id="L158">    -DRTFW_BUILD_EXAMPLES=OFF \</span>
+<span id="L159">    -DRTFW_BUILD_RUNTIME_DEMO=OFF \</span>
+<span id="L160">    -DSIM_WERROR=ON</span>
+<span id="L161">  cmake --build &quot;$package_build&quot; --parallel 2</span>
+<span id="L162">  cpack --config &quot;$package_build/CPackConfig.cmake&quot; \</span>
+<span id="L163">    -C Release -G TGZ -B &quot;$cpack_output&quot;</span>
+<span id="L164">  python3 &quot;$REPO_ROOT/tools/stage_release_artifacts.py&quot; \</span>
+<span id="L165">    --cpack-dir &quot;$cpack_output&quot; \</span>
+<span id="L166">    --artifact-dir &quot;$candidate_a&quot; \</span>
+<span id="L167">    --generator TGZ \</span>
+<span id="L168">    --version-file &quot;$REPO_ROOT/VERSION.txt&quot;</span>
+<span id="L169">  mkdir &quot;$candidate_b&quot;</span>
+<span id="L170">  find &quot;$candidate_a&quot; -maxdepth 1 -type f -exec cp {} &quot;$candidate_b/&quot; \;</span>
+<span id="L171"></span>
+<span id="L172">  python3 &quot;$REPO_ROOT/tools/sbom.py&quot; create \</span>
+<span id="L173">    --repo-root &quot;$REPO_ROOT&quot; \</span>
+<span id="L174">    --artifact-dir &quot;$candidate_a&quot; \</span>
+<span id="L175">    --output &quot;$candidate_a/rtfw.spdx.json&quot; \</span>
+<span id="L176">    --policy &quot;$ASSURANCE_POLICY&quot; \</span>
+<span id="L177">    --dependency-policy &quot;$DEPENDENCY_POLICY&quot; \</span>
+<span id="L178">    --source-commit &quot;$SOURCE_COMMIT&quot;</span>
+<span id="L179">  python3 &quot;$REPO_ROOT/tools/sbom.py&quot; create \</span>
+<span id="L180">    --repo-root &quot;$REPO_ROOT&quot; \</span>
+<span id="L181">    --artifact-dir &quot;$candidate_b&quot; \</span>
+<span id="L182">    --output &quot;$candidate_b/rtfw.spdx.json&quot; \</span>
+<span id="L183">    --policy &quot;$ASSURANCE_POLICY&quot; \</span>
+<span id="L184">    --dependency-policy &quot;$DEPENDENCY_POLICY&quot; \</span>
+<span id="L185">    --source-commit &quot;$SOURCE_COMMIT&quot;</span>
+<span id="L186">  cmp &quot;$candidate_a/rtfw.spdx.json&quot; &quot;$candidate_b/rtfw.spdx.json&quot;</span>
+<span id="L187"></span>
+<span id="L188">  local tree_id</span>
+<span id="L189">  tree_id=&quot;$(git -C &quot;$REPO_ROOT&quot; rev-parse HEAD^{tree})&quot;</span>
+<span id="L190">  local tree_state</span>
+<span id="L191">  tree_state=&quot;$(source_tree_state)&quot;</span>
+<span id="L192">  local compiler_id</span>
+<span id="L193">  compiler_id=&quot;$(clang++-14 --version | head -1)&quot;</span>
+<span id="L194">  local cmake_id</span>
+<span id="L195">  cmake_id=&quot;$(cmake --version | head -1)&quot;</span>
+<span id="L196">  python3 &quot;$REPO_ROOT/tools/provenance.py&quot; create \</span>
+<span id="L197">    --artifact-dir &quot;$candidate_a&quot; \</span>
+<span id="L198">    --output &quot;$candidate_a/rtfw.provenance.json&quot; \</span>
+<span id="L199">    --policy &quot;$ASSURANCE_POLICY&quot; \</span>
+<span id="L200">    --dependency-policy &quot;$DEPENDENCY_POLICY&quot; \</span>
+<span id="L201">    --source-commit &quot;$SOURCE_COMMIT&quot; \</span>
+<span id="L202">    --source-tree &quot;$tree_id&quot; \</span>
+<span id="L203">    --source-tree-state &quot;$tree_state&quot; \</span>
+<span id="L204">    --compiler &quot;$compiler_id&quot; \</span>
+<span id="L205">    --cmake &quot;$cmake_id&quot;</span>
+<span id="L206">  python3 &quot;$REPO_ROOT/tools/release_manifest.py&quot; create \</span>
+<span id="L207">    --artifact-dir &quot;$candidate_a&quot; \</span>
+<span id="L208">    --output &quot;$candidate_a/rtfw-release-manifest.json&quot; \</span>
+<span id="L209">    --version-file &quot;$REPO_ROOT/VERSION.txt&quot; \</span>
+<span id="L210">    --source-commit &quot;$SOURCE_COMMIT&quot;</span>
+<span id="L211">  python3 &quot;$REPO_ROOT/tools/release_manifest.py&quot; verify \</span>
+<span id="L212">    --artifact-dir &quot;$candidate_a&quot; \</span>
+<span id="L213">    --manifest &quot;$candidate_a/rtfw-release-manifest.json&quot; \</span>
+<span id="L214">    --version-file &quot;$REPO_ROOT/VERSION.txt&quot; \</span>
+<span id="L215">    --expected-source-commit &quot;$SOURCE_COMMIT&quot;</span>
+<span id="L216">  python3 &quot;$REPO_ROOT/tools/sbom.py&quot; verify \</span>
+<span id="L217">    --repo-root &quot;$REPO_ROOT&quot; \</span>
+<span id="L218">    --artifact-dir &quot;$candidate_a&quot; \</span>
+<span id="L219">    --sbom &quot;$candidate_a/rtfw.spdx.json&quot; \</span>
+<span id="L220">    --policy &quot;$ASSURANCE_POLICY&quot; \</span>
+<span id="L221">    --dependency-policy &quot;$DEPENDENCY_POLICY&quot; \</span>
+<span id="L222">    --source-commit &quot;$SOURCE_COMMIT&quot;</span>
+<span id="L223">  python3 &quot;$REPO_ROOT/tools/provenance.py&quot; verify \</span>
+<span id="L224">    --artifact-dir &quot;$candidate_a&quot; \</span>
+<span id="L225">    --statement &quot;$candidate_a/rtfw.provenance.json&quot; \</span>
+<span id="L226">    --manifest &quot;$candidate_a/rtfw-release-manifest.json&quot; \</span>
+<span id="L227">    --policy &quot;$ASSURANCE_POLICY&quot; \</span>
+<span id="L228">    --dependency-policy &quot;$DEPENDENCY_POLICY&quot; \</span>
+<span id="L229">    --source-commit &quot;$SOURCE_COMMIT&quot; \</span>
+<span id="L230">    --source-tree &quot;$tree_id&quot; \</span>
+<span id="L231">    --source-tree-state &quot;$tree_state&quot; \</span>
+<span id="L232">    --compiler &quot;$compiler_id&quot; \</span>
+<span id="L233">    --cmake &quot;$cmake_id&quot;</span>
+<span id="L234">  python3 &quot;$REPO_ROOT/tools/provenance.py&quot; verify-fixture \</span>
+<span id="L235">    --repo-root &quot;$REPO_ROOT&quot; \</span>
+<span id="L236">    --policy &quot;$ASSURANCE_POLICY&quot;</span>
+<span id="L237"></span>
+<span id="L238">  python3 &quot;$REPO_ROOT/tools/extract_release_archive.py&quot; \</span>
+<span id="L239">    --artifact-dir &quot;$candidate_a&quot; \</span>
+<span id="L240">    --destination &quot;$relocated&quot;</span>
+<span id="L241">  CC=clang-14 CXX=clang++-14 cmake \</span>
+<span id="L242">    -S &quot;$REPO_ROOT/tests/package_consumer&quot; \</span>
+<span id="L243">    -B &quot;$consumer&quot; \</span>
+<span id="L244">    -DCMAKE_BUILD_TYPE=Release \</span>
+<span id="L245">    -DCMAKE_PREFIX_PATH=&quot;$relocated&quot;</span>
+<span id="L246">  cmake --build &quot;$consumer&quot; --parallel 2</span>
+<span id="L247">  ctest --test-dir &quot;$consumer&quot; --output-on-failure</span>
+<span id="L248">  python3 &quot;$REPO_ROOT/tools/check_c_abi.py&quot; \</span>
+<span id="L249">    --library &quot;$package_build/librtfw.so&quot;</span>
+<span id="L250">  readelf -d &quot;$package_build/librtfw.so&quot; | \</span>
+<span id="L251">    rg &#x27;SONAME.*librtfw.so.8&#x27;</span>
+<span id="L252"></span>
+<span id="L253">  python3 - &quot;$candidate_a&quot; &quot;$BUILD_DIR/artifact-report.json&quot; &quot;$SOURCE_COMMIT&quot; &lt;&lt;&#x27;PY&#x27;</span>
+<span id="L254">import hashlib,json,pathlib,sys</span>
+<span id="L255">root=pathlib.Path(sys.argv[1])</span>
+<span id="L256">output=pathlib.Path(sys.argv[2])</span>
+<span id="L257">records=[]</span>
+<span id="L258">for path in sorted(root.iterdir()):</span>
+<span id="L259">    if path.is_file() and not path.is_symlink():</span>
+<span id="L260">        records.append({&quot;name&quot;:path.name,&quot;bytes&quot;:path.stat().st_size,&quot;sha256&quot;:hashlib.sha256(path.read_bytes()).hexdigest()})</span>
+<span id="L261">value={&quot;schema_version&quot;:1,&quot;source_commit&quot;:sys.argv[3],&quot;candidate_only&quot;:True,&quot;signed&quot;:False,&quot;published&quot;:False,&quot;authenticated_provenance&quot;:False,&quot;files&quot;:records}</span>
+<span id="L262">temporary=output.with_name(output.name+&quot;.tmp&quot;)</span>
+<span id="L263">temporary.write_text(json.dumps(value,indent=2,sort_keys=True)+&quot;\n&quot;,encoding=&quot;utf-8&quot;)</span>
+<span id="L264">temporary.replace(output)</span>
+<span id="L265">PY</span>
+<span id="L266">}</span>
+<span id="L267"></span>
+<span id="L268">case &quot;$MODE&quot; in</span>
+<span id="L269">  dependencies) run_dependencies ;;</span>
+<span id="L270">  static) run_static ;;</span>
+<span id="L271">  fuzz) run_fuzz ;;</span>
+<span id="L272">  artifacts) run_artifacts ;;</span>
+<span id="L273">  all)</span>
+<span id="L274">    run_dependencies</span>
+<span id="L275">    run_static</span>
+<span id="L276">    run_fuzz</span>
+<span id="L277">    run_artifacts</span>
+<span id="L278">    ;;</span>
+<span id="L279">esac</span>
+<span id="L280"></span>
+<span id="L281">echo &quot;portable assurance mode=$MODE completed build_dir=$BUILD_DIR&quot;</span></pre></html>

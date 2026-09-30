@@ -13,9 +13,10 @@ require a connection. The runtime version and exact input hashes are recorded in
 [the inventory](inventory.json). Generated content is reproducible and checked
 against source during development and against archive bytes during package tests.
 
-M25 software completion does not establish an independent novice walkthrough,
-M26 composition/audit, physical CUDA/XDMA/HIL, RT1/RT2, controlled performance,
-Unreal, signing or release approval.
+The [golden system and capability audit](../golden_audit/index.html) maps the
+portable composition to exact source and retained evidence. M25/M26 software
+delivery does not establish an independent novice walkthrough, physical
+CUDA/XDMA/HIL, RT1/RT2, controlled performance, Unreal, signing or release approval.
 
 ## Guides
 
@@ -47,3 +48,8 @@ Unreal, signing or release approval.
 - [docs/typed_runtime.md](<guides/docs__typed_runtime.md>)
 - [docs/runtime_profiles.md](<guides/docs__runtime_profiles.md>)
 - [docs/release_policy.md](<guides/docs__release_policy.md>)
+- [docs/golden_system.md](<guides/docs__golden_system.md>)
+- [docs/golden_cuda.md](<guides/docs__golden_cuda.md>)
+- [docs/golden_xdma.md](<guides/docs__golden_xdma.md>)
+- [docs/golden_showcase.md](<guides/docs__golden_showcase.md>)
+- [docs/golden_audit.md](<guides/docs__golden_audit.md>)

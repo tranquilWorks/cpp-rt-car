@@ -60,7 +60,7 @@ Install the SDK with benchmarks enabled and configure the shipped
 uses those same three installed source files and the optional `rtfw::benchmark`
 component. Default SDK targets/headers and all prior sample files remain intact.
 
-[Generated capabilities](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/cuda_capabilities.md) binds each row to named automated
+[Generated capabilities](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/cuda_capabilities.md) binds each row to named automated
 checks and retained source/evidence digests. Physical rows remain in the overall
 denominator and explicit M18 manual gates. CUDA does not claim deterministic
 checkpoint/replay of external device state; the actual CUDA registration rejects

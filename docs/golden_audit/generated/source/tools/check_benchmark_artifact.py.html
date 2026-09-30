@@ -1,0 +1,304 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tools/check_benchmark_artifact.py</title><h1>tools/check_benchmark_artifact.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#!/usr/bin/env python3</span>
+<span id="L2">&quot;&quot;&quot;Offline M23 v1 schema, canonical-byte, digest, and arithmetic validation.</span>
+<span id="L3"></span>
+<span id="L4">This is not a general JSON Schema engine: only the closed keyword subset used</span>
+<span id="L5">by the two shipped schemas is accepted. No references or network are loaded.</span>
+<span id="L6">&quot;&quot;&quot;</span>
+<span id="L7">from __future__ import annotations</span>
+<span id="L8"></span>
+<span id="L9">import argparse</span>
+<span id="L10">import datetime</span>
+<span id="L11">import hashlib</span>
+<span id="L12">import json</span>
+<span id="L13">import os</span>
+<span id="L14">from pathlib import Path</span>
+<span id="L15">import re</span>
+<span id="L16">import stat</span>
+<span id="L17">import sys</span>
+<span id="L18">from typing import Any</span>
+<span id="L19"></span>
+<span id="L20">MAX_BYTES = 32 * 1024 * 1024</span>
+<span id="L21">MAX_INT = (1 &lt;&lt; 63) - 1</span>
+<span id="L22">FILES = {&quot;descriptor.json&quot;, &quot;raw.json&quot;, &quot;result.json&quot;}</span>
+<span id="L23">ROOT = Path(__file__).resolve().parents[1]</span>
+<span id="L24"></span>
+<span id="L25"></span>
+<span id="L26">def require(condition: bool, message: str) -&gt; None:</span>
+<span id="L27">    if not condition:</span>
+<span id="L28">        raise ValueError(message)</span>
+<span id="L29"></span>
+<span id="L30"></span>
+<span id="L31">def canonical(value: Any) -&gt; bytes:</span>
+<span id="L32">    return (json.dumps(value, sort_keys=True, ensure_ascii=True, allow_nan=False,</span>
+<span id="L33">                       separators=(&quot;,&quot;, &quot;:&quot;)) + &quot;\n&quot;).encode(&quot;ascii&quot;)</span>
+<span id="L34"></span>
+<span id="L35"></span>
+<span id="L36">def digest(raw: bytes) -&gt; str:</span>
+<span id="L37">    return hashlib.sha256(raw).hexdigest()</span>
+<span id="L38"></span>
+<span id="L39"></span>
+<span id="L40">def _pairs(pairs: list[tuple[str, Any]]) -&gt; dict[str, Any]:</span>
+<span id="L41">    result: dict[str, Any] = {}</span>
+<span id="L42">    for name, value in pairs:</span>
+<span id="L43">        require(name not in result, &quot;duplicate JSON field&quot;)</span>
+<span id="L44">        result[name] = value</span>
+<span id="L45">    return result</span>
+<span id="L46"></span>
+<span id="L47"></span>
+<span id="L48">def _no_float(_: str) -&gt; None:</span>
+<span id="L49">    raise ValueError(&quot;non-integer JSON number&quot;)</span>
+<span id="L50"></span>
+<span id="L51"></span>
+<span id="L52">def decode(raw: bytes, *, canonical_required: bool = True) -&gt; Any:</span>
+<span id="L53">    require(len(raw) &lt;= MAX_BYTES, &quot;artifact too large&quot;)</span>
+<span id="L54">    depth = 0</span>
+<span id="L55">    quoted = escaped = False</span>
+<span id="L56">    for char in raw:</span>
+<span id="L57">        if quoted:</span>
+<span id="L58">            if escaped:</span>
+<span id="L59">                escaped = False</span>
+<span id="L60">            elif char == 92:</span>
+<span id="L61">                escaped = True</span>
+<span id="L62">            elif char == 34:</span>
+<span id="L63">                quoted = False</span>
+<span id="L64">        elif char == 34:</span>
+<span id="L65">            quoted = True</span>
+<span id="L66">        elif char in (91, 123):</span>
+<span id="L67">            depth += 1</span>
+<span id="L68">            require(depth &lt;= 32, &quot;JSON nesting limit&quot;)</span>
+<span id="L69">        elif char in (93, 125):</span>
+<span id="L70">            depth -= 1</span>
+<span id="L71">    value = json.loads(raw.decode(&quot;utf-8&quot;), object_pairs_hook=_pairs,</span>
+<span id="L72">                       parse_float=_no_float, parse_constant=_no_float)</span>
+<span id="L73">    if canonical_required:</span>
+<span id="L74">        require(canonical(value) == raw, &quot;noncanonical JSON bytes&quot;)</span>
+<span id="L75">    return value</span>
+<span id="L76"></span>
+<span id="L77"></span>
+<span id="L78">def validate_schema(value: Any, schema: dict[str, Any]) -&gt; None:</span>
+<span id="L79">    &quot;&quot;&quot;Validate the frozen, deliberately limited v1 schema vocabulary.&quot;&quot;&quot;</span>
+<span id="L80">    allowed = {&quot;$schema&quot;, &quot;$id&quot;, &quot;$defs&quot;, &quot;type&quot;, &quot;const&quot;, &quot;enum&quot;, &quot;oneOf&quot;, &quot;required&quot;,</span>
+<span id="L81">               &quot;properties&quot;, &quot;additionalProperties&quot;, &quot;propertyNames&quot;, &quot;items&quot;, &quot;minimum&quot;, &quot;maximum&quot;,</span>
+<span id="L82">               &quot;minItems&quot;, &quot;maxItems&quot;, &quot;minLength&quot;, &quot;maxLength&quot;, &quot;pattern&quot;, &quot;minProperties&quot;, &quot;maxProperties&quot;}</span>
+<span id="L83">    require(set(schema) &lt;= allowed, &quot;unsupported schema keyword&quot;)</span>
+<span id="L84">    if &quot;oneOf&quot; in schema:</span>
+<span id="L85">        successes = 0</span>
+<span id="L86">        for choice in schema[&quot;oneOf&quot;]:</span>
+<span id="L87">            try:</span>
+<span id="L88">                validate_schema(value, choice)</span>
+<span id="L89">                successes += 1</span>
+<span id="L90">            except ValueError:</span>
+<span id="L91">                pass</span>
+<span id="L92">        require(successes == 1, &quot;schema oneOf mismatch&quot;)</span>
+<span id="L93">    if &quot;const&quot; in schema:</span>
+<span id="L94">        require(type(value) is type(schema[&quot;const&quot;]) and value == schema[&quot;const&quot;], &quot;schema constant mismatch&quot;)</span>
+<span id="L95">    if &quot;enum&quot; in schema:</span>
+<span id="L96">        require(any(type(value) is type(item) and value == item for item in schema[&quot;enum&quot;]), &quot;schema enum mismatch&quot;)</span>
+<span id="L97">    if &quot;type&quot; in schema:</span>
+<span id="L98">        types = {&quot;object&quot;: dict, &quot;array&quot;: list, &quot;string&quot;: str, &quot;integer&quot;: int, &quot;boolean&quot;: bool, &quot;null&quot;: type(None)}</span>
+<span id="L99">        require(schema[&quot;type&quot;] in types and type(value) is types[schema[&quot;type&quot;]], &quot;schema type mismatch&quot;)</span>
+<span id="L100">    if type(value) is int:</span>
+<span id="L101">        require(schema.get(&quot;minimum&quot;, 0) &lt;= value &lt;= schema.get(&quot;maximum&quot;, MAX_INT), &quot;integer out of range&quot;)</span>
+<span id="L102">    if type(value) is str:</span>
+<span id="L103">        require(schema.get(&quot;minLength&quot;, 0) &lt;= len(value) &lt;= schema.get(&quot;maxLength&quot;, 256), &quot;string extent&quot;)</span>
+<span id="L104">        if &quot;pattern&quot; in schema:</span>
+<span id="L105">            require(re.fullmatch(schema[&quot;pattern&quot;], value) is not None, &quot;string format&quot;)</span>
+<span id="L106">    if type(value) is list:</span>
+<span id="L107">        require(schema.get(&quot;minItems&quot;, 0) &lt;= len(value) &lt;= schema.get(&quot;maxItems&quot;, 10000), &quot;array extent&quot;)</span>
+<span id="L108">        for item in value:</span>
+<span id="L109">            validate_schema(item, schema.get(&quot;items&quot;, {}))</span>
+<span id="L110">    if type(value) is dict:</span>
+<span id="L111">        require(schema.get(&quot;minProperties&quot;, 0) &lt;= len(value) &lt;= schema.get(&quot;maxProperties&quot;, 64), &quot;object extent&quot;)</span>
+<span id="L112">        require(set(schema.get(&quot;required&quot;, [])) &lt;= set(value), &quot;missing required field&quot;)</span>
+<span id="L113">        properties = schema.get(&quot;properties&quot;, {})</span>
+<span id="L114">        for key, item in value.items():</span>
+<span id="L115">            if &quot;propertyNames&quot; in schema:</span>
+<span id="L116">                validate_schema(key, schema[&quot;propertyNames&quot;])</span>
+<span id="L117">            if key in properties:</span>
+<span id="L118">                validate_schema(item, properties[key])</span>
+<span id="L119">            else:</span>
+<span id="L120">                extra = schema.get(&quot;additionalProperties&quot;, True)</span>
+<span id="L121">                require(extra is not False, &quot;unknown field&quot;)</span>
+<span id="L122">                if isinstance(extra, dict):</span>
+<span id="L123">                    validate_schema(item, extra)</span>
+<span id="L124"></span>
+<span id="L125"></span>
+<span id="L126">def _regular_file(fd: int) -&gt; bytes:</span>
+<span id="L127">    info = os.fstat(fd)</span>
+<span id="L128">    require(stat.S_ISREG(info.st_mode) and info.st_size &lt;= MAX_BYTES, &quot;not a bounded regular file&quot;)</span>
+<span id="L129">    with os.fdopen(os.dup(fd), &quot;rb&quot;) as stream:</span>
+<span id="L130">        raw = stream.read(MAX_BYTES + 1)</span>
+<span id="L131">    require(len(raw) &lt;= MAX_BYTES, &quot;artifact too large&quot;)</span>
+<span id="L132">    return raw</span>
+<span id="L133"></span>
+<span id="L134"></span>
+<span id="L135">def _windows_bundle(root: Path) -&gt; dict[str, bytes]:</span>
+<span id="L136">    # Hold every ancestor against rename; OPEN_REPARSE_POINT checks the object</span>
+<span id="L137">    # itself before reading, so a junction or leaf symlink is never followed.</span>
+<span id="L138">    import ctypes</span>
+<span id="L139">    from ctypes import wintypes</span>
+<span id="L140">    import msvcrt</span>
+<span id="L141">    kernel = ctypes.WinDLL(&quot;kernel32&quot;, use_last_error=True)</span>
+<span id="L142">    create = kernel.CreateFileW</span>
+<span id="L143">    create.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,</span>
+<span id="L144">                       wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)</span>
+<span id="L145">    create.restype = wintypes.HANDLE</span>
+<span id="L146">    close = kernel.CloseHandle</span>
+<span id="L147">    close.argtypes = (wintypes.HANDLE,)</span>
+<span id="L148">    query = kernel.GetFileInformationByHandleEx</span>
+<span id="L149">    query.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)</span>
+<span id="L150">    class Tag(ctypes.Structure):</span>
+<span id="L151">        _fields_ = [(&quot;attributes&quot;, wintypes.DWORD), (&quot;tag&quot;, wintypes.DWORD)]</span>
+<span id="L152">    handles: list[Any] = []</span>
+<span id="L153">    def open_checked(path: Path, directory: bool) -&gt; Any:</span>
+<span id="L154">        access = 0x80 if directory else 0x80000000  # attributes / GENERIC_READ</span>
+<span id="L155">        handle = create(str(path), access, 1, None, 3, 0x00200000 | 0x02000000, None)</span>
+<span id="L156">        require(handle != ctypes.c_void_p(-1).value, &quot;cannot open artifact object&quot;)</span>
+<span id="L157">        handles.append(handle)</span>
+<span id="L158">        info = Tag()</span>
+<span id="L159">        require(query(handle, 9, ctypes.byref(info), ctypes.sizeof(info)) != 0, &quot;cannot inspect artifact object&quot;)</span>
+<span id="L160">        require(not info.attributes &amp; 0x400, &quot;reparse point forbidden&quot;)</span>
+<span id="L161">        require(bool(info.attributes &amp; 0x10) == directory, &quot;wrong artifact object type&quot;)</span>
+<span id="L162">        return handle</span>
+<span id="L163">    try:</span>
+<span id="L164">        current = Path(root.anchor)</span>
+<span id="L165">        for part in root.parts[1:]:</span>
+<span id="L166">            current /= part</span>
+<span id="L167">            open_checked(current, True)</span>
+<span id="L168">        require({p.name for p in root.iterdir()} == FILES, &quot;incomplete or unlisted artifact files&quot;)</span>
+<span id="L169">        output = {}</span>
+<span id="L170">        for name in sorted(FILES):</span>
+<span id="L171">            handle = open_checked(root / name, False)</span>
+<span id="L172">            fd = msvcrt.open_osfhandle(int(handle), os.O_RDONLY | os.O_BINARY)</span>
+<span id="L173">            handles.remove(handle)  # fd now owns the HANDLE</span>
+<span id="L174">            try:</span>
+<span id="L175">                output[name] = _regular_file(fd)</span>
+<span id="L176">            finally:</span>
+<span id="L177">                os.close(fd)</span>
+<span id="L178">        require({p.name for p in root.iterdir()} == FILES, &quot;artifact listing changed&quot;)</span>
+<span id="L179">        return output</span>
+<span id="L180">    finally:</span>
+<span id="L181">        for handle in reversed(handles):</span>
+<span id="L182">            close(handle)</span>
+<span id="L183"></span>
+<span id="L184"></span>
+<span id="L185">def read_bundle(root: Path) -&gt; dict[str, bytes]:</span>
+<span id="L186">    require(&quot;..&quot; not in root.parts, &quot;parent traversal forbidden&quot;)</span>
+<span id="L187">    root = root.absolute()</span>
+<span id="L188">    if os.name == &quot;nt&quot;:</span>
+<span id="L189">        require(not str(root).startswith(&quot;\\\\&quot;), &quot;UNC/device path forbidden&quot;)</span>
+<span id="L190">        return _windows_bundle(root)</span>
+<span id="L191">    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC</span>
+<span id="L192">    fd = os.open(root.anchor, flags)</span>
+<span id="L193">    try:</span>
+<span id="L194">        for part in root.parts[1:]:</span>
+<span id="L195">            new = os.open(part, flags, dir_fd=fd)</span>
+<span id="L196">            os.close(fd)</span>
+<span id="L197">            fd = new</span>
+<span id="L198">        require(set(os.listdir(fd)) == FILES, &quot;incomplete or unlisted artifact files&quot;)</span>
+<span id="L199">        output = {}</span>
+<span id="L200">        for name in sorted(FILES):</span>
+<span id="L201">            leaf = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=fd)</span>
+<span id="L202">            try:</span>
+<span id="L203">                output[name] = _regular_file(leaf)</span>
+<span id="L204">            finally:</span>
+<span id="L205">                os.close(leaf)</span>
+<span id="L206">        require(set(os.listdir(fd)) == FILES, &quot;artifact listing changed&quot;)</span>
+<span id="L207">        return output</span>
+<span id="L208">    finally:</span>
+<span id="L209">        os.close(fd)</span>
+<span id="L210"></span>
+<span id="L211"></span>
+<span id="L212">def validate_bundle(root: Path, schema_root: Path | None = None) -&gt; dict[str, Any]:</span>
+<span id="L213">    schemas = schema_root or ROOT / &quot;bench/schemas&quot;</span>
+<span id="L214">    ds = decode((schemas / &quot;descriptor.schema.json&quot;).read_bytes(), canonical_required=False)</span>
+<span id="L215">    rs = decode((schemas / &quot;result.schema.json&quot;).read_bytes(), canonical_required=False)</span>
+<span id="L216">    files = read_bundle(root)</span>
+<span id="L217">    d, raw, result = (decode(files[name]) for name in (&quot;descriptor.json&quot;, &quot;raw.json&quot;, &quot;result.json&quot;))</span>
+<span id="L218">    validate_schema(d, ds)</span>
+<span id="L219">    validate_schema(raw, rs[&quot;$defs&quot;][&quot;raw&quot;])</span>
+<span id="L220">    validate_schema(result, rs)</span>
+<span id="L221">    for fields in (d[&quot;parameters&quot;], d[&quot;counters&quot;]):</span>
+<span id="L222">        require(len({p[&quot;name&quot;] for p in fields}) == len(fields), &quot;duplicate parameter/counter&quot;)</span>
+<span id="L223">        for p in fields:</span>
+<span id="L224">            require(p[&quot;minimum&quot;] &lt;= p[&quot;maximum&quot;], &quot;reversed range&quot;)</span>
+<span id="L225">            if &quot;value&quot; in p:</span>
+<span id="L226">                require(p[&quot;minimum&quot;] &lt;= p[&quot;value&quot;] &lt;= p[&quot;maximum&quot;], &quot;parameter outside range&quot;)</span>
+<span id="L227">    require(d[&quot;parameters&quot;] == sorted(d[&quot;parameters&quot;], key=lambda p: p[&quot;name&quot;]), &quot;noncanonical parameter order&quot;)</span>
+<span id="L228">    descriptor_hash = digest(files[&quot;descriptor.json&quot;])</span>
+<span id="L229">    require(result[&quot;descriptor_sha256&quot;] == raw[&quot;descriptor_sha256&quot;] == descriptor_hash, &quot;descriptor digest mismatch&quot;)</span>
+<span id="L230">    require(result[&quot;raw_sha256&quot;] == digest(files[&quot;raw.json&quot;]), &quot;raw digest mismatch&quot;)</span>
+<span id="L231">    unhashed = {k: v for k, v in result.items() if k != &quot;result_sha256&quot;}</span>
+<span id="L232">    require(result[&quot;result_sha256&quot;] == digest(canonical(unhashed)), &quot;result digest mismatch&quot;)</span>
+<span id="L233">    context = {&quot;descriptor_sha256&quot;: descriptor_hash, &quot;identity&quot;: result[&quot;identity&quot;], &quot;start_utc&quot;: result[&quot;start_utc&quot;]}</span>
+<span id="L234">    # C++ context object intentionally has no trailing LF; file digests do.</span>
+<span id="L235">    require(result[&quot;run_context_sha256&quot;] == raw[&quot;run_context_sha256&quot;] == digest(canonical(context)[:-1]), &quot;cross-run context mismatch&quot;)</span>
+<span id="L236">    require(result[&quot;workload_sha256&quot;] == d[&quot;workload_sha256&quot;], &quot;workload mismatch&quot;)</span>
+<span id="L237">    expected_class = &quot;structural_fixture&quot; if d[&quot;clock&quot;] == &quot;fake&quot; else &quot;portable_characterization&quot;</span>
+<span id="L238">    require(result[&quot;clock&quot;] == d[&quot;clock&quot;] and result[&quot;evidence_class&quot;] == d[&quot;evidence_class&quot;] == expected_class, &quot;clock/evidence mismatch&quot;)</span>
+<span id="L239">    for field in (&quot;start_utc&quot;, &quot;end_utc&quot;):</span>
+<span id="L240">        if result[field] != &quot;not_available&quot;:</span>
+<span id="L241">            datetime.datetime.strptime(result[field], &quot;%Y-%m-%dT%H:%M:%SZ&quot;)</span>
+<span id="L242">    if d[&quot;clock&quot;] == &quot;fake&quot;:</span>
+<span id="L243">        require(result[&quot;start_utc&quot;] == result[&quot;end_utc&quot;] == &quot;1970-01-01T00:00:00Z&quot;, &quot;fake UTC mismatch&quot;)</span>
+<span id="L244">    elif &quot;not_available&quot; not in (result[&quot;start_utc&quot;], result[&quot;end_utc&quot;]):</span>
+<span id="L245">        require(result[&quot;start_utc&quot;] &lt;= result[&quot;end_utc&quot;], &quot;reversed UTC&quot;)</span>
+<span id="L246">    samples = raw[&quot;samples&quot;]</span>
+<span id="L247">    require(result[&quot;measured_completed&quot;] == len(samples) &lt;= d[&quot;repetitions&quot;], &quot;sample count mismatch&quot;)</span>
+<span id="L248">    require(result[&quot;warmup_completed&quot;] &lt;= d[&quot;warmup&quot;], &quot;warmup count mismatch&quot;)</span>
+<span id="L249">    if samples:</span>
+<span id="L250">        require(result[&quot;warmup_completed&quot;] == d[&quot;warmup&quot;], &quot;measured before warmup complete&quot;)</span>
+<span id="L251">    counters = {p[&quot;name&quot;]: p for p in d[&quot;counters&quot;]}</span>
+<span id="L252">    totals = dict.fromkeys(counters, 0)</span>
+<span id="L253">    durations = []</span>
+<span id="L254">    previous = 0</span>
+<span id="L255">    for n, sample in enumerate(samples):</span>
+<span id="L256">        require(sample[&quot;index&quot;] == n and previous &lt;= sample[&quot;start_ns&quot;] &lt;= sample[&quot;end_ns&quot;], &quot;sample timeline mismatch&quot;)</span>
+<span id="L257">        require(sample[&quot;duration_ns&quot;] == sample[&quot;end_ns&quot;] - sample[&quot;start_ns&quot;], &quot;duration mismatch&quot;)</span>
+<span id="L258">        previous = sample[&quot;end_ns&quot;]</span>
+<span id="L259">        durations.append(sample[&quot;duration_ns&quot;])</span>
+<span id="L260">        require(set(sample[&quot;counters&quot;]) == set(counters), &quot;counter inventory mismatch&quot;)</span>
+<span id="L261">        for name, value in sample[&quot;counters&quot;].items():</span>
+<span id="L262">            require(counters[name][&quot;minimum&quot;] &lt;= value &lt;= counters[name][&quot;maximum&quot;], &quot;counter invariant failed&quot;)</span>
+<span id="L263">            totals[name] += value</span>
+<span id="L264">            require(totals[name] &lt;= MAX_INT, &quot;counter total overflow&quot;)</span>
+<span id="L265">    require(sum(durations) &lt;= MAX_INT, &quot;duration total overflow&quot;)</span>
+<span id="L266">    diagnostics = {&quot;ok&quot;: {&quot;&quot;}, &quot;provider_error&quot;: {&quot;provider callback threw&quot;, &quot;provider invocation failed&quot;},</span>
+<span id="L267">                   &quot;clock_error&quot;: {&quot;invalid start clock&quot;, &quot;invalid end clock&quot;, &quot;clock callback threw&quot;},</span>
+<span id="L268">                   &quot;invariant_failed&quot;: {&quot;counter or correctness invariant failed&quot;, &quot;counter aggregate overflow&quot;, &quot;duration aggregate overflow&quot;},</span>
+<span id="L269">                   &quot;not_run&quot;: {&quot;prerequisite unavailable&quot;}}</span>
+<span id="L270">    require(result[&quot;diagnostic&quot;] in diagnostics[result[&quot;status&quot;]], &quot;unsupported diagnostic&quot;)</span>
+<span id="L271">    if result[&quot;status&quot;] == &quot;ok&quot;:</span>
+<span id="L272">        require(len(samples) == d[&quot;repetitions&quot;] and result[&quot;warmup_completed&quot;] == d[&quot;warmup&quot;], &quot;incomplete successful run&quot;)</span>
+<span id="L273">        require(result[&quot;diagnostic&quot;] == &quot;&quot;, &quot;successful run has diagnostic&quot;)</span>
+<span id="L274">        ordered = sorted(durations)</span>
+<span id="L275">        expected = {&quot;counter_totals&quot;: totals, &quot;min_ns&quot;: min(ordered), &quot;max_ns&quot;: max(ordered),</span>
+<span id="L276">                    &quot;total_ns&quot;: sum(ordered), &quot;percentile_method&quot;: &quot;nearest_rank&quot;}</span>
+<span id="L277">        for p in (50, 95, 99):</span>
+<span id="L278">            expected[f&quot;p{p}_ns&quot;] = ordered[(len(ordered) * p + 99) // 100 - 1]</span>
+<span id="L279">        require(result[&quot;statistics&quot;] == expected, &quot;summary arithmetic mismatch&quot;)</span>
+<span id="L280">    else:</span>
+<span id="L281">        require(result[&quot;statistics&quot;] is None and result[&quot;diagnostic&quot;] != &quot;&quot;, &quot;failed run has successful summary&quot;)</span>
+<span id="L282">        require(len(samples) &lt; d[&quot;repetitions&quot;], &quot;failure after claimed completion&quot;)</span>
+<span id="L283">        if result[&quot;status&quot;] == &quot;not_run&quot;:</span>
+<span id="L284">            require(not samples and result[&quot;warmup_completed&quot;] == 0 and result[&quot;diagnostic&quot;] == &quot;prerequisite unavailable&quot;, &quot;invalid not-run result&quot;)</span>
+<span id="L285">    return result</span>
+<span id="L286"></span>
+<span id="L287"></span>
+<span id="L288">def main() -&gt; int:</span>
+<span id="L289">    parser = argparse.ArgumentParser(description=__doc__)</span>
+<span id="L290">    parser.add_argument(&quot;--artifact-root&quot;, type=Path, required=True)</span>
+<span id="L291">    parser.add_argument(&quot;--schema-root&quot;, type=Path)</span>
+<span id="L292">    args = parser.parse_args()</span>
+<span id="L293">    try:</span>
+<span id="L294">        result = validate_bundle(args.artifact_root, args.schema_root)</span>
+<span id="L295">        print(f&quot;Benchmark artifact valid: status={result[&#x27;status&#x27;]} evidence={result[&#x27;evidence_class&#x27;]}&quot;)</span>
+<span id="L296">        return 0 if result[&quot;status&quot;] == &quot;ok&quot; else 3 if result[&quot;status&quot;] == &quot;not_run&quot; else 1</span>
+<span id="L297">    except (ValueError, OSError, RecursionError, UnicodeError):</span>
+<span id="L298">        # Do not echo parsed user content or potentially private path strings.</span>
+<span id="L299">        print(&quot;Benchmark artifact rejected&quot;, file=sys.stderr)</span>
+<span id="L300">        return 1</span>
+<span id="L301"></span>
+<span id="L302"></span>
+<span id="L303">if __name__ == &quot;__main__&quot;:</span>
+<span id="L304">    raise SystemExit(main())</span></pre></html>

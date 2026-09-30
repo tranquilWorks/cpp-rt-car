@@ -1,0 +1,107 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_live_control_actions.cpp</title><h1>tests/test_live_control_actions.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;array&gt;</span>
+<span id="L4">#include &lt;cstddef&gt;</span>
+<span id="L5">#include &lt;cstdint&gt;</span>
+<span id="L6">#include &lt;limits&gt;</span>
+<span id="L7"></span>
+<span id="L8">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L9"></span>
+<span id="L10">#include &quot;rt/src/live_control_actions.hpp&quot;</span>
+<span id="L11"></span>
+<span id="L12">namespace {</span>
+<span id="L13"></span>
+<span id="L14">rt::LiveControlActionRecord action_record() {</span>
+<span id="L15">    rt::LiveControlActionRecord record;</span>
+<span id="L16">    record.runtime_id = 11;</span>
+<span id="L17">    record.configuration_generation = 12;</span>
+<span id="L18">    record.policy_identity = 13;</span>
+<span id="L19">    record.target.frame_index = 7;</span>
+<span id="L20">    record.mailbox_identity = 14;</span>
+<span id="L21">    record.producer_identity = 15;</span>
+<span id="L22">    record.mailbox_sequence = 1;</span>
+<span id="L23">    record.producer_sequence = 1;</span>
+<span id="L24">    record.payload_digest = 16;</span>
+<span id="L25">    record.payload_bytes = 4;</span>
+<span id="L26">    return record;</span>
+<span id="L27">}</span>
+<span id="L28"></span>
+<span id="L29">} // namespace</span>
+<span id="L30"></span>
+<span id="L31">TEST(LiveControlActions, PublicLayoutAndClosedTablesRejectMalformedRecords) {</span>
+<span id="L32">    EXPECT_EQ(sizeof(rt::LiveControlClosurePolicy), 72u);</span>
+<span id="L33">    EXPECT_EQ(alignof(rt::LiveControlClosurePolicy), 8u);</span>
+<span id="L34">    EXPECT_EQ(sizeof(rt::LiveControlActionRecord), 256u);</span>
+<span id="L35">    EXPECT_EQ(alignof(rt::LiveControlActionRecord), 8u);</span>
+<span id="L36"></span>
+<span id="L37">    auto record = action_record();</span>
+<span id="L38">    EXPECT_TRUE(rt::detail::live_control_action_valid(record));</span>
+<span id="L39">    record.reserved.front() = std::byte{1};</span>
+<span id="L40">    EXPECT_FALSE(rt::detail::live_control_action_valid(record));</span>
+<span id="L41">    record = action_record();</span>
+<span id="L42">    record.target.reserved.back() = std::byte{1};</span>
+<span id="L43">    EXPECT_FALSE(rt::detail::live_control_action_valid(record));</span>
+<span id="L44">    record = action_record();</span>
+<span id="L45">    record.action = static_cast&lt;rt::LiveControlActionId&gt;(0);</span>
+<span id="L46">    EXPECT_FALSE(rt::detail::live_control_action_valid(record));</span>
+<span id="L47">    record = action_record();</span>
+<span id="L48">    record.action = rt::LiveControlActionId::rolled_back;</span>
+<span id="L49">    EXPECT_FALSE(rt::detail::live_control_action_valid(record));</span>
+<span id="L50">}</span>
+<span id="L51"></span>
+<span id="L52">TEST(LiveControlActions, FixedRingReportsOverwriteGapAndResetExactly) {</span>
+<span id="L53">    rt::detail::LiveControlActionRing ring(2);</span>
+<span id="L54">    for (std::uint64_t sequence = 0; sequence &lt; 3; ++sequence) {</span>
+<span id="L55">        auto record = action_record();</span>
+<span id="L56">        record.mailbox_sequence = sequence + 1;</span>
+<span id="L57">        std::uint64_t assigned = 99;</span>
+<span id="L58">        ASSERT_TRUE(ring.emit(record, &amp;assigned));</span>
+<span id="L59">        EXPECT_EQ(assigned, sequence);</span>
+<span id="L60">    }</span>
+<span id="L61">    EXPECT_EQ(ring.next_sequence(), 3u);</span>
+<span id="L62">    EXPECT_EQ(ring.emitted(), 3u);</span>
+<span id="L63">    EXPECT_EQ(ring.overwritten(), 1u);</span>
+<span id="L64">    EXPECT_EQ(ring.dropped(), 0u);</span>
+<span id="L65">    EXPECT_EQ(ring.oldest_sequence(ring.next_sequence()), 1u);</span>
+<span id="L66"></span>
+<span id="L67">    rt::LiveControlActionRecord read;</span>
+<span id="L68">    EXPECT_FALSE(ring.read_sequence(0, read));</span>
+<span id="L69">    ASSERT_TRUE(ring.read_sequence(1, read));</span>
+<span id="L70">    EXPECT_EQ(read.sequence, 1u);</span>
+<span id="L71">    EXPECT_EQ(read.mailbox_sequence, 2u);</span>
+<span id="L72">    EXPECT_TRUE(ring.gap_free(1, 2));</span>
+<span id="L73">    EXPECT_FALSE(ring.gap_free(0, 3));</span>
+<span id="L74"></span>
+<span id="L75">    ring.restore_sequence(10);</span>
+<span id="L76">    EXPECT_EQ(ring.next_sequence(), 10u);</span>
+<span id="L77">    EXPECT_EQ(ring.emitted(), 0u);</span>
+<span id="L78">    EXPECT_EQ(ring.overwritten(), 0u);</span>
+<span id="L79">    EXPECT_EQ(ring.dropped(), 0u);</span>
+<span id="L80">    EXPECT_FALSE(ring.read_sequence(1, read));</span>
+<span id="L81">    std::uint64_t assigned = 0;</span>
+<span id="L82">    ASSERT_TRUE(ring.emit(action_record(), &amp;assigned));</span>
+<span id="L83">    EXPECT_EQ(assigned, 10u);</span>
+<span id="L84">}</span>
+<span id="L85"></span>
+<span id="L86">TEST(LiveControlActions, ZeroCapacityDropsButStillReservesSequence) {</span>
+<span id="L87">    rt::detail::LiveControlActionRing ring(0);</span>
+<span id="L88">    std::uint64_t assigned = 99;</span>
+<span id="L89">    EXPECT_FALSE(ring.emit(action_record(), &amp;assigned));</span>
+<span id="L90">    EXPECT_EQ(assigned, 0u);</span>
+<span id="L91">    EXPECT_EQ(ring.next_sequence(), 1u);</span>
+<span id="L92">    EXPECT_EQ(ring.emitted(), 0u);</span>
+<span id="L93">    EXPECT_EQ(ring.dropped(), 1u);</span>
+<span id="L94">}</span>
+<span id="L95"></span>
+<span id="L96">TEST(LiveControlActions, SequenceExhaustionFailsBeforeWrap) {</span>
+<span id="L97">    rt::detail::LiveControlActionRing ring(1);</span>
+<span id="L98">    ring.restore_sequence(std::numeric_limits&lt;std::uint64_t&gt;::max() - 1);</span>
+<span id="L99">    std::uint64_t assigned = 0;</span>
+<span id="L100">    ASSERT_TRUE(ring.emit(action_record(), &amp;assigned));</span>
+<span id="L101">    EXPECT_EQ(assigned, std::numeric_limits&lt;std::uint64_t&gt;::max() - 1);</span>
+<span id="L102">    EXPECT_EQ(ring.next_sequence(), std::numeric_limits&lt;std::uint64_t&gt;::max());</span>
+<span id="L103">    EXPECT_FALSE(ring.emit(action_record(), &amp;assigned));</span>
+<span id="L104">    EXPECT_EQ(assigned, std::numeric_limits&lt;std::uint64_t&gt;::max());</span>
+<span id="L105">    EXPECT_EQ(ring.next_sequence(), std::numeric_limits&lt;std::uint64_t&gt;::max());</span>
+<span id="L106">    EXPECT_EQ(ring.dropped(), 1u);</span>
+<span id="L107">}</span></pre></html>

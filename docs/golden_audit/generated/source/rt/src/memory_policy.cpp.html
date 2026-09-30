@@ -1,0 +1,1055 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>rt/src/memory_policy.cpp</title><h1>rt/src/memory_policy.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;memory_policy.hpp&quot;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;cerrno&gt;</span>
+<span id="L5">#include &lt;cstdint&gt;</span>
+<span id="L6">#include &lt;cstring&gt;</span>
+<span id="L7">#include &lt;limits&gt;</span>
+<span id="L8">#include &lt;memory&gt;</span>
+<span id="L9">#include &lt;new&gt;</span>
+<span id="L10">#include &lt;utility&gt;</span>
+<span id="L11"></span>
+<span id="L12">#if defined(__linux__)</span>
+<span id="L13">#include &lt;sys/mman.h&gt;</span>
+<span id="L14">#include &lt;unistd.h&gt;</span>
+<span id="L15">#endif</span>
+<span id="L16"></span>
+<span id="L17">namespace {</span>
+<span id="L18"></span>
+<span id="L19">constexpr std::uint64_t kKnownCapabilities =</span>
+<span id="L20">    rt::memory_provider_capability_bit(</span>
+<span id="L21">        rt::MemoryProviderCapability::guard_pages) |</span>
+<span id="L22">    rt::memory_provider_capability_bit(</span>
+<span id="L23">        rt::MemoryProviderCapability::explicit_huge_pages) |</span>
+<span id="L24">    rt::memory_provider_capability_bit(</span>
+<span id="L25">        rt::MemoryProviderCapability::policy_operations) |</span>
+<span id="L26">    rt::memory_provider_capability_bit(</span>
+<span id="L27">        rt::MemoryProviderCapability::independent_observation) |</span>
+<span id="L28">    rt::memory_provider_capability_bit(</span>
+<span id="L29">        rt::MemoryProviderCapability::pinning) |</span>
+<span id="L30">    rt::memory_provider_capability_bit(</span>
+<span id="L31">        rt::MemoryProviderCapability::numa_binding);</span>
+<span id="L32"></span>
+<span id="L33">struct LiveAllocationRegistry {</span>
+<span id="L34">    std::atomic_flag lock = ATOMIC_FLAG_INIT;</span>
+<span id="L35">    rt::detail::LiveResidentAllocation* head = nullptr;</span>
+<span id="L36">};</span>
+<span id="L37"></span>
+<span id="L38">constinit LiveAllocationRegistry g_live_allocations{};</span>
+<span id="L39"></span>
+<span id="L40">class RegistryGuard final {</span>
+<span id="L41">public:</span>
+<span id="L42">    RegistryGuard() noexcept {</span>
+<span id="L43">        while (g_live_allocations.lock.test_and_set(</span>
+<span id="L44">            std::memory_order_acquire)) {</span>
+<span id="L45">        }</span>
+<span id="L46">    }</span>
+<span id="L47">    ~RegistryGuard() {</span>
+<span id="L48">        g_live_allocations.lock.clear(std::memory_order_release);</span>
+<span id="L49">    }</span>
+<span id="L50">};</span>
+<span id="L51"></span>
+<span id="L52">[[nodiscard]] bool has_capability(</span>
+<span id="L53">    const rt::MemoryProvider&amp; provider,</span>
+<span id="L54">    rt::MemoryProviderCapability capability) noexcept {</span>
+<span id="L55">    return (provider.capabilities &amp;</span>
+<span id="L56">            rt::memory_provider_capability_bit(capability)) != 0;</span>
+<span id="L57">}</span>
+<span id="L58"></span>
+<span id="L59">[[nodiscard]] bool pointer_range(</span>
+<span id="L60">    const std::byte* pointer,</span>
+<span id="L61">    std::size_t bytes,</span>
+<span id="L62">    std::uintptr_t&amp; begin,</span>
+<span id="L63">    std::uintptr_t&amp; end) noexcept {</span>
+<span id="L64">    begin = reinterpret_cast&lt;std::uintptr_t&gt;(pointer);</span>
+<span id="L65">    if (bytes &gt; std::numeric_limits&lt;std::uintptr_t&gt;::max() - begin) {</span>
+<span id="L66">        end = 0;</span>
+<span id="L67">        return false;</span>
+<span id="L68">    }</span>
+<span id="L69">    end = begin + bytes;</span>
+<span id="L70">    return true;</span>
+<span id="L71">}</span>
+<span id="L72"></span>
+<span id="L73">class CallbackGuard final {</span>
+<span id="L74">public:</span>
+<span id="L75">    explicit CallbackGuard(std::atomic&lt;bool&gt;&amp; active) noexcept</span>
+<span id="L76">        : active_(active) {</span>
+<span id="L77">        active_.store(true, std::memory_order_release);</span>
+<span id="L78">    }</span>
+<span id="L79">    ~CallbackGuard() {</span>
+<span id="L80">        active_.store(false, std::memory_order_release);</span>
+<span id="L81">    }</span>
+<span id="L82"></span>
+<span id="L83">private:</span>
+<span id="L84">    std::atomic&lt;bool&gt;&amp; active_;</span>
+<span id="L85">};</span>
+<span id="L86"></span>
+<span id="L87">[[nodiscard]] std::size_t native_page_size() noexcept {</span>
+<span id="L88">#if defined(__linux__)</span>
+<span id="L89">    const long value = ::sysconf(_SC_PAGESIZE);</span>
+<span id="L90">    return value &gt; 0 ? static_cast&lt;std::size_t&gt;(value) : 4096u;</span>
+<span id="L91">#else</span>
+<span id="L92">    return 4096u;</span>
+<span id="L93">#endif</span>
+<span id="L94">}</span>
+<span id="L95"></span>
+<span id="L96">[[nodiscard]] bool strict_requested(</span>
+<span id="L97">    const rt::MemoryPolicyReport&amp; row) noexcept {</span>
+<span id="L98">    return row.requested.requirement == rt::PolicyRequirement::strict;</span>
+<span id="L99">}</span>
+<span id="L100"></span>
+<span id="L101">} // namespace</span>
+<span id="L102"></span>
+<span id="L103">namespace rt::detail {</span>
+<span id="L104"></span>
+<span id="L105">ResidentRegionSet::ResidentRegionSet(</span>
+<span id="L106">    const MemoryProvider* provider,</span>
+<span id="L107">    std::atomic&lt;bool&gt;&amp; callback_active) noexcept</span>
+<span id="L108">    : regions_{{</span>
+<span id="L109">          Region{memory_region_phase_scratch},</span>
+<span id="L110">          Region{memory_region_task_scratch},</span>
+<span id="L111">          Region{memory_region_trace_storage},</span>
+<span id="L112">      }},</span>
+<span id="L113">      callback_active_(&amp;callback_active) {</span>
+<span id="L114">    if (provider) {</span>
+<span id="L115">        provider_copy_ = *provider;</span>
+<span id="L116">        provider_ = &amp;provider_copy_;</span>
+<span id="L117">    }</span>
+<span id="L118">}</span>
+<span id="L119"></span>
+<span id="L120">ResidentRegionSet::~ResidentRegionSet() {</span>
+<span id="L121">    release();</span>
+<span id="L122">}</span>
+<span id="L123"></span>
+<span id="L124">Status ResidentRegionSet::validate_provider(</span>
+<span id="L125">    const MemoryProvider* provider,</span>
+<span id="L126">    const char*&amp; diagnostic) noexcept {</span>
+<span id="L127">    diagnostic = nullptr;</span>
+<span id="L128">    if (!provider) {</span>
+<span id="L129">        return Status::ok;</span>
+<span id="L130">    }</span>
+<span id="L131">    if (provider-&gt;struct_size != sizeof(MemoryProvider) ||</span>
+<span id="L132">        provider-&gt;api_version != memory_provider_api_version) {</span>
+<span id="L133">        diagnostic = &quot;memory provider size or version is incompatible&quot;;</span>
+<span id="L134">        return Status::invalid_config;</span>
+<span id="L135">    }</span>
+<span id="L136">    if ((provider-&gt;capabilities &amp; ~kKnownCapabilities) != 0 ||</span>
+<span id="L137">        std::any_of(</span>
+<span id="L138">            provider-&gt;reserved.begin(),</span>
+<span id="L139">            provider-&gt;reserved.end(),</span>
+<span id="L140">            [](std::uint64_t value) { return value != 0; })) {</span>
+<span id="L141">        diagnostic = &quot;memory provider capabilities or reserved fields are invalid&quot;;</span>
+<span id="L142">        return Status::invalid_config;</span>
+<span id="L143">    }</span>
+<span id="L144">    if (!provider-&gt;acquire || !provider-&gt;release ||</span>
+<span id="L145">        !provider-&gt;apply || !provider-&gt;observe ||</span>
+<span id="L146">        !provider-&gt;rollback ||</span>
+<span id="L147">        !has_capability(</span>
+<span id="L148">            *provider,</span>
+<span id="L149">            MemoryProviderCapability::policy_operations) ||</span>
+<span id="L150">        !has_capability(</span>
+<span id="L151">            *provider,</span>
+<span id="L152">            MemoryProviderCapability::independent_observation)) {</span>
+<span id="L153">        diagnostic = &quot;memory provider callback table is incomplete&quot;;</span>
+<span id="L154">        return Status::invalid_config;</span>
+<span id="L155">    }</span>
+<span id="L156">    return Status::ok;</span>
+<span id="L157">}</span>
+<span id="L158"></span>
+<span id="L159">MemoryPolicyReport* ResidentRegionSet::find_report(</span>
+<span id="L160">    CpuMemoryPolicyReport&amp; report,</span>
+<span id="L161">    MemoryRegionId region) noexcept {</span>
+<span id="L162">    for (std::size_t index = 0; index &lt; report.memory_count; ++index) {</span>
+<span id="L163">        if (report.memory[index].region == region) {</span>
+<span id="L164">            return &amp;report.memory[index];</span>
+<span id="L165">        }</span>
+<span id="L166">    }</span>
+<span id="L167">    return nullptr;</span>
+<span id="L168">}</span>
+<span id="L169"></span>
+<span id="L170">ResidentRegionSet::Region* ResidentRegionSet::find_region(</span>
+<span id="L171">    MemoryRegionId region) noexcept {</span>
+<span id="L172">    for (auto&amp; candidate : regions_) {</span>
+<span id="L173">        if (candidate.id == region) {</span>
+<span id="L174">            return &amp;candidate;</span>
+<span id="L175">        }</span>
+<span id="L176">    }</span>
+<span id="L177">    return nullptr;</span>
+<span id="L178">}</span>
+<span id="L179"></span>
+<span id="L180">Status ResidentRegionSet::acquire(</span>
+<span id="L181">    CpuMemoryPolicyReport&amp; report,</span>
+<span id="L182">    const char*&amp; diagnostic) noexcept {</span>
+<span id="L183">    diagnostic = nullptr;</span>
+<span id="L184">    for (auto&amp; region : regions_) {</span>
+<span id="L185">        auto* row = find_report(report, region.id);</span>
+<span id="L186">        if (!row) {</span>
+<span id="L187">            diagnostic = &quot;memory policy inventory is missing a resident region&quot;;</span>
+<span id="L188">            release();</span>
+<span id="L189">            return Status::internal_error;</span>
+<span id="L190">        }</span>
+<span id="L191">        const std::size_t alignment =</span>
+<span id="L192">            region.id == memory_region_trace_storage</span>
+<span id="L193">            ? std::max(row-&gt;resolved.alignment, std::size_t{64})</span>
+<span id="L194">            : row-&gt;resolved.alignment;</span>
+<span id="L195">        const auto status = acquire_one(</span>
+<span id="L196">            region,</span>
+<span id="L197">            *row,</span>
+<span id="L198">            alignment == 0 ? alignof(std::max_align_t) : alignment,</span>
+<span id="L199">            diagnostic);</span>
+<span id="L200">        if (status != Status::ok) {</span>
+<span id="L201">            release();</span>
+<span id="L202">            return status;</span>
+<span id="L203">        }</span>
+<span id="L204">    }</span>
+<span id="L205">    return Status::ok;</span>
+<span id="L206">}</span>
+<span id="L207"></span>
+<span id="L208">Status ResidentRegionSet::acquire_one(</span>
+<span id="L209">    Region&amp; region,</span>
+<span id="L210">    MemoryPolicyReport&amp; row,</span>
+<span id="L211">    std::size_t required_alignment,</span>
+<span id="L212">    const char*&amp; diagnostic) noexcept {</span>
+<span id="L213">    row.acquired = PolicyOperationState::not_attempted;</span>
+<span id="L214">    row.provider_error = 0;</span>
+<span id="L215">    if (row.accounted_bytes == 0) {</span>
+<span id="L216">        return Status::ok;</span>
+<span id="L217">    }</span>
+<span id="L218"></span>
+<span id="L219">    const MemoryProviderAcquireRequest request{</span>
+<span id="L220">        region.id,</span>
+<span id="L221">        row.accounted_bytes,</span>
+<span id="L222">        required_alignment,</span>
+<span id="L223">        row.resolved.page_rounding,</span>
+<span id="L224">        row.resolved.guard_bytes_before,</span>
+<span id="L225">        row.resolved.guard_bytes_after,</span>
+<span id="L226">        row.resolved.huge_pages,</span>
+<span id="L227">        row.resolved.huge_page_fallback,</span>
+<span id="L228">        row.resolved.numa_node,</span>
+<span id="L229">        row.resolved.rollback,</span>
+<span id="L230">    };</span>
+<span id="L231"></span>
+<span id="L232">    Status status = Status::ok;</span>
+<span id="L233">    if (provider_) {</span>
+<span id="L234">        MemoryProviderAllocation allocation{};</span>
+<span id="L235">        {</span>
+<span id="L236">            CallbackGuard guard(*callback_active_);</span>
+<span id="L237">            status = provider_-&gt;acquire(</span>
+<span id="L238">                provider_-&gt;user_data,</span>
+<span id="L239">                request,</span>
+<span id="L240">                allocation);</span>
+<span id="L241">        }</span>
+<span id="L242">        region.allocation = allocation;</span>
+<span id="L243">        if (status != Status::ok) {</span>
+<span id="L244">            // A failed acquire may still return a provisional token requiring</span>
+<span id="L245">            // cleanup. Claim it atomically before adopting it so a malformed</span>
+<span id="L246">            // provider cannot make this runtime release a token or extent</span>
+<span id="L247">            // already owned by another live runtime.</span>
+<span id="L248">            if (allocation.token &amp;&amp;</span>
+<span id="L249">                register_provisional(region) ==</span>
+<span id="L250">                    RegistrationResult::registered) {</span>
+<span id="L251">                region.acquired = true;</span>
+<span id="L252">            }</span>
+<span id="L253">            row.provider_error = allocation.provider_error;</span>
+<span id="L254">            row.acquired = PolicyOperationState::failed;</span>
+<span id="L255">            diagnostic = &quot;memory provider acquisition failed&quot;;</span>
+<span id="L256">            return status;</span>
+<span id="L257">        }</span>
+<span id="L258">        if (allocation.token) {</span>
+<span id="L259">            const bool duplicate_live_token = std::any_of(</span>
+<span id="L260">                regions_.begin(),</span>
+<span id="L261">                regions_.end(),</span>
+<span id="L262">                [&amp;](const Region&amp; other) {</span>
+<span id="L263">                    return &amp;other != &amp;region &amp;&amp; other.acquired &amp;&amp;</span>
+<span id="L264">                           other.allocation.token == allocation.token;</span>
+<span id="L265">                });</span>
+<span id="L266">            if (duplicate_live_token) {</span>
+<span id="L267">                row.provider_error = allocation.provider_error;</span>
+<span id="L268">                row.acquired = PolicyOperationState::failed;</span>
+<span id="L269">                diagnostic = &quot;memory provider returned a duplicate live token&quot;;</span>
+<span id="L270">                return Status::invalid_config;</span>
+<span id="L271">            }</span>
+<span id="L272">            region.acquired = true;</span>
+<span id="L273">        }</span>
+<span id="L274">    } else {</span>
+<span id="L275">        status = acquire_native(</span>
+<span id="L276">            region,</span>
+<span id="L277">            request,</span>
+<span id="L278">            row.resolved.locking == PolicyToggle::enabled,</span>
+<span id="L279">            diagnostic);</span>
+<span id="L280">        if (status != Status::ok) {</span>
+<span id="L281">            row.acquired = PolicyOperationState::failed;</span>
+<span id="L282">            return status;</span>
+<span id="L283">        }</span>
+<span id="L284">        region.acquired = true;</span>
+<span id="L285">    }</span>
+<span id="L286"></span>
+<span id="L287">    status = validate_allocation(region, request, diagnostic);</span>
+<span id="L288">    if (status != Status::ok) {</span>
+<span id="L289">        row.provider_error = region.allocation.provider_error;</span>
+<span id="L290">        row.acquired = PolicyOperationState::failed;</span>
+<span id="L291">        return status;</span>
+<span id="L292">    }</span>
+<span id="L293">    const auto registration = register_live(region);</span>
+<span id="L294">    if (registration != RegistrationResult::registered) {</span>
+<span id="L295">        row.provider_error = region.allocation.provider_error;</span>
+<span id="L296">        row.acquired = PolicyOperationState::failed;</span>
+<span id="L297">        if (registration == RegistrationResult::duplicate_token) {</span>
+<span id="L298">            // A provider did not create a new ownership token. Releasing it</span>
+<span id="L299">            // here could invalidate the already-live runtime that owns it.</span>
+<span id="L300">            region.acquired = false;</span>
+<span id="L301">            diagnostic = &quot;memory provider returned a token already owned by another runtime&quot;;</span>
+<span id="L302">        } else {</span>
+<span id="L303">            diagnostic = &quot;memory provider returned storage overlapping another runtime&quot;;</span>
+<span id="L304">        }</span>
+<span id="L305">        return Status::invalid_config;</span>
+<span id="L306">    }</span>
+<span id="L307">    row.committed_bytes = region.allocation.committed_bytes;</span>
+<span id="L308">    row.actual_guard_bytes_before =</span>
+<span id="L309">        region.allocation.guard_bytes_before;</span>
+<span id="L310">    row.actual_guard_bytes_after =</span>
+<span id="L311">        region.allocation.guard_bytes_after;</span>
+<span id="L312">    row.actual_page_bytes = region.allocation.actual_page_bytes;</span>
+<span id="L313">    row.used_explicit_huge_pages =</span>
+<span id="L314">        region.allocation.explicit_huge_pages;</span>
+<span id="L315">    row.used_huge_page_fallback =</span>
+<span id="L316">        region.allocation.used_huge_page_fallback;</span>
+<span id="L317">    row.provider_error = region.allocation.provider_error;</span>
+<span id="L318">    row.acquired = PolicyOperationState::succeeded;</span>
+<span id="L319">    return Status::ok;</span>
+<span id="L320">}</span>
+<span id="L321"></span>
+<span id="L322">Status ResidentRegionSet::acquire_native(</span>
+<span id="L323">    Region&amp; region,</span>
+<span id="L324">    const MemoryProviderAcquireRequest&amp; request,</span>
+<span id="L325">    bool isolate_for_locking,</span>
+<span id="L326">    const char*&amp; diagnostic) noexcept {</span>
+<span id="L327">    const bool page_policy =</span>
+<span id="L328">        request.page_rounding == PageRounding::base_page ||</span>
+<span id="L329">        request.guard_bytes_before != 0 ||</span>
+<span id="L330">        request.guard_bytes_after != 0 ||</span>
+<span id="L331">        request.huge_pages == HugePagePreference::prefer ||</span>
+<span id="L332">        request.numa_node &gt;= 0 || isolate_for_locking;</span>
+<span id="L333">    if (!page_policy) {</span>
+<span id="L334">        try {</span>
+<span id="L335">            region.owned.allocate(</span>
+<span id="L336">                request.logical_bytes,</span>
+<span id="L337">                request.required_alignment);</span>
+<span id="L338">        } catch (const std::bad_alloc&amp;) {</span>
+<span id="L339">            diagnostic = &quot;default resident-region allocation failed&quot;;</span>
+<span id="L340">            return Status::resource_exhausted;</span>
+<span id="L341">        }</span>
+<span id="L342">        region.allocation = {</span>
+<span id="L343">            region.owned.data(),</span>
+<span id="L344">            region.owned.data(),</span>
+<span id="L345">            region.owned.size(),</span>
+<span id="L346">            region.owned.data(),</span>
+<span id="L347">            region.owned.size(),</span>
+<span id="L348">            region.owned.size(),</span>
+<span id="L349">            region.owned.alignment(),</span>
+<span id="L350">            0,</span>
+<span id="L351">            0,</span>
+<span id="L352">            0,</span>
+<span id="L353">            false,</span>
+<span id="L354">            false,</span>
+<span id="L355">            0,</span>
+<span id="L356">        };</span>
+<span id="L357">        return Status::ok;</span>
+<span id="L358">    }</span>
+<span id="L359"></span>
+<span id="L360">#if !defined(__linux__)</span>
+<span id="L361">    diagnostic = &quot;native page-backed memory policy is unsupported&quot;;</span>
+<span id="L362">    return Status::invalid_config;</span>
+<span id="L363">#else</span>
+<span id="L364">    const auto page = native_page_size();</span>
+<span id="L365">    std::size_t committed = 0;</span>
+<span id="L366">    std::size_t guard_before = 0;</span>
+<span id="L367">    std::size_t guard_after = 0;</span>
+<span id="L368">    if (!checked_align_up(request.logical_bytes, page, committed) ||</span>
+<span id="L369">        (request.guard_bytes_before != 0 &amp;&amp;</span>
+<span id="L370">         !checked_align_up(request.guard_bytes_before, page, guard_before)) ||</span>
+<span id="L371">        (request.guard_bytes_after != 0 &amp;&amp;</span>
+<span id="L372">         !checked_align_up(request.guard_bytes_after, page, guard_after))) {</span>
+<span id="L373">        diagnostic = &quot;resident-region page rounding overflows&quot;;</span>
+<span id="L374">        return Status::invalid_config;</span>
+<span id="L375">    }</span>
+<span id="L376">    const auto alignment = std::max(request.required_alignment, page);</span>
+<span id="L377">    std::size_t mapping_bytes = 0;</span>
+<span id="L378">    std::size_t extra = 0;</span>
+<span id="L379">    if (!checked_add(guard_before, guard_after, extra) ||</span>
+<span id="L380">        !checked_add(extra, alignment, extra) ||</span>
+<span id="L381">        !checked_add(committed, extra, mapping_bytes)) {</span>
+<span id="L382">        diagnostic = &quot;resident-region mapping size overflows&quot;;</span>
+<span id="L383">        return Status::invalid_config;</span>
+<span id="L384">    }</span>
+<span id="L385"></span>
+<span id="L386">    void* mapping = MAP_FAILED;</span>
+<span id="L387">    bool explicit_huge = false;</span>
+<span id="L388">#if defined(MAP_HUGETLB)</span>
+<span id="L389">    if (request.huge_pages == HugePagePreference::prefer &amp;&amp;</span>
+<span id="L390">        guard_before == 0 &amp;&amp; guard_after == 0) {</span>
+<span id="L391">        constexpr std::size_t kExplicitHugePageBytes = 2u * 1024u * 1024u;</span>
+<span id="L392">        std::size_t huge_committed = 0;</span>
+<span id="L393">        std::size_t huge_mapping_bytes = 0;</span>
+<span id="L394">        if (!checked_align_up(</span>
+<span id="L395">                request.logical_bytes,</span>
+<span id="L396">                kExplicitHugePageBytes,</span>
+<span id="L397">                huge_committed) ||</span>
+<span id="L398">            !checked_add(huge_committed, alignment, huge_mapping_bytes) ||</span>
+<span id="L399">            !checked_align_up(</span>
+<span id="L400">                huge_mapping_bytes,</span>
+<span id="L401">                kExplicitHugePageBytes,</span>
+<span id="L402">                huge_mapping_bytes)) {</span>
+<span id="L403">            diagnostic = &quot;explicit huge-page mapping size overflows&quot;;</span>
+<span id="L404">            return Status::invalid_config;</span>
+<span id="L405">        }</span>
+<span id="L406">#if defined(MAP_HUGE_SHIFT)</span>
+<span id="L407">        constexpr int kHuge2MiB = 21 &lt;&lt; MAP_HUGE_SHIFT;</span>
+<span id="L408">#else</span>
+<span id="L409">        // Linux UAPI fixes MAP_HUGE_SHIFT at bit 26 even when older libc</span>
+<span id="L410">        // headers omit the convenience macro.</span>
+<span id="L411">        constexpr int kHuge2MiB = 21 &lt;&lt; 26;</span>
+<span id="L412">#endif</span>
+<span id="L413">        mapping = ::mmap(</span>
+<span id="L414">            nullptr,</span>
+<span id="L415">            huge_mapping_bytes,</span>
+<span id="L416">            PROT_READ | PROT_WRITE,</span>
+<span id="L417">            MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | kHuge2MiB,</span>
+<span id="L418">            -1,</span>
+<span id="L419">            0);</span>
+<span id="L420">        explicit_huge = mapping != MAP_FAILED;</span>
+<span id="L421">        if (explicit_huge) {</span>
+<span id="L422">            committed = huge_committed;</span>
+<span id="L423">            mapping_bytes = huge_mapping_bytes;</span>
+<span id="L424">        }</span>
+<span id="L425">    }</span>
+<span id="L426">#endif</span>
+<span id="L427">    bool fallback = false;</span>
+<span id="L428">    if (mapping == MAP_FAILED) {</span>
+<span id="L429">        if (request.huge_pages == HugePagePreference::prefer &amp;&amp;</span>
+<span id="L430">            request.huge_page_fallback != PolicyToggle::enabled) {</span>
+<span id="L431">            diagnostic = &quot;explicit huge-page allocation failed without fallback&quot;;</span>
+<span id="L432">            return Status::resource_exhausted;</span>
+<span id="L433">        }</span>
+<span id="L434">        fallback = request.huge_pages == HugePagePreference::prefer;</span>
+<span id="L435">        mapping = ::mmap(</span>
+<span id="L436">            nullptr,</span>
+<span id="L437">            mapping_bytes,</span>
+<span id="L438">            PROT_NONE,</span>
+<span id="L439">            MAP_PRIVATE | MAP_ANONYMOUS,</span>
+<span id="L440">            -1,</span>
+<span id="L441">            0);</span>
+<span id="L442">        if (mapping == MAP_FAILED) {</span>
+<span id="L443">            diagnostic = &quot;resident-region mapping failed&quot;;</span>
+<span id="L444">            return errno == ENOMEM</span>
+<span id="L445">                ? Status::resource_exhausted</span>
+<span id="L446">                : Status::internal_error;</span>
+<span id="L447">        }</span>
+<span id="L448">    }</span>
+<span id="L449"></span>
+<span id="L450">    const auto base = reinterpret_cast&lt;std::uintptr_t&gt;(mapping);</span>
+<span id="L451">    std::size_t offset_value = 0;</span>
+<span id="L452">    if (!checked_add(</span>
+<span id="L453">            static_cast&lt;std::size_t&gt;(base),</span>
+<span id="L454">            guard_before,</span>
+<span id="L455">            offset_value) ||</span>
+<span id="L456">        !checked_align_up(offset_value, alignment, offset_value)) {</span>
+<span id="L457">        (void)::munmap(mapping, mapping_bytes);</span>
+<span id="L458">        diagnostic = &quot;resident-region usable address overflows&quot;;</span>
+<span id="L459">        return Status::invalid_config;</span>
+<span id="L460">    }</span>
+<span id="L461">    auto* usable = reinterpret_cast&lt;std::byte*&gt;(</span>
+<span id="L462">        static_cast&lt;std::uintptr_t&gt;(offset_value));</span>
+<span id="L463">    if (!explicit_huge &amp;&amp;</span>
+<span id="L464">        ::mprotect(usable, committed, PROT_READ | PROT_WRITE) != 0) {</span>
+<span id="L465">        const int error = errno;</span>
+<span id="L466">        (void)::munmap(mapping, mapping_bytes);</span>
+<span id="L467">        diagnostic = &quot;resident-region guard protection failed&quot;;</span>
+<span id="L468">        return error == ENOMEM</span>
+<span id="L469">            ? Status::resource_exhausted</span>
+<span id="L470">            : Status::internal_error;</span>
+<span id="L471">    }</span>
+<span id="L472">    std::memset(usable, 0, request.logical_bytes);</span>
+<span id="L473">    const auto actual_guard_before =</span>
+<span id="L474">        static_cast&lt;std::size_t&gt;(</span>
+<span id="L475">            reinterpret_cast&lt;std::uintptr_t&gt;(usable) - base);</span>
+<span id="L476">    const auto actual_guard_after = mapping_bytes -</span>
+<span id="L477">        actual_guard_before - committed;</span>
+<span id="L478">    region.native_mapping = mapping;</span>
+<span id="L479">    region.native_mapping_bytes = mapping_bytes;</span>
+<span id="L480">    region.allocation = {</span>
+<span id="L481">        mapping,</span>
+<span id="L482">        static_cast&lt;std::byte*&gt;(mapping),</span>
+<span id="L483">        mapping_bytes,</span>
+<span id="L484">        usable,</span>
+<span id="L485">        committed,</span>
+<span id="L486">        committed,</span>
+<span id="L487">        alignment,</span>
+<span id="L488">        explicit_huge ? 2u * 1024u * 1024u : page,</span>
+<span id="L489">        explicit_huge ? 0 : actual_guard_before,</span>
+<span id="L490">        explicit_huge ? 0 : actual_guard_after,</span>
+<span id="L491">        explicit_huge,</span>
+<span id="L492">        fallback,</span>
+<span id="L493">        0,</span>
+<span id="L494">    };</span>
+<span id="L495">    return Status::ok;</span>
+<span id="L496">#endif</span>
+<span id="L497">}</span>
+<span id="L498"></span>
+<span id="L499">Status ResidentRegionSet::validate_allocation(</span>
+<span id="L500">    const Region&amp; region,</span>
+<span id="L501">    const MemoryProviderAcquireRequest&amp; request,</span>
+<span id="L502">    const char*&amp; diagnostic) const noexcept {</span>
+<span id="L503">    const auto&amp; allocation = region.allocation;</span>
+<span id="L504">    if (!allocation.token || !allocation.allocation_base ||</span>
+<span id="L505">        !allocation.usable_data || allocation.allocation_bytes == 0 ||</span>
+<span id="L506">        allocation.usable_bytes &lt; request.logical_bytes ||</span>
+<span id="L507">        allocation.committed_bytes &lt; request.logical_bytes ||</span>
+<span id="L508">        allocation.committed_bytes &gt; allocation.usable_bytes ||</span>
+<span id="L509">        allocation.alignment &lt; request.required_alignment ||</span>
+<span id="L510">        (allocation.alignment &amp; (allocation.alignment - 1)) != 0 ||</span>
+<span id="L511">        (reinterpret_cast&lt;std::uintptr_t&gt;(allocation.usable_data) &amp;</span>
+<span id="L512">         (request.required_alignment - 1)) != 0) {</span>
+<span id="L513">        diagnostic = &quot;memory provider returned an undersized or misaligned span&quot;;</span>
+<span id="L514">        return Status::invalid_config;</span>
+<span id="L515">    }</span>
+<span id="L516">    std::uintptr_t allocation_begin = 0;</span>
+<span id="L517">    std::uintptr_t allocation_end = 0;</span>
+<span id="L518">    std::uintptr_t usable_begin = 0;</span>
+<span id="L519">    std::uintptr_t usable_end = 0;</span>
+<span id="L520">    if (!pointer_range(</span>
+<span id="L521">            allocation.allocation_base,</span>
+<span id="L522">            allocation.allocation_bytes,</span>
+<span id="L523">            allocation_begin,</span>
+<span id="L524">            allocation_end) ||</span>
+<span id="L525">        !pointer_range(</span>
+<span id="L526">            allocation.usable_data,</span>
+<span id="L527">            allocation.usable_bytes,</span>
+<span id="L528">            usable_begin,</span>
+<span id="L529">            usable_end) ||</span>
+<span id="L530">        usable_begin &lt; allocation_begin || usable_end &gt; allocation_end) {</span>
+<span id="L531">        diagnostic = &quot;memory provider returned an overflowed allocation extent&quot;;</span>
+<span id="L532">        return Status::invalid_config;</span>
+<span id="L533">    }</span>
+<span id="L534">    if (allocation.guard_bytes_before &lt; request.guard_bytes_before ||</span>
+<span id="L535">        allocation.guard_bytes_after &lt; request.guard_bytes_after) {</span>
+<span id="L536">        diagnostic = &quot;memory provider did not establish requested guards&quot;;</span>
+<span id="L537">        return Status::invalid_config;</span>
+<span id="L538">    }</span>
+<span id="L539">    const auto contained_before = usable_begin - allocation_begin;</span>
+<span id="L540">    const auto contained_after = allocation_end - usable_end;</span>
+<span id="L541">    if (allocation.guard_bytes_before &gt; contained_before ||</span>
+<span id="L542">        allocation.guard_bytes_after &gt; contained_after) {</span>
+<span id="L543">        diagnostic = &quot;memory provider guards lie outside the allocation extent&quot;;</span>
+<span id="L544">        return Status::invalid_config;</span>
+<span id="L545">    }</span>
+<span id="L546">    if (allocation.explicit_huge_pages &amp;&amp;</span>
+<span id="L547">        allocation.used_huge_page_fallback) {</span>
+<span id="L548">        diagnostic = &quot;memory provider reported contradictory huge-page outcomes&quot;;</span>
+<span id="L549">        return Status::invalid_config;</span>
+<span id="L550">    }</span>
+<span id="L551">    if (request.huge_pages != HugePagePreference::prefer &amp;&amp;</span>
+<span id="L552">        (allocation.explicit_huge_pages ||</span>
+<span id="L553">         allocation.used_huge_page_fallback)) {</span>
+<span id="L554">        diagnostic = &quot;memory provider reported an unrequested huge-page outcome&quot;;</span>
+<span id="L555">        return Status::invalid_config;</span>
+<span id="L556">    }</span>
+<span id="L557">    if (request.page_rounding == PageRounding::base_page &amp;&amp;</span>
+<span id="L558">        !allocation.explicit_huge_pages &amp;&amp;</span>
+<span id="L559">        (allocation.actual_page_bytes == 0 ||</span>
+<span id="L560">         (allocation.actual_page_bytes &amp;</span>
+<span id="L561">          (allocation.actual_page_bytes - 1)) != 0 ||</span>
+<span id="L562">         allocation.committed_bytes % allocation.actual_page_bytes != 0 ||</span>
+<span id="L563">         reinterpret_cast&lt;std::uintptr_t&gt;(allocation.usable_data) %</span>
+<span id="L564">                 allocation.actual_page_bytes !=</span>
+<span id="L565">             0)) {</span>
+<span id="L566">        diagnostic = &quot;memory provider did not return a page-rounded usable span&quot;;</span>
+<span id="L567">        return Status::invalid_config;</span>
+<span id="L568">    }</span>
+<span id="L569">    if (request.huge_pages == HugePagePreference::prefer &amp;&amp;</span>
+<span id="L570">        !allocation.explicit_huge_pages &amp;&amp;</span>
+<span id="L571">        !allocation.used_huge_page_fallback) {</span>
+<span id="L572">        diagnostic = &quot;memory provider did not report a huge-page outcome&quot;;</span>
+<span id="L573">        return Status::invalid_config;</span>
+<span id="L574">    }</span>
+<span id="L575">    if (allocation.used_huge_page_fallback &amp;&amp;</span>
+<span id="L576">        request.huge_page_fallback != PolicyToggle::enabled) {</span>
+<span id="L577">        diagnostic = &quot;memory provider used a huge-page fallback that was not allowed&quot;;</span>
+<span id="L578">        return Status::invalid_config;</span>
+<span id="L579">    }</span>
+<span id="L580">    if (provider_) {</span>
+<span id="L581">        if ((allocation.guard_bytes_before != 0 ||</span>
+<span id="L582">             allocation.guard_bytes_after != 0) &amp;&amp;</span>
+<span id="L583">            !has_capability(</span>
+<span id="L584">                *provider_,</span>
+<span id="L585">                MemoryProviderCapability::guard_pages)) {</span>
+<span id="L586">            diagnostic = &quot;memory provider lacks guard capability&quot;;</span>
+<span id="L587">            return Status::invalid_config;</span>
+<span id="L588">        }</span>
+<span id="L589">        if (allocation.explicit_huge_pages &amp;&amp;</span>
+<span id="L590">            !has_capability(</span>
+<span id="L591">                *provider_,</span>
+<span id="L592">                MemoryProviderCapability::explicit_huge_pages)) {</span>
+<span id="L593">            diagnostic = &quot;memory provider overclaimed explicit huge pages&quot;;</span>
+<span id="L594">            return Status::invalid_config;</span>
+<span id="L595">        }</span>
+<span id="L596">    }</span>
+<span id="L597">    for (const auto&amp; other : regions_) {</span>
+<span id="L598">        if (&amp;other == &amp;region || !other.acquired) {</span>
+<span id="L599">            continue;</span>
+<span id="L600">        }</span>
+<span id="L601">        std::uintptr_t other_begin = 0;</span>
+<span id="L602">        std::uintptr_t other_end = 0;</span>
+<span id="L603">        if (!pointer_range(</span>
+<span id="L604">                other.allocation.allocation_base,</span>
+<span id="L605">                other.allocation.allocation_bytes,</span>
+<span id="L606">                other_begin,</span>
+<span id="L607">                other_end) ||</span>
+<span id="L608">            (allocation_begin &lt; other_end &amp;&amp; other_begin &lt; allocation_end)) {</span>
+<span id="L609">            diagnostic = &quot;memory provider returned overlapping live regions&quot;;</span>
+<span id="L610">            return Status::invalid_config;</span>
+<span id="L611">        }</span>
+<span id="L612">    }</span>
+<span id="L613">    return Status::ok;</span>
+<span id="L614">}</span>
+<span id="L615"></span>
+<span id="L616">ResidentRegionSet::RegistrationResult ResidentRegionSet::register_live(</span>
+<span id="L617">    Region&amp; region) noexcept {</span>
+<span id="L618">    auto&amp; live = region.live;</span>
+<span id="L619">    live.token = region.allocation.token;</span>
+<span id="L620">    live.allocation_begin = reinterpret_cast&lt;std::uintptr_t&gt;(</span>
+<span id="L621">        region.allocation.allocation_base);</span>
+<span id="L622">    live.allocation_end = live.allocation_begin +</span>
+<span id="L623">        region.allocation.allocation_bytes;</span>
+<span id="L624">    RegistryGuard guard;</span>
+<span id="L625">    for (auto* other = g_live_allocations.head;</span>
+<span id="L626">         other != nullptr;</span>
+<span id="L627">         other = other-&gt;next) {</span>
+<span id="L628">        if (other-&gt;token == live.token) {</span>
+<span id="L629">            live = {};</span>
+<span id="L630">            return RegistrationResult::duplicate_token;</span>
+<span id="L631">        }</span>
+<span id="L632">        if (live.allocation_begin &lt; other-&gt;allocation_end &amp;&amp;</span>
+<span id="L633">            other-&gt;allocation_begin &lt; live.allocation_end) {</span>
+<span id="L634">            live = {};</span>
+<span id="L635">            return RegistrationResult::overlapping_span;</span>
+<span id="L636">        }</span>
+<span id="L637">    }</span>
+<span id="L638">    live.next = g_live_allocations.head;</span>
+<span id="L639">    live.registered = true;</span>
+<span id="L640">    g_live_allocations.head = &amp;live;</span>
+<span id="L641">    return RegistrationResult::registered;</span>
+<span id="L642">}</span>
+<span id="L643"></span>
+<span id="L644">ResidentRegionSet::RegistrationResult</span>
+<span id="L645">ResidentRegionSet::register_provisional(Region&amp; region) noexcept {</span>
+<span id="L646">    auto&amp; live = region.live;</span>
+<span id="L647">    live.token = region.allocation.token;</span>
+<span id="L648">    if (region.allocation.allocation_base &amp;&amp;</span>
+<span id="L649">        region.allocation.allocation_bytes != 0 &amp;&amp;</span>
+<span id="L650">        !pointer_range(</span>
+<span id="L651">            region.allocation.allocation_base,</span>
+<span id="L652">            region.allocation.allocation_bytes,</span>
+<span id="L653">            live.allocation_begin,</span>
+<span id="L654">            live.allocation_end)) {</span>
+<span id="L655">        live.allocation_begin = 0;</span>
+<span id="L656">        live.allocation_end = 0;</span>
+<span id="L657">    }</span>
+<span id="L658">    RegistryGuard guard;</span>
+<span id="L659">    for (auto* other = g_live_allocations.head;</span>
+<span id="L660">         other != nullptr;</span>
+<span id="L661">         other = other-&gt;next) {</span>
+<span id="L662">        if (other-&gt;token == live.token) {</span>
+<span id="L663">            live = {};</span>
+<span id="L664">            return RegistrationResult::duplicate_token;</span>
+<span id="L665">        }</span>
+<span id="L666">        if (live.allocation_begin &lt; live.allocation_end &amp;&amp;</span>
+<span id="L667">            other-&gt;allocation_begin &lt; other-&gt;allocation_end &amp;&amp;</span>
+<span id="L668">            live.allocation_begin &lt; other-&gt;allocation_end &amp;&amp;</span>
+<span id="L669">            other-&gt;allocation_begin &lt; live.allocation_end) {</span>
+<span id="L670">            live = {};</span>
+<span id="L671">            return RegistrationResult::overlapping_span;</span>
+<span id="L672">        }</span>
+<span id="L673">    }</span>
+<span id="L674">    live.next = g_live_allocations.head;</span>
+<span id="L675">    live.registered = true;</span>
+<span id="L676">    g_live_allocations.head = &amp;live;</span>
+<span id="L677">    return RegistrationResult::registered;</span>
+<span id="L678">}</span>
+<span id="L679"></span>
+<span id="L680">void ResidentRegionSet::unregister_live(Region&amp; region) noexcept {</span>
+<span id="L681">    auto&amp; live = region.live;</span>
+<span id="L682">    if (!live.registered) {</span>
+<span id="L683">        return;</span>
+<span id="L684">    }</span>
+<span id="L685">    RegistryGuard guard;</span>
+<span id="L686">    auto** link = &amp;g_live_allocations.head;</span>
+<span id="L687">    while (*link &amp;&amp; *link != &amp;live) {</span>
+<span id="L688">        link = &amp;(*link)-&gt;next;</span>
+<span id="L689">    }</span>
+<span id="L690">    if (*link == &amp;live) {</span>
+<span id="L691">        *link = live.next;</span>
+<span id="L692">    }</span>
+<span id="L693">    live = {};</span>
+<span id="L694">}</span>
+<span id="L695"></span>
+<span id="L696">Status ResidentRegionSet::apply_and_verify(</span>
+<span id="L697">    CpuMemoryPolicyReport&amp; report,</span>
+<span id="L698">    const char*&amp; diagnostic) noexcept {</span>
+<span id="L699">    diagnostic = nullptr;</span>
+<span id="L700">    for (auto&amp; region : regions_) {</span>
+<span id="L701">        auto* row = find_report(report, region.id);</span>
+<span id="L702">        if (!row) {</span>
+<span id="L703">            diagnostic = &quot;memory policy inventory is missing a resident region&quot;;</span>
+<span id="L704">            (void)rollback(report);</span>
+<span id="L705">            return Status::internal_error;</span>
+<span id="L706">        }</span>
+<span id="L707">        const auto status = apply_one(region, *row, diagnostic);</span>
+<span id="L708">        if (status != Status::ok) {</span>
+<span id="L709">            (void)rollback(report);</span>
+<span id="L710">            return status;</span>
+<span id="L711">        }</span>
+<span id="L712">    }</span>
+<span id="L713">    return Status::ok;</span>
+<span id="L714">}</span>
+<span id="L715"></span>
+<span id="L716">Status ResidentRegionSet::apply_one(</span>
+<span id="L717">    Region&amp; region,</span>
+<span id="L718">    MemoryPolicyReport&amp; row,</span>
+<span id="L719">    const char*&amp; diagnostic) noexcept {</span>
+<span id="L720">    row.applied = PolicyOperationState::not_attempted;</span>
+<span id="L721">    row.verified = PolicyOperationState::not_attempted;</span>
+<span id="L722">    row.resident_bytes = 0;</span>
+<span id="L723">    row.locked_bytes = 0;</span>
+<span id="L724">    row.pinned_bytes = 0;</span>
+<span id="L725">    row.apply_error = 0;</span>
+<span id="L726">    row.verify_error = 0;</span>
+<span id="L727">    row.rollback_error = 0;</span>
+<span id="L728">    region.applied = {};</span>
+<span id="L729">    region.operation_applied = false;</span>
+<span id="L730">    if (!region.acquired) {</span>
+<span id="L731">        return Status::ok;</span>
+<span id="L732">    }</span>
+<span id="L733"></span>
+<span id="L734">    if (provider_) {</span>
+<span id="L735">        Status apply_status = Status::ok;</span>
+<span id="L736">        // A failing provider may already have changed native state. Treat every</span>
+<span id="L737">        // apply invocation as rollback-eligible so retry cannot inherit an</span>
+<span id="L738">        // unknown partial operation.</span>
+<span id="L739">        region.operation_applied = true;</span>
+<span id="L740">        {</span>
+<span id="L741">            CallbackGuard guard(*callback_active_);</span>
+<span id="L742">            apply_status = provider_-&gt;apply(</span>
+<span id="L743">                provider_-&gt;user_data,</span>
+<span id="L744">                region.allocation.token,</span>
+<span id="L745">                row.resolved,</span>
+<span id="L746">                region.applied);</span>
+<span id="L747">        }</span>
+<span id="L748">        row.apply_error = region.applied.system_error;</span>
+<span id="L749">        if (apply_status != Status::ok) {</span>
+<span id="L750">            row.applied = PolicyOperationState::failed;</span>
+<span id="L751">            row.verified = PolicyOperationState::not_attempted;</span>
+<span id="L752">            if (strict_requested(row)) {</span>
+<span id="L753">                diagnostic = &quot;strict memory provider apply failed&quot;;</span>
+<span id="L754">                return apply_status;</span>
+<span id="L755">            }</span>
+<span id="L756">            return Status::ok;</span>
+<span id="L757">        }</span>
+<span id="L758">        row.applied = PolicyOperationState::succeeded;</span>
+<span id="L759">        MemoryProviderObservation observed{};</span>
+<span id="L760">        Status observe_status = Status::ok;</span>
+<span id="L761">        {</span>
+<span id="L762">            CallbackGuard guard(*callback_active_);</span>
+<span id="L763">            observe_status = provider_-&gt;observe(</span>
+<span id="L764">                provider_-&gt;user_data,</span>
+<span id="L765">                region.allocation.token,</span>
+<span id="L766">                row.resolved,</span>
+<span id="L767">                observed);</span>
+<span id="L768">        }</span>
+<span id="L769">        row.verify_error = observed.system_error;</span>
+<span id="L770">        if (observe_status != Status::ok) {</span>
+<span id="L771">            row.verified = PolicyOperationState::failed;</span>
+<span id="L772">            if (strict_requested(row)) {</span>
+<span id="L773">                diagnostic = &quot;strict memory provider observation failed&quot;;</span>
+<span id="L774">                return observe_status;</span>
+<span id="L775">            }</span>
+<span id="L776">            return Status::ok;</span>
+<span id="L777">        }</span>
+<span id="L778">        row.resident_bytes = observed.resident_bytes;</span>
+<span id="L779">        row.locked_bytes = observed.locked_bytes;</span>
+<span id="L780">        row.pinned_bytes = observed.pinned_bytes;</span>
+<span id="L781">        const bool bounded =</span>
+<span id="L782">            observed.resident_bytes &lt;= row.committed_bytes &amp;&amp;</span>
+<span id="L783">            observed.locked_bytes &lt;= row.committed_bytes &amp;&amp;</span>
+<span id="L784">            observed.pinned_bytes &lt;= row.committed_bytes;</span>
+<span id="L785">        const bool pin_capability_matches =</span>
+<span id="L786">            observed.pinned_bytes == 0 ||</span>
+<span id="L787">            has_capability(</span>
+<span id="L788">                *provider_,</span>
+<span id="L789">                MemoryProviderCapability::pinning);</span>
+<span id="L790">        bool matches = bounded &amp;&amp; pin_capability_matches &amp;&amp;</span>
+<span id="L791">            observed.independently_observed;</span>
+<span id="L792">        if (row.resolved.prefault == PolicyToggle::enabled) {</span>
+<span id="L793">            matches = matches &amp;&amp; observed.prefaulted;</span>
+<span id="L794">        }</span>
+<span id="L795">        if (row.resolved.first_touch == FirstTouchPolicy::caller) {</span>
+<span id="L796">            matches = matches &amp;&amp; observed.caller_first_touched;</span>
+<span id="L797">        }</span>
+<span id="L798">        if (row.resolved.locking == PolicyToggle::enabled) {</span>
+<span id="L799">            matches = matches &amp;&amp;</span>
+<span id="L800">                observed.locked_bytes == row.committed_bytes;</span>
+<span id="L801">        }</span>
+<span id="L802">        if (row.resolved.pinning == PolicyToggle::enabled) {</span>
+<span id="L803">            matches = matches &amp;&amp;</span>
+<span id="L804">                observed.pinned_bytes == row.committed_bytes;</span>
+<span id="L805">        }</span>
+<span id="L806">        if (row.resolved.residency_verification == PolicyToggle::enabled) {</span>
+<span id="L807">            matches = matches &amp;&amp;</span>
+<span id="L808">                observed.resident_bytes == row.committed_bytes;</span>
+<span id="L809">        }</span>
+<span id="L810">        if (row.resolved.numa_node &gt;= 0) {</span>
+<span id="L811">            matches = matches &amp;&amp;</span>
+<span id="L812">                observed.numa_node == row.resolved.numa_node;</span>
+<span id="L813">        }</span>
+<span id="L814">        row.verified = matches</span>
+<span id="L815">            ? PolicyOperationState::succeeded</span>
+<span id="L816">            : PolicyOperationState::mismatched;</span>
+<span id="L817">        if (!matches &amp;&amp; strict_requested(row)) {</span>
+<span id="L818">            diagnostic = &quot;strict memory provider readback mismatched&quot;;</span>
+<span id="L819">            return Status::internal_error;</span>
+<span id="L820">        }</span>
+<span id="L821">        return Status::ok;</span>
+<span id="L822">    }</span>
+<span id="L823"></span>
+<span id="L824">    auto* bytes = region.allocation.usable_data;</span>
+<span id="L825">    const auto committed = region.allocation.committed_bytes;</span>
+<span id="L826">    if (row.resolved.first_touch == FirstTouchPolicy::caller ||</span>
+<span id="L827">        row.resolved.prefault == PolicyToggle::enabled) {</span>
+<span id="L828">        const auto page = native_page_size();</span>
+<span id="L829">        for (std::size_t offset = 0; offset &lt; committed; offset += page) {</span>
+<span id="L830">            volatile unsigned char* location =</span>
+<span id="L831">                reinterpret_cast&lt;volatile unsigned char*&gt;(bytes + offset);</span>
+<span id="L832">            const auto value = *location;</span>
+<span id="L833">            *location = value;</span>
+<span id="L834">        }</span>
+<span id="L835">        if (committed != 0) {</span>
+<span id="L836">            volatile unsigned char* location =</span>
+<span id="L837">                reinterpret_cast&lt;volatile unsigned char*&gt;(</span>
+<span id="L838">                    bytes + committed - 1);</span>
+<span id="L839">            const auto value = *location;</span>
+<span id="L840">            *location = value;</span>
+<span id="L841">        }</span>
+<span id="L842">        region.applied.prefaulted =</span>
+<span id="L843">            row.resolved.prefault == PolicyToggle::enabled;</span>
+<span id="L844">        region.applied.caller_first_touched =</span>
+<span id="L845">            row.resolved.first_touch == FirstTouchPolicy::caller;</span>
+<span id="L846">    }</span>
+<span id="L847">#if defined(__linux__)</span>
+<span id="L848">    if (row.resolved.locking == PolicyToggle::enabled) {</span>
+<span id="L849">        if (::mlock(bytes, committed) == 0) {</span>
+<span id="L850">            region.native_locked = true;</span>
+<span id="L851">        } else {</span>
+<span id="L852">            row.apply_error = errno;</span>
+<span id="L853">            row.applied = PolicyOperationState::failed;</span>
+<span id="L854">            if (strict_requested(row)) {</span>
+<span id="L855">                diagnostic = &quot;strict native memory locking failed&quot;;</span>
+<span id="L856">                return Status::internal_error;</span>
+<span id="L857">            }</span>
+<span id="L858">        }</span>
+<span id="L859">    }</span>
+<span id="L860">#endif</span>
+<span id="L861">    region.operation_applied = true;</span>
+<span id="L862">    if (row.applied != PolicyOperationState::failed) {</span>
+<span id="L863">        row.applied = PolicyOperationState::succeeded;</span>
+<span id="L864">    }</span>
+<span id="L865"></span>
+<span id="L866">#if defined(__linux__)</span>
+<span id="L867">    if (row.resolved.residency_verification != PolicyToggle::enabled &amp;&amp;</span>
+<span id="L868">        row.resolved.locking != PolicyToggle::enabled) {</span>
+<span id="L869">        row.verified = PolicyOperationState::succeeded;</span>
+<span id="L870">        return Status::ok;</span>
+<span id="L871">    }</span>
+<span id="L872">    const auto page = native_page_size();</span>
+<span id="L873">    const auto usable_begin = reinterpret_cast&lt;std::uintptr_t&gt;(bytes);</span>
+<span id="L874">    const auto observed_begin = usable_begin &amp; ~(page - 1);</span>
+<span id="L875">    std::size_t usable_end = 0;</span>
+<span id="L876">    std::size_t observed_end = 0;</span>
+<span id="L877">    if (!checked_add(</span>
+<span id="L878">            static_cast&lt;std::size_t&gt;(usable_begin),</span>
+<span id="L879">            committed,</span>
+<span id="L880">            usable_end) ||</span>
+<span id="L881">        !checked_align_up(usable_end, page, observed_end)) {</span>
+<span id="L882">        row.verify_error = EOVERFLOW;</span>
+<span id="L883">        row.verified = PolicyOperationState::failed;</span>
+<span id="L884">        return strict_requested(row) ? Status::internal_error : Status::ok;</span>
+<span id="L885">    }</span>
+<span id="L886">    const auto observed_bytes = observed_end - observed_begin;</span>
+<span id="L887">    const auto pages = observed_bytes / page;</span>
+<span id="L888">    try {</span>
+<span id="L889">        std::unique_ptr&lt;unsigned char[]&gt; residency =</span>
+<span id="L890">            pages == 0 ? nullptr : std::make_unique&lt;unsigned char[]&gt;(pages);</span>
+<span id="L891">        if (pages != 0 &amp;&amp;</span>
+<span id="L892">            ::mincore(</span>
+<span id="L893">                reinterpret_cast&lt;void*&gt;(observed_begin),</span>
+<span id="L894">                observed_bytes,</span>
+<span id="L895">                residency.get()) != 0) {</span>
+<span id="L896">            row.verify_error = errno;</span>
+<span id="L897">            row.verified = PolicyOperationState::failed;</span>
+<span id="L898">            if (strict_requested(row)) {</span>
+<span id="L899">                diagnostic = &quot;strict native residency observation failed&quot;;</span>
+<span id="L900">                return Status::internal_error;</span>
+<span id="L901">            }</span>
+<span id="L902">            return Status::ok;</span>
+<span id="L903">        }</span>
+<span id="L904">        std::size_t resident = 0;</span>
+<span id="L905">        for (std::size_t index = 0; index &lt; pages; ++index) {</span>
+<span id="L906">            if ((residency[index] &amp; 1u) != 0) {</span>
+<span id="L907">                const auto page_begin = observed_begin + (index * page);</span>
+<span id="L908">                const auto page_end = page_begin + page;</span>
+<span id="L909">                const auto overlap_begin = std::max(page_begin, usable_begin);</span>
+<span id="L910">                const auto overlap_end = std::min(</span>
+<span id="L911">                    page_end,</span>
+<span id="L912">                    static_cast&lt;std::uintptr_t&gt;(usable_end));</span>
+<span id="L913">                resident += overlap_end &gt; overlap_begin</span>
+<span id="L914">                    ? overlap_end - overlap_begin</span>
+<span id="L915">                    : 0;</span>
+<span id="L916">            }</span>
+<span id="L917">        }</span>
+<span id="L918">        row.resident_bytes = resident;</span>
+<span id="L919">        bool matches = true;</span>
+<span id="L920">        if (row.resolved.residency_verification == PolicyToggle::enabled) {</span>
+<span id="L921">            matches = resident == committed;</span>
+<span id="L922">        }</span>
+<span id="L923">        // Linux exposes mincore residency independently, but mlock success is</span>
+<span id="L924">        // not independent lock readback and never proves provider/device pin.</span>
+<span id="L925">        if (row.resolved.locking == PolicyToggle::enabled) {</span>
+<span id="L926">            matches = false;</span>
+<span id="L927">        }</span>
+<span id="L928">        row.verified = matches</span>
+<span id="L929">            ? PolicyOperationState::succeeded</span>
+<span id="L930">            : PolicyOperationState::mismatched;</span>
+<span id="L931">        if (!matches &amp;&amp; strict_requested(row)) {</span>
+<span id="L932">            diagnostic = &quot;strict native memory observation mismatched&quot;;</span>
+<span id="L933">            return Status::internal_error;</span>
+<span id="L934">        }</span>
+<span id="L935">    } catch (const std::bad_alloc&amp;) {</span>
+<span id="L936">        row.verify_error = ENOMEM;</span>
+<span id="L937">        row.verified = PolicyOperationState::failed;</span>
+<span id="L938">        if (strict_requested(row)) {</span>
+<span id="L939">            diagnostic = &quot;native residency observation allocation failed&quot;;</span>
+<span id="L940">            return Status::resource_exhausted;</span>
+<span id="L941">        }</span>
+<span id="L942">    }</span>
+<span id="L943">#else</span>
+<span id="L944">    row.verified = PolicyOperationState::succeeded;</span>
+<span id="L945">#endif</span>
+<span id="L946">    return Status::ok;</span>
+<span id="L947">}</span>
+<span id="L948"></span>
+<span id="L949">bool ResidentRegionSet::rollback(CpuMemoryPolicyReport&amp; report) noexcept {</span>
+<span id="L950">    bool complete = true;</span>
+<span id="L951">    for (std::size_t index = regions_.size(); index != 0; --index) {</span>
+<span id="L952">        auto&amp; region = regions_[index - 1];</span>
+<span id="L953">        if (!region.operation_applied) {</span>
+<span id="L954">            continue;</span>
+<span id="L955">        }</span>
+<span id="L956">        auto* row = find_report(report, region.id);</span>
+<span id="L957">        if (provider_) {</span>
+<span id="L958">            Status status = Status::ok;</span>
+<span id="L959">            {</span>
+<span id="L960">                CallbackGuard guard(*callback_active_);</span>
+<span id="L961">                status = provider_-&gt;rollback(</span>
+<span id="L962">                    provider_-&gt;user_data,</span>
+<span id="L963">                    region.allocation.token,</span>
+<span id="L964">                    row ? row-&gt;resolved : MemoryPolicy{},</span>
+<span id="L965">                    region.applied);</span>
+<span id="L966">            }</span>
+<span id="L967">            if (row &amp;&amp; status != Status::ok) {</span>
+<span id="L968">                row-&gt;rollback_error = static_cast&lt;std::int32_t&gt;(status);</span>
+<span id="L969">            }</span>
+<span id="L970">            if (status != Status::ok) {</span>
+<span id="L971">                complete = false;</span>
+<span id="L972">                continue;</span>
+<span id="L973">            }</span>
+<span id="L974">        }</span>
+<span id="L975">#if defined(__linux__)</span>
+<span id="L976">        if (region.native_locked) {</span>
+<span id="L977">            if (::munlock(</span>
+<span id="L978">                    region.allocation.usable_data,</span>
+<span id="L979">                    region.allocation.committed_bytes) != 0) {</span>
+<span id="L980">                if (row) {</span>
+<span id="L981">                    row-&gt;rollback_error = errno;</span>
+<span id="L982">                }</span>
+<span id="L983">                complete = false;</span>
+<span id="L984">            } else {</span>
+<span id="L985">                region.native_locked = false;</span>
+<span id="L986">            }</span>
+<span id="L987">        }</span>
+<span id="L988">#endif</span>
+<span id="L989">        region.operation_applied = region.native_locked;</span>
+<span id="L990">    }</span>
+<span id="L991">    return complete;</span>
+<span id="L992">}</span>
+<span id="L993"></span>
+<span id="L994">void ResidentRegionSet::release_one(Region&amp; region) noexcept {</span>
+<span id="L995">    if (!region.acquired) {</span>
+<span id="L996">        return;</span>
+<span id="L997">    }</span>
+<span id="L998">    if (provider_ &amp;&amp; region.allocation.token) {</span>
+<span id="L999">        CallbackGuard guard(*callback_active_);</span>
+<span id="L1000">        provider_-&gt;release(</span>
+<span id="L1001">            provider_-&gt;user_data,</span>
+<span id="L1002">            region.allocation.token,</span>
+<span id="L1003">            RollbackIntent::release);</span>
+<span id="L1004">    }</span>
+<span id="L1005">#if defined(__linux__)</span>
+<span id="L1006">    if (region.native_mapping) {</span>
+<span id="L1007">        (void)::munmap(</span>
+<span id="L1008">            region.native_mapping,</span>
+<span id="L1009">            region.native_mapping_bytes);</span>
+<span id="L1010">    }</span>
+<span id="L1011">#endif</span>
+<span id="L1012">    unregister_live(region);</span>
+<span id="L1013">    region.owned.reset();</span>
+<span id="L1014">    region.native_mapping = nullptr;</span>
+<span id="L1015">    region.native_mapping_bytes = 0;</span>
+<span id="L1016">    region.allocation = {};</span>
+<span id="L1017">    region.applied = {};</span>
+<span id="L1018">    region.acquired = false;</span>
+<span id="L1019">    region.operation_applied = false;</span>
+<span id="L1020">    region.native_locked = false;</span>
+<span id="L1021">}</span>
+<span id="L1022"></span>
+<span id="L1023">void ResidentRegionSet::release() noexcept {</span>
+<span id="L1024">    for (std::size_t index = regions_.size(); index != 0; --index) {</span>
+<span id="L1025">        release_one(regions_[index - 1]);</span>
+<span id="L1026">    }</span>
+<span id="L1027">}</span>
+<span id="L1028"></span>
+<span id="L1029">std::span&lt;std::byte&gt; ResidentRegionSet::span(</span>
+<span id="L1030">    MemoryRegionId region) noexcept {</span>
+<span id="L1031">    auto* record = find_region(region);</span>
+<span id="L1032">    if (!record || !record-&gt;acquired) {</span>
+<span id="L1033">        return {};</span>
+<span id="L1034">    }</span>
+<span id="L1035">    return {</span>
+<span id="L1036">        record-&gt;allocation.usable_data,</span>
+<span id="L1037">        record-&gt;allocation.usable_bytes,</span>
+<span id="L1038">    };</span>
+<span id="L1039">}</span>
+<span id="L1040"></span>
+<span id="L1041">bool ResidentRegionSet::has_live_tokens() const noexcept {</span>
+<span id="L1042">    return std::any_of(</span>
+<span id="L1043">        regions_.begin(),</span>
+<span id="L1044">        regions_.end(),</span>
+<span id="L1045">        [](const Region&amp; region) { return region.acquired; });</span>
+<span id="L1046">}</span>
+<span id="L1047"></span>
+<span id="L1048">bool ResidentRegionSet::has_pending_operations() const noexcept {</span>
+<span id="L1049">    return std::any_of(</span>
+<span id="L1050">        regions_.begin(),</span>
+<span id="L1051">        regions_.end(),</span>
+<span id="L1052">        [](const Region&amp; region) { return region.operation_applied; });</span>
+<span id="L1053">}</span>
+<span id="L1054"></span>
+<span id="L1055">} // namespace rt::detail</span></pre></html>

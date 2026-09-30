@@ -1,0 +1,1433 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>rt/src/thread_policy.cpp</title><h1>rt/src/thread_policy.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#if defined(__linux__) &amp;&amp; !defined(_GNU_SOURCE)</span>
+<span id="L2">#define _GNU_SOURCE</span>
+<span id="L3">#endif</span>
+<span id="L4"></span>
+<span id="L5">#include &quot;thread_policy.hpp&quot;</span>
+<span id="L6"></span>
+<span id="L7">#include &lt;algorithm&gt;</span>
+<span id="L8">#include &lt;cerrno&gt;</span>
+<span id="L9">#include &lt;climits&gt;</span>
+<span id="L10">#include &lt;cstdio&gt;</span>
+<span id="L11">#include &lt;cstring&gt;</span>
+<span id="L12">#include &lt;exception&gt;</span>
+<span id="L13">#include &lt;limits&gt;</span>
+<span id="L14">#include &lt;new&gt;</span>
+<span id="L15">#include &lt;string_view&gt;</span>
+<span id="L16"></span>
+<span id="L17">#if defined(__linux__)</span>
+<span id="L18">#include &lt;sched.h&gt;</span>
+<span id="L19">#include &lt;sys/mman.h&gt;</span>
+<span id="L20">#include &lt;unistd.h&gt;</span>
+<span id="L21">#endif</span>
+<span id="L22"></span>
+<span id="L23">namespace {</span>
+<span id="L24"></span>
+<span id="L25">#if defined(ENOTSUP)</span>
+<span id="L26">constexpr std::int32_t kUnsupportedError = ENOTSUP;</span>
+<span id="L27">#else</span>
+<span id="L28">constexpr std::int32_t kUnsupportedError = EINVAL;</span>
+<span id="L29">#endif</span>
+<span id="L30"></span>
+<span id="L31">#if !defined(__linux__)</span>
+<span id="L32">bool nondefault_request(const rt::ThreadPolicy&amp; policy) noexcept {</span>
+<span id="L33">    return policy.cpu_set.count != 0 ||</span>
+<span id="L34">           policy.scheduling_class != rt::SchedulingClass::inherit ||</span>
+<span id="L35">           policy.scheduling_priority != 0 ||</span>
+<span id="L36">           policy.numa_node != -1 ||</span>
+<span id="L37">           policy.wait_strategy != rt::WaitStrategy::inherit ||</span>
+<span id="L38">           policy.stack_bytes != 0 || policy.guard_bytes != 0 ||</span>
+<span id="L39">           policy.name.front() != &#x27;\0&#x27;;</span>
+<span id="L40">}</span>
+<span id="L41">#endif</span>
+<span id="L42"></span>
+<span id="L43">std::size_t policy_name_length(</span>
+<span id="L44">    const std::array&lt;char, rt::thread_name_capacity&gt;&amp; name) noexcept {</span>
+<span id="L45">    const auto end = std::find(name.begin(), name.end(), &#x27;\0&#x27;);</span>
+<span id="L46">    return static_cast&lt;std::size_t&gt;(end - name.begin());</span>
+<span id="L47">}</span>
+<span id="L48"></span>
+<span id="L49">void copy_name(</span>
+<span id="L50">    std::array&lt;char, rt::thread_name_capacity&gt;&amp; output,</span>
+<span id="L51">    const char* value) noexcept {</span>
+<span id="L52">    output.fill(&#x27;\0&#x27;);</span>
+<span id="L53">    if (!value) {</span>
+<span id="L54">        return;</span>
+<span id="L55">    }</span>
+<span id="L56">    const auto length = std::min(</span>
+<span id="L57">        std::strlen(value),</span>
+<span id="L58">        output.size() - 1);</span>
+<span id="L59">    std::copy_n(value, length, output.begin());</span>
+<span id="L60">}</span>
+<span id="L61"></span>
+<span id="L62">#if defined(__linux__)</span>
+<span id="L63"></span>
+<span id="L64">rt::SchedulingClass scheduling_class(int policy) noexcept {</span>
+<span id="L65">    switch (policy) {</span>
+<span id="L66">    case SCHED_FIFO:</span>
+<span id="L67">        return rt::SchedulingClass::fifo;</span>
+<span id="L68">    case SCHED_RR:</span>
+<span id="L69">        return rt::SchedulingClass::round_robin;</span>
+<span id="L70">    default:</span>
+<span id="L71">        return rt::SchedulingClass::normal;</span>
+<span id="L72">    }</span>
+<span id="L73">}</span>
+<span id="L74"></span>
+<span id="L75">int native_scheduling_class(rt::SchedulingClass policy) noexcept {</span>
+<span id="L76">    switch (policy) {</span>
+<span id="L77">    case rt::SchedulingClass::normal:</span>
+<span id="L78">        return SCHED_OTHER;</span>
+<span id="L79">    case rt::SchedulingClass::fifo:</span>
+<span id="L80">        return SCHED_FIFO;</span>
+<span id="L81">    case rt::SchedulingClass::round_robin:</span>
+<span id="L82">        return SCHED_RR;</span>
+<span id="L83">    case rt::SchedulingClass::inherit:</span>
+<span id="L84">        break;</span>
+<span id="L85">    }</span>
+<span id="L86">    return SCHED_OTHER;</span>
+<span id="L87">}</span>
+<span id="L88"></span>
+<span id="L89">bool cpu_set_to_policy(</span>
+<span id="L90">    const cpu_set_t&amp; source,</span>
+<span id="L91">    rt::CpuSetRequest&amp; output) noexcept {</span>
+<span id="L92">    output = {};</span>
+<span id="L93">    for (std::size_t cpu = 0; cpu &lt; CPU_SETSIZE; ++cpu) {</span>
+<span id="L94">        if (!CPU_ISSET(static_cast&lt;int&gt;(cpu), &amp;source)) {</span>
+<span id="L95">            continue;</span>
+<span id="L96">        }</span>
+<span id="L97">        if (output.count == output.cpu_ids.size()) {</span>
+<span id="L98">            output = {};</span>
+<span id="L99">            return false;</span>
+<span id="L100">        }</span>
+<span id="L101">        output.cpu_ids[output.count++] = static_cast&lt;std::uint32_t&gt;(cpu);</span>
+<span id="L102">    }</span>
+<span id="L103">    return output.count != 0;</span>
+<span id="L104">}</span>
+<span id="L105"></span>
+<span id="L106">bool policy_to_cpu_set(</span>
+<span id="L107">    const rt::CpuSetRequest&amp; source,</span>
+<span id="L108">    cpu_set_t&amp; output) noexcept {</span>
+<span id="L109">    CPU_ZERO(&amp;output);</span>
+<span id="L110">    if (source.count == 0) {</span>
+<span id="L111">        return false;</span>
+<span id="L112">    }</span>
+<span id="L113">    for (std::size_t index = 0; index &lt; source.count; ++index) {</span>
+<span id="L114">        const auto cpu = source.cpu_ids[index];</span>
+<span id="L115">        if (cpu &gt;= CPU_SETSIZE) {</span>
+<span id="L116">            CPU_ZERO(&amp;output);</span>
+<span id="L117">            return false;</span>
+<span id="L118">        }</span>
+<span id="L119">        CPU_SET(static_cast&lt;int&gt;(cpu), &amp;output);</span>
+<span id="L120">    }</span>
+<span id="L121">    return true;</span>
+<span id="L122">}</span>
+<span id="L123"></span>
+<span id="L124">bool parse_cpu_number(</span>
+<span id="L125">    const char*&amp; cursor,</span>
+<span id="L126">    const char* end,</span>
+<span id="L127">    std::uint32_t&amp; output) noexcept {</span>
+<span id="L128">    if (cursor == end || *cursor &lt; &#x27;0&#x27; || *cursor &gt; &#x27;9&#x27;) {</span>
+<span id="L129">        return false;</span>
+<span id="L130">    }</span>
+<span id="L131">    std::uint64_t value = 0;</span>
+<span id="L132">    while (cursor != end &amp;&amp; *cursor &gt;= &#x27;0&#x27; &amp;&amp; *cursor &lt;= &#x27;9&#x27;) {</span>
+<span id="L133">        value = (value * 10u) + static_cast&lt;unsigned&gt;(*cursor - &#x27;0&#x27;);</span>
+<span id="L134">        if (value &gt; std::numeric_limits&lt;std::uint32_t&gt;::max()) {</span>
+<span id="L135">            return false;</span>
+<span id="L136">        }</span>
+<span id="L137">        ++cursor;</span>
+<span id="L138">    }</span>
+<span id="L139">    output = static_cast&lt;std::uint32_t&gt;(value);</span>
+<span id="L140">    return true;</span>
+<span id="L141">}</span>
+<span id="L142"></span>
+<span id="L143">bool read_numa_node_cpus(</span>
+<span id="L144">    std::int32_t node,</span>
+<span id="L145">    cpu_set_t&amp; output,</span>
+<span id="L146">    std::int32_t&amp; system_error) noexcept {</span>
+<span id="L147">    CPU_ZERO(&amp;output);</span>
+<span id="L148">    char path[96]{};</span>
+<span id="L149">    const auto written = std::snprintf(</span>
+<span id="L150">        path,</span>
+<span id="L151">        sizeof(path),</span>
+<span id="L152">        &quot;/sys/devices/system/node/node%d/cpulist&quot;,</span>
+<span id="L153">        node);</span>
+<span id="L154">    if (written &lt;= 0 || static_cast&lt;std::size_t&gt;(written) &gt;= sizeof(path)) {</span>
+<span id="L155">        system_error = ENAMETOOLONG;</span>
+<span id="L156">        return false;</span>
+<span id="L157">    }</span>
+<span id="L158">    auto* file = std::fopen(path, &quot;rb&quot;);</span>
+<span id="L159">    if (!file) {</span>
+<span id="L160">        system_error = errno == 0 ? ENOENT : errno;</span>
+<span id="L161">        return false;</span>
+<span id="L162">    }</span>
+<span id="L163">    char text[4096]{};</span>
+<span id="L164">    const auto bytes = std::fread(text, 1, sizeof(text) - 1, file);</span>
+<span id="L165">    const bool complete = std::feof(file) != 0;</span>
+<span id="L166">    const int close_status = std::fclose(file);</span>
+<span id="L167">    if (!complete || close_status != 0 || bytes == 0) {</span>
+<span id="L168">        system_error = complete ? EIO : EOVERFLOW;</span>
+<span id="L169">        return false;</span>
+<span id="L170">    }</span>
+<span id="L171">    const char* cursor = text;</span>
+<span id="L172">    const char* end = text + bytes;</span>
+<span id="L173">    bool any = false;</span>
+<span id="L174">    while (cursor != end) {</span>
+<span id="L175">        while (cursor != end &amp;&amp; (*cursor == &#x27; &#x27; || *cursor == &#x27;\t&#x27; ||</span>
+<span id="L176">                                 *cursor == &#x27;\r&#x27; || *cursor == &#x27;\n&#x27; ||</span>
+<span id="L177">                                 *cursor == &#x27;,&#x27;)) {</span>
+<span id="L178">            ++cursor;</span>
+<span id="L179">        }</span>
+<span id="L180">        if (cursor == end) {</span>
+<span id="L181">            break;</span>
+<span id="L182">        }</span>
+<span id="L183">        std::uint32_t first = 0;</span>
+<span id="L184">        if (!parse_cpu_number(cursor, end, first)) {</span>
+<span id="L185">            system_error = EINVAL;</span>
+<span id="L186">            return false;</span>
+<span id="L187">        }</span>
+<span id="L188">        std::uint32_t last = first;</span>
+<span id="L189">        if (cursor != end &amp;&amp; *cursor == &#x27;-&#x27;) {</span>
+<span id="L190">            ++cursor;</span>
+<span id="L191">            if (!parse_cpu_number(cursor, end, last) || last &lt; first) {</span>
+<span id="L192">                system_error = EINVAL;</span>
+<span id="L193">                return false;</span>
+<span id="L194">            }</span>
+<span id="L195">        }</span>
+<span id="L196">        if (cursor != end &amp;&amp; *cursor != &#x27;,&#x27; &amp;&amp; *cursor != &#x27; &#x27; &amp;&amp;</span>
+<span id="L197">            *cursor != &#x27;\t&#x27; &amp;&amp; *cursor != &#x27;\r&#x27; &amp;&amp; *cursor != &#x27;\n&#x27;) {</span>
+<span id="L198">            system_error = EINVAL;</span>
+<span id="L199">            return false;</span>
+<span id="L200">        }</span>
+<span id="L201">        if (last &gt;= CPU_SETSIZE) {</span>
+<span id="L202">            system_error = EOVERFLOW;</span>
+<span id="L203">            return false;</span>
+<span id="L204">        }</span>
+<span id="L205">        for (std::uint32_t cpu = first; cpu &lt;= last; ++cpu) {</span>
+<span id="L206">            CPU_SET(static_cast&lt;int&gt;(cpu), &amp;output);</span>
+<span id="L207">            any = true;</span>
+<span id="L208">            if (cpu == std::numeric_limits&lt;std::uint32_t&gt;::max()) {</span>
+<span id="L209">                break;</span>
+<span id="L210">            }</span>
+<span id="L211">        }</span>
+<span id="L212">    }</span>
+<span id="L213">    if (!any) {</span>
+<span id="L214">        system_error = ENODEV;</span>
+<span id="L215">    }</span>
+<span id="L216">    return any;</span>
+<span id="L217">}</span>
+<span id="L218"></span>
+<span id="L219">bool read_current_policy(</span>
+<span id="L220">    rt::WaitStrategy wait_strategy,</span>
+<span id="L221">    rt::ThreadPolicy&amp; output,</span>
+<span id="L222">    std::int32_t&amp; system_error) noexcept {</span>
+<span id="L223">    output = {};</span>
+<span id="L224">    output.wait_strategy = wait_strategy;</span>
+<span id="L225">    cpu_set_t affinity;</span>
+<span id="L226">    CPU_ZERO(&amp;affinity);</span>
+<span id="L227">    int status = pthread_getaffinity_np(</span>
+<span id="L228">        pthread_self(),</span>
+<span id="L229">        sizeof(affinity),</span>
+<span id="L230">        &amp;affinity);</span>
+<span id="L231">    if (status != 0 || !cpu_set_to_policy(affinity, output.cpu_set)) {</span>
+<span id="L232">        system_error = status == 0 ? EOVERFLOW : status;</span>
+<span id="L233">        return false;</span>
+<span id="L234">    }</span>
+<span id="L235"></span>
+<span id="L236">    int scheduler = 0;</span>
+<span id="L237">    sched_param parameters{};</span>
+<span id="L238">    status = pthread_getschedparam(pthread_self(), &amp;scheduler, &amp;parameters);</span>
+<span id="L239">    if (status != 0) {</span>
+<span id="L240">        system_error = status;</span>
+<span id="L241">        return false;</span>
+<span id="L242">    }</span>
+<span id="L243">    output.scheduling_class = scheduling_class(scheduler);</span>
+<span id="L244">    output.scheduling_priority = parameters.sched_priority;</span>
+<span id="L245"></span>
+<span id="L246">    char name[rt::thread_name_capacity]{};</span>
+<span id="L247">    status = pthread_getname_np(pthread_self(), name, sizeof(name));</span>
+<span id="L248">    if (status != 0) {</span>
+<span id="L249">        system_error = status;</span>
+<span id="L250">        return false;</span>
+<span id="L251">    }</span>
+<span id="L252">    copy_name(output.name, name);</span>
+<span id="L253"></span>
+<span id="L254">    pthread_attr_t attributes;</span>
+<span id="L255">    status = pthread_getattr_np(pthread_self(), &amp;attributes);</span>
+<span id="L256">    if (status != 0) {</span>
+<span id="L257">        system_error = status;</span>
+<span id="L258">        return false;</span>
+<span id="L259">    }</span>
+<span id="L260">    std::size_t stack_bytes = 0;</span>
+<span id="L261">    std::size_t guard_bytes = 0;</span>
+<span id="L262">    const int stack_status = pthread_attr_getstacksize(&amp;attributes, &amp;stack_bytes);</span>
+<span id="L263">    const int guard_status = pthread_attr_getguardsize(&amp;attributes, &amp;guard_bytes);</span>
+<span id="L264">    const int destroy_status = pthread_attr_destroy(&amp;attributes);</span>
+<span id="L265">    if (stack_status != 0 || guard_status != 0 || destroy_status != 0) {</span>
+<span id="L266">        system_error = stack_status != 0</span>
+<span id="L267">            ? stack_status</span>
+<span id="L268">            : (guard_status != 0 ? guard_status : destroy_status);</span>
+<span id="L269">        return false;</span>
+<span id="L270">    }</span>
+<span id="L271">    output.stack_bytes = stack_bytes;</span>
+<span id="L272">    output.guard_bytes = guard_bytes;</span>
+<span id="L273">    output.numa_node = -1;</span>
+<span id="L274">    system_error = 0;</span>
+<span id="L275">    return true;</span>
+<span id="L276">}</span>
+<span id="L277"></span>
+<span id="L278">bool set_affinity(</span>
+<span id="L279">    const rt::CpuSetRequest&amp; requested,</span>
+<span id="L280">    std::int32_t&amp; system_error) noexcept {</span>
+<span id="L281">    cpu_set_t affinity;</span>
+<span id="L282">    if (!policy_to_cpu_set(requested, affinity)) {</span>
+<span id="L283">        system_error = EINVAL;</span>
+<span id="L284">        return false;</span>
+<span id="L285">    }</span>
+<span id="L286">    const int status = pthread_setaffinity_np(</span>
+<span id="L287">        pthread_self(),</span>
+<span id="L288">        sizeof(affinity),</span>
+<span id="L289">        &amp;affinity);</span>
+<span id="L290">    if (status != 0) {</span>
+<span id="L291">        system_error = status;</span>
+<span id="L292">        return false;</span>
+<span id="L293">    }</span>
+<span id="L294">    return true;</span>
+<span id="L295">}</span>
+<span id="L296"></span>
+<span id="L297">bool set_scheduler(</span>
+<span id="L298">    rt::SchedulingClass requested,</span>
+<span id="L299">    std::int32_t priority,</span>
+<span id="L300">    std::int32_t&amp; system_error) noexcept {</span>
+<span id="L301">    sched_param parameters{};</span>
+<span id="L302">    parameters.sched_priority = priority;</span>
+<span id="L303">    const int status = pthread_setschedparam(</span>
+<span id="L304">        pthread_self(),</span>
+<span id="L305">        native_scheduling_class(requested),</span>
+<span id="L306">        &amp;parameters);</span>
+<span id="L307">    if (status != 0) {</span>
+<span id="L308">        system_error = status;</span>
+<span id="L309">        return false;</span>
+<span id="L310">    }</span>
+<span id="L311">    return true;</span>
+<span id="L312">}</span>
+<span id="L313"></span>
+<span id="L314">bool set_name(</span>
+<span id="L315">    const std::array&lt;char, rt::thread_name_capacity&gt;&amp; requested,</span>
+<span id="L316">    std::int32_t&amp; system_error) noexcept {</span>
+<span id="L317">    const int status = pthread_setname_np(pthread_self(), requested.data());</span>
+<span id="L318">    if (status != 0) {</span>
+<span id="L319">        system_error = status;</span>
+<span id="L320">        return false;</span>
+<span id="L321">    }</span>
+<span id="L322">    return true;</span>
+<span id="L323">}</span>
+<span id="L324"></span>
+<span id="L325">bool matches_resolved(</span>
+<span id="L326">    const rt::ThreadPolicy&amp; resolved,</span>
+<span id="L327">    const rt::ThreadPolicy&amp; observed) noexcept {</span>
+<span id="L328">    return resolved.cpu_set.count == observed.cpu_set.count &amp;&amp;</span>
+<span id="L329">           resolved.cpu_set.cpu_ids == observed.cpu_set.cpu_ids &amp;&amp;</span>
+<span id="L330">           resolved.scheduling_class == observed.scheduling_class &amp;&amp;</span>
+<span id="L331">           resolved.scheduling_priority == observed.scheduling_priority &amp;&amp;</span>
+<span id="L332">           resolved.wait_strategy == observed.wait_strategy &amp;&amp;</span>
+<span id="L333">           resolved.stack_bytes == observed.stack_bytes &amp;&amp;</span>
+<span id="L334">           resolved.guard_bytes == observed.guard_bytes &amp;&amp;</span>
+<span id="L335">           resolved.name == observed.name;</span>
+<span id="L336">}</span>
+<span id="L337"></span>
+<span id="L338">#endif</span>
+<span id="L339"></span>
+<span id="L340">} // namespace</span>
+<span id="L341"></span>
+<span id="L342">namespace rt::detail {</span>
+<span id="L343"></span>
+<span id="L344">void ThreadStartupResult::reset() noexcept {</span>
+<span id="L345">    ready.store(false, std::memory_order_relaxed);</span>
+<span id="L346">    applied = PolicyOperationState::not_attempted;</span>
+<span id="L347">    verified = PolicyOperationState::not_attempted;</span>
+<span id="L348">    read_back = {};</span>
+<span id="L349">    creation_error = 0;</span>
+<span id="L350">    apply_error = 0;</span>
+<span id="L351">    verify_error = 0;</span>
+<span id="L352">    used_default_fallback = false;</span>
+<span id="L353">    stack_applied = PolicyOperationState::not_attempted;</span>
+<span id="L354">    stack_verified = PolicyOperationState::not_attempted;</span>
+<span id="L355">    stack_cleanup = PolicyOperationState::not_attempted;</span>
+<span id="L356">    stack_mapping_base = nullptr;</span>
+<span id="L357">    stack_mapping_bytes = 0;</span>
+<span id="L358">    stack_usable_bytes = 0;</span>
+<span id="L359">    stack_guard_bytes = 0;</span>
+<span id="L360">    stack_resident_bytes = 0;</span>
+<span id="L361">    stack_locked_bytes = 0;</span>
+<span id="L362">    stack_apply_error = 0;</span>
+<span id="L363">    stack_verify_error = 0;</span>
+<span id="L364">    stack_cleanup_error = 0;</span>
+<span id="L365">    stack_lock_applied = false;</span>
+<span id="L366">}</span>
+<span id="L367"></span>
+<span id="L368">void ThreadStartupResult::publish() noexcept {</span>
+<span id="L369">    ready.store(true, std::memory_order_release);</span>
+<span id="L370">    ready.notify_all();</span>
+<span id="L371">}</span>
+<span id="L372"></span>
+<span id="L373">void ThreadStartupResult::wait() const noexcept {</span>
+<span id="L374">    while (!ready.load(std::memory_order_acquire)) {</span>
+<span id="L375">        ready.wait(false, std::memory_order_relaxed);</span>
+<span id="L376">    }</span>
+<span id="L377">}</span>
+<span id="L378"></span>
+<span id="L379">void ThreadStartupGate::reset() noexcept {</span>
+<span id="L380">    decision_.store(0, std::memory_order_release);</span>
+<span id="L381">}</span>
+<span id="L382"></span>
+<span id="L383">void ThreadStartupGate::commit() noexcept {</span>
+<span id="L384">    decision_.store(1, std::memory_order_release);</span>
+<span id="L385">    decision_.notify_all();</span>
+<span id="L386">}</span>
+<span id="L387"></span>
+<span id="L388">void ThreadStartupGate::abort() noexcept {</span>
+<span id="L389">    decision_.store(2, std::memory_order_release);</span>
+<span id="L390">    decision_.notify_all();</span>
+<span id="L391">}</span>
+<span id="L392"></span>
+<span id="L393">bool ThreadStartupGate::wait() const noexcept {</span>
+<span id="L394">    auto decision = decision_.load(std::memory_order_acquire);</span>
+<span id="L395">    while (decision == 0) {</span>
+<span id="L396">        decision_.wait(0, std::memory_order_relaxed);</span>
+<span id="L397">        decision = decision_.load(std::memory_order_acquire);</span>
+<span id="L398">    }</span>
+<span id="L399">    return decision == 1;</span>
+<span id="L400">}</span>
+<span id="L401"></span>
+<span id="L402">Status ThreadPolicyProvider::before_create(</span>
+<span id="L403">    ThreadRoleId,</span>
+<span id="L404">    std::size_t,</span>
+<span id="L405">    const ThreadRolePlan&amp;,</span>
+<span id="L406">    std::int32_t&amp; system_error) noexcept {</span>
+<span id="L407">    system_error = 0;</span>
+<span id="L408">    return Status::ok;</span>
+<span id="L409">}</span>
+<span id="L410"></span>
+<span id="L411">void ThreadPolicyProvider::after_join(</span>
+<span id="L412">    ThreadRoleId,</span>
+<span id="L413">    std::size_t) noexcept {}</span>
+<span id="L414"></span>
+<span id="L415">void ThreadPolicyProvider::apply_and_verify_stack_current(</span>
+<span id="L416">    ThreadRoleId,</span>
+<span id="L417">    std::size_t,</span>
+<span id="L418">    const ThreadRolePlan&amp; plan,</span>
+<span id="L419">    ThreadStartupResult&amp; result) noexcept {</span>
+<span id="L420">#if !defined(__linux__)</span>
+<span id="L421">    (void)plan;</span>
+<span id="L422">    result.stack_applied = PolicyOperationState::unsupported;</span>
+<span id="L423">    result.stack_verified = PolicyOperationState::unsupported;</span>
+<span id="L424">    result.stack_apply_error = kUnsupportedError;</span>
+<span id="L425">    result.stack_verify_error = kUnsupportedError;</span>
+<span id="L426">#else</span>
+<span id="L427">    pthread_attr_t attributes;</span>
+<span id="L428">    int status = pthread_getattr_np(pthread_self(), &amp;attributes);</span>
+<span id="L429">    if (status != 0) {</span>
+<span id="L430">        result.stack_applied = PolicyOperationState::failed;</span>
+<span id="L431">        result.stack_verified = PolicyOperationState::failed;</span>
+<span id="L432">        result.stack_apply_error = status;</span>
+<span id="L433">        result.stack_verify_error = status;</span>
+<span id="L434">        return;</span>
+<span id="L435">    }</span>
+<span id="L436">    void* stack_base = nullptr;</span>
+<span id="L437">    std::size_t stack_bytes = 0;</span>
+<span id="L438">    std::size_t guard_bytes = 0;</span>
+<span id="L439">    const int stack_status = pthread_attr_getstack(</span>
+<span id="L440">        &amp;attributes,</span>
+<span id="L441">        &amp;stack_base,</span>
+<span id="L442">        &amp;stack_bytes);</span>
+<span id="L443">    const int guard_status = pthread_attr_getguardsize(</span>
+<span id="L444">        &amp;attributes,</span>
+<span id="L445">        &amp;guard_bytes);</span>
+<span id="L446">    const int destroy_status = pthread_attr_destroy(&amp;attributes);</span>
+<span id="L447">    status = stack_status != 0</span>
+<span id="L448">        ? stack_status</span>
+<span id="L449">        : (guard_status != 0 ? guard_status : destroy_status);</span>
+<span id="L450">    if (status != 0 || stack_base == nullptr || stack_bytes == 0 ||</span>
+<span id="L451">        guard_bytes &gt; stack_bytes) {</span>
+<span id="L452">        const auto error = status != 0 ? status : EINVAL;</span>
+<span id="L453">        result.stack_applied = PolicyOperationState::failed;</span>
+<span id="L454">        result.stack_verified = PolicyOperationState::failed;</span>
+<span id="L455">        result.stack_apply_error = error;</span>
+<span id="L456">        result.stack_verify_error = error;</span>
+<span id="L457">        return;</span>
+<span id="L458">    }</span>
+<span id="L459"></span>
+<span id="L460">    // Linux NPTL includes the guard inside the stack-size allocation. The</span>
+<span id="L461">    // returned base names the complete mapping and the protected low pages</span>
+<span id="L462">    // precede the usable downward-growing stack range.</span>
+<span id="L463">    result.stack_mapping_base = static_cast&lt;std::byte*&gt;(stack_base);</span>
+<span id="L464">    result.stack_mapping_bytes = stack_bytes;</span>
+<span id="L465">    result.stack_guard_bytes = guard_bytes;</span>
+<span id="L466">    result.stack_usable_bytes = stack_bytes - guard_bytes;</span>
+<span id="L467">    auto* const usable_base = result.stack_mapping_base + guard_bytes;</span>
+<span id="L468"></span>
+<span id="L469">    if (plan.stack_resolved.locking == PolicyToggle::enabled) {</span>
+<span id="L470">        if (::mlock(usable_base, result.stack_usable_bytes) != 0) {</span>
+<span id="L471">            result.stack_apply_error = errno;</span>
+<span id="L472">            result.stack_applied = PolicyOperationState::failed;</span>
+<span id="L473">        } else {</span>
+<span id="L474">            result.stack_lock_applied = true;</span>
+<span id="L475">            result.stack_applied = PolicyOperationState::succeeded;</span>
+<span id="L476">        }</span>
+<span id="L477">    } else {</span>
+<span id="L478">        result.stack_applied = PolicyOperationState::succeeded;</span>
+<span id="L479">    }</span>
+<span id="L480"></span>
+<span id="L481">    const long native_page = ::sysconf(_SC_PAGESIZE);</span>
+<span id="L482">    if (native_page &lt;= 0 ||</span>
+<span id="L483">        (static_cast&lt;unsigned long&gt;(native_page) &amp;</span>
+<span id="L484">         (static_cast&lt;unsigned long&gt;(native_page) - 1ul)) != 0) {</span>
+<span id="L485">        result.stack_verify_error = errno == 0 ? EINVAL : errno;</span>
+<span id="L486">        result.stack_verified = PolicyOperationState::failed;</span>
+<span id="L487">        return;</span>
+<span id="L488">    }</span>
+<span id="L489">    const auto page = static_cast&lt;std::size_t&gt;(native_page);</span>
+<span id="L490">    const auto begin = reinterpret_cast&lt;std::uintptr_t&gt;(usable_base);</span>
+<span id="L491">    if ((begin &amp; (page - 1)) != 0 ||</span>
+<span id="L492">        (result.stack_usable_bytes &amp; (page - 1)) != 0) {</span>
+<span id="L493">        result.stack_verify_error = EINVAL;</span>
+<span id="L494">        result.stack_verified = PolicyOperationState::failed;</span>
+<span id="L495">        return;</span>
+<span id="L496">    }</span>
+<span id="L497"></span>
+<span id="L498">    std::size_t resident = 0;</span>
+<span id="L499">    for (std::size_t offset = 0;</span>
+<span id="L500">         offset &lt; result.stack_usable_bytes;</span>
+<span id="L501">         offset += page) {</span>
+<span id="L502">        unsigned char state = 0;</span>
+<span id="L503">        if (::mincore(usable_base + offset, page, &amp;state) != 0) {</span>
+<span id="L504">            result.stack_verify_error = errno;</span>
+<span id="L505">            result.stack_verified = PolicyOperationState::failed;</span>
+<span id="L506">            return;</span>
+<span id="L507">        }</span>
+<span id="L508">        if ((state &amp; 1u) != 0) {</span>
+<span id="L509">            resident += page;</span>
+<span id="L510">        }</span>
+<span id="L511">    }</span>
+<span id="L512">    result.stack_resident_bytes = resident;</span>
+<span id="L513">    // Linux exposes residency independently through mincore. A successful</span>
+<span id="L514">    // mlock call is an applied operation, not independent lock readback.</span>
+<span id="L515">    result.stack_locked_bytes = 0;</span>
+<span id="L516">    bool matches = true;</span>
+<span id="L517">    if (plan.stack_resolved.residency_verification ==</span>
+<span id="L518">        PolicyToggle::enabled) {</span>
+<span id="L519">        matches = resident == result.stack_usable_bytes;</span>
+<span id="L520">    }</span>
+<span id="L521">    if (plan.stack_resolved.locking == PolicyToggle::enabled) {</span>
+<span id="L522">        matches = false;</span>
+<span id="L523">    }</span>
+<span id="L524">    if (result.stack_applied == PolicyOperationState::failed) {</span>
+<span id="L525">        result.stack_verified = PolicyOperationState::failed;</span>
+<span id="L526">    } else {</span>
+<span id="L527">        result.stack_verified = matches</span>
+<span id="L528">            ? PolicyOperationState::succeeded</span>
+<span id="L529">            : PolicyOperationState::mismatched;</span>
+<span id="L530">    }</span>
+<span id="L531">#endif</span>
+<span id="L532">}</span>
+<span id="L533"></span>
+<span id="L534">Status ThreadPolicyProvider::cleanup_stack_current(</span>
+<span id="L535">    ThreadRoleId,</span>
+<span id="L536">    std::size_t,</span>
+<span id="L537">    const ThreadRolePlan&amp;,</span>
+<span id="L538">    ThreadStartupResult&amp; result) noexcept {</span>
+<span id="L539">    if (!result.stack_lock_applied) {</span>
+<span id="L540">        result.stack_cleanup = PolicyOperationState::succeeded;</span>
+<span id="L541">        result.stack_cleanup_error = 0;</span>
+<span id="L542">        return Status::ok;</span>
+<span id="L543">    }</span>
+<span id="L544">#if defined(__linux__)</span>
+<span id="L545">    auto* const usable_base =</span>
+<span id="L546">        result.stack_mapping_base + result.stack_guard_bytes;</span>
+<span id="L547">    if (::munlock(usable_base, result.stack_usable_bytes) != 0) {</span>
+<span id="L548">        result.stack_cleanup = PolicyOperationState::failed;</span>
+<span id="L549">        result.stack_cleanup_error = errno;</span>
+<span id="L550">        return Status::internal_error;</span>
+<span id="L551">    }</span>
+<span id="L552">    result.stack_lock_applied = false;</span>
+<span id="L553">    result.stack_cleanup = PolicyOperationState::succeeded;</span>
+<span id="L554">    result.stack_cleanup_error = 0;</span>
+<span id="L555">    return Status::ok;</span>
+<span id="L556">#else</span>
+<span id="L557">    result.stack_cleanup = PolicyOperationState::unsupported;</span>
+<span id="L558">    result.stack_cleanup_error = kUnsupportedError;</span>
+<span id="L559">    return Status::internal_error;</span>
+<span id="L560">#endif</span>
+<span id="L561">}</span>
+<span id="L562"></span>
+<span id="L563">Status NativeThreadPolicyProvider::resolve(</span>
+<span id="L564">    ThreadRoleId role,</span>
+<span id="L565">    PolicyApplicationMode mode,</span>
+<span id="L566">    bool active,</span>
+<span id="L567">    bool observable,</span>
+<span id="L568">    bool has_request,</span>
+<span id="L569">    const ThreadPolicy&amp; requested,</span>
+<span id="L570">    const ThreadPolicy&amp; role_default,</span>
+<span id="L571">    ThreadPolicy&amp; resolved,</span>
+<span id="L572">    PolicyResolutionState&amp; resolution,</span>
+<span id="L573">    std::int32_t&amp; system_error) noexcept {</span>
+<span id="L574">    (void)role;</span>
+<span id="L575">    resolved = role_default;</span>
+<span id="L576">    resolution = PolicyResolutionState::portable_default;</span>
+<span id="L577">    system_error = 0;</span>
+<span id="L578"></span>
+<span id="L579">    if (!active) {</span>
+<span id="L580">        resolution = PolicyResolutionState::inactive;</span>
+<span id="L581">        if (has_request &amp;&amp; requested.requirement == PolicyRequirement::strict) {</span>
+<span id="L582">            system_error = ENODEV;</span>
+<span id="L583">            return Status::invalid_config;</span>
+<span id="L584">        }</span>
+<span id="L585">        return Status::ok;</span>
+<span id="L586">    }</span>
+<span id="L587">    if (mode == PolicyApplicationMode::verify_only &amp;&amp; !observable) {</span>
+<span id="L588">        resolution = PolicyResolutionState::external_verify_only;</span>
+<span id="L589">        if (has_request &amp;&amp; requested.requirement == PolicyRequirement::strict) {</span>
+<span id="L590">            system_error = kUnsupportedError;</span>
+<span id="L591">            return Status::invalid_config;</span>
+<span id="L592">        }</span>
+<span id="L593">        if (has_request) {</span>
+<span id="L594">            system_error = kUnsupportedError;</span>
+<span id="L595">        }</span>
+<span id="L596">        return Status::ok;</span>
+<span id="L597">    }</span>
+<span id="L598"></span>
+<span id="L599">#if !defined(__linux__)</span>
+<span id="L600">    if (has_request &amp;&amp;</span>
+<span id="L601">        (requested.requirement == PolicyRequirement::strict ||</span>
+<span id="L602">         nondefault_request(requested))) {</span>
+<span id="L603">        system_error = kUnsupportedError;</span>
+<span id="L604">        if (requested.requirement == PolicyRequirement::strict) {</span>
+<span id="L605">            return Status::invalid_config;</span>
+<span id="L606">        }</span>
+<span id="L607">        resolution = PolicyResolutionState::unsupported_best_effort;</span>
+<span id="L608">        return Status::ok;</span>
+<span id="L609">    }</span>
+<span id="L610">    resolution = PolicyResolutionState::portable_default;</span>
+<span id="L611">    return Status::ok;</span>
+<span id="L612">#else</span>
+<span id="L613">    ThreadPolicy baseline;</span>
+<span id="L614">    if (!read_current_policy(role_default.wait_strategy, baseline, system_error)) {</span>
+<span id="L615">        if (has_request &amp;&amp; requested.requirement == PolicyRequirement::strict) {</span>
+<span id="L616">            return Status::invalid_config;</span>
+<span id="L617">        }</span>
+<span id="L618">        resolution = PolicyResolutionState::unsupported_best_effort;</span>
+<span id="L619">        resolved = role_default;</span>
+<span id="L620">        return Status::ok;</span>
+<span id="L621">    }</span>
+<span id="L622">    if (mode == PolicyApplicationMode::apply_and_verify) {</span>
+<span id="L623">        pthread_attr_t defaults;</span>
+<span id="L624">        int status = pthread_attr_init(&amp;defaults);</span>
+<span id="L625">        const bool defaults_initialized = status == 0;</span>
+<span id="L626">        std::size_t default_stack = 0;</span>
+<span id="L627">        std::size_t default_guard = 0;</span>
+<span id="L628">        if (status == 0) {</span>
+<span id="L629">            status = pthread_attr_getstacksize(&amp;defaults, &amp;default_stack);</span>
+<span id="L630">        }</span>
+<span id="L631">        if (status == 0) {</span>
+<span id="L632">            status = pthread_attr_getguardsize(&amp;defaults, &amp;default_guard);</span>
+<span id="L633">        }</span>
+<span id="L634">        const int destroy_status = defaults_initialized</span>
+<span id="L635">            ? pthread_attr_destroy(&amp;defaults)</span>
+<span id="L636">            : 0;</span>
+<span id="L637">        if (status == 0) {</span>
+<span id="L638">            status = destroy_status;</span>
+<span id="L639">        }</span>
+<span id="L640">        if (status != 0) {</span>
+<span id="L641">            system_error = status;</span>
+<span id="L642">            if (has_request &amp;&amp;</span>
+<span id="L643">                requested.requirement == PolicyRequirement::strict) {</span>
+<span id="L644">                return Status::invalid_config;</span>
+<span id="L645">            }</span>
+<span id="L646">            resolution = PolicyResolutionState::unsupported_best_effort;</span>
+<span id="L647">            resolved = role_default;</span>
+<span id="L648">            return Status::ok;</span>
+<span id="L649">        }</span>
+<span id="L650">        baseline.stack_bytes = default_stack;</span>
+<span id="L651">        baseline.guard_bytes = default_guard;</span>
+<span id="L652">    }</span>
+<span id="L653">    resolved = baseline;</span>
+<span id="L654">    resolved.requirement = requested.requirement;</span>
+<span id="L655">    resolved.wait_strategy = role_default.wait_strategy;</span>
+<span id="L656"></span>
+<span id="L657">    const auto fallback = [&amp;](std::int32_t error) {</span>
+<span id="L658">        system_error = error;</span>
+<span id="L659">        if (requested.requirement == PolicyRequirement::strict) {</span>
+<span id="L660">            return Status::invalid_config;</span>
+<span id="L661">        }</span>
+<span id="L662">        resolved = baseline;</span>
+<span id="L663">        resolved.wait_strategy = role_default.wait_strategy;</span>
+<span id="L664">        resolution = PolicyResolutionState::native_best_effort_fallback;</span>
+<span id="L665">        return Status::ok;</span>
+<span id="L666">    };</span>
+<span id="L667"></span>
+<span id="L668">    cpu_set_t allowed;</span>
+<span id="L669">    if (!policy_to_cpu_set(baseline.cpu_set, allowed)) {</span>
+<span id="L670">        return fallback(EOVERFLOW);</span>
+<span id="L671">    }</span>
+<span id="L672">    cpu_set_t selected = allowed;</span>
+<span id="L673">    if (requested.numa_node &gt;= 0) {</span>
+<span id="L674">        cpu_set_t node;</span>
+<span id="L675">        std::int32_t node_error = 0;</span>
+<span id="L676">        if (!read_numa_node_cpus(requested.numa_node, node, node_error)) {</span>
+<span id="L677">            return fallback(node_error);</span>
+<span id="L678">        }</span>
+<span id="L679">        CPU_AND(&amp;selected, &amp;allowed, &amp;node);</span>
+<span id="L680">    }</span>
+<span id="L681">    if (requested.cpu_set.count != 0) {</span>
+<span id="L682">        cpu_set_t explicit_set;</span>
+<span id="L683">        if (!policy_to_cpu_set(requested.cpu_set, explicit_set)) {</span>
+<span id="L684">            return fallback(EINVAL);</span>
+<span id="L685">        }</span>
+<span id="L686">        for (std::size_t index = 0; index &lt; requested.cpu_set.count; ++index) {</span>
+<span id="L687">            const auto cpu = requested.cpu_set.cpu_ids[index];</span>
+<span id="L688">            if (!CPU_ISSET(static_cast&lt;int&gt;(cpu), &amp;selected)) {</span>
+<span id="L689">                return fallback(ENODEV);</span>
+<span id="L690">            }</span>
+<span id="L691">        }</span>
+<span id="L692">        selected = explicit_set;</span>
+<span id="L693">    }</span>
+<span id="L694">    if (requested.cpu_set.count != 0 || requested.numa_node &gt;= 0) {</span>
+<span id="L695">        if (!cpu_set_to_policy(selected, resolved.cpu_set)) {</span>
+<span id="L696">            return fallback(ENODEV);</span>
+<span id="L697">        }</span>
+<span id="L698">        std::sort(</span>
+<span id="L699">            resolved.cpu_set.cpu_ids.begin(),</span>
+<span id="L700">            resolved.cpu_set.cpu_ids.begin() +</span>
+<span id="L701">                static_cast&lt;std::ptrdiff_t&gt;(resolved.cpu_set.count));</span>
+<span id="L702">    }</span>
+<span id="L703">    resolved.numa_node = requested.numa_node;</span>
+<span id="L704"></span>
+<span id="L705">    if (requested.scheduling_class != SchedulingClass::inherit) {</span>
+<span id="L706">        const int native = native_scheduling_class(requested.scheduling_class);</span>
+<span id="L707">        const int minimum = sched_get_priority_min(native);</span>
+<span id="L708">        const int maximum = sched_get_priority_max(native);</span>
+<span id="L709">        if (minimum &lt; 0 || maximum &lt; 0 ||</span>
+<span id="L710">            requested.scheduling_priority &lt; minimum ||</span>
+<span id="L711">            requested.scheduling_priority &gt; maximum) {</span>
+<span id="L712">            return fallback(EINVAL);</span>
+<span id="L713">        }</span>
+<span id="L714">        resolved.scheduling_class = requested.scheduling_class;</span>
+<span id="L715">        resolved.scheduling_priority = requested.scheduling_priority;</span>
+<span id="L716">    }</span>
+<span id="L717"></span>
+<span id="L718">    if (requested.wait_strategy != WaitStrategy::inherit) {</span>
+<span id="L719">        if (mode == PolicyApplicationMode::verify_only) {</span>
+<span id="L720">            return fallback(kUnsupportedError);</span>
+<span id="L721">        }</span>
+<span id="L722">        resolved.wait_strategy = requested.wait_strategy;</span>
+<span id="L723">    }</span>
+<span id="L724"></span>
+<span id="L725">    if (requested.stack_bytes != 0 || requested.guard_bytes != 0) {</span>
+<span id="L726">        if (mode == PolicyApplicationMode::verify_only) {</span>
+<span id="L727">            if (requested.stack_bytes != 0 &amp;&amp;</span>
+<span id="L728">                requested.stack_bytes != baseline.stack_bytes) {</span>
+<span id="L729">                return fallback(kUnsupportedError);</span>
+<span id="L730">            }</span>
+<span id="L731">            if (requested.guard_bytes != 0 &amp;&amp;</span>
+<span id="L732">                requested.guard_bytes != baseline.guard_bytes) {</span>
+<span id="L733">                return fallback(kUnsupportedError);</span>
+<span id="L734">            }</span>
+<span id="L735">        } else {</span>
+<span id="L736">            pthread_attr_t attributes;</span>
+<span id="L737">            int status = pthread_attr_init(&amp;attributes);</span>
+<span id="L738">            const bool attributes_initialized = status == 0;</span>
+<span id="L739">            if (status == 0 &amp;&amp; requested.stack_bytes != 0) {</span>
+<span id="L740">                status = pthread_attr_setstacksize(</span>
+<span id="L741">                    &amp;attributes,</span>
+<span id="L742">                    requested.stack_bytes);</span>
+<span id="L743">            }</span>
+<span id="L744">            if (status == 0 &amp;&amp; requested.guard_bytes != 0) {</span>
+<span id="L745">                status = pthread_attr_setguardsize(</span>
+<span id="L746">                    &amp;attributes,</span>
+<span id="L747">                    requested.guard_bytes);</span>
+<span id="L748">            }</span>
+<span id="L749">            std::size_t actual_stack = baseline.stack_bytes;</span>
+<span id="L750">            std::size_t actual_guard = baseline.guard_bytes;</span>
+<span id="L751">            if (status == 0) {</span>
+<span id="L752">                status = pthread_attr_getstacksize(&amp;attributes, &amp;actual_stack);</span>
+<span id="L753">            }</span>
+<span id="L754">            if (status == 0) {</span>
+<span id="L755">                status = pthread_attr_getguardsize(&amp;attributes, &amp;actual_guard);</span>
+<span id="L756">            }</span>
+<span id="L757">            const int destroy_status = attributes_initialized</span>
+<span id="L758">                ? pthread_attr_destroy(&amp;attributes)</span>
+<span id="L759">                : 0;</span>
+<span id="L760">            if (status == 0) {</span>
+<span id="L761">                status = destroy_status;</span>
+<span id="L762">            }</span>
+<span id="L763">            if (status != 0 ||</span>
+<span id="L764">                (requested.stack_bytes != 0 &amp;&amp;</span>
+<span id="L765">                 actual_stack != requested.stack_bytes) ||</span>
+<span id="L766">                (requested.guard_bytes != 0 &amp;&amp;</span>
+<span id="L767">                 actual_guard != requested.guard_bytes)) {</span>
+<span id="L768">                return fallback(status == 0 ? EINVAL : status);</span>
+<span id="L769">            }</span>
+<span id="L770">            resolved.stack_bytes = actual_stack;</span>
+<span id="L771">            resolved.guard_bytes = actual_guard;</span>
+<span id="L772">        }</span>
+<span id="L773">    }</span>
+<span id="L774"></span>
+<span id="L775">    if (requested.name.front() != &#x27;\0&#x27;) {</span>
+<span id="L776">        if (policy_name_length(requested.name) &gt; 15) {</span>
+<span id="L777">            return fallback(ERANGE);</span>
+<span id="L778">        }</span>
+<span id="L779">        resolved.name = requested.name;</span>
+<span id="L780">    }</span>
+<span id="L781">    resolution = PolicyResolutionState::native_supported;</span>
+<span id="L782">    return Status::ok;</span>
+<span id="L783">#endif</span>
+<span id="L784">}</span>
+<span id="L785"></span>
+<span id="L786">void NativeThreadPolicyProvider::apply_and_verify_current(</span>
+<span id="L787">    ThreadRoleId,</span>
+<span id="L788">    std::size_t,</span>
+<span id="L789">    const ThreadRolePlan&amp; plan,</span>
+<span id="L790">    ThreadStartupResult&amp; result) noexcept {</span>
+<span id="L791">    result.applied = PolicyOperationState::not_attempted;</span>
+<span id="L792">    result.verified = PolicyOperationState::not_attempted;</span>
+<span id="L793">    if (plan.resolution == PolicyResolutionState::unsupported_best_effort ||</span>
+<span id="L794">        plan.resolution == PolicyResolutionState::native_best_effort_fallback) {</span>
+<span id="L795">        result.applied = PolicyOperationState::unsupported;</span>
+<span id="L796">        result.verified = PolicyOperationState::unsupported;</span>
+<span id="L797">        result.used_default_fallback = true;</span>
+<span id="L798">#if defined(__linux__)</span>
+<span id="L799">        (void)read_current_policy(</span>
+<span id="L800">            plan.resolved.wait_strategy,</span>
+<span id="L801">            result.read_back,</span>
+<span id="L802">            result.verify_error);</span>
+<span id="L803">#else</span>
+<span id="L804">        result.read_back = plan.resolved;</span>
+<span id="L805">#endif</span>
+<span id="L806">        return;</span>
+<span id="L807">    }</span>
+<span id="L808"></span>
+<span id="L809">#if !defined(__linux__)</span>
+<span id="L810">    result.applied = PolicyOperationState::succeeded;</span>
+<span id="L811">    result.verified = PolicyOperationState::succeeded;</span>
+<span id="L812">    result.read_back = plan.resolved;</span>
+<span id="L813">#else</span>
+<span id="L814">    ThreadPolicy original;</span>
+<span id="L815">    if (!read_current_policy(</span>
+<span id="L816">            plan.resolved.wait_strategy,</span>
+<span id="L817">            original,</span>
+<span id="L818">            result.apply_error)) {</span>
+<span id="L819">        result.applied = PolicyOperationState::failed;</span>
+<span id="L820">        result.verified = PolicyOperationState::failed;</span>
+<span id="L821">        return;</span>
+<span id="L822">    }</span>
+<span id="L823">    bool applied = true;</span>
+<span id="L824">    if (plan.requested.cpu_set.count != 0 ||</span>
+<span id="L825">        plan.requested.numa_node &gt;= 0) {</span>
+<span id="L826">        applied = set_affinity(plan.resolved.cpu_set, result.apply_error);</span>
+<span id="L827">    }</span>
+<span id="L828">    if (applied &amp;&amp;</span>
+<span id="L829">        plan.requested.scheduling_class != SchedulingClass::inherit) {</span>
+<span id="L830">        applied = set_scheduler(</span>
+<span id="L831">            plan.resolved.scheduling_class,</span>
+<span id="L832">            plan.resolved.scheduling_priority,</span>
+<span id="L833">            result.apply_error);</span>
+<span id="L834">    }</span>
+<span id="L835">    if (applied &amp;&amp; plan.requested.name.front() != &#x27;\0&#x27;) {</span>
+<span id="L836">        applied = set_name(plan.resolved.name, result.apply_error);</span>
+<span id="L837">    }</span>
+<span id="L838">    if (!applied) {</span>
+<span id="L839">        std::int32_t ignored = 0;</span>
+<span id="L840">        if (plan.requested.cpu_set.count != 0 ||</span>
+<span id="L841">            plan.requested.numa_node &gt;= 0) {</span>
+<span id="L842">            (void)set_affinity(original.cpu_set, ignored);</span>
+<span id="L843">        }</span>
+<span id="L844">        if (plan.requested.scheduling_class != SchedulingClass::inherit) {</span>
+<span id="L845">            (void)set_scheduler(</span>
+<span id="L846">                original.scheduling_class,</span>
+<span id="L847">                original.scheduling_priority,</span>
+<span id="L848">                ignored);</span>
+<span id="L849">        }</span>
+<span id="L850">        if (plan.requested.name.front() != &#x27;\0&#x27;) {</span>
+<span id="L851">            (void)set_name(original.name, ignored);</span>
+<span id="L852">        }</span>
+<span id="L853">        result.applied = PolicyOperationState::failed;</span>
+<span id="L854">        result.verified = PolicyOperationState::failed;</span>
+<span id="L855">        result.used_default_fallback = true;</span>
+<span id="L856">        (void)read_current_policy(</span>
+<span id="L857">            plan.resolved.wait_strategy,</span>
+<span id="L858">            result.read_back,</span>
+<span id="L859">            result.verify_error);</span>
+<span id="L860">        return;</span>
+<span id="L861">    }</span>
+<span id="L862">    result.applied = PolicyOperationState::succeeded;</span>
+<span id="L863">    if (!read_current_policy(</span>
+<span id="L864">            plan.resolved.wait_strategy,</span>
+<span id="L865">            result.read_back,</span>
+<span id="L866">            result.verify_error)) {</span>
+<span id="L867">        result.verified = PolicyOperationState::failed;</span>
+<span id="L868">        return;</span>
+<span id="L869">    }</span>
+<span id="L870">    result.verified = matches_resolved(plan.resolved, result.read_back)</span>
+<span id="L871">        ? PolicyOperationState::succeeded</span>
+<span id="L872">        : PolicyOperationState::mismatched;</span>
+<span id="L873">#endif</span>
+<span id="L874">}</span>
+<span id="L875"></span>
+<span id="L876">void NativeThreadPolicyProvider::verify_current(</span>
+<span id="L877">    ThreadRoleId,</span>
+<span id="L878">    const ThreadRolePlan&amp; plan,</span>
+<span id="L879">    ThreadStartupResult&amp; result) noexcept {</span>
+<span id="L880">    result.applied = PolicyOperationState::not_attempted;</span>
+<span id="L881">    if (plan.resolution == PolicyResolutionState::external_verify_only ||</span>
+<span id="L882">        plan.resolution == PolicyResolutionState::unsupported_best_effort ||</span>
+<span id="L883">        plan.resolution == PolicyResolutionState::native_best_effort_fallback) {</span>
+<span id="L884">        result.verified = PolicyOperationState::unsupported;</span>
+<span id="L885">        result.used_default_fallback =</span>
+<span id="L886">            plan.resolution == PolicyResolutionState::native_best_effort_fallback;</span>
+<span id="L887">        return;</span>
+<span id="L888">    }</span>
+<span id="L889">#if !defined(__linux__)</span>
+<span id="L890">    result.read_back = plan.resolved;</span>
+<span id="L891">    result.verified = PolicyOperationState::succeeded;</span>
+<span id="L892">#else</span>
+<span id="L893">    if (!read_current_policy(</span>
+<span id="L894">            plan.resolved.wait_strategy,</span>
+<span id="L895">            result.read_back,</span>
+<span id="L896">            result.verify_error)) {</span>
+<span id="L897">        result.verified = PolicyOperationState::failed;</span>
+<span id="L898">        return;</span>
+<span id="L899">    }</span>
+<span id="L900">    result.verified = matches_resolved(plan.resolved, result.read_back)</span>
+<span id="L901">        ? PolicyOperationState::succeeded</span>
+<span id="L902">        : PolicyOperationState::mismatched;</span>
+<span id="L903">#endif</span>
+<span id="L904">}</span>
+<span id="L905"></span>
+<span id="L906">NativeThread::~NativeThread() {</span>
+<span id="L907">    if (cleanup_and_join() != Status::ok) {</span>
+<span id="L908">        // Destroying the synchronization state of a still-live owning lane</span>
+<span id="L909">        // would abandon the stack operation and create a use-after-free. The</span>
+<span id="L910">        // checked Runtime::stop() path is retryable; destruction is only a</span>
+<span id="L911">        // best-effort fallback and must fail closed if that retry still fails.</span>
+<span id="L912">        std::terminate();</span>
+<span id="L913">    }</span>
+<span id="L914">}</span>
+<span id="L915"></span>
+<span id="L916">Status NativeThread::start(</span>
+<span id="L917">    ThreadPolicyProvider&amp; provider,</span>
+<span id="L918">    ThreadStartupGate&amp; gate,</span>
+<span id="L919">    const ThreadRolePlan&amp; plan,</span>
+<span id="L920">    std::size_t instance_index,</span>
+<span id="L921">    ThreadStartupResult&amp; result,</span>
+<span id="L922">    NativeThreadEntry entry,</span>
+<span id="L923">    void* entry_data) noexcept {</span>
+<span id="L924">    if (joinable() || entry == nullptr) {</span>
+<span id="L925">        return Status::invalid_state;</span>
+<span id="L926">    }</span>
+<span id="L927">    result.reset();</span>
+<span id="L928">    body_started_.store(false, std::memory_order_relaxed);</span>
+<span id="L929">    body_quiescent_.store(false, std::memory_order_relaxed);</span>
+<span id="L930">    cleanup_request_.store(0, std::memory_order_relaxed);</span>
+<span id="L931">    cleanup_complete_.store(0, std::memory_order_relaxed);</span>
+<span id="L932">    cleanup_status_.store(</span>
+<span id="L933">        static_cast&lt;std::int32_t&gt;(Status::ok),</span>
+<span id="L934">        std::memory_order_relaxed);</span>
+<span id="L935">    cleanup_succeeded_ = false;</span>
+<span id="L936">    provider_ = &amp;provider;</span>
+<span id="L937">    gate_ = &amp;gate;</span>
+<span id="L938">    plan_ = plan;</span>
+<span id="L939">    result_ = &amp;result;</span>
+<span id="L940">    instance_index_ = instance_index;</span>
+<span id="L941">    role_ = plan.role;</span>
+<span id="L942">    entry_ = entry;</span>
+<span id="L943">    entry_data_ = entry_data;</span>
+<span id="L944"></span>
+<span id="L945">    std::int32_t error = 0;</span>
+<span id="L946">    const auto before = provider.before_create(</span>
+<span id="L947">        plan.role,</span>
+<span id="L948">        instance_index,</span>
+<span id="L949">        plan,</span>
+<span id="L950">        error);</span>
+<span id="L951">    if (before != Status::ok) {</span>
+<span id="L952">        result.creation_error = error;</span>
+<span id="L953">        result.applied = PolicyOperationState::failed;</span>
+<span id="L954">        result.publish();</span>
+<span id="L955">        return before;</span>
+<span id="L956">    }</span>
+<span id="L957"></span>
+<span id="L958">#if defined(__linux__)</span>
+<span id="L959">    pthread_attr_t attributes;</span>
+<span id="L960">    int status = pthread_attr_init(&amp;attributes);</span>
+<span id="L961">    const bool attributes_initialized = status == 0;</span>
+<span id="L962">    if (status == 0 &amp;&amp; plan.resolved.stack_bytes != 0) {</span>
+<span id="L963">        status = pthread_attr_setstacksize(</span>
+<span id="L964">            &amp;attributes,</span>
+<span id="L965">            plan.resolved.stack_bytes);</span>
+<span id="L966">    }</span>
+<span id="L967">    if (status == 0) {</span>
+<span id="L968">        status = pthread_attr_setguardsize(</span>
+<span id="L969">            &amp;attributes,</span>
+<span id="L970">            plan.resolved.guard_bytes);</span>
+<span id="L971">    }</span>
+<span id="L972">    int create_status = status;</span>
+<span id="L973">    if (create_status == 0) {</span>
+<span id="L974">        create_status = pthread_create(</span>
+<span id="L975">            &amp;thread_,</span>
+<span id="L976">            &amp;attributes,</span>
+<span id="L977">            &amp;NativeThread::pthread_entry,</span>
+<span id="L978">            this);</span>
+<span id="L979">    }</span>
+<span id="L980">    const int destroy_status = attributes_initialized</span>
+<span id="L981">        ? pthread_attr_destroy(&amp;attributes)</span>
+<span id="L982">        : 0;</span>
+<span id="L983">    if (create_status != 0) {</span>
+<span id="L984">        result.creation_error = create_status;</span>
+<span id="L985">        result.applied = PolicyOperationState::failed;</span>
+<span id="L986">        result.publish();</span>
+<span id="L987">        return create_status == EAGAIN || create_status == ENOMEM</span>
+<span id="L988">            ? Status::resource_exhausted</span>
+<span id="L989">            : Status::internal_error;</span>
+<span id="L990">    }</span>
+<span id="L991">    joinable_ = true;</span>
+<span id="L992">    if (destroy_status != 0) {</span>
+<span id="L993">        // A successfully created thread remains owned and joinable. Attribute</span>
+<span id="L994">        // destruction cannot invalidate it, so retain ownership and let the</span>
+<span id="L995">        // native policy/readback result determine startup success.</span>
+<span id="L996">        result.creation_error = destroy_status;</span>
+<span id="L997">    }</span>
+<span id="L998">#else</span>
+<span id="L999">    try {</span>
+<span id="L1000">        thread_ = std::thread([this] { run_entry(*this); });</span>
+<span id="L1001">    } catch (const std::bad_alloc&amp;) {</span>
+<span id="L1002">        result.creation_error = ENOMEM;</span>
+<span id="L1003">        result.applied = PolicyOperationState::failed;</span>
+<span id="L1004">        result.publish();</span>
+<span id="L1005">        return Status::resource_exhausted;</span>
+<span id="L1006">    } catch (...) {</span>
+<span id="L1007">        result.creation_error = EAGAIN;</span>
+<span id="L1008">        result.applied = PolicyOperationState::failed;</span>
+<span id="L1009">        result.publish();</span>
+<span id="L1010">        return Status::resource_exhausted;</span>
+<span id="L1011">    }</span>
+<span id="L1012">#endif</span>
+<span id="L1013">    result.wait();</span>
+<span id="L1014">    return Status::ok;</span>
+<span id="L1015">}</span>
+<span id="L1016"></span>
+<span id="L1017">void NativeThread::run_entry(NativeThread&amp; self) noexcept {</span>
+<span id="L1018">    self.provider_-&gt;apply_and_verify_current(</span>
+<span id="L1019">        self.plan_.role,</span>
+<span id="L1020">        self.instance_index_,</span>
+<span id="L1021">        self.plan_,</span>
+<span id="L1022">        *self.result_);</span>
+<span id="L1023">    self.provider_-&gt;apply_and_verify_stack_current(</span>
+<span id="L1024">        self.plan_.role,</span>
+<span id="L1025">        self.instance_index_,</span>
+<span id="L1026">        self.plan_,</span>
+<span id="L1027">        *self.result_);</span>
+<span id="L1028">    self.result_-&gt;publish();</span>
+<span id="L1029">    if (self.gate_-&gt;wait()) {</span>
+<span id="L1030">        self.body_started_.store(true, std::memory_order_release);</span>
+<span id="L1031">        self.body_started_.notify_all();</span>
+<span id="L1032">        self.entry_(self.entry_data_);</span>
+<span id="L1033">    }</span>
+<span id="L1034">    self.body_quiescent_.store(true, std::memory_order_release);</span>
+<span id="L1035">    self.body_quiescent_.notify_all();</span>
+<span id="L1036"></span>
+<span id="L1037">    std::uint64_t completed = 0;</span>
+<span id="L1038">    for (;;) {</span>
+<span id="L1039">        auto requested = self.cleanup_request_.load(</span>
+<span id="L1040">            std::memory_order_acquire);</span>
+<span id="L1041">        while (requested == completed) {</span>
+<span id="L1042">            self.cleanup_request_.wait(</span>
+<span id="L1043">                completed,</span>
+<span id="L1044">                std::memory_order_relaxed);</span>
+<span id="L1045">            requested = self.cleanup_request_.load(</span>
+<span id="L1046">                std::memory_order_acquire);</span>
+<span id="L1047">        }</span>
+<span id="L1048">        const auto status = self.provider_-&gt;cleanup_stack_current(</span>
+<span id="L1049">            self.role_,</span>
+<span id="L1050">            self.instance_index_,</span>
+<span id="L1051">            self.plan_,</span>
+<span id="L1052">            *self.result_);</span>
+<span id="L1053">        if (status == Status::ok) {</span>
+<span id="L1054">            self.result_-&gt;stack_cleanup = PolicyOperationState::succeeded;</span>
+<span id="L1055">            self.result_-&gt;stack_cleanup_error = 0;</span>
+<span id="L1056">        } else if (self.result_-&gt;stack_cleanup !=</span>
+<span id="L1057">                   PolicyOperationState::failed) {</span>
+<span id="L1058">            self.result_-&gt;stack_cleanup = PolicyOperationState::failed;</span>
+<span id="L1059">            self.result_-&gt;stack_cleanup_error =</span>
+<span id="L1060">                static_cast&lt;std::int32_t&gt;(status);</span>
+<span id="L1061">        }</span>
+<span id="L1062">        self.cleanup_status_.store(</span>
+<span id="L1063">            static_cast&lt;std::int32_t&gt;(status),</span>
+<span id="L1064">            std::memory_order_relaxed);</span>
+<span id="L1065">        completed = requested;</span>
+<span id="L1066">        self.cleanup_complete_.store(completed, std::memory_order_release);</span>
+<span id="L1067">        self.cleanup_complete_.notify_all();</span>
+<span id="L1068">        if (status == Status::ok) {</span>
+<span id="L1069">            return;</span>
+<span id="L1070">        }</span>
+<span id="L1071">    }</span>
+<span id="L1072">}</span>
+<span id="L1073"></span>
+<span id="L1074">#if defined(__linux__)</span>
+<span id="L1075">void* NativeThread::pthread_entry(void* self) noexcept {</span>
+<span id="L1076">    run_entry(*static_cast&lt;NativeThread*&gt;(self));</span>
+<span id="L1077">    return nullptr;</span>
+<span id="L1078">}</span>
+<span id="L1079">#endif</span>
+<span id="L1080"></span>
+<span id="L1081">Status NativeThread::cleanup_and_join() noexcept {</span>
+<span id="L1082">    if (!joinable()) {</span>
+<span id="L1083">        return Status::ok;</span>
+<span id="L1084">    }</span>
+<span id="L1085">    if (!cleanup_succeeded_) {</span>
+<span id="L1086">        wait_quiescent();</span>
+<span id="L1087">        const auto request = cleanup_request_.fetch_add(</span>
+<span id="L1088">            1,</span>
+<span id="L1089">            std::memory_order_acq_rel) + 1;</span>
+<span id="L1090">        cleanup_request_.notify_all();</span>
+<span id="L1091">        auto complete = cleanup_complete_.load(std::memory_order_acquire);</span>
+<span id="L1092">        while (complete &lt; request) {</span>
+<span id="L1093">            cleanup_complete_.wait(complete, std::memory_order_relaxed);</span>
+<span id="L1094">            complete = cleanup_complete_.load(std::memory_order_acquire);</span>
+<span id="L1095">        }</span>
+<span id="L1096">        const auto cleanup_status = static_cast&lt;Status&gt;(</span>
+<span id="L1097">            cleanup_status_.load(std::memory_order_acquire));</span>
+<span id="L1098">        if (cleanup_status != Status::ok) {</span>
+<span id="L1099">            return cleanup_status;</span>
+<span id="L1100">        }</span>
+<span id="L1101">        cleanup_succeeded_ = true;</span>
+<span id="L1102">    }</span>
+<span id="L1103">#if defined(__linux__)</span>
+<span id="L1104">    if (joinable_) {</span>
+<span id="L1105">        const int status = pthread_join(thread_, nullptr);</span>
+<span id="L1106">        if (status != 0) {</span>
+<span id="L1107">            return Status::internal_error;</span>
+<span id="L1108">        }</span>
+<span id="L1109">        joinable_ = false;</span>
+<span id="L1110">        cleanup_succeeded_ = false;</span>
+<span id="L1111">        provider_-&gt;after_join(role_, instance_index_);</span>
+<span id="L1112">    }</span>
+<span id="L1113">#else</span>
+<span id="L1114">    if (thread_.joinable()) {</span>
+<span id="L1115">        thread_.join();</span>
+<span id="L1116">        cleanup_succeeded_ = false;</span>
+<span id="L1117">        provider_-&gt;after_join(role_, instance_index_);</span>
+<span id="L1118">    }</span>
+<span id="L1119">#endif</span>
+<span id="L1120">    return Status::ok;</span>
+<span id="L1121">}</span>
+<span id="L1122"></span>
+<span id="L1123">void NativeThread::join() noexcept {</span>
+<span id="L1124">    (void)cleanup_and_join();</span>
+<span id="L1125">}</span>
+<span id="L1126"></span>
+<span id="L1127">bool NativeThread::joinable() const noexcept {</span>
+<span id="L1128">#if defined(__linux__)</span>
+<span id="L1129">    return joinable_;</span>
+<span id="L1130">#else</span>
+<span id="L1131">    return thread_.joinable();</span>
+<span id="L1132">#endif</span>
+<span id="L1133">}</span>
+<span id="L1134"></span>
+<span id="L1135">void NativeThread::wait_started() const noexcept {</span>
+<span id="L1136">    while (!body_started_.load(std::memory_order_acquire)) {</span>
+<span id="L1137">        body_started_.wait(false, std::memory_order_relaxed);</span>
+<span id="L1138">    }</span>
+<span id="L1139">}</span>
+<span id="L1140"></span>
+<span id="L1141">void NativeThread::wait_quiescent() const noexcept {</span>
+<span id="L1142">    while (!body_quiescent_.load(std::memory_order_acquire)) {</span>
+<span id="L1143">        body_quiescent_.wait(false, std::memory_order_relaxed);</span>
+<span id="L1144">    }</span>
+<span id="L1145">}</span>
+<span id="L1146"></span>
+<span id="L1147">ThreadRolePlan make_thread_role_plan(</span>
+<span id="L1148">    const ThreadPolicyReport&amp; report) noexcept {</span>
+<span id="L1149">    return {</span>
+<span id="L1150">        report.role,</span>
+<span id="L1151">        report.requested,</span>
+<span id="L1152">        report.resolved,</span>
+<span id="L1153">        report.resolution,</span>
+<span id="L1154">    };</span>
+<span id="L1155">}</span>
+<span id="L1156"></span>
+<span id="L1157">ThreadRolePlan make_thread_role_plan(</span>
+<span id="L1158">    const ThreadPolicyReport&amp; report,</span>
+<span id="L1159">    const MemoryPolicyReport&amp; stack_report) noexcept {</span>
+<span id="L1160">    auto plan = make_thread_role_plan(report);</span>
+<span id="L1161">    plan.stack_requested = stack_report.requested;</span>
+<span id="L1162">    plan.stack_resolved = stack_report.resolved;</span>
+<span id="L1163">    plan.stack_resolution = stack_report.resolution;</span>
+<span id="L1164">    return plan;</span>
+<span id="L1165">}</span>
+<span id="L1166"></span>
+<span id="L1167">void reset_thread_report_operations(ThreadPolicyReport&amp; report) noexcept {</span>
+<span id="L1168">    report.applied = PolicyOperationState::not_attempted;</span>
+<span id="L1169">    report.verified = PolicyOperationState::not_attempted;</span>
+<span id="L1170">    report.applied_policy = {};</span>
+<span id="L1171">    report.read_back = {};</span>
+<span id="L1172">    report.attempted_instance_count = 0;</span>
+<span id="L1173">    report.applied_instance_count = 0;</span>
+<span id="L1174">    report.verified_instance_count = 0;</span>
+<span id="L1175">    report.fallback_instance_count = 0;</span>
+<span id="L1176">    report.apply_error = 0;</span>
+<span id="L1177">    report.verify_error = 0;</span>
+<span id="L1178">}</span>
+<span id="L1179"></span>
+<span id="L1180">void aggregate_thread_startup_results(</span>
+<span id="L1181">    ThreadPolicyReport&amp; report,</span>
+<span id="L1182">    const ThreadStartupResult* results,</span>
+<span id="L1183">    std::size_t count) noexcept {</span>
+<span id="L1184">    reset_thread_report_operations(report);</span>
+<span id="L1185">    if (!results || count == 0) {</span>
+<span id="L1186">        return;</span>
+<span id="L1187">    }</span>
+<span id="L1188">    bool any_apply_failed = false;</span>
+<span id="L1189">    bool any_apply_unsupported = false;</span>
+<span id="L1190">    bool any_verify_failed = false;</span>
+<span id="L1191">    bool any_verify_unsupported = false;</span>
+<span id="L1192">    bool any_verify_mismatched = false;</span>
+<span id="L1193">    for (std::size_t index = 0; index &lt; count; ++index) {</span>
+<span id="L1194">        const auto&amp; result = results[index];</span>
+<span id="L1195">        if (!result.ready.load(std::memory_order_acquire)) {</span>
+<span id="L1196">            continue;</span>
+<span id="L1197">        }</span>
+<span id="L1198">        if (report.attempted_instance_count == 0) {</span>
+<span id="L1199">            report.read_back = result.read_back;</span>
+<span id="L1200">        }</span>
+<span id="L1201">        ++report.attempted_instance_count;</span>
+<span id="L1202">        if (result.applied == PolicyOperationState::succeeded) {</span>
+<span id="L1203">            ++report.applied_instance_count;</span>
+<span id="L1204">        } else if (result.applied == PolicyOperationState::failed) {</span>
+<span id="L1205">            any_apply_failed = true;</span>
+<span id="L1206">        } else if (result.applied == PolicyOperationState::unsupported) {</span>
+<span id="L1207">            any_apply_unsupported = true;</span>
+<span id="L1208">        }</span>
+<span id="L1209">        if (result.verified == PolicyOperationState::succeeded) {</span>
+<span id="L1210">            ++report.verified_instance_count;</span>
+<span id="L1211">        } else if (result.verified == PolicyOperationState::failed) {</span>
+<span id="L1212">            any_verify_failed = true;</span>
+<span id="L1213">        } else if (result.verified == PolicyOperationState::unsupported) {</span>
+<span id="L1214">            any_verify_unsupported = true;</span>
+<span id="L1215">        } else if (result.verified == PolicyOperationState::mismatched) {</span>
+<span id="L1216">            any_verify_mismatched = true;</span>
+<span id="L1217">        }</span>
+<span id="L1218">        if (result.applied != PolicyOperationState::succeeded ||</span>
+<span id="L1219">            result.verified != PolicyOperationState::succeeded) {</span>
+<span id="L1220">            // Preserve an offending instance&#x27;s actual observation rather than</span>
+<span id="L1221">            // leaving a successful first instance as the aggregate example.</span>
+<span id="L1222">            report.read_back = result.read_back;</span>
+<span id="L1223">        }</span>
+<span id="L1224">        report.fallback_instance_count += result.used_default_fallback ? 1u : 0u;</span>
+<span id="L1225">        if (report.apply_error == 0) {</span>
+<span id="L1226">            report.apply_error = result.creation_error != 0</span>
+<span id="L1227">                ? result.creation_error</span>
+<span id="L1228">                : result.apply_error;</span>
+<span id="L1229">        }</span>
+<span id="L1230">        if (report.verify_error == 0) {</span>
+<span id="L1231">            report.verify_error = result.verify_error;</span>
+<span id="L1232">        }</span>
+<span id="L1233">    }</span>
+<span id="L1234">    if (any_apply_failed) {</span>
+<span id="L1235">        report.applied = PolicyOperationState::failed;</span>
+<span id="L1236">    } else if (any_apply_unsupported) {</span>
+<span id="L1237">        report.applied = PolicyOperationState::unsupported;</span>
+<span id="L1238">    } else if (report.applied_instance_count == count) {</span>
+<span id="L1239">        report.applied = PolicyOperationState::succeeded;</span>
+<span id="L1240">        report.applied_policy = report.resolved;</span>
+<span id="L1241">    }</span>
+<span id="L1242">    if (any_verify_mismatched) {</span>
+<span id="L1243">        report.verified = PolicyOperationState::mismatched;</span>
+<span id="L1244">    } else if (any_verify_failed) {</span>
+<span id="L1245">        report.verified = PolicyOperationState::failed;</span>
+<span id="L1246">    } else if (any_verify_unsupported) {</span>
+<span id="L1247">        report.verified = PolicyOperationState::unsupported;</span>
+<span id="L1248">    } else if (report.verified_instance_count == count) {</span>
+<span id="L1249">        report.verified = PolicyOperationState::succeeded;</span>
+<span id="L1250">    }</span>
+<span id="L1251">}</span>
+<span id="L1252"></span>
+<span id="L1253">Status aggregate_runtime_stack_startup_results(</span>
+<span id="L1254">    MemoryPolicyReport&amp; report,</span>
+<span id="L1255">    const ThreadStartupResult* executor_results,</span>
+<span id="L1256">    std::size_t executor_count,</span>
+<span id="L1257">    const ThreadStartupResult* watchdog_results,</span>
+<span id="L1258">    std::size_t watchdog_count,</span>
+<span id="L1259">    const ThreadStartupResult* device_results,</span>
+<span id="L1260">    std::size_t device_count,</span>
+<span id="L1261">    const ThreadStartupResult* submission_results,</span>
+<span id="L1262">    std::size_t submission_count) noexcept {</span>
+<span id="L1263">    const std::array&lt;const ThreadStartupResult*, 4&gt; result_sets{</span>
+<span id="L1264">        executor_results,</span>
+<span id="L1265">        watchdog_results,</span>
+<span id="L1266">        device_results,</span>
+<span id="L1267">        submission_results,</span>
+<span id="L1268">    };</span>
+<span id="L1269">    const std::array&lt;std::size_t, 4&gt; result_counts{</span>
+<span id="L1270">        executor_count,</span>
+<span id="L1271">        watchdog_count,</span>
+<span id="L1272">        device_count,</span>
+<span id="L1273">        submission_count,</span>
+<span id="L1274">    };</span>
+<span id="L1275">    std::size_t count = 0;</span>
+<span id="L1276">    for (std::size_t set = 0; set &lt; result_sets.size(); ++set) {</span>
+<span id="L1277">        if ((result_sets[set] == nullptr &amp;&amp; result_counts[set] != 0) ||</span>
+<span id="L1278">            result_counts[set] &gt;</span>
+<span id="L1279">                std::numeric_limits&lt;std::size_t&gt;::max() - count) {</span>
+<span id="L1280">            report.applied = PolicyOperationState::failed;</span>
+<span id="L1281">            report.verified = PolicyOperationState::failed;</span>
+<span id="L1282">            report.apply_error = EINVAL;</span>
+<span id="L1283">            report.verify_error = EINVAL;</span>
+<span id="L1284">            return Status::invalid_config;</span>
+<span id="L1285">        }</span>
+<span id="L1286">        count += result_counts[set];</span>
+<span id="L1287">    }</span>
+<span id="L1288">    if (count != report.logical_region_count) {</span>
+<span id="L1289">        report.applied = PolicyOperationState::failed;</span>
+<span id="L1290">        report.verified = PolicyOperationState::failed;</span>
+<span id="L1291">        report.apply_error = EINVAL;</span>
+<span id="L1292">        report.verify_error = EINVAL;</span>
+<span id="L1293">        return Status::invalid_config;</span>
+<span id="L1294">    }</span>
+<span id="L1295"></span>
+<span id="L1296">    std::size_t committed = 0;</span>
+<span id="L1297">    std::size_t usable = 0;</span>
+<span id="L1298">    std::size_t guards = 0;</span>
+<span id="L1299">    std::size_t resident = 0;</span>
+<span id="L1300">    std::size_t locked = 0;</span>
+<span id="L1301">    bool any_apply_failed = false;</span>
+<span id="L1302">    bool any_apply_unsupported = false;</span>
+<span id="L1303">    bool any_verify_failed = false;</span>
+<span id="L1304">    bool any_verify_unsupported = false;</span>
+<span id="L1305">    bool any_verify_mismatched = false;</span>
+<span id="L1306">    bool any_accounting_unavailable = false;</span>
+<span id="L1307">    bool all_cleanup_succeeded = count != 0;</span>
+<span id="L1308">    std::int32_t cleanup_error = 0;</span>
+<span id="L1309">    const auto checked_sum = [](std::size_t&amp; total, std::size_t value) {</span>
+<span id="L1310">        if (value &gt; std::numeric_limits&lt;std::size_t&gt;::max() - total) {</span>
+<span id="L1311">            return false;</span>
+<span id="L1312">        }</span>
+<span id="L1313">        total += value;</span>
+<span id="L1314">        return true;</span>
+<span id="L1315">    };</span>
+<span id="L1316"></span>
+<span id="L1317">    for (std::size_t set = 0; set &lt; result_sets.size(); ++set) {</span>
+<span id="L1318">        for (std::size_t index = 0;</span>
+<span id="L1319">             index &lt; result_counts[set];</span>
+<span id="L1320">             ++index) {</span>
+<span id="L1321">            const auto&amp; result = result_sets[set][index];</span>
+<span id="L1322">            if (!result.ready.load(std::memory_order_acquire)) {</span>
+<span id="L1323">                report.applied = PolicyOperationState::failed;</span>
+<span id="L1324">                report.verified = PolicyOperationState::failed;</span>
+<span id="L1325">                report.apply_error = EPROTO;</span>
+<span id="L1326">                report.verify_error = EPROTO;</span>
+<span id="L1327">                return Status::invalid_config;</span>
+<span id="L1328">            }</span>
+<span id="L1329">            const bool unavailable =</span>
+<span id="L1330">                result.stack_mapping_base == nullptr &amp;&amp;</span>
+<span id="L1331">                result.stack_mapping_bytes == 0 &amp;&amp;</span>
+<span id="L1332">                (result.stack_applied == PolicyOperationState::unsupported ||</span>
+<span id="L1333">                 result.stack_applied == PolicyOperationState::failed) &amp;&amp;</span>
+<span id="L1334">                (result.stack_verified == PolicyOperationState::unsupported ||</span>
+<span id="L1335">                 result.stack_verified == PolicyOperationState::failed);</span>
+<span id="L1336">            if (!unavailable &amp;&amp;</span>
+<span id="L1337">                (result.stack_mapping_base == nullptr ||</span>
+<span id="L1338">                 result.stack_mapping_bytes == 0 ||</span>
+<span id="L1339">                 result.stack_guard_bytes &gt; result.stack_mapping_bytes ||</span>
+<span id="L1340">                 result.stack_usable_bytes !=</span>
+<span id="L1341">                     result.stack_mapping_bytes - result.stack_guard_bytes)) {</span>
+<span id="L1342">                report.applied = PolicyOperationState::failed;</span>
+<span id="L1343">                report.verified = PolicyOperationState::failed;</span>
+<span id="L1344">                report.apply_error = EINVAL;</span>
+<span id="L1345">                report.verify_error = EINVAL;</span>
+<span id="L1346">                return Status::invalid_config;</span>
+<span id="L1347">            }</span>
+<span id="L1348">            any_accounting_unavailable =</span>
+<span id="L1349">                any_accounting_unavailable || unavailable;</span>
+<span id="L1350">            if (!checked_sum(committed, result.stack_mapping_bytes) ||</span>
+<span id="L1351">                !checked_sum(usable, result.stack_usable_bytes) ||</span>
+<span id="L1352">                !checked_sum(guards, result.stack_guard_bytes) ||</span>
+<span id="L1353">                !checked_sum(resident, result.stack_resident_bytes) ||</span>
+<span id="L1354">                !checked_sum(locked, result.stack_locked_bytes)) {</span>
+<span id="L1355">                report.applied = PolicyOperationState::failed;</span>
+<span id="L1356">                report.verified = PolicyOperationState::failed;</span>
+<span id="L1357">                report.apply_error = EOVERFLOW;</span>
+<span id="L1358">                report.verify_error = EOVERFLOW;</span>
+<span id="L1359">                return Status::invalid_config;</span>
+<span id="L1360">            }</span>
+<span id="L1361">            any_apply_failed = any_apply_failed ||</span>
+<span id="L1362">                result.stack_applied == PolicyOperationState::failed;</span>
+<span id="L1363">            any_apply_unsupported = any_apply_unsupported ||</span>
+<span id="L1364">                result.stack_applied == PolicyOperationState::unsupported;</span>
+<span id="L1365">            any_verify_failed = any_verify_failed ||</span>
+<span id="L1366">                result.stack_verified == PolicyOperationState::failed;</span>
+<span id="L1367">            any_verify_unsupported = any_verify_unsupported ||</span>
+<span id="L1368">                result.stack_verified == PolicyOperationState::unsupported;</span>
+<span id="L1369">            any_verify_mismatched = any_verify_mismatched ||</span>
+<span id="L1370">                result.stack_verified == PolicyOperationState::mismatched;</span>
+<span id="L1371">            all_cleanup_succeeded = all_cleanup_succeeded &amp;&amp;</span>
+<span id="L1372">                result.stack_cleanup == PolicyOperationState::succeeded;</span>
+<span id="L1373">            if (report.apply_error == 0) {</span>
+<span id="L1374">                report.apply_error = result.stack_apply_error;</span>
+<span id="L1375">            }</span>
+<span id="L1376">            if (report.verify_error == 0) {</span>
+<span id="L1377">                report.verify_error = result.stack_verify_error;</span>
+<span id="L1378">            }</span>
+<span id="L1379">            if (cleanup_error == 0) {</span>
+<span id="L1380">                cleanup_error = result.stack_cleanup_error;</span>
+<span id="L1381">            }</span>
+<span id="L1382">        }</span>
+<span id="L1383">    }</span>
+<span id="L1384"></span>
+<span id="L1385">    report.accounted_bytes = committed;</span>
+<span id="L1386">    report.committed_bytes = committed;</span>
+<span id="L1387">    report.actual_guard_bytes_before = guards;</span>
+<span id="L1388">    report.actual_guard_bytes_after = 0;</span>
+<span id="L1389">    report.resident_bytes = resident;</span>
+<span id="L1390">    report.locked_bytes = locked;</span>
+<span id="L1391">    report.pinned_bytes = 0;</span>
+<span id="L1392">    report.applied = any_apply_failed        ? PolicyOperationState::failed</span>
+<span id="L1393">                     : any_apply_unsupported ? PolicyOperationState::unsupported</span>
+<span id="L1394">                     : count == 0 ? PolicyOperationState::not_attempted</span>
+<span id="L1395">                                  : PolicyOperationState::succeeded;</span>
+<span id="L1396">    report.verified = any_verify_mismatched</span>
+<span id="L1397">        ? PolicyOperationState::mismatched</span>
+<span id="L1398">        : any_verify_failed</span>
+<span id="L1399">            ? PolicyOperationState::failed</span>
+<span id="L1400">            : any_verify_unsupported</span>
+<span id="L1401">                ? PolicyOperationState::unsupported</span>
+<span id="L1402">                : count == 0</span>
+<span id="L1403">                    ? PolicyOperationState::not_attempted</span>
+<span id="L1404">                    : PolicyOperationState::succeeded;</span>
+<span id="L1405">    if (cleanup_error != 0) {</span>
+<span id="L1406">        report.rollback_error = cleanup_error;</span>
+<span id="L1407">    } else if (all_cleanup_succeeded) {</span>
+<span id="L1408">        report.rollback_error = 0;</span>
+<span id="L1409">    }</span>
+<span id="L1410">    report.accounting_exactness = any_accounting_unavailable</span>
+<span id="L1411">        ? ResourceAccountingExactness::unknown</span>
+<span id="L1412">        : ResourceAccountingExactness::exact;</span>
+<span id="L1413">    (void)usable;</span>
+<span id="L1414">    return Status::ok;</span>
+<span id="L1415">}</span>
+<span id="L1416"></span>
+<span id="L1417">Status aggregate_stack_startup_results(</span>
+<span id="L1418">    MemoryPolicyReport&amp; report,</span>
+<span id="L1419">    const ThreadStartupResult* results,</span>
+<span id="L1420">    std::size_t count) noexcept {</span>
+<span id="L1421">    return aggregate_runtime_stack_startup_results(</span>
+<span id="L1422">        report,</span>
+<span id="L1423">        results,</span>
+<span id="L1424">        count,</span>
+<span id="L1425">        nullptr,</span>
+<span id="L1426">        0,</span>
+<span id="L1427">        nullptr,</span>
+<span id="L1428">        0,</span>
+<span id="L1429">        nullptr,</span>
+<span id="L1430">        0);</span>
+<span id="L1431">}</span>
+<span id="L1432"></span>
+<span id="L1433">} // namespace rt::detail</span></pre></html>

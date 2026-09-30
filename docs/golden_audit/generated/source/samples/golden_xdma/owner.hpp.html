@@ -1,0 +1,70 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_xdma/owner.hpp</title><h1>samples/golden_xdma/owner.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;../golden_cuda/physics.hpp&quot;</span>
+<span id="L3">#include &quot;session.hpp&quot;</span>
+<span id="L4">namespace golden::xdma {</span>
+<span id="L5">enum class Dispatch { cpu, kernel, graph };</span>
+<span id="L6">// All borrowed storage and both native worker drivers outlive checked Runtime</span>
+<span id="L7">// stop. A failed stop leaves this complete owner available for bounded retry.</span>
+<span id="L8">struct Owner {</span>
+<span id="L9">  Options options;</span>
+<span id="L10">  Dispatch dispatch;</span>
+<span id="L11">  std::unique_ptr&lt;Memory&gt; memory = std::make_unique&lt;Memory&gt;();</span>
+<span id="L12">  std::unique_ptr&lt;Jobs&gt; jobs = std::make_unique&lt;Jobs&gt;();</span>
+<span id="L13">  std::unique_ptr&lt;cuda::SimulatedDriver&gt; cuda_driver;</span>
+<span id="L14">  std::unique_ptr&lt;cuda::CudaPhysics&gt; physics;</span>
+<span id="L15">  std::unique_ptr&lt;SimulatedDriver&gt; driver;</span>
+<span id="L16">  std::unique_ptr&lt;Io&gt; io;</span>
+<span id="L17">  std::unique_ptr&lt;Session&gt; session;</span>
+<span id="L18">  bool jobs_started = false;</span>
+<span id="L19">  Owner(Options o, Dispatch d = Dispatch::cpu) : options(o), dispatch(d) {</span>
+<span id="L20">    if (d != Dispatch::cpu) {</span>
+<span id="L21">      cuda_driver = std::make_unique&lt;cuda::SimulatedDriver&gt;(o.count);</span>
+<span id="L22">      physics = std::make_unique&lt;cuda::CudaPhysics&gt;(*cuda_driver,</span>
+<span id="L23">                                                    d == Dispatch::graph);</span>
+<span id="L24">    }</span>
+<span id="L25">    driver = std::make_unique&lt;SimulatedDriver&gt;(o.count);</span>
+<span id="L26">    io = std::make_unique&lt;Io&gt;(*driver);</span>
+<span id="L27">    session = std::make_unique&lt;Session&gt;(o, o.host ? jobs.get() : nullptr,</span>
+<span id="L28">                                        *memory, *io, physics.get());</span>
+<span id="L29">  }</span>
+<span id="L30">  Owner(const Owner &amp;) = delete;</span>
+<span id="L31">  Owner &amp;operator=(const Owner &amp;) = delete;</span>
+<span id="L32">  ~Owner() {</span>
+<span id="L33">    if (close() != rt::Status::ok)</span>
+<span id="L34">      std::terminate();</span>
+<span id="L35">  }</span>
+<span id="L36">  rt::Status prepare() noexcept {</span>
+<span id="L37">    if (!session)</span>
+<span id="L38">      return rt::Status::invalid_state;</span>
+<span id="L39">    if (options.host &amp;&amp; !jobs_started) {</span>
+<span id="L40">      const auto s = jobs-&gt;start(options.workers);</span>
+<span id="L41">      if (s != rt::Status::ok)</span>
+<span id="L42">        return s;</span>
+<span id="L43">      jobs_started = true;</span>
+<span id="L44">    }</span>
+<span id="L45">    return session-&gt;prepare();</span>
+<span id="L46">  }</span>
+<span id="L47">  rt::Status close() noexcept {</span>
+<span id="L48">    if (session) {</span>
+<span id="L49">      const auto s = session-&gt;close();</span>
+<span id="L50">      if (s != rt::Status::ok)</span>
+<span id="L51">        return s;</span>
+<span id="L52">      session.reset();</span>
+<span id="L53">    }</span>
+<span id="L54">    io.reset();</span>
+<span id="L55">    physics.reset();</span>
+<span id="L56">    if (cuda_driver &amp;&amp; !cuda_driver-&gt;close())</span>
+<span id="L57">      return rt::Status::device_error;</span>
+<span id="L58">    if (jobs_started) {</span>
+<span id="L59">      const auto s = jobs-&gt;close();</span>
+<span id="L60">      if (s != rt::Status::ok)</span>
+<span id="L61">        return s;</span>
+<span id="L62">      jobs_started = false;</span>
+<span id="L63">    }</span>
+<span id="L64">    return !driver-&gt;live &amp;&amp; memory-&gt;live_count() == 0 &amp;&amp; !memory-&gt;violations &amp;&amp;</span>
+<span id="L65">                   jobs-&gt;accepted == jobs-&gt;completed</span>
+<span id="L66">               ? rt::Status::ok</span>
+<span id="L67">               : rt::Status::internal_error;</span>
+<span id="L68">  }</span>
+<span id="L69">};</span>
+<span id="L70">} // namespace golden::xdma</span></pre></html>

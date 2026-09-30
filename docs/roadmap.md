@@ -1,3 +1,20 @@
+# M26-06 source-linked documentation and capability audit
+
+M26-01 through M26-05 are merged; the final target284 merge is
+`912ce878ad311d38e452a5d2916ee0daa6ee3f72`, canonically closed by control578.
+M26-06 adds the [offline golden manual](golden_audit/generated/index.html),
+100 scenario mappings, 112 canonical requirement dispositions, and the
+[installed audit/soak workflow](golden_audit.md). Its fresh verification and
+integration disposition are retained in M26-06 evidence and its PR.
+
+Portable composition is distinct from global capability qualification. M18
+physical/RT, M19 Unreal, M20 release engineering (including native telemetry
+exporters, controlled performance, signing and migration), independent M25
+human review and the protected fixture/replay findings remain open. No next
+batch, hardware, signing, release or deployment action is activated.
+
+## Historical checkpoints
+
 # M26-05 golden showcase implemented
 
 The optional public-SDK kit provides fifteen meaningful M23 cases, CPU and
@@ -346,7 +363,7 @@ pass; file presence or a passing smoke test is not sufficient.
 | M23 | Complete | M23-01 through M23-05 merged, including offline analysis and the extension source kit; physical/controlled evidence remains separate |
 | M24 | Portable closure | Runtime CUDA model, oracle, failure/lifetime, benchmarks, host correlations and capability coverage40/44 with37/37 critical; final hosted/integration evidence is retained in the M24-04 PR; physical M18 gates remain |
 | M25 | Software delivery | M25-01 through M25-05 merged; M25-06 adds installed docs/API/recipes with final gates retained in its PR/closure. Independent novice acceptance remains unperformed |
-| M26 | Specification | M26-01 checked golden scenario/lever contract; M26-02 through M26-06 remain |
+| M26 | Portable composition and audit | M26-01 through M26-05 merged; M26-06 delivers source-linked installed documentation, complete requirement dispositions and bounded soak. Exact validation/integration remains in its evidence; independent gated capabilities stay open |
 
 ## M0 — Product contract and truth reset
 

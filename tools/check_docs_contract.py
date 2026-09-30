@@ -3311,6 +3311,15 @@ def main() -> int:
     except (OSError, ValueError, KeyError) as exc:
         fail(f"golden showcase contract: {exc}")
     import generate_golden_config
+    import check_golden_audit
+    try:
+        bundle = ROOT / 'docs/golden_audit/generated'
+        check_golden_audit.catalog.verify_bundle(bundle)
+        for path, content in check_golden_audit.catalog.render(ROOT).items():
+            if (bundle / path).read_bytes() != content:
+                fail(f"stale generated golden audit: {path}")
+    except (OSError, ValueError, KeyError) as exc:
+        fail(f"golden source/capability audit: {exc}")
     if read("samples/golden_system/fixed.hpp") != generate_golden_config.render():
         fail("compiled golden constants differ from the frozen contract")
     import check_sdk_docs

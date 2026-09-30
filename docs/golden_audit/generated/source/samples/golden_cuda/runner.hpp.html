@@ -1,0 +1,426 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_cuda/runner.hpp</title><h1>samples/golden_cuda/runner.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">// Derived from the M26-02 CLI; shared CPU model, controls and replay remain</span>
+<span id="L3">// authoritative.</span>
+<span id="L4">#include &quot;../golden_system/oracle.hpp&quot;</span>
+<span id="L5">#include &quot;../golden_system/peer.hpp&quot;</span>
+<span id="L6">#include &quot;../golden_system/session.hpp&quot;</span>
+<span id="L7">#include &quot;owner.hpp&quot;</span>
+<span id="L8">#include &quot;replay.hpp&quot;</span>
+<span id="L9">#include &quot;telemetry.hpp&quot;</span>
+<span id="L10">#include &lt;filesystem&gt;</span>
+<span id="L11">#include &lt;fstream&gt;</span>
+<span id="L12">#include &lt;iostream&gt;</span>
+<span id="L13">#include &lt;memory&gt;</span>
+<span id="L14">#include &lt;numeric&gt;</span>
+<span id="L15">namespace fs = std::filesystem;</span>
+<span id="L16">using namespace golden;</span>
+<span id="L17">namespace golden::cuda {</span>
+<span id="L18">enum class Fault { none, device_loss, reset_failure };</span>
+<span id="L19">struct Arguments {</span>
+<span id="L20">  std::string dispatch = &quot;graph&quot;;</span>
+<span id="L21">  Fault fault = Fault::none;</span>
+<span id="L22">  Options scenario;</span>
+<span id="L23">  cil::Options peer;</span>
+<span id="L24">  fs::path output;</span>
+<span id="L25">};</span>
+<span id="L26">bool arguments(int argc, char **argv, Arguments &amp;a) {</span>
+<span id="L27">  for (int i = 1; i &lt; argc; ++i) {</span>
+<span id="L28">    std::string_view key = argv[i];</span>
+<span id="L29">    if (i + 1 &gt;= argc)</span>
+<span id="L30">      return false;</span>
+<span id="L31">    std::string_view value = argv[++i];</span>
+<span id="L32">    std::uint64_t number = 0;</span>
+<span id="L33">    if (key == &quot;--dispatch&quot;) {</span>
+<span id="L34">      if (value != &quot;cpu&quot; &amp;&amp; value != &quot;kernel&quot; &amp;&amp; value != &quot;graph&quot;)</span>
+<span id="L35">        return false;</span>
+<span id="L36">      a.dispatch = value;</span>
+<span id="L37">    } else if (key == &quot;--fault&quot;) {</span>
+<span id="L38">      if (value == &quot;none&quot;)</span>
+<span id="L39">        a.fault = Fault::none;</span>
+<span id="L40">      else if (value == &quot;device_loss&quot;)</span>
+<span id="L41">        a.fault = Fault::device_loss;</span>
+<span id="L42">      else if (value == &quot;reset_failure&quot;)</span>
+<span id="L43">        a.fault = Fault::reset_failure;</span>
+<span id="L44">      else</span>
+<span id="L45">        return false;</span>
+<span id="L46">    } else if (key == &quot;--mode&quot;) {</span>
+<span id="L47">      if (value != &quot;native&quot; &amp;&amp; value != &quot;host&quot;)</span>
+<span id="L48">        return false;</span>
+<span id="L49">      a.scenario.host = value == &quot;host&quot;;</span>
+<span id="L50">    } else if (key == &quot;--output&quot;)</span>
+<span id="L51">      a.output = argv[i];</span>
+<span id="L52">    else if (key == &quot;--campaign&quot;) {</span>
+<span id="L53">      auto it = std::find(campaign_names.begin(), campaign_names.end(), value);</span>
+<span id="L54">      if (it == campaign_names.end())</span>
+<span id="L55">        return false;</span>
+<span id="L56">      a.scenario.campaign = static_cast&lt;Campaign&gt;(it - campaign_names.begin());</span>
+<span id="L57">    } else if (key == &quot;--peer&quot;) {</span>
+<span id="L58">      a.scenario.external = true;</span>
+<span id="L59">      a.peer.key = value;</span>
+<span id="L60">    } else {</span>
+<span id="L61">      if (!cil::number(value, number))</span>
+<span id="L62">        return false;</span>
+<span id="L63">      if (key == &quot;--count&quot;)</span>
+<span id="L64">        a.scenario.count = number;</span>
+<span id="L65">      else if (key == &quot;--ticks&quot;)</span>
+<span id="L66">        a.scenario.ticks = number;</span>
+<span id="L67">      else if (key == &quot;--workers&quot;)</span>
+<span id="L68">        a.scenario.workers = number;</span>
+<span id="L69">      else if (key == &quot;--grain&quot;)</span>
+<span id="L70">        a.scenario.grain = number;</span>
+<span id="L71">      else if (key == &quot;--generation&quot;)</span>
+<span id="L72">        a.peer.generation = number;</span>
+<span id="L73">      else if (key == &quot;--timeout-ms&quot;)</span>
+<span id="L74">        a.peer.timeout_ms = number;</span>
+<span id="L75">      else</span>
+<span id="L76">        return false;</span>
+<span id="L77">    }</span>
+<span id="L78">  }</span>
+<span id="L79">  return a.scenario.valid() &amp;&amp;</span>
+<span id="L80">         (a.fault == Fault::none ||</span>
+<span id="L81">          (a.dispatch != &quot;cpu&quot; &amp;&amp; !a.scenario.external &amp;&amp;</span>
+<span id="L82">           a.scenario.campaign == Campaign::nominal &amp;&amp;</span>
+<span id="L83">           a.scenario.ticks &gt;= 19)) &amp;&amp;</span>
+<span id="L84">         (!a.scenario.external ||</span>
+<span id="L85">          (cil::valid_key(a.peer.key) &amp;&amp; a.peer.generation &amp;&amp;</span>
+<span id="L86">           a.peer.timeout_ms &gt;= 100 &amp;&amp; a.peer.timeout_ms &lt;= 5000)) &amp;&amp;</span>
+<span id="L87">         !(a.scenario.external &amp;&amp; a.scenario.campaign == Campaign::overload);</span>
+<span id="L88">}</span>
+<span id="L89">bool write(const fs::path &amp;path, std::span&lt;const std::byte&gt; bytes) {</span>
+<span id="L90">  std::ofstream f(path, std::ios::binary);</span>
+<span id="L91">  f.write(reinterpret_cast&lt;const char *&gt;(bytes.data()),</span>
+<span id="L92">          static_cast&lt;std::streamsize&gt;(bytes.size()));</span>
+<span id="L93">  f.close();</span>
+<span id="L94">  return !f.fail();</span>
+<span id="L95">}</span>
+<span id="L96">int execute(const Arguments &amp;a) {</span>
+<span id="L97">  const auto o = a.scenario;</span>
+<span id="L98">#if defined(_WIN32)</span>
+<span id="L99">  const auto process_id = GetCurrentProcessId();</span>
+<span id="L100">#else</span>
+<span id="L101">  const auto process_id = getpid();</span>
+<span id="L102">#endif</span>
+<span id="L103">  const auto session_identity =</span>
+<span id="L104">      std::to_string(cil::now_ns()) + &quot;-&quot; + std::to_string(process_id);</span>
+<span id="L105">  const bool device = a.dispatch != &quot;cpu&quot;;</span>
+<span id="L106">  const auto dispatch = a.dispatch == &quot;cpu&quot;      ? Dispatch::cpu</span>
+<span id="L107">                        : a.dispatch == &quot;kernel&quot; ? Dispatch::kernel</span>
+<span id="L108">                                                 : Dispatch::graph;</span>
+<span id="L109">  auto owner = std::make_unique&lt;Owner&gt;(o, dispatch);</span>
+<span id="L110">  auto *s = owner-&gt;session.get();</span>
+<span id="L111">  auto status = owner-&gt;prepare();</span>
+<span id="L112">  if (status != rt::Status::ok) {</span>
+<span id="L113">    std::cerr &lt;&lt; &quot;prepare &quot; &lt;&lt; s-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L114">    return 1;</span>
+<span id="L115">  }</span>
+<span id="L116">  struct Totals {</span>
+<span id="L117">    std::uint64_t providers = 0, publications = 0, uploads = 0, copies = 0,</span>
+<span id="L118">                  downloads = 0, kernels = 0, graphs = 0, records = 0,</span>
+<span id="L119">                  registrations = 0, unregistrations = 0, event_creates = 0,</span>
+<span id="L120">                  event_destroys = 0, backend_allocations = 0,</span>
+<span id="L121">                  backend_frees = 0, faults = 0, jobs_accepted = 0,</span>
+<span id="L122">                  jobs_completed = 0, acquisitions = 0, releases = 0;</span>
+<span id="L123">    bool protocol_ok = true;</span>
+<span id="L124">    bool close(Owner &amp;v) {</span>
+<span id="L125">      if (v.physics) {</span>
+<span id="L126">        providers += v.physics-&gt;providers;</span>
+<span id="L127">        publications += v.physics-&gt;publications;</span>
+<span id="L128">      }</span>
+<span id="L129">      if (v.close() != rt::Status::ok)</span>
+<span id="L130">        return false;</span>
+<span id="L131">      if (v.driver) {</span>
+<span id="L132">        auto &amp;d = *v.driver;</span>
+<span id="L133">#define GOLDEN_SUM(field) field += d.field.load()</span>
+<span id="L134">        GOLDEN_SUM(uploads);</span>
+<span id="L135">        GOLDEN_SUM(copies);</span>
+<span id="L136">        GOLDEN_SUM(downloads);</span>
+<span id="L137">        GOLDEN_SUM(kernels);</span>
+<span id="L138">        GOLDEN_SUM(graphs);</span>
+<span id="L139">        GOLDEN_SUM(records);</span>
+<span id="L140">        GOLDEN_SUM(registrations);</span>
+<span id="L141">        GOLDEN_SUM(unregistrations);</span>
+<span id="L142">        GOLDEN_SUM(event_creates);</span>
+<span id="L143">        GOLDEN_SUM(event_destroys);</span>
+<span id="L144">        GOLDEN_SUM(backend_allocations);</span>
+<span id="L145">        GOLDEN_SUM(backend_frees);</span>
+<span id="L146">        GOLDEN_SUM(faults);</span>
+<span id="L147">#undef GOLDEN_SUM</span>
+<span id="L148">        protocol_ok = protocol_ok &amp;&amp; d.protocol_ok &amp;&amp; d.clean();</span>
+<span id="L149">      }</span>
+<span id="L150">      jobs_accepted += v.jobs-&gt;accepted.load();</span>
+<span id="L151">      jobs_completed += v.jobs-&gt;completed.load();</span>
+<span id="L152">      acquisitions += v.memory-&gt;acquisitions;</span>
+<span id="L153">      releases += v.memory-&gt;releases;</span>
+<span id="L154">      return protocol_ok &amp;&amp; jobs_accepted == jobs_completed &amp;&amp;</span>
+<span id="L155">             acquisitions == releases;</span>
+<span id="L156">    }</span>
+<span id="L157">  } totals;</span>
+<span id="L158">  std::int32_t fault_status = 0, reset_status = 0, retry_status = 0,</span>
+<span id="L159">               stop_status = 0;</span>
+<span id="L160">  std::uint64_t fault_health = 0, fault_outstanding = 0,</span>
+<span id="L161">                prior_device_failures = 0;</span>
+<span id="L162">  std::unique_ptr&lt;Peer&gt; peer;</span>
+<span id="L163">  if (o.external) {</span>
+<span id="L164">    peer = std::make_unique&lt;Peer&gt;(a.peer);</span>
+<span id="L165">    if (!peer-&gt;start())</span>
+<span id="L166">      return 2;</span>
+<span id="L167">  }</span>
+<span id="L168">  OwnedReplay replay(o.ticks, o.external);</span>
+<span id="L169">  if (!replay.begin(*s) || !s-&gt;controls())</span>
+<span id="L170">    return 1;</span>
+<span id="L171">  Oracle oracle(o);</span>
+<span id="L172">  Telemetry telemetry;</span>
+<span id="L173">  std::uint64_t prior_events = 0, prior_failures = 0;</span>
+<span id="L174">  std::array&lt;std::uint64_t, 3&gt; prior_actions{};</span>
+<span id="L175">  std::size_t recoveries = 0;</span>
+<span id="L176">  std::vector&lt;std::byte&gt; recovery;</span>
+<span id="L177">  for (std::size_t t = 0; t &lt; o.ticks; ++t) {</span>
+<span id="L178">    if ((o.campaign == Campaign::overload || a.fault != Fault::none) &amp;&amp;</span>
+<span id="L179">        t == 6) {</span>
+<span id="L180">      recovery = s-&gt;checkpoint(5);</span>
+<span id="L181">      if (recovery.empty())</span>
+<span id="L182">        return 1;</span>
+<span id="L183">      const bool loss = a.fault == Fault::device_loss;</span>
+<span id="L184">      const auto expected = a.fault == Fault::none ? rt::Status::callback_failed</span>
+<span id="L185">                            : loss                 ? rt::Status::device_lost</span>
+<span id="L186">                                   : rt::Status::device_reset_required;</span>
+<span id="L187">      if (a.fault != Fault::none) {</span>
+<span id="L188">        telemetry.expected_device_failure = expected;</span>
+<span id="L189">        if (loss)</span>
+<span id="L190">          owner-&gt;driver-&gt;lose_query = true;</span>
+<span id="L191">        else</span>
+<span id="L192">          owner-&gt;driver-&gt;fail_query = true;</span>
+<span id="L193">      }</span>
+<span id="L194">      const auto plant = s-&gt;world.plant;</span>
+<span id="L195">      status = s-&gt;step(t, a.fault == Fault::none);</span>
+<span id="L196">      fault_status = static_cast&lt;std::int32_t&gt;(status);</span>
+<span id="L197">      if (status != expected || s-&gt;world.calls[1] != 6 ||</span>
+<span id="L198">          s-&gt;world.calls[2] != 6 || s-&gt;world.plant.position != plant.position ||</span>
+<span id="L199">          s-&gt;world.plant.velocity != plant.velocity ||</span>
+<span id="L200">          s-&gt;world.plant.acceleration != plant.acceleration ||</span>
+<span id="L201">          telemetry.drain(*s-&gt;runtime) != rt::Status::ok ||</span>
+<span id="L202">          telemetry.deadline_failures != (a.fault == Fault::none ? 1u : 0u) ||</span>
+<span id="L203">          telemetry.device_failures != (a.fault == Fault::none ? 0u : 1u))</span>
+<span id="L204">        return 1;</span>
+<span id="L205">      if (a.fault != Fault::none) {</span>
+<span id="L206">        rt::DeviceHealth health = rt::make_device_health(),</span>
+<span id="L207">                         after = rt::make_device_health();</span>
+<span id="L208">        rt::DeviceTimelineInfo timeline;</span>
+<span id="L209">        if (owner-&gt;driver-&gt;faults != 1 || owner-&gt;physics-&gt;providers != 7 ||</span>
+<span id="L210">            owner-&gt;physics-&gt;publications != 6 ||</span>
+<span id="L211">            !owner-&gt;physics-&gt;timeline(timeline) ||</span>
+<span id="L212">            timeline.completed_value != 6 ||</span>
+<span id="L213">            owner-&gt;physics-&gt;health(health) != rt::Status::ok ||</span>
+<span id="L214">            health.outstanding != 1)</span>
+<span id="L215">          return 1;</span>
+<span id="L216">        fault_health = health.state;</span>
+<span id="L217">        fault_outstanding = health.outstanding;</span>
+<span id="L218">        if (loss) {</span>
+<span id="L219">          reset_status = static_cast&lt;std::int32_t&gt;(owner-&gt;physics-&gt;reset());</span>
+<span id="L220">          if (health.state != RTFW_DEVICE_HEALTH_LOST || health.losses != 1 ||</span>
+<span id="L221">              reset_status != fault_status)</span>
+<span id="L222">            return 1;</span>
+<span id="L223">        } else {</span>
+<span id="L224">          if (health.state != RTFW_DEVICE_HEALTH_RESET_REQUIRED)</span>
+<span id="L225">            return 1;</span>
+<span id="L226">          owner-&gt;driver-&gt;fail_stream_sync = true;</span>
+<span id="L227">          reset_status = static_cast&lt;std::int32_t&gt;(owner-&gt;physics-&gt;reset());</span>
+<span id="L228">          if (!reset_status || owner-&gt;driver-&gt;faults != 2 ||</span>
+<span id="L229">              owner-&gt;driver-&gt;clean() || owner-&gt;memory-&gt;live_count() != 3)</span>
+<span id="L230">            return 1;</span>
+<span id="L231">          retry_status = static_cast&lt;std::int32_t&gt;(owner-&gt;physics-&gt;reset());</span>
+<span id="L232">          if (retry_status || owner-&gt;physics-&gt;health(after) != rt::Status::ok ||</span>
+<span id="L233">              after.state != RTFW_DEVICE_HEALTH_HEALTHY || after.outstanding ||</span>
+<span id="L234">              after.resets != health.resets + 1 ||</span>
+<span id="L235">              after.generation &lt;= health.generation)</span>
+<span id="L236">            return 1;</span>
+<span id="L237">        }</span>
+<span id="L238">        owner-&gt;driver-&gt;fail_unregister = true;</span>
+<span id="L239">        stop_status = static_cast&lt;std::int32_t&gt;(owner-&gt;close());</span>
+<span id="L240">        if (!stop_status || !owner-&gt;session || !owner-&gt;physics ||</span>
+<span id="L241">            owner-&gt;driver-&gt;clean() || owner-&gt;memory-&gt;live_count() != 3)</span>
+<span id="L242">          return 1;</span>
+<span id="L243">      }</span>
+<span id="L244">      if (!totals.close(*owner))</span>
+<span id="L245">        return 1;</span>
+<span id="L246">      owner.reset();</span>
+<span id="L247">      owner = std::make_unique&lt;Owner&gt;(o, dispatch);</span>
+<span id="L248">      s = owner-&gt;session.get();</span>
+<span id="L249">      if (owner-&gt;prepare() != rt::Status::ok ||</span>
+<span id="L250">          s-&gt;runtime-&gt;restore_checkpoint(recovery) != rt::Status::ok ||</span>
+<span id="L251">          !s-&gt;world.decode())</span>
+<span id="L252">        return 1;</span>
+<span id="L253">      prior_events = telemetry.events;</span>
+<span id="L254">      prior_actions = telemetry.action_records;</span>
+<span id="L255">      prior_failures = telemetry.deadline_failures;</span>
+<span id="L256">      prior_device_failures = telemetry.device_failures;</span>
+<span id="L257">      Telemetry resumed;</span>
+<span id="L258">      if (!resumed.resume(*s-&gt;runtime, telemetry))</span>
+<span id="L259">        return 1;</span>
+<span id="L260">      telemetry = resumed;</span>
+<span id="L261">      replay = OwnedReplay(o.ticks, false, 6);</span>
+<span id="L262">      replay.initial = s-&gt;checkpoint(5);</span>
+<span id="L263">      if (replay.initial.empty())</span>
+<span id="L264">        return 1;</span>
+<span id="L265">      ++recoveries;</span>
+<span id="L266">    }</span>
+<span id="L267">    if (peer &amp;&amp; t % 3 == 0)</span>
+<span id="L268">      peer-&gt;exchange(t, s-&gt;world);</span>
+<span id="L269">    replay.record(*s, t);</span>
+<span id="L270">    status = s-&gt;step(t);</span>
+<span id="L271">    if (status != rt::Status::ok) {</span>
+<span id="L272">      std::cerr &lt;&lt; &quot;step &quot; &lt;&lt; t &lt;&lt; &#x27; &#x27; &lt;&lt; s-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L273">      return 1;</span>
+<span id="L274">    }</span>
+<span id="L275">    if (!oracle.step(t, s-&gt;world)) {</span>
+<span id="L276">      std::cerr &lt;&lt; &quot;oracle &quot; &lt;&lt; t &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L277">      return 1;</span>
+<span id="L278">    }</span>
+<span id="L279">    const auto trace_status = telemetry.drain(*s-&gt;runtime);</span>
+<span id="L280">    if (trace_status != rt::Status::ok) {</span>
+<span id="L281">      std::cerr &lt;&lt; &quot;telemetry tick=&quot; &lt;&lt; t &lt;&lt; &quot; stream=&quot; &lt;&lt; telemetry.last_stream</span>
+<span id="L282">                &lt;&lt; &quot; status=&quot; &lt;&lt; static_cast&lt;int&gt;(trace_status)</span>
+<span id="L283">                &lt;&lt; &quot; gaps=&quot; &lt;&lt; telemetry.action_gaps &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L284">      return 1;</span>
+<span id="L285">    }</span>
+<span id="L286">  }</span>
+<span id="L287">  const auto final = s-&gt;world.canonical;</span>
+<span id="L288">  const auto calls = s-&gt;world.calls;</span>
+<span id="L289">  const auto planned = s-&gt;plan.planned_bytes;</span>
+<span id="L290">  const auto callback_count =</span>
+<span id="L291">      std::accumulate(calls.begin(), calls.end(), std::uint64_t{0});</span>
+<span id="L292">  if (!recoveries &amp;&amp; !telemetry.metrics(*s-&gt;runtime, o.ticks, callback_count))</span>
+<span id="L293">    return 1;</span>
+<span id="L294">  rt::LiveControlMailboxInfo mailbox;</span>
+<span id="L295">  rt::LiveControlCommitInfo commit;</span>
+<span id="L296">  if (!s-&gt;runtime-&gt;live_control_mailbox_info(2601, mailbox) ||</span>
+<span id="L297">      !s-&gt;runtime-&gt;live_control_commit_info(commit))</span>
+<span id="L298">    return 1;</span>
+<span id="L299">  if (!replay.seal(*s) || !replay.verify(*s)) {</span>
+<span id="L300">    std::cerr &lt;&lt; &quot;replay &quot; &lt;&lt; s-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L301">    return 1;</span>
+<span id="L302">  }</span>
+<span id="L303">  rt::DeviceTimelineInfo timeline;</span>
+<span id="L304">  if (device &amp;&amp; !owner-&gt;physics-&gt;timeline(timeline))</span>
+<span id="L305">    return 1;</span>
+<span id="L306">  if (!totals.close(*owner))</span>
+<span id="L307">    return 1;</span>
+<span id="L308">  if (peer)</span>
+<span id="L309">    (void)peer-&gt;close();</span>
+<span id="L310">  const auto peer_result = peer ? peer-&gt;result : cil::Code::ok,</span>
+<span id="L311">             peer_cleanup = peer ? peer-&gt;cleanup : cil::Code::ok;</span>
+<span id="L312">  const auto sample_bytes =</span>
+<span id="L313">      sizeof(Owner) + sizeof(Totals) + sizeof(Session) + sizeof(Memory) +</span>
+<span id="L314">      sizeof(Jobs) + sizeof(Oracle) + sizeof(OwnedReplay) + sizeof(Telemetry) +</span>
+<span id="L315">      3 * sizeof(StateBytes) + sizeof(SimulatedDriver) + sizeof(CudaPhysics) +</span>
+<span id="L316">      2 * sizeof(Storage) + (peer ? sizeof(Peer) + sizeof(cil::Region) : 0) +</span>
+<span id="L317">      replay.initial.capacity() + replay.active.capacity() +</span>
+<span id="L318">      replay.trusted.capacity() +</span>
+<span id="L319">      replay.inputs.capacity() * sizeof(rt::ReplayInputRecord) +</span>
+<span id="L320">      replay.external.capacity() * 3073 + recovery.capacity();</span>
+<span id="L321">  if (sample_bytes &gt; fixed::sample_budget)</span>
+<span id="L322">    return 1;</span>
+<span id="L323">  if (!a.output.empty()) {</span>
+<span id="L324">    fs::create_directories(a.output);</span>
+<span id="L325">    if (!write(a.output / &quot;state.bin&quot;, final) ||</span>
+<span id="L326">        !write(a.output / &quot;checkpoint.bin&quot;, replay.initial) ||</span>
+<span id="L327">        !write(a.output / &quot;active.bin&quot;, replay.active) ||</span>
+<span id="L328">        !write(a.output / &quot;trusted.bin&quot;, replay.trusted))</span>
+<span id="L329">      return 1;</span>
+<span id="L330">    std::ofstream f(a.output / &quot;execution.json&quot;);</span>
+<span id="L331">    f &lt;&lt; &quot;{\&quot;dispatch\&quot;:\&quot;&quot; &lt;&lt; a.dispatch &lt;&lt; &quot;\&quot;,\&quot;variant\&quot;:\&quot;&quot;</span>
+<span id="L332">      &lt;&lt; (device ? &quot;sim_cuda&quot; : &quot;cpu&quot;)</span>
+<span id="L333">      &lt;&lt; &quot;\&quot;,\&quot;device_providers\&quot;:&quot; &lt;&lt; totals.providers</span>
+<span id="L334">      &lt;&lt; &quot;,\&quot;device_publications\&quot;:&quot; &lt;&lt; totals.publications</span>
+<span id="L335">      &lt;&lt; &quot;,\&quot;device_uploads\&quot;:&quot; &lt;&lt; totals.uploads</span>
+<span id="L336">      &lt;&lt; &quot;,\&quot;device_copies\&quot;:&quot; &lt;&lt; totals.copies</span>
+<span id="L337">      &lt;&lt; &quot;,\&quot;device_downloads\&quot;:&quot; &lt;&lt; totals.downloads</span>
+<span id="L338">      &lt;&lt; &quot;,\&quot;device_kernels\&quot;:&quot; &lt;&lt; totals.kernels</span>
+<span id="L339">      &lt;&lt; &quot;,\&quot;device_graphs\&quot;:&quot; &lt;&lt; totals.graphs</span>
+<span id="L340">      &lt;&lt; &quot;,\&quot;device_events\&quot;:&quot; &lt;&lt; totals.records</span>
+<span id="L341">      &lt;&lt; &quot;,\&quot;device_registrations\&quot;:&quot; &lt;&lt; totals.registrations</span>
+<span id="L342">      &lt;&lt; &quot;,\&quot;device_unregistrations\&quot;:&quot; &lt;&lt; totals.unregistrations</span>
+<span id="L343">      &lt;&lt; &quot;,\&quot;event_creates\&quot;:&quot; &lt;&lt; totals.event_creates</span>
+<span id="L344">      &lt;&lt; &quot;,\&quot;event_destroys\&quot;:&quot; &lt;&lt; totals.event_destroys</span>
+<span id="L345">      &lt;&lt; &quot;,\&quot;device_timeline\&quot;:&quot; &lt;&lt; timeline.completed_value</span>
+<span id="L346">      &lt;&lt; &quot;,\&quot;device_protocol\&quot;:&quot; &lt;&lt; (totals.protocol_ok ? &quot;true&quot; : &quot;false&quot;)</span>
+<span id="L347">      &lt;&lt; &quot;,\&quot;device_allocations\&quot;:&quot; &lt;&lt; totals.backend_allocations</span>
+<span id="L348">      &lt;&lt; &quot;,\&quot;device_frees\&quot;:&quot; &lt;&lt; totals.backend_frees &lt;&lt; &quot;,\&quot;fault\&quot;:\&quot;&quot;</span>
+<span id="L349">      &lt;&lt; (a.fault == Fault::none          ? &quot;none&quot;</span>
+<span id="L350">          : a.fault == Fault::device_loss ? &quot;device_loss&quot;</span>
+<span id="L351">                                          : &quot;reset_failure&quot;)</span>
+<span id="L352">      &lt;&lt; &quot;\&quot;,\&quot;fault_status\&quot;:&quot; &lt;&lt; fault_status</span>
+<span id="L353">      &lt;&lt; &quot;,\&quot;reset_status\&quot;:&quot; &lt;&lt; reset_status</span>
+<span id="L354">      &lt;&lt; &quot;,\&quot;reset_retry_status\&quot;:&quot; &lt;&lt; retry_status</span>
+<span id="L355">      &lt;&lt; &quot;,\&quot;stop_status\&quot;:&quot; &lt;&lt; stop_status</span>
+<span id="L356">      &lt;&lt; &quot;,\&quot;fault_health\&quot;:&quot; &lt;&lt; fault_health</span>
+<span id="L357">      &lt;&lt; &quot;,\&quot;fault_outstanding\&quot;:&quot; &lt;&lt; fault_outstanding</span>
+<span id="L358">      &lt;&lt; &quot;,\&quot;device_faults\&quot;:&quot; &lt;&lt; totals.faults &lt;&lt; &quot;,\&quot;device_failures\&quot;:&quot;</span>
+<span id="L359">      &lt;&lt; prior_device_failures + telemetry.device_failures</span>
+<span id="L360">      &lt;&lt; &quot;,\&quot;schema\&quot;:1,\&quot;contract_sha256\&quot;:\&quot;&quot; &lt;&lt; fixed::contract_sha256</span>
+<span id="L361">      &lt;&lt; &quot;\&quot;,\&quot;mode\&quot;:\&quot;&quot; &lt;&lt; (o.host ? &quot;host&quot; : &quot;native&quot;)</span>
+<span id="L362">      &lt;&lt; &quot;\&quot;,\&quot;count\&quot;:&quot; &lt;&lt; o.count &lt;&lt; &quot;,\&quot;ticks\&quot;:&quot; &lt;&lt; o.ticks</span>
+<span id="L363">      &lt;&lt; &quot;,\&quot;workers\&quot;:&quot; &lt;&lt; o.workers &lt;&lt; &quot;,\&quot;grain\&quot;:&quot; &lt;&lt; o.grain</span>
+<span id="L364">      &lt;&lt; &quot;,\&quot;campaign\&quot;:\&quot;&quot;</span>
+<span id="L365">      &lt;&lt; campaign_names[static_cast&lt;std::size_t&gt;(o.campaign)]</span>
+<span id="L366">      &lt;&lt; &quot;\&quot;,\&quot;external\&quot;:&quot; &lt;&lt; (o.external ? &quot;true&quot; : &quot;false&quot;)</span>
+<span id="L367">      &lt;&lt; &quot;,\&quot;session_identity\&quot;:\&quot;&quot; &lt;&lt; session_identity &lt;&lt; &quot;\&quot;&quot;</span>
+<span id="L368">      &lt;&lt; &quot;,\&quot;runtime_id\&quot;:&quot; &lt;&lt; telemetry.runtime_id</span>
+<span id="L369">      &lt;&lt; &quot;,\&quot;runtime_planned_bytes\&quot;:&quot; &lt;&lt; planned</span>
+<span id="L370">      &lt;&lt; &quot;,\&quot;sample_owned_bytes\&quot;:&quot; &lt;&lt; sample_bytes &lt;&lt; &quot;,\&quot;phase_calls\&quot;:[&quot;;</span>
+<span id="L371">    for (std::size_t i = 0; i &lt; 8; ++i)</span>
+<span id="L372">      f &lt;&lt; (i ? &quot;,&quot; : &quot;&quot;) &lt;&lt; calls[i];</span>
+<span id="L373">    f &lt;&lt; &quot;],\&quot;oracle\&quot;:true,\&quot;trace_events\&quot;:&quot;</span>
+<span id="L374">      &lt;&lt; telemetry.events + prior_events &lt;&lt; &quot;,\&quot;trace_lost\&quot;:&quot; &lt;&lt; telemetry.lost</span>
+<span id="L375">      &lt;&lt; &quot;,\&quot;rate_actions\&quot;:&quot; &lt;&lt; prior_actions[0] + telemetry.action_records[0]</span>
+<span id="L376">      &lt;&lt; &quot;,\&quot;mixed_actions\&quot;:&quot; &lt;&lt; prior_actions[1] + telemetry.action_records[1]</span>
+<span id="L377">      &lt;&lt; &quot;,\&quot;control_actions\&quot;:&quot;</span>
+<span id="L378">      &lt;&lt; prior_actions[2] + telemetry.action_records[2]</span>
+<span id="L379">      &lt;&lt; &quot;,\&quot;action_gaps\&quot;:&quot; &lt;&lt; telemetry.action_gaps</span>
+<span id="L380">      &lt;&lt; &quot;,\&quot;deadline_failures\&quot;:&quot;</span>
+<span id="L381">      &lt;&lt; prior_failures + telemetry.deadline_failures</span>
+<span id="L382">      &lt;&lt; &quot;,\&quot;control_accepted\&quot;:&quot; &lt;&lt; mailbox.accepted</span>
+<span id="L383">      &lt;&lt; &quot;,\&quot;control_invalid\&quot;:&quot; &lt;&lt; mailbox.invalid</span>
+<span id="L384">      &lt;&lt; &quot;,\&quot;control_replaced\&quot;:&quot; &lt;&lt; commit.replaced</span>
+<span id="L385">      &lt;&lt; &quot;,\&quot;control_committed\&quot;:&quot; &lt;&lt; commit.committed</span>
+<span id="L386">      &lt;&lt; &quot;,\&quot;replay_frames\&quot;:&quot; &lt;&lt; replay.result.frames_replayed</span>
+<span id="L387">      &lt;&lt; &quot;,\&quot;replay_actions\&quot;:&quot; &lt;&lt; replay.result.actions_compared</span>
+<span id="L388">      &lt;&lt; &quot;,\&quot;replay_generations\&quot;:&quot; &lt;&lt; replay.result.generations_compared</span>
+<span id="L389">      &lt;&lt; &quot;,\&quot;recoveries\&quot;:&quot; &lt;&lt; recoveries</span>
+<span id="L390">      &lt;&lt; &quot;,\&quot;jobs_accepted\&quot;:&quot; &lt;&lt; totals.jobs_accepted</span>
+<span id="L391">      &lt;&lt; &quot;,\&quot;jobs_completed\&quot;:&quot; &lt;&lt; totals.jobs_completed</span>
+<span id="L392">      &lt;&lt; &quot;,\&quot;memory_acquired\&quot;:&quot; &lt;&lt; totals.acquisitions</span>
+<span id="L393">      &lt;&lt; &quot;,\&quot;memory_released\&quot;:&quot; &lt;&lt; totals.releases</span>
+<span id="L394">      &lt;&lt; &quot;,\&quot;cleanup\&quot;:true,\&quot;peer_status\&quot;:\&quot;&quot; &lt;&lt; cil::name(peer_result)</span>
+<span id="L395">      &lt;&lt; &quot;\&quot;,\&quot;peer_cleanup\&quot;:\&quot;&quot; &lt;&lt; cil::name(peer_cleanup)</span>
+<span id="L396">      &lt;&lt; &quot;\&quot;,\&quot;peer_responses\&quot;:&quot; &lt;&lt; (peer ? peer-&gt;responses : 0) &lt;&lt; &quot;}\n&quot;;</span>
+<span id="L397">    f.close();</span>
+<span id="L398">    if (f.fail())</span>
+<span id="L399">      return 1;</span>
+<span id="L400">  }</span>
+<span id="L401">  std::cout &lt;&lt; &quot;golden ticks=&quot; &lt;&lt; o.ticks &lt;&lt; &quot; callbacks=&quot; &lt;&lt; callback_count</span>
+<span id="L402">            &lt;&lt; &quot; replay=&quot; &lt;&lt; replay.result.frames_replayed</span>
+<span id="L403">            &lt;&lt; &quot; peer=&quot; &lt;&lt; cil::name(peer_result)</span>
+<span id="L404">            &lt;&lt; &quot; cleanup=&quot; &lt;&lt; cil::name(peer_cleanup) &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L405">  return peer_result == cil::Code::ok &amp;&amp; peer_cleanup == cil::Code::ok ? 0 : 2;</span>
+<span id="L406">}</span>
+<span id="L407">int portable_main(int argc, char **argv) {</span>
+<span id="L408">  try {</span>
+<span id="L409">    Arguments a;</span>
+<span id="L410">    if (!arguments(argc, argv, a)) {</span>
+<span id="L411">      std::cerr &lt;&lt; &quot;usage: golden_cuda [--dispatch cpu|kernel|graph] [--fault &quot;</span>
+<span id="L412">                   &quot;none|device_loss|reset_failure] [--mode native|host] &quot;</span>
+<span id="L413">                   &quot;[--count 1..256] &quot;</span>
+<span id="L414">                   &quot;[--ticks 1..1024] [--workers 1..3] [--grain 1|4|16|64] &quot;</span>
+<span id="L415">                   &quot;[--campaign NAME] [--output DIRECTORY] [--peer NAME &quot;</span>
+<span id="L416">                   &quot;--generation N --timeout-ms N]\n&quot;;</span>
+<span id="L417">      return 2;</span>
+<span id="L418">    }</span>
+<span id="L419">    return execute(a);</span>
+<span id="L420">  } catch (const std::exception &amp;e) {</span>
+<span id="L421">    std::cerr &lt;&lt; e.what() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L422">    return 1;</span>
+<span id="L423">  }</span>
+<span id="L424">}</span>
+<span id="L425"></span>
+<span id="L426">} // namespace golden::cuda</span></pre></html>

@@ -1,0 +1,290 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_showcase/experiments.cpp</title><h1>samples/golden_showcase/experiments.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;experiments.hpp&quot;</span>
+<span id="L2">#include &quot;../golden_system/oracle.hpp&quot;</span>
+<span id="L3">#include &quot;../golden_cuda/physics.hpp&quot;</span>
+<span id="L4">#include &lt;rt/loopback_backend.hpp&gt;</span>
+<span id="L5">#include &lt;cstring&gt;</span>
+<span id="L6">#include &lt;numeric&gt;</span>
+<span id="L7">namespace golden::showcase {</span>
+<span id="L8">bool finite_value(std::string_view id,std::uint64_t v) noexcept {</span>
+<span id="L9">  if (id == &quot;workers&quot;) return v == 1 || v == 2 || v == 3;</span>
+<span id="L10">  if (id == &quot;grain&quot;) return v == 1 || v == 4 || v == 16 || v == 64;</span>
+<span id="L11">  if (id == &quot;rate_multiplier&quot;) return v == 1 || v == 2 || v == 4;</span>
+<span id="L12">  if (id == &quot;budget_percent&quot;) return v == 25 || v == 50 || v == 100;</span>
+<span id="L13">  if (id == &quot;queue_slots&quot;) return v == 4 || v == 32 || v == 1024;</span>
+<span id="L14">  if (id == &quot;scratch_bytes&quot;) return v == 0 || v == 64 || v == 256;</span>
+<span id="L15">  if (id == &quot;device_depth&quot;) return v == 1 || v == 2;</span>
+<span id="L16">  if (id == &quot;cuda_graph&quot; || id == &quot;overload_policy&quot;) return v &lt;= 1;</span>
+<span id="L17">  if (id == &quot;transfer_batch&quot;) return v == 1 || v == 4 || v == 16;</span>
+<span id="L18">  if (id == &quot;staging_slots&quot;) return v == 2 || v == 4;</span>
+<span id="L19">  if (id == &quot;telemetry_capacity&quot;) return v == 0 || v == 64 || v == 16384;</span>
+<span id="L20">  if (id == &quot;control_burst&quot;) return v == 1 || v == 16 || v == 17;</span>
+<span id="L21">  return false;</span>
+<span id="L22">}</span>
+<span id="L23">namespace {</span>
+<span id="L24">bool metadata(rt::Runtime &amp;runtime, Experiment &amp;e) {</span>
+<span id="L25">  rt::RuntimeMetricSnapshot metrics;</span>
+<span id="L26">  if (runtime.metrics_snapshot(rt::RuntimeMetricWindow::cumulative,nullptr,metrics) != rt::Status::ok) return false;</span>
+<span id="L27">  e.runtime_id = metrics.metadata.runtime_id; e.config_id = metrics.metadata.config_id;</span>
+<span id="L28">  return e.runtime_id &amp;&amp; e.config_id;</span>
+<span id="L29">}</span>
+<span id="L30">bool golden_loop(Experiment &amp;e) {</span>
+<span id="L31">  Options options;</span>
+<span id="L32">  if (e.lever == &quot;workers&quot;) options.workers = static_cast&lt;std::size_t&gt;(e.requested);</span>
+<span id="L33">  if (e.lever == &quot;grain&quot;) options.grain = static_cast&lt;std::size_t&gt;(e.requested);</span>
+<span id="L34">  auto memory = std::make_unique&lt;Memory&gt;();</span>
+<span id="L35">  std::unique_ptr&lt;cuda::SimulatedDriver&gt; driver;</span>
+<span id="L36">  std::unique_ptr&lt;cuda::CudaPhysics&gt; physics;</span>
+<span id="L37">  if (e.lever == &quot;cuda_graph&quot;) {</span>
+<span id="L38">    driver = std::make_unique&lt;cuda::SimulatedDriver&gt;(options.count);</span>
+<span id="L39">    physics = std::make_unique&lt;cuda::CudaPhysics&gt;(*driver,e.requested == 1);</span>
+<span id="L40">  }</span>
+<span id="L41">  auto session = std::make_unique&lt;golden::Session&gt;(options,nullptr,*memory,physics.get());</span>
+<span id="L42">  e.scope = &quot;frozen-golden-loop&quot;;</span>
+<span id="L43">  if (session-&gt;prepare() != rt::Status::ok || !session-&gt;controls()) return false;</span>
+<span id="L44">  Oracle oracle(options);</span>
+<span id="L45">  bool ok = true;</span>
+<span id="L46">  for (std::size_t tick = 0; ok &amp;&amp; tick &lt; options.ticks; ++tick) {</span>
+<span id="L47">    const auto status = session-&gt;step(tick); e.status = static_cast&lt;std::int32_t&gt;(status);</span>
+<span id="L48">    ok = status == rt::Status::ok &amp;&amp; oracle.step(tick,session-&gt;world);</span>
+<span id="L49">    ++e.operations; if (ok) e.checks += 3 * fixed::capacity;</span>
+<span id="L50">  }</span>
+<span id="L51">  e.calls = std::accumulate(session-&gt;world.calls.begin(),session-&gt;world.calls.end(),std::uint64_t{});</span>
+<span id="L52">  e.state = session-&gt;world.canonical; e.has_state = true;</span>
+<span id="L53">  e.checksum = digest(session-&gt;world.canonical); e.bytes = session-&gt;plan.planned_bytes;</span>
+<span id="L54">  ok = metadata(*session-&gt;runtime,e) &amp;&amp; ok;</span>
+<span id="L55">  e.cleanup = session-&gt;close() == rt::Status::ok &amp;&amp; !memory-&gt;live_count() &amp;&amp; memory-&gt;acquisitions == memory-&gt;releases;</span>
+<span id="L56">  physics.reset();</span>
+<span id="L57">  if (driver) {</span>
+<span id="L58">    ok = ok &amp;&amp; driver-&gt;protocol_ok &amp;&amp; driver-&gt;kernels == (e.requested ? 0 : options.ticks) &amp;&amp;</span>
+<span id="L59">         driver-&gt;graphs == (e.requested ? options.ticks : 0) &amp;&amp; driver-&gt;uploads == 2 * options.ticks;</span>
+<span id="L60">    e.accepted = driver-&gt;kernels + driver-&gt;graphs;</span>
+<span id="L61">    e.cleanup = driver-&gt;close() &amp;&amp; e.cleanup;</span>
+<span id="L62">  }</span>
+<span id="L63">  e.effective = e.requested;</span>
+<span id="L64">  return ok &amp;&amp; e.cleanup;</span>
+<span id="L65">}</span>
+<span id="L66">bool burst(Experiment &amp;e) {</span>
+<span id="L67">  e.scope = &quot;public-control-boundary&quot;;</span>
+<span id="L68">  Options options;</span>
+<span id="L69">  auto memory = std::make_unique&lt;Memory&gt;();</span>
+<span id="L70">  auto session = std::make_unique&lt;golden::Session&gt;(options,nullptr,*memory);</span>
+<span id="L71">  if (session-&gt;prepare() != rt::Status::ok) return false;</span>
+<span id="L72">  bool ok = true;</span>
+<span id="L73">  for (std::uint64_t n = 0; n &lt; e.requested; ++n) {</span>
+<span id="L74">    rt::LiveControlTypedPayload&lt;Control&lt;2&gt;&gt; payload;</span>
+<span id="L75">    rt::LiveControlUpdateRecord record;</span>
+<span id="L76">    rt::LiveControlAdmissionResult admission;</span>
+<span id="L77">    if (rt::make_live_control_host_update(session-&gt;producer,session-&gt;sequence,0,Control&lt;2&gt;{1},payload,record) != rt::LiveControlTypedStatus::ok ||</span>
+<span id="L78">        session-&gt;runtime-&gt;stage_live_control_update(session-&gt;producer,record,payload,admission) != rt::Status::ok) return false;</span>
+<span id="L79">    if (admission == rt::LiveControlAdmissionResult::accepted) { ++e.accepted; ++session-&gt;sequence; }</span>
+<span id="L80">    else if (admission == rt::LiveControlAdmissionResult::full) ++e.rejected;</span>
+<span id="L81">    else return false;</span>
+<span id="L82">  }</span>
+<span id="L83">  Oracle oracle(options);</span>
+<span id="L84">  ok = session-&gt;step(0) == rt::Status::ok &amp;&amp; oracle.step(0,session-&gt;world);</span>
+<span id="L85">  rt::LiveControlCommitInfo commit;</span>
+<span id="L86">  rt::LiveControlMailboxInfo mailbox;</span>
+<span id="L87">  ok = ok &amp;&amp; session-&gt;runtime-&gt;live_control_commit_info(commit) &amp;&amp; session-&gt;runtime-&gt;live_control_mailbox_info(2601,mailbox);</span>
+<span id="L88">  e.replaced = commit.replaced; e.operations = e.requested; e.checks = 3 * fixed::capacity;</span>
+<span id="L89">  e.calls = std::accumulate(session-&gt;world.calls.begin(),session-&gt;world.calls.end(),std::uint64_t{});</span>
+<span id="L90">  ok = ok &amp;&amp; e.accepted == std::min(std::uint64_t{16},e.requested) &amp;&amp; e.accepted + e.rejected == e.requested &amp;&amp;</span>
+<span id="L91">       e.replaced + commit.committed == e.accepted &amp;&amp; commit.committed == 1 &amp;&amp;</span>
+<span id="L92">       mailbox.accepted == e.accepted &amp;&amp; mailbox.full == e.rejected &amp;&amp; !mailbox.occupancy &amp;&amp;</span>
+<span id="L93">       session-&gt;sequence == e.accepted + 1;</span>
+<span id="L94">  // A full rejection did not advance producer sequence. The same next sequence</span>
+<span id="L95">  // is accepted after terminal reclamation, without modifying prior records.</span>
+<span id="L96">  ok = ok &amp;&amp; session-&gt;stage&lt;2&gt;(1,1) &amp;&amp; session-&gt;sequence == e.accepted + 2;</span>
+<span id="L97">  e.state = session-&gt;world.canonical; e.has_state = true;</span>
+<span id="L98">  e.checksum = digest(session-&gt;world.canonical); ok = metadata(*session-&gt;runtime,e) &amp;&amp; ok;</span>
+<span id="L99">  e.cleanup = session-&gt;close() == rt::Status::ok &amp;&amp; !memory-&gt;live_count();</span>
+<span id="L100">  e.effective = e.requested; return ok &amp;&amp; e.cleanup;</span>
+<span id="L101">}</span>
+<span id="L102">struct TaskProbe {</span>
+<span id="L103">  std::size_t scratch = 64;</span>
+<span id="L104">  std::array&lt;std::uint64_t,64&gt; values{};</span>
+<span id="L105">  std::uint64_t calls = 0;</span>
+<span id="L106">  static rt::TaskResult task(void *p,const rt::TaskContext &amp;ctx,const rt::TaskRange &amp;range) noexcept {</span>
+<span id="L107">    auto &amp;s = *static_cast&lt;TaskProbe *&gt;(p);</span>
+<span id="L108">    if (ctx.scratch().size() != s.scratch) return rt::TaskResult::error;</span>
+<span id="L109">    std::fill(ctx.scratch().begin(),ctx.scratch().end(),std::byte{0x26});</span>
+<span id="L110">    for (auto n = range.begin; n &lt; range.end; ++n) s.values[n] += n + 1;</span>
+<span id="L111">    return rt::TaskResult::ok;</span>
+<span id="L112">  }</span>
+<span id="L113">  static rt::CallbackResult callback(void *p,const rt::CallbackContext &amp;ctx) noexcept {</span>
+<span id="L114">    auto &amp;s = *static_cast&lt;TaskProbe *&gt;(p); ++s.calls;</span>
+<span id="L115">    return ctx.tasks.parallel_for(s.values.size(),4,task,p) == rt::Status::ok ? rt::CallbackResult::ok : rt::CallbackResult::error;</span>
+<span id="L116">  }</span>
+<span id="L117">};</span>
+<span id="L118">bool cpu_experiment(Experiment &amp;e) {</span>
+<span id="L119">  e.scope = &quot;public-runtime-task-rate-telemetry&quot;;</span>
+<span id="L120">  TaskProbe work;</span>
+<span id="L121">  golden::Clock clock;</span>
+<span id="L122">  rt::Runtime runtime(clock);</span>
+<span id="L123">  rt::RuntimeConfig config;</span>
+<span id="L124">  config.callback_capacity = 1; config.worker_count = 2;</span>
+<span id="L125">  config.executor_queue_capacity = e.lever == &quot;queue_slots&quot; ? e.requested : 32;</span>
+<span id="L126">  config.scratch_bytes = config.task_scratch_bytes = e.lever == &quot;scratch_bytes&quot; ? e.requested : 64;</span>
+<span id="L127">  config.task_scratch_slots = 32;</span>
+<span id="L128">  config.trace_capacity = e.lever == &quot;telemetry_capacity&quot; ? e.requested : 16384;</span>
+<span id="L129">  work.scratch = config.task_scratch_bytes;</span>
+<span id="L130">  const auto period = fixed::tick_ns * (e.lever == &quot;rate_multiplier&quot; ? e.requested : 1);</span>
+<span id="L131">  const auto budget = std::uint64_t{1&#x27;000&#x27;000} * (e.lever == &quot;budget_percent&quot; ? e.requested : 100) / 100;</span>
+<span id="L132">  rt::RateDomainHandle rate;</span>
+<span id="L133">  rt::PhaseHandle phase;</span>
+<span id="L134">  rt::RateDomainRegistration registration{&quot;showcase.probe&quot;,period,1,period,budget};</span>
+<span id="L135">  if (e.lever == &quot;overload_policy&quot; &amp;&amp; e.requested) {</span>
+<span id="L136">    registration.late_action = rt::RateLateAction::bounded_catch_up;</span>
+<span id="L137">    registration.bounded_catch_up_limit = 1;</span>
+<span id="L138">  }</span>
+<span id="L139">  bool ok = runtime.configure(config) == rt::Status::ok &amp;&amp;</span>
+<span id="L140">    runtime.set_rate_execution_policy({4,2605,1,1,16384}) == rt::Status::ok &amp;&amp;</span>
+<span id="L141">    runtime.register_rate_domain(registration,rate) == rt::Status::ok &amp;&amp;</span>
+<span id="L142">    runtime.register_callback({&quot;showcase.probe&quot;,TaskProbe::callback,&amp;work},phase) == rt::Status::ok &amp;&amp;</span>
+<span id="L143">    runtime.bind_phase_to_rate_domain(phase,rate) == rt::Status::ok &amp;&amp; runtime.finalize() == rt::Status::ok;</span>
+<span id="L144">  rt::MemoryPlan plan{};</span>
+<span id="L145">  rt::ReferenceRelease release;</span>
+<span id="L146">  ok = ok &amp;&amp; runtime.memory_plan(plan) &amp;&amp; runtime.reference_release_at(0,release) &amp;&amp;</span>
+<span id="L147">       release.budget_wcet_ns == budget &amp;&amp; release.bounded_catch_up_limit == (e.lever == &quot;overload_policy&quot; ? e.requested : 0) &amp;&amp;</span>
+<span id="L148">       runtime.start() == rt::Status::ok;</span>
+<span id="L149">  rt::RuntimeTraceCursor cursor;</span>
+<span id="L150">  rt::RuntimeTraceReadResult read;</span>
+<span id="L151">  std::array&lt;rt::RuntimeTraceEvent,64&gt; events{};</span>
+<span id="L152">  ok = runtime.read_trace(cursor,events,read) == rt::Status::ok &amp;&amp; ok;</span>
+<span id="L153">  bool queue_rejected = false;</span>
+<span id="L154">  for (std::size_t tick = 0; ok &amp;&amp; tick &lt; 24; ++tick) {</span>
+<span id="L155">    const auto nominal = 1000 + tick * period;</span>
+<span id="L156">    clock.now = nominal + (e.lever == &quot;overload_policy&quot; &amp;&amp; tick == 6 ? period + 1 : 0);</span>
+<span id="L157">    const auto result = runtime.step({tick,std::chrono::nanoseconds(period),std::nullopt,nominal});</span>
+<span id="L158">    e.status = static_cast&lt;std::int32_t&gt;(result); ++e.operations;</span>
+<span id="L159">    if (e.lever == &quot;overload_policy&quot; &amp;&amp; !e.requested &amp;&amp; tick == 6) {</span>
+<span id="L160">      ok = result == rt::Status::callback_failed; ++e.rejected; break;</span>
+<span id="L161">    }</span>
+<span id="L162">    if (e.lever == &quot;queue_slots&quot; &amp;&amp; e.requested == 4 &amp;&amp; result == rt::Status::callback_failed) {</span>
+<span id="L163">      queue_rejected = true; ++e.rejected; break;</span>
+<span id="L164">    }</span>
+<span id="L165">    ok = result == rt::Status::ok;</span>
+<span id="L166">  }</span>
+<span id="L167">  e.calls = work.calls;</span>
+<span id="L168">  for (std::size_t n = 0; n &lt; work.values.size(); ++n) {</span>
+<span id="L169">    ok = ok &amp;&amp; (queue_rejected ? (work.values[n] == 0 || work.values[n] == n + 1) :</span>
+<span id="L170">                                work.values[n] == work.calls * (n + 1)); ++e.checks;</span>
+<span id="L171">  }</span>
+<span id="L172">  std::uint64_t retained_events = 0;</span>
+<span id="L173">  for (std::size_t batch = 0; batch &lt; 257; ++batch) {</span>
+<span id="L174">    ok = runtime.read_trace(cursor,events,read) == rt::Status::ok &amp;&amp; ok;</span>
+<span id="L175">    retained_events += read.events_read; e.gaps += read.lost_events;</span>
+<span id="L176">    if (!read.remaining_sequence_count) break;</span>
+<span id="L177">    if (batch == 256) ok = false;</span>
+<span id="L178">  }</span>
+<span id="L179">  e.accepted = work.calls;</span>
+<span id="L180">  if (e.lever == &quot;telemetry_capacity&quot;) ok = ok &amp;&amp; read.metadata.trace_capacity == e.requested &amp;&amp;</span>
+<span id="L181">    (e.requested == 0 ? retained_events == 0 &amp;&amp; e.gaps == 96 : e.requested == 64 ? e.gaps &gt; 0 &amp;&amp; retained_events == 64 : !e.gaps &amp;&amp; retained_events &gt; 64);</span>
+<span id="L182">  e.capacity = config.executor_queue_capacity; e.scratch = work.scratch;</span>
+<span id="L183">  e.bytes = plan.planned_bytes; ok = metadata(runtime,e) &amp;&amp; ok;</span>
+<span id="L184">  e.cleanup = runtime.stop() == rt::Status::ok;</span>
+<span id="L185">  e.effective = e.requested;</span>
+<span id="L186">  e.checksum = std::accumulate(work.values.begin(),work.values.end(),std::uint64_t{});</span>
+<span id="L187">  return ok &amp;&amp; e.cleanup;</span>
+<span id="L188">}</span>
+<span id="L189">bool device_experiment(Experiment &amp;e) {</span>
+<span id="L190">  e.scope = &quot;public-hal-v2-loopback-batch-copy&quot;;</span>
+<span id="L191">  const auto depth = static_cast&lt;std::uint32_t&gt;(e.lever == &quot;device_depth&quot; ? e.requested : 2);</span>
+<span id="L192">  const auto batch_size = static_cast&lt;std::size_t&gt;(e.lever == &quot;transfer_batch&quot; ? e.requested : 4);</span>
+<span id="L193">  const auto slots = static_cast&lt;std::size_t&gt;(e.lever == &quot;staging_slots&quot; ? e.requested : 2);</span>
+<span id="L194">  // Four fixed staging pairs; only the requested pairs are registered/used.</span>
+<span id="L195">  // All comparisons transfer exactly64 full256-lane payloads.</span>
+<span id="L196">  constexpr auto payload_size = fixed::capacity * 4;</span>
+<span id="L197">  constexpr auto frame_bytes = sizeof(rt::SampledIoFrameHeader) + payload_size;</span>
+<span id="L198">  std::array&lt;std::array&lt;std::byte,frame_bytes&gt;,8&gt; storage{};</span>
+<span id="L199">  std::array&lt;std::uint64_t,8&gt; tokens{};</span>
+<span id="L200">  rt::SampledIoLoopbackBackend backend({depth,static_cast&lt;std::uint32_t&gt;(2 * slots),frame_bytes,1,1});</span>
+<span id="L201">  if (backend.add_route({2605,26001,26002,1,1,1}) != rt::Status::ok) return false;</span>
+<span id="L202">  const auto registration = backend.hal_v2_registration();</span>
+<span id="L203">  const auto api = registration.api;</span>
+<span id="L204">  const auto commands = *registration.command_timeline;</span>
+<span id="L205">  rt::HalV2InitializeConfig init;</span>
+<span id="L206">  init.requested_in_flight = depth; init.requested_registered_buffers = 2 * slots;</span>
+<span id="L207">  if (api.initialize(api.instance,&amp;init) != rt::HalV2Status::ok) return false;</span>
+<span id="L208">  bool ok = true;</span>
+<span id="L209">  std::size_t registered = 0;</span>
+<span id="L210">  for (; registered &lt; 2 * slots; ++registered) {</span>
+<span id="L211">    auto &amp;data = storage[registered];</span>
+<span id="L212">    rt::SampledIoFrameHeader header;</span>
+<span id="L213">    header.channel_identity = 26001; header.sequence = 1;</span>
+<span id="L214">    header.release_generation = 1; header.sample_count = fixed::capacity;</span>
+<span id="L215">    header.sample_interval_ns = fixed::tick_ns; header.timestamp_domain_identity = 1;</span>
+<span id="L216">    header.trigger_identity = header.trigger_sequence = header.calibration_identity = 1;</span>
+<span id="L217">    for (std::size_t j = 0; j &lt; payload_size; ++j) data[sizeof(header) + j] = std::byte(j % 251);</span>
+<span id="L218">    header.payload_checksum = rt::sampled_io_payload_checksum(std::span(data).subspan(sizeof(header)));</span>
+<span id="L219">    std::memcpy(data.data(),&amp;header,sizeof(header));</span>
+<span id="L220">    rt::HalV2BufferRegistration buffer;</span>
+<span id="L221">    buffer.data = data.data(); buffer.bytes = data.size();</span>
+<span id="L222">    buffer.flags = RTFW_DEVICE_BUFFER_HOST_READ | RTFW_DEVICE_BUFFER_HOST_WRITE |</span>
+<span id="L223">                   RTFW_DEVICE_BUFFER_DEVICE_READ | RTFW_DEVICE_BUFFER_DEVICE_WRITE;</span>
+<span id="L224">    if (api.register_buffer(api.instance,&amp;buffer,&amp;tokens[registered]) != rt::HalV2Status::ok) { ok = false; break; }</span>
+<span id="L225">  }</span>
+<span id="L226">  std::uint64_t submitted = 0, completed = 0;</span>
+<span id="L227">  const auto make_batch = [&amp;](std::uint64_t id) {</span>
+<span id="L228">    rt::DeviceCommandBatch batch;</span>
+<span id="L229">    batch.batch_id = id; batch.timeout_ns = 1&#x27;000&#x27;000;</span>
+<span id="L230">    batch.command_count = static_cast&lt;std::uint32_t&gt;(batch_size);</span>
+<span id="L231">    for (std::size_t c = 0; c &lt; batch_size; ++c) {</span>
+<span id="L232">      const auto slot = static_cast&lt;std::size_t&gt;((id - 1) * batch_size + c) % slots;</span>
+<span id="L233">      auto &amp;command = batch.commands[c];</span>
+<span id="L234">      command.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::dispatch);</span>
+<span id="L235">      command.opcode = 2605; command.buffer_count = 2;</span>
+<span id="L236">      command.buffers[0] = {tokens[2 * slot],RTFW_DEVICE_ACCESS_READ,0,0,frame_bytes};</span>
+<span id="L237">      command.buffers[1] = {tokens[2 * slot + 1],RTFW_DEVICE_ACCESS_WRITE,0,0,frame_bytes};</span>
+<span id="L238">    }</span>
+<span id="L239">    return batch;</span>
+<span id="L240">  };</span>
+<span id="L241">  while (ok &amp;&amp; submitted &lt; 64 / batch_size) {</span>
+<span id="L242">    for (std::size_t n = 0; ok &amp;&amp; n &lt; depth &amp;&amp; submitted &lt; 64 / batch_size; ++n) {</span>
+<span id="L243">      const auto batch = make_batch(submitted + 1);</span>
+<span id="L244">      ok = commands.submit(commands.instance,&amp;batch) == rt::HalV2Status::ok;</span>
+<span id="L245">      if (ok) ++submitted;</span>
+<span id="L246">    }</span>
+<span id="L247">    // The actual finite queue, not a catalog entry, rejects excess work.</span>
+<span id="L248">    const auto excess = make_batch(1000 + submitted);</span>
+<span id="L249">    if (commands.submit(commands.instance,&amp;excess) != rt::HalV2Status::queue_full) ok = false;</span>
+<span id="L250">    else ++e.rejected;</span>
+<span id="L251">    std::array&lt;rt::HalV2BatchCompletion,2&gt; results{};</span>
+<span id="L252">    std::uint64_t count = 0;</span>
+<span id="L253">    ok = commands.poll(commands.instance,results.data(),results.size(),&amp;count) == rt::HalV2Status::ok &amp;&amp; ok;</span>
+<span id="L254">    if (count != depth) ok = false;</span>
+<span id="L255">    for (std::size_t n = 0; n &lt; count; ++n) {</span>
+<span id="L256">      ok = ok &amp;&amp; results[n].status == static_cast&lt;std::int32_t&gt;(rt::HalV2Status::ok) &amp;&amp;</span>
+<span id="L257">           results[n].batch_id &gt; completed &amp;&amp; results[n].batch_id &lt;= submitted;</span>
+<span id="L258">      ++completed;</span>
+<span id="L259">    }</span>
+<span id="L260">  }</span>
+<span id="L261">  for (std::size_t slot = 0; ok &amp;&amp; slot &lt; slots; ++slot) {</span>
+<span id="L262">    rt::SampledIoFrameHeader header;</span>
+<span id="L263">    std::memcpy(&amp;header,storage[2 * slot + 1].data(),sizeof(header));</span>
+<span id="L264">    ok = header.channel_identity == 26002 &amp;&amp; header.status == static_cast&lt;std::uint32_t&gt;(rt::SampledIoFrameStatus::produced);</span>
+<span id="L265">    for (std::size_t j = 0; j &lt; payload_size; ++j) {</span>
+<span id="L266">      ok = ok &amp;&amp; storage[2 * slot + 1][sizeof(header) + j] == std::byte(j % 251); ++e.checks;</span>
+<span id="L267">    }</span>
+<span id="L268">  }</span>
+<span id="L269">  const auto stats = backend.stats();</span>
+<span id="L270">  e.accepted = stats.submissions; e.operations = stats.frames_copied;</span>
+<span id="L271">  e.calls = completed; e.capacity = depth; e.bytes = stats.frames_copied * payload_size;</span>
+<span id="L272">  ok = ok &amp;&amp; stats.frames_copied == 64 &amp;&amp; stats.submissions == 64 / batch_size &amp;&amp;</span>
+<span id="L273">       stats.completions == stats.submissions &amp;&amp; stats.rejected == e.rejected;</span>
+<span id="L274">  e.cleanup = commands.request_stop(commands.instance) == rt::HalV2Status::ok;</span>
+<span id="L275">  for (std::size_t n = 0; n &lt; registered; ++n)</span>
+<span id="L276">    e.cleanup = api.unregister_buffer(api.instance,tokens[n]) == rt::HalV2Status::ok &amp;&amp; e.cleanup;</span>
+<span id="L277">  e.cleanup = api.shutdown(api.instance) == rt::HalV2Status::ok &amp;&amp; e.cleanup;</span>
+<span id="L278">  e.effective = e.requested; e.scratch = slots;</span>
+<span id="L279">  return ok &amp;&amp; e.cleanup;</span>
+<span id="L280">}</span>
+<span id="L281">} // namespace</span>
+<span id="L282">bool experiment(Experiment &amp;e) {</span>
+<span id="L283">  if (!finite_value(e.lever,e.requested)) return false;</span>
+<span id="L284">  if (e.lever == &quot;workers&quot; || e.lever == &quot;grain&quot; || e.lever == &quot;cuda_graph&quot;) e.correct = golden_loop(e);</span>
+<span id="L285">  else if (e.lever == &quot;control_burst&quot;) e.correct = burst(e);</span>
+<span id="L286">  else if (e.lever == &quot;device_depth&quot; || e.lever == &quot;transfer_batch&quot; || e.lever == &quot;staging_slots&quot;) e.correct = device_experiment(e);</span>
+<span id="L287">  else e.correct = cpu_experiment(e);</span>
+<span id="L288">  return e.correct;</span>
+<span id="L289">}</span>
+<span id="L290">} // namespace golden::showcase</span></pre></html>

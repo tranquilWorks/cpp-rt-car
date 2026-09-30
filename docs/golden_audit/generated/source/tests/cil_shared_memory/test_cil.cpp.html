@@ -1,0 +1,214 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/cil_shared_memory/test_cil.cpp</title><h1>tests/cil_shared_memory/test_cil.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;../../samples/cil_shared_memory/plant_runtime.hpp&quot;</span>
+<span id="L2">#include &lt;atomic&gt;</span>
+<span id="L3">#include &lt;thread&gt;</span>
+<span id="L4">#include &lt;iostream&gt;</span>
+<span id="L5">#include &lt;string&gt;</span>
+<span id="L6">#include &quot;../cuda_physics/allocation_guard.hpp&quot;</span>
+<span id="L7">#define CHECK(x) do { if (!(x)) { std::cerr &lt;&lt; __func__ &lt;&lt; &#x27;:&#x27; &lt;&lt; __LINE__ &lt;&lt; &quot; failed: &quot; #x &lt;&lt; &#x27;\n&#x27;; return false; } } while (false)</span>
+<span id="L8">using cil::Code;</span>
+<span id="L9">cil::Record sample() { return {cil::Kind::command, 0x0102030405060708ULL, 9, 1000, 2000, 7, 6, -3}; }</span>
+<span id="L10">bool wire() {</span>
+<span id="L11">    constexpr std::array&lt;unsigned char, 96&gt; golden{</span>
+<span id="L12">#include &quot;wire_golden.inc&quot;</span>
+<span id="L13">    };</span>
+<span id="L14">    auto r = sample(); cil::Wire w{}; CHECK(cil::encode(r, w) == Code::ok);</span>
+<span id="L15">    for (std::size_t i = 0; i &lt; w.size(); ++i) CHECK(std::to_integer&lt;unsigned char&gt;(w[i]) == golden[i]);</span>
+<span id="L16">    cil::Record out; CHECK(cil::decode(w, out) == Code::ok);</span>
+<span id="L17">    CHECK(out.generation == 0x0102030405060708ULL &amp;&amp; out.sequence == 9 &amp;&amp; out.value == -3 &amp;&amp; out.frame == 6 &amp;&amp; out.correlation == 7);</span>
+<span id="L18">    for (std::size_t length = 0; length &lt; 96; ++length) {</span>
+<span id="L19">        out.value = 123; CHECK(cil::decode(std::span&lt;const std::byte&gt;(w).first(length), out) == Code::schema &amp;&amp; out.value == 123);</span>
+<span id="L20">    }</span>
+<span id="L21">    std::array&lt;std::byte, 97&gt; extra{}; CHECK(cil::decode(extra, out) == Code::schema);</span>
+<span id="L22">    for (const auto offset : {0u, 4u, 8u, 12u, 72u, 76u, 80u, 88u, 95u}) {</span>
+<span id="L23">        auto bad = w; bad[offset] = std::byte{0xff};</span>
+<span id="L24">        CHECK(cil::decode(bad, out) == Code::schema);</span>
+<span id="L25">    }</span>
+<span id="L26">    auto invalid = r; invalid.issued_ns = 0; CHECK(cil::encode(invalid, w) == Code::invalid);</span>
+<span id="L27">    invalid = r; invalid.expiry_ns = 999; CHECK(cil::encode(invalid, w) == Code::invalid);</span>
+<span id="L28">    invalid = r; invalid.expiry_ns = UINT64_MAX; CHECK(cil::encode(invalid, w) == Code::invalid);</span>
+<span id="L29">    invalid = r; invalid.value = 257; CHECK(cil::encode(invalid, w) == Code::invalid);</span>
+<span id="L30">    invalid = r; invalid.sequence = UINT64_MAX; CHECK(cil::encode(invalid, w) == Code::exhausted);</span>
+<span id="L31">    invalid = r; invalid.generation = 0; CHECK(cil::encode(invalid, w) == Code::invalid);</span>
+<span id="L32">    invalid = r; invalid.sequence = 0; CHECK(cil::encode(invalid, w) == Code::invalid);</span>
+<span id="L33">    invalid = r; invalid.correlation = 0; CHECK(cil::encode(invalid, w) == Code::correlation);</span>
+<span id="L34">    CHECK(cil::encode(r, w) == Code::ok);</span>
+<span id="L35">    cil::Sequence sequence{9}; cil::Record plant{cil::Kind::plant, r.generation, 7, 1000, 2000, 0, 6, 0};</span>
+<span id="L36">    CHECK(cil::accept(w, cil::Kind::command, r.generation + 1, sequence, 1000, out, &amp;plant) == Code::generation &amp;&amp; sequence.next == 9);</span>
+<span id="L37">    CHECK(cil::accept(w, cil::Kind::command, r.generation, sequence, 999, out, &amp;plant) == Code::future &amp;&amp; sequence.next == 9);</span>
+<span id="L38">    CHECK(cil::accept(w, cil::Kind::command, r.generation, sequence, 2000, out, &amp;plant) == Code::expired &amp;&amp; sequence.next == 9);</span>
+<span id="L39">    ++plant.sequence; CHECK(cil::accept(w, cil::Kind::command, r.generation, sequence, 1500, out, &amp;plant) == Code::correlation);</span>
+<span id="L40">    --plant.sequence; ++plant.issued_ns; CHECK(cil::accept(w, cil::Kind::command, r.generation, sequence, 1500, out, &amp;plant) == Code::correlation);</span>
+<span id="L41">    --plant.issued_ns; ++plant.expiry_ns; CHECK(cil::accept(w, cil::Kind::command, r.generation, sequence, 1500, out, &amp;plant) == Code::correlation);</span>
+<span id="L42">    --plant.expiry_ns; ++plant.frame; CHECK(cil::accept(w, cil::Kind::command, r.generation, sequence, 1500, out, &amp;plant) == Code::correlation);</span>
+<span id="L43">    --plant.frame; CHECK(cil::accept(w, cil::Kind::command, r.generation, sequence, 1500, out, &amp;plant) == Code::ok &amp;&amp; sequence.next == 10);</span>
+<span id="L44">    CHECK(cil::accept(w, cil::Kind::command, r.generation, sequence, 1500, out, &amp;plant) == Code::sequence);</span>
+<span id="L45">    sequence.next = 8; CHECK(cil::accept(w, cil::Kind::command, r.generation, sequence, 1500, out, &amp;plant) == Code::sequence);</span>
+<span id="L46">    sequence.next = UINT64_MAX; CHECK(sequence.inspect(UINT64_MAX) == Code::exhausted);</span>
+<span id="L47">    return true;</span>
+<span id="L48">}</span>
+<span id="L49">bool channel() {</span>
+<span id="L50">    cil::Region r{}; CHECK(cil::inspect(r, 1) == Code::not_ready);</span>
+<span id="L51">    CHECK(cil::initialize(r, 0) == Code::invalid);</span>
+<span id="L52">    CHECK(cil::initialize(r, 1) == Code::ok);</span>
+<span id="L53">    CHECK(cil::initialize(r, 1) == Code::invalid);</span>
+<span id="L54">    CHECK(cil::inspect(r, 2) == Code::generation);</span>
+<span id="L55">    CHECK(cil::attach(r, 1) == Code::ok &amp;&amp; cil::attach(r, 1) == Code::attached);</span>
+<span id="L56">    auto header = r.header; r.header[8] = std::byte{0xff}; CHECK(cil::inspect(r, 1) == Code::schema); r.header = header;</span>
+<span id="L57">    cil::Wire a{}, b{}, out{}; a.fill(std::byte{0x51}); b.fill(std::byte{0xa3});</span>
+<span id="L58">    CHECK(cil::pop(r.plants, out) == Code::empty);</span>
+<span id="L59">    CHECK(cil::push(r.plants, a) == Code::ok &amp;&amp; cil::push(r.plants, b) == Code::full);</span>
+<span id="L60">    CHECK(cil::pop(r.plants, out) == Code::ok &amp;&amp; out == a);</span>
+<span id="L61">    CHECK(cil::push(r.plants, b) == Code::ok &amp;&amp; cil::pop(r.plants, out) == Code::ok &amp;&amp; out == b);</span>
+<span id="L62">    r.commands.bytes = a; CHECK(cil::pop(r.commands, out) == Code::empty); // Unpublished bytes cannot escape.</span>
+<span id="L63">    cil::store(r.commands.state, 3); CHECK(cil::pop(r.commands, out) == Code::schema &amp;&amp; cil::push(r.commands, a) == Code::schema);</span>
+<span id="L64">    cil::store(r.commands.state, 0);</span>
+<span id="L65">    cil::Endpoint host{&amp;r, 1, {}, {}, true};</span>
+<span id="L66">    cil::Record plant{cil::Kind::plant, 1, 1, 1000, 2000, 0, 0, 0};</span>
+<span id="L67">    CHECK(host.send(plant) == Code::ok &amp;&amp; host.sent.next == 2);</span>
+<span id="L68">    CHECK(host.send(plant) == Code::full &amp;&amp; host.sent.next == 2);</span>
+<span id="L69">    CHECK(cil::pop(r.plants, out) == Code::ok);</span>
+<span id="L70">    host.sent.next = UINT64_MAX; CHECK(host.send(plant) == Code::exhausted &amp;&amp; cil::load(r.plants.state) == 0);</span>
+<span id="L71">    cil::store(r.stopping, 1); CHECK(host.send(plant) == Code::closed &amp;&amp; cil::inspect(r, 1) == Code::closed);</span>
+<span id="L72">    host.detach(); CHECK(host.receive(1500, plant) == Code::closed);</span>
+<span id="L73">    return true;</span>
+<span id="L74">}</span>
+<span id="L75">bool concurrency_and_allocation() {</span>
+<span id="L76">    cil::Slot slot{};</span>
+<span id="L77">    constexpr std::uint64_t total = 10000;</span>
+<span id="L78">    std::atomic&lt;bool&gt; failed{false}; std::uint64_t produced = 0, consumed = 0;</span>
+<span id="L79">    std::thread producer([&amp;] {</span>
+<span id="L80">        for (std::uint64_t attempt = 0; attempt &lt; 5&#x27;000&#x27;000 &amp;&amp; produced &lt; total; ++attempt) {</span>
+<span id="L81">            cil::Wire w{}; cil::put(w, 0, produced + 1, 8);</span>
+<span id="L82">            for (std::size_t i = 8; i &lt; w.size(); ++i) w[i] = static_cast&lt;std::byte&gt;((produced + i) &amp; 255);</span>
+<span id="L83">            const auto c = cil::push(slot, w);</span>
+<span id="L84">            if (c == Code::ok) ++produced;</span>
+<span id="L85">            else if (c != Code::full) { failed.store(true); break; }</span>
+<span id="L86">            else std::this_thread::yield();</span>
+<span id="L87">        }</span>
+<span id="L88">    });</span>
+<span id="L89">    std::thread consumer([&amp;] {</span>
+<span id="L90">        for (std::uint64_t attempt = 0; attempt &lt; 5&#x27;000&#x27;000 &amp;&amp; consumed &lt; total; ++attempt) {</span>
+<span id="L91">            cil::Wire w{}; const auto c = cil::pop(slot, w);</span>
+<span id="L92">            if (c == Code::empty) { std::this_thread::yield(); continue; }</span>
+<span id="L93">            if (c != Code::ok || cil::get(w, 0, 8) != consumed + 1) { failed.store(true); break; }</span>
+<span id="L94">            for (std::size_t i = 8; i &lt; w.size(); ++i)</span>
+<span id="L95">                if (w[i] != static_cast&lt;std::byte&gt;((consumed + i) &amp; 255)) failed.store(true);</span>
+<span id="L96">            ++consumed;</span>
+<span id="L97">        }</span>
+<span id="L98">    });</span>
+<span id="L99">    producer.join(); consumer.join(); CHECK(!failed.load() &amp;&amp; produced == total &amp;&amp; consumed == total);</span>
+<span id="L100">    bool success = true; auto record = sample(); cil::Wire w{}, out{};</span>
+<span id="L101">    rtfw_physics_allocation::begin();</span>
+<span id="L102">    for (unsigned i = 0; i &lt; 1000; ++i) {</span>
+<span id="L103">        cil::Record decoded;</span>
+<span id="L104">        success = success &amp;&amp; cil::encode(record, w) == Code::ok &amp;&amp; cil::push(slot, w) == Code::ok &amp;&amp;</span>
+<span id="L105">            cil::pop(slot, out) == Code::ok &amp;&amp; cil::decode(out, decoded) == Code::ok &amp;&amp; decoded.value == -3;</span>
+<span id="L106">    }</span>
+<span id="L107">    const auto allocated = rtfw_physics_allocation::end(); CHECK(success &amp;&amp; allocated == 0);</span>
+<span id="L108">    return true;</span>
+<span id="L109">}</span>
+<span id="L110">std::string unique_key() {</span>
+<span id="L111">    static unsigned counter = 0;</span>
+<span id="L112">#if defined(_WIN32)</span>
+<span id="L113">    const auto pid = GetCurrentProcessId();</span>
+<span id="L114">#else</span>
+<span id="L115">    const auto pid = getpid();</span>
+<span id="L116">#endif</span>
+<span id="L117">    return &quot;unit_&quot; + std::to_string(pid) + &quot;_&quot; + std::to_string(cil::now_ns()) + &quot;_&quot; + std::to_string(++counter);</span>
+<span id="L118">}</span>
+<span id="L119">bool mappings() {</span>
+<span id="L120">    CHECK(!cil::valid_key(&quot;bad/name&quot;) &amp;&amp; !cil::valid_key(&quot;&quot;) &amp;&amp; !cil::valid_key(std::string(49, &#x27;x&#x27;)));</span>
+<span id="L121">    cil::Mapping owner, peer, duplicate;</span>
+<span id="L122">    const auto key = unique_key();</span>
+<span id="L123">    CHECK(owner.open(key, true) == Code::ok &amp;&amp; owner.owns_resources());</span>
+<span id="L124">    CHECK(peer.open(key, false) == Code::ok);</span>
+<span id="L125">    CHECK(cil::inspect(*peer.region(), 1) == Code::not_ready);</span>
+<span id="L126">    CHECK(cil::initialize(*owner.region(), 1) == Code::ok);</span>
+<span id="L127">    CHECK(cil::attach(*peer.region(), 2) == Code::generation);</span>
+<span id="L128">    CHECK(cil::attach(*peer.region(), 1) == Code::ok);</span>
+<span id="L129">    CHECK(duplicate.open(key, true) == Code::exists);</span>
+<span id="L130">    CHECK(duplicate.close() == Code::ok);</span>
+<span id="L131">    CHECK(duplicate.open(key, false) == Code::ok);</span>
+<span id="L132">    CHECK(cil::attach(*duplicate.region(), 1) == Code::attached);</span>
+<span id="L133">    CHECK(duplicate.close() == Code::ok);</span>
+<span id="L134">    auto* held = owner.region(); owner.fail_next_close_for_test();</span>
+<span id="L135">    CHECK(owner.close() == Code::io &amp;&amp; owner.owns_resources() &amp;&amp; owner.region() == held);</span>
+<span id="L136">    cil::store(owner.region()-&gt;stopping, 1);</span>
+<span id="L137">    CHECK(owner.close() == Code::ok &amp;&amp; !owner.owns_resources());</span>
+<span id="L138">    CHECK(cil::inspect(*peer.region(), 1) == Code::closed); // Peer view independently owns physical lifetime.</span>
+<span id="L139">    cil::Mapping fresh;</span>
+<span id="L140">    CHECK(fresh.open(unique_key(), true) == Code::ok &amp;&amp; cil::initialize(*fresh.region(), 2) == Code::ok);</span>
+<span id="L141">    cil::Wire old{}; old.fill(std::byte{0x37}); CHECK(cil::push(peer.region()-&gt;commands, old) == Code::ok);</span>
+<span id="L142">    CHECK(cil::load(fresh.region()-&gt;commands.state) == 0 &amp;&amp; fresh.region()-&gt;commands.bytes[0] == std::byte{0});</span>
+<span id="L143">    CHECK(peer.close() == Code::ok &amp;&amp; fresh.close() == Code::ok);</span>
+<span id="L144">    CHECK(duplicate.open(key, false) == Code::not_found &amp;&amp; duplicate.close() == Code::ok);</span>
+<span id="L145">#if !defined(_WIN32)</span>
+<span id="L146">    // A separately created wrong-sized OS object must never be mapped as Region.</span>
+<span id="L147">    const auto small_key = unique_key(); const auto native = &quot;/rtfw_cil_&quot; + small_key;</span>
+<span id="L148">    const int fd = shm_open(native.c_str(), O_CREAT | O_EXCL | O_RDWR, 0600); CHECK(fd &gt;= 0);</span>
+<span id="L149">    CHECK(ftruncate(fd, 128) == 0);</span>
+<span id="L150">    CHECK(duplicate.open(small_key, false) == Code::schema &amp;&amp; duplicate.close() == Code::ok);</span>
+<span id="L151">    CHECK(::close(fd) == 0 &amp;&amp; shm_unlink(native.c_str()) == 0);</span>
+<span id="L152">#endif</span>
+<span id="L153">    return true;</span>
+<span id="L154">}</span>
+<span id="L155">bool runtime() {</span>
+<span id="L156">    cil::Region r{}; CHECK(cil::initialize(r, 71) == Code::ok);</span>
+<span id="L157">    cil::Plant plant; plant.endpoint = {&amp;r, 71, {}, {}, true}; plant.ttl = 1000; plant.now = 1000;</span>
+<span id="L158">    rt::Runtime runtime; CHECK(cil::configure(runtime, plant) == rt::Status::ok);</span>
+<span id="L159">    rt::sdk::CheckedStopGuard stop(runtime); CHECK(runtime.start() == rt::Status::ok);</span>
+<span id="L160">    CHECK(runtime.step({0, std::chrono::milliseconds(1)}) == rt::Status::ok);</span>
+<span id="L161">    cil::Wire w; cil::Record output;</span>
+<span id="L162">    CHECK(cil::pop(r.plants, w) == Code::ok &amp;&amp; cil::decode(w, output) == Code::ok &amp;&amp; output.value == 0);</span>
+<span id="L163">    bool success = true; rtfw_physics_allocation::begin();</span>
+<span id="L164">    for (std::uint64_t i = 1; i &lt;= 8; ++i) {</span>
+<span id="L165">        cil::Record command{cil::Kind::command, 71, i, output.issued_ns, output.expiry_ns,</span>
+<span id="L166">                            output.sequence, output.frame, (256 - output.value) / 2};</span>
+<span id="L167">        success = success &amp;&amp; cil::encode(command, w) == Code::ok &amp;&amp; cil::push(r.commands, w) == Code::ok;</span>
+<span id="L168">        plant.now = 1000 + i;</span>
+<span id="L169">        success = success &amp;&amp; runtime.step({i, std::chrono::milliseconds(1)}) == rt::Status::ok &amp;&amp;</span>
+<span id="L170">            plant.status == Code::ok &amp;&amp; cil::pop(r.plants, w) == Code::ok &amp;&amp; cil::decode(w, output) == Code::ok;</span>
+<span id="L171">    }</span>
+<span id="L172">    const auto allocations = rtfw_physics_allocation::end();</span>
+<span id="L173">    CHECK(success &amp;&amp; allocations == 0 &amp;&amp; plant.position == 255 &amp;&amp; plant.applied == 8);</span>
+<span id="L174">    CHECK((plant.history == std::array&lt;std::int64_t, 8&gt;{128,192,224,240,248,252,254,255}));</span>
+<span id="L175">    CHECK(stop.close() == rt::Status::ok); plant.endpoint.detach();</span>
+<span id="L176">    // Pure callback boundary oracle: full output never consumes input or advances state.</span>
+<span id="L177">    cil::Plant blocked; blocked.bootstrap = false; blocked.endpoint = {&amp;r, 71, {}, {}, true};</span>
+<span id="L178">    CHECK(cil::push(r.plants, w) == Code::ok &amp;&amp; cil::push(r.commands, w) == Code::ok);</span>
+<span id="L179">    rt::Runtime blocked_runtime;</span>
+<span id="L180">    CHECK(cil::configure(blocked_runtime, blocked) == rt::Status::ok);</span>
+<span id="L181">    rt::sdk::CheckedStopGuard blocked_stop(blocked_runtime);</span>
+<span id="L182">    CHECK(blocked_runtime.start() == rt::Status::ok);</span>
+<span id="L183">    CHECK(blocked_runtime.step({0, std::chrono::milliseconds(1)}) == rt::Status::ok);</span>
+<span id="L184">    CHECK(blocked.status == Code::full &amp;&amp; blocked.applied == 0 &amp;&amp; blocked.position == 0 &amp;&amp; cil::load(r.commands.state) == 1);</span>
+<span id="L185">    CHECK(blocked_stop.close() == rt::Status::ok); blocked.endpoint.detach();</span>
+<span id="L186">    return true;</span>
+<span id="L187">}</span>
+<span id="L188">bool runtime_rejection_boundaries() {</span>
+<span id="L189">    for (unsigned kind = 0; kind &lt; 4; ++kind) {</span>
+<span id="L190">        cil::Region r{}; CHECK(cil::initialize(r, 81) == Code::ok);</span>
+<span id="L191">        cil::Plant plant; plant.endpoint = {&amp;r, 81, {}, {}, true}; plant.ttl = 1000; plant.now = 1000;</span>
+<span id="L192">        rt::Runtime runtime; CHECK(cil::configure(runtime, plant) == rt::Status::ok);</span>
+<span id="L193">        rt::sdk::CheckedStopGuard stop(runtime); CHECK(runtime.start() == rt::Status::ok);</span>
+<span id="L194">        CHECK(runtime.step({0, std::chrono::milliseconds(1)}) == rt::Status::ok);</span>
+<span id="L195">        cil::Wire w; cil::Record published;</span>
+<span id="L196">        CHECK(cil::pop(r.plants, w) == Code::ok &amp;&amp; cil::decode(w, published) == Code::ok);</span>
+<span id="L197">        cil::Record command{cil::Kind::command, 81, 1, 1000, 2000, 1, 0, 128};</span>
+<span id="L198">        Code expected = Code::expired;</span>
+<span id="L199">        plant.now = 2000;</span>
+<span id="L200">        if (kind == 1) { plant.now = 999; expected = Code::future; }</span>
+<span id="L201">        if (kind == 2) { plant.now = 1500; command.generation = 80; expected = Code::generation; }</span>
+<span id="L202">        if (kind == 3) { plant.now = 1500; command.sequence = 2; expected = Code::sequence; }</span>
+<span id="L203">        CHECK(cil::encode(command, w) == Code::ok &amp;&amp; cil::push(r.commands, w) == Code::ok);</span>
+<span id="L204">        CHECK(runtime.step({1, std::chrono::milliseconds(1)}) == rt::Status::ok);</span>
+<span id="L205">        CHECK(plant.status == expected &amp;&amp; plant.position == 0 &amp;&amp; plant.applied == 0 &amp;&amp; plant.effort == 0);</span>
+<span id="L206">        CHECK(plant.endpoint.received.next == 1 &amp;&amp; cil::load(r.commands.state) == 0 &amp;&amp; cil::load(r.plants.state) == 0);</span>
+<span id="L207">        CHECK(stop.close() == rt::Status::ok); plant.endpoint.detach();</span>
+<span id="L208">    }</span>
+<span id="L209">    return true;</span>
+<span id="L210">}</span>
+<span id="L211">int main() {</span>
+<span id="L212">    if (!wire() || !channel() || !concurrency_and_allocation() || !mappings() || !runtime() || !runtime_rejection_boundaries()) return 1;</span>
+<span id="L213">    std::cout &lt;&lt; &quot;CIL wire, channel, mapping, Runtime, ownership and allocation passed\n&quot;;</span>
+<span id="L214">}</span></pre></html>

@@ -1,0 +1,290 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/typed_runtime/test_sdk.cpp</title><h1>tests/typed_runtime/test_sdk.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;rt/sdk.hpp&gt;</span>
+<span id="L2">#include &lt;rt/mock_device.hpp&gt;</span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;atomic&gt;</span>
+<span id="L5">#include &lt;cstdlib&gt;</span>
+<span id="L6">#include &lt;iostream&gt;</span>
+<span id="L7">#include &lt;thread&gt;</span>
+<span id="L8">#include &quot;../cuda_physics/allocation_guard.hpp&quot;</span>
+<span id="L9"></span>
+<span id="L10">namespace sdk = rt::sdk;</span>
+<span id="L11">#define CHECK(x) do { if (!(x)) { std::cerr &lt;&lt; __func__ &lt;&lt; &#x27;:&#x27; &lt;&lt; __LINE__ &lt;&lt; &quot; failed: &quot; #x &lt;&lt; &#x27;\n&#x27;; return false; } } while (false)</span>
+<span id="L12">struct State {</span>
+<span id="L13">    int produced = 0, consumed = 0;</span>
+<span id="L14">    rt::CallbackResult produce(const rt::CallbackContext&amp;) noexcept { ++produced; return rt::CallbackResult::ok; }</span>
+<span id="L15">    rt::CallbackResult consume(const rt::CallbackContext&amp;) noexcept {</span>
+<span id="L16">        if (produced != consumed + 1) return rt::CallbackResult::error;</span>
+<span id="L17">        consumed = produced; return rt::CallbackResult::ok;</span>
+<span id="L18">    }</span>
+<span id="L19">    rt::CallbackResult throwing(const rt::CallbackContext&amp;) { return rt::CallbackResult::ok; }</span>
+<span id="L20">    bool wrong(const rt::CallbackContext&amp;) noexcept { return true; }</span>
+<span id="L21">};</span>
+<span id="L22">rt::CallbackResult free_callback(State&amp; state, const rt::CallbackContext&amp; context) noexcept { return state.produce(context); }</span>
+<span id="L23">rt::CallbackResult raw_produce(void* user, const rt::CallbackContext&amp; context) noexcept { return static_cast&lt;State*&gt;(user)-&gt;produce(context); }</span>
+<span id="L24">rt::CallbackResult raw_consume(void* user, const rt::CallbackContext&amp; context) noexcept { return static_cast&lt;State*&gt;(user)-&gt;consume(context); }</span>
+<span id="L25">rt::CallbackResult fail_callback(State&amp;, const rt::CallbackContext&amp;) noexcept { return rt::CallbackResult::error; }</span>
+<span id="L26">static_assert(sdk::Callback&lt;&amp;State::produce, State&gt; &amp;&amp; sdk::Callback&lt;&amp;free_callback, State&gt;);</span>
+<span id="L27">static_assert(!sdk::Callback&lt;&amp;State::throwing, State&gt; &amp;&amp; !sdk::Callback&lt;&amp;State::wrong, State&gt;);</span>
+<span id="L28">static_assert(!sdk::Callback&lt;&amp;State::produce, const State&gt;);</span>
+<span id="L29">static_assert(!sdk::Callback&lt;static_cast&lt;decltype(&amp;free_callback)&gt;(nullptr), State&gt;);</span>
+<span id="L30">static_assert(!sdk::Callback&lt;static_cast&lt;decltype(&amp;State::produce)&gt;(nullptr), State&gt;);</span>
+<span id="L31">static_assert(!std::is_copy_constructible_v&lt;sdk::CheckedStopGuard&gt; &amp;&amp; !std::is_move_constructible_v&lt;sdk::CheckedStopGuard&gt;);</span>
+<span id="L32">template&lt;typename T&gt; concept AcceptsTemporary = requires { sdk::callback&lt;&amp;State::produce&gt;(&quot;temporary&quot;, T{}); };</span>
+<span id="L33">static_assert(!AcceptsTemporary&lt;State&gt;);</span>
+<span id="L34"></span>
+<span id="L35">rt::RuntimeConfig config() {</span>
+<span id="L36">    rt::RuntimeConfig c;</span>
+<span id="L37">    c.callback_capacity = 2; c.worker_count = 2; c.executor_queue_capacity = 4;</span>
+<span id="L38">    c.scratch_bytes = 17; c.task_scratch_bytes = 65; c.task_scratch_slots = 3; c.trace_capacity = 16;</span>
+<span id="L39">    return c;</span>
+<span id="L40">}</span>
+<span id="L41"></span>
+<span id="L42">bool prepare(rt::Runtime&amp; runtime, State&amp; state, bool typed) {</span>
+<span id="L43">    const auto c = config();</span>
+<span id="L44">    sdk::ConfigBuilder builder(c);</span>
+<span id="L45">    CHECK((typed ? builder.apply(runtime) : runtime.configure(c)) == rt::Status::ok);</span>
+<span id="L46">    rt::PhaseHandle producer, consumer;</span>
+<span id="L47">    rt::ResourceHandle resource;</span>
+<span id="L48">    sdk::GraphBuilder graph(runtime);</span>
+<span id="L49">    if (typed) {</span>
+<span id="L50">        CHECK(graph.phase&lt;&amp;free_callback&gt;(&quot;produce&quot;, state, producer) == rt::Status::ok);</span>
+<span id="L51">        CHECK(graph.phase&lt;&amp;State::consume&gt;(&quot;consume&quot;, state, consumer) == rt::Status::ok);</span>
+<span id="L52">        CHECK(graph.resource(&quot;state&quot;, resource) == rt::Status::ok);</span>
+<span id="L53">        CHECK(graph.depends_on(consumer, producer) == rt::Status::ok);</span>
+<span id="L54">        CHECK(graph.access(producer, resource, rt::ResourceAccess::write) == rt::Status::ok);</span>
+<span id="L55">        CHECK(graph.access(consumer, resource, rt::ResourceAccess::write) == rt::Status::ok);</span>
+<span id="L56">        CHECK(graph.finalize() == rt::Status::ok);</span>
+<span id="L57">    } else {</span>
+<span id="L58">        CHECK(runtime.register_callback({&quot;produce&quot;, raw_produce, &amp;state}, producer) == rt::Status::ok);</span>
+<span id="L59">        CHECK(runtime.register_callback({&quot;consume&quot;, raw_consume, &amp;state}, consumer) == rt::Status::ok);</span>
+<span id="L60">        CHECK(runtime.register_resource(&quot;state&quot;, resource) == rt::Status::ok);</span>
+<span id="L61">        CHECK(runtime.add_dependency(producer, consumer) == rt::Status::ok);</span>
+<span id="L62">        CHECK(runtime.declare_resource_access(producer, resource, rt::ResourceAccess::write) == rt::Status::ok);</span>
+<span id="L63">        CHECK(runtime.declare_resource_access(consumer, resource, rt::ResourceAccess::write) == rt::Status::ok);</span>
+<span id="L64">        CHECK(runtime.finalize() == rt::Status::ok);</span>
+<span id="L65">    }</span>
+<span id="L66">    CHECK(runtime.dependency_count() == 1 &amp;&amp; runtime.resource_count() == 1 &amp;&amp; runtime.resource_access_count() == 2);</span>
+<span id="L67">    rt::PhaseHandle first, second;</span>
+<span id="L68">    CHECK(runtime.compiled_phase_at(0, first) &amp;&amp; runtime.compiled_phase_at(1, second));</span>
+<span id="L69">    CHECK(first == producer &amp;&amp; second == consumer &amp;&amp; !runtime.compiled_phase_at(2, first));</span>
+<span id="L70">    return true;</span>
+<span id="L71">}</span>
+<span id="L72"></span>
+<span id="L73">bool parity_and_allocation() {</span>
+<span id="L74">    State a, b; rt::Runtime raw, typed;</span>
+<span id="L75">    CHECK(prepare(raw, a, false) &amp;&amp; prepare(typed, b, true));</span>
+<span id="L76">    sdk::CheckedStopGuard guard_raw(raw), guard_typed(typed);</span>
+<span id="L77">    rt::MemoryPlan x{}, y{};</span>
+<span id="L78">    CHECK(raw.memory_plan(x) &amp;&amp; typed.memory_plan(y));</span>
+<span id="L79">    // Compare every public plan field without reading indeterminate struct padding.</span>
+<span id="L80">#define PLAN_FIELD(field) CHECK(x.field == y.field)</span>
+<span id="L81">#include &quot;plan_fields.inc&quot;</span>
+<span id="L82">#undef PLAN_FIELD</span>
+<span id="L83">    sdk::NativeStorageEstimate estimate;</span>
+<span id="L84">    CHECK(sdk::estimate_native_storage(config(), 2, estimate) == rt::Status::ok);</span>
+<span id="L85">    CHECK(estimate.phase_scratch.stride == 64 &amp;&amp; estimate.phase_scratch.total_bytes == 128);</span>
+<span id="L86">    CHECK(estimate.task_scratch.stride == 128 &amp;&amp; estimate.task_scratch.total_bytes == 384);</span>
+<span id="L87">    CHECK(estimate.queue_slots == 8);</span>
+<span id="L88">    CHECK(x.phase_scratch_total_bytes == estimate.phase_scratch.total_bytes &amp;&amp; x.task_scratch_total_bytes == estimate.task_scratch.total_bytes &amp;&amp; x.queue_slots == estimate.queue_slots);</span>
+<span id="L89">    CHECK(raw.start() == rt::Status::ok &amp;&amp; typed.start() == rt::Status::ok);</span>
+<span id="L90">    bool success = true;</span>
+<span id="L91">    rtfw_physics_allocation::begin();</span>
+<span id="L92">    for (std::uint64_t i = 0; i &lt; 100; ++i) {</span>
+<span id="L93">        success = (raw.step({i, std::chrono::milliseconds(1)}) == rt::Status::ok) &amp;&amp; success;</span>
+<span id="L94">        success = (typed.step({i, std::chrono::milliseconds(1)}) == rt::Status::ok) &amp;&amp; success;</span>
+<span id="L95">        std::array&lt;char, 256&gt; diagnostic{};</span>
+<span id="L96">        success = !sdk::render_error(diagnostic, &quot;frame&quot;, rt::Status::ok).truncated &amp;&amp; success;</span>
+<span id="L97">        success = (sdk::estimate_native_storage(config(), 2, estimate) == rt::Status::ok) &amp;&amp; success;</span>
+<span id="L98">    }</span>
+<span id="L99">    const auto allocations = rtfw_physics_allocation::end();</span>
+<span id="L100">    CHECK(success &amp;&amp; allocations == 0 &amp;&amp; a.produced == 100 &amp;&amp; a.consumed == 100 &amp;&amp; b.produced == 100 &amp;&amp; b.consumed == 100);</span>
+<span id="L101">    CHECK(guard_raw.close() == rt::Status::ok &amp;&amp; guard_typed.close() == rt::Status::ok);</span>
+<span id="L102">    CHECK(!guard_typed.armed() &amp;&amp; guard_typed.close() == rt::Status::ok);</span>
+<span id="L103">    return true;</span>
+<span id="L104">}</span>
+<span id="L105"></span>
+<span id="L106">bool errors() {</span>
+<span id="L107">    State s; rt::Runtime raw, typed; sdk::GraphBuilder graph(typed);</span>
+<span id="L108">    auto c = config(); c.worker_count = 0;</span>
+<span id="L109">    sdk::ConfigBuilder invalid(c);</span>
+<span id="L110">    CHECK(invalid.apply(typed) == raw.configure(c) &amp;&amp; invalid.apply(typed) == rt::Status::invalid_config);</span>
+<span id="L111">    sdk::ConfigBuilder builder(config());</span>
+<span id="L112">    auto expected = config();</span>
+<span id="L113">    for (const auto value : {&quot;3&quot;, &quot;4&quot;, &quot;-1&quot;, &quot;4garbage&quot;}) {</span>
+<span id="L114">        CHECK(builder.set(&quot;executor_queue_capacity&quot;, value) == rt::set_runtime_config_value(expected, &quot;executor_queue_capacity&quot;, value));</span>
+<span id="L115">        CHECK(builder.value().executor_queue_capacity == expected.executor_queue_capacity);</span>
+<span id="L116">    }</span>
+<span id="L117">    const auto unknown_key = builder.set(&quot;unknown&quot;, &quot;1&quot;);</span>
+<span id="L118">    CHECK(unknown_key != rt::Status::ok &amp;&amp; unknown_key == rt::set_runtime_config_value(expected, &quot;unknown&quot;, &quot;1&quot;));</span>
+<span id="L119">    CHECK(builder.apply(typed) == rt::Status::ok);</span>
+<span id="L120">    rt::PhaseHandle p, q, extra; rt::ResourceHandle resource;</span>
+<span id="L121">    CHECK(graph.phase&lt;&amp;State::produce&gt;(&quot;p&quot;, s, p) == rt::Status::ok);</span>
+<span id="L122">    CHECK(graph.phase&lt;&amp;State::produce&gt;(&quot;p&quot;, s, extra) == rt::Status::invalid_argument);</span>
+<span id="L123">    CHECK(graph.phase&lt;&amp;State::consume&gt;(&quot;q&quot;, s, q) == rt::Status::ok);</span>
+<span id="L124">    CHECK(graph.phase&lt;&amp;State::produce&gt;(&quot;extra&quot;, s, extra) == rt::Status::capacity_exceeded);</span>
+<span id="L125">    CHECK(graph.depends_on(q, {}) == rt::Status::invalid_handle);</span>
+<span id="L126">    CHECK(graph.resource(&quot;state&quot;, resource) == rt::Status::ok);</span>
+<span id="L127">    CHECK(graph.access(p, resource, rt::ResourceAccess::write) == rt::Status::ok);</span>
+<span id="L128">    CHECK(graph.access(q, resource, rt::ResourceAccess::write) == rt::Status::ok);</span>
+<span id="L129">    CHECK(graph.finalize() == rt::Status::resource_conflict);</span>
+<span id="L130">    CHECK(graph.depends_on(q, p) == rt::Status::ok);</span>
+<span id="L131">    CHECK(graph.depends_on(q, p) == rt::Status::invalid_argument);</span>
+<span id="L132">    CHECK(graph.finalize() == rt::Status::ok); // Failed finalize remains repairable.</span>
+<span id="L133">    sdk::CheckedStopGuard stop(typed);</span>
+<span id="L134">    CHECK(graph.resource(&quot;late&quot;, resource) == rt::Status::invalid_state);</span>
+<span id="L135">    CHECK(stop.close() == rt::Status::ok);</span>
+<span id="L136">    rt::Runtime cyclic; sdk::GraphBuilder cycle(cyclic);</span>
+<span id="L137">    CHECK(cyclic.configure(config()) == rt::Status::ok);</span>
+<span id="L138">    CHECK(cycle.phase&lt;&amp;State::produce&gt;(&quot;p&quot;, s, p) == rt::Status::ok &amp;&amp; cycle.phase&lt;&amp;State::consume&gt;(&quot;q&quot;, s, q) == rt::Status::ok);</span>
+<span id="L139">    CHECK(cycle.depends_on(p, q) == rt::Status::ok &amp;&amp; cycle.depends_on(q, p) == rt::Status::ok);</span>
+<span id="L140">    CHECK(cycle.finalize() == rt::Status::graph_cycle);</span>
+<span id="L141">    rt::Runtime failed; sdk::GraphBuilder fail(failed);</span>
+<span id="L142">    CHECK(failed.configure(config()) == rt::Status::ok &amp;&amp; fail.phase&lt;&amp;fail_callback&gt;(&quot;fail&quot;, s, p) == rt::Status::ok &amp;&amp; fail.finalize() == rt::Status::ok);</span>
+<span id="L143">    sdk::CheckedStopGuard failed_stop(failed);</span>
+<span id="L144">    CHECK(failed.start() == rt::Status::ok &amp;&amp; failed.step({0, std::chrono::milliseconds(1)}) == rt::Status::callback_failed);</span>
+<span id="L145">    CHECK(failed_stop.close() == rt::Status::ok);</span>
+<span id="L146">    return true;</span>
+<span id="L147">}</span>
+<span id="L148"></span>
+<span id="L149">bool failure_status_parity() {</span>
+<span id="L150">    // Run the same invalid declarations through independent raw/helper graphs.</span>
+<span id="L151">    auto exercise = [](bool typed) {</span>
+<span id="L152">        std::array&lt;rt::Status, 16&gt; results{};</span>
+<span id="L153">        std::size_t n = 0;</span>
+<span id="L154">        State state; rt::Runtime runtime, other;</span>
+<span id="L155">        sdk::GraphBuilder graph(runtime);</span>
+<span id="L156">        auto c = config(); c.memory_budget_bytes = 1;</span>
+<span id="L157">        results[n++] = typed ? sdk::ConfigBuilder(c).apply(runtime) : runtime.configure(c);</span>
+<span id="L158">        rt::PhaseHandle p, q, spare, foreign;</span>
+<span id="L159">        (void)other.register_callback({&quot;foreign&quot;, raw_produce, &amp;state}, foreign);</span>
+<span id="L160">        auto phase = [&amp;](std::string_view name, rt::PhaseHandle&amp; out) {</span>
+<span id="L161">            return typed ? graph.phase&lt;&amp;State::produce&gt;(name, state, out)</span>
+<span id="L162">                         : runtime.register_callback({name, raw_produce, &amp;state}, out);</span>
+<span id="L163">        };</span>
+<span id="L164">        auto edge = [&amp;](rt::PhaseHandle dependent, rt::PhaseHandle prerequisite) {</span>
+<span id="L165">            return typed ? graph.depends_on(dependent, prerequisite) : runtime.add_dependency(prerequisite, dependent);</span>
+<span id="L166">        };</span>
+<span id="L167">        results[n++] = phase(&quot;&quot;, spare);</span>
+<span id="L168">        results[n++] = phase(&quot;p&quot;, p);</span>
+<span id="L169">        results[n++] = phase(&quot;p&quot;, spare);</span>
+<span id="L170">        results[n++] = phase(&quot;q&quot;, q);</span>
+<span id="L171">        results[n++] = phase(&quot;extra&quot;, spare);</span>
+<span id="L172">        results[n++] = edge(q, foreign);</span>
+<span id="L173">        results[n++] = edge(q, {});</span>
+<span id="L174">        results[n++] = edge(q, p);</span>
+<span id="L175">        results[n++] = edge(q, p);</span>
+<span id="L176">        rt::ResourceHandle resource;</span>
+<span id="L177">        results[n++] = typed ? graph.resource(&quot;resource&quot;, resource) : runtime.register_resource(&quot;resource&quot;, resource);</span>
+<span id="L178">        results[n++] = typed ? graph.access(p, resource, static_cast&lt;rt::ResourceAccess&gt;(99))</span>
+<span id="L179">                             : runtime.declare_resource_access(p, resource, static_cast&lt;rt::ResourceAccess&gt;(99));</span>
+<span id="L180">        results[n++] = typed ? graph.finalize() : runtime.finalize(); // Budget failure.</span>
+<span id="L181">        c.memory_budget_bytes = config().memory_budget_bytes;</span>
+<span id="L182">        results[n++] = typed ? sdk::ConfigBuilder(c).apply(runtime) : runtime.configure(c);</span>
+<span id="L183">        results[n++] = edge(p, q);</span>
+<span id="L184">        results[n++] = typed ? graph.finalize() : runtime.finalize(); // Cycle failure.</span>
+<span id="L185">        return results;</span>
+<span id="L186">    };</span>
+<span id="L187">    const auto raw = exercise(false), typed = exercise(true);</span>
+<span id="L188">    CHECK(raw == typed);</span>
+<span id="L189">    CHECK(typed[6] == rt::Status::invalid_handle &amp;&amp; typed[12] != rt::Status::ok &amp;&amp; typed[15] == rt::Status::graph_cycle);</span>
+<span id="L190">    return true;</span>
+<span id="L191">}</span>
+<span id="L192"></span>
+<span id="L193">bool capacities_and_diagnostics() {</span>
+<span id="L194">    sdk::AlignedCapacity out{7,9};</span>
+<span id="L195">    CHECK(sdk::aligned_capacity(1, 3, 1, out) == rt::Status::invalid_argument &amp;&amp; out.stride == 7 &amp;&amp; out.total_bytes == 9);</span>
+<span id="L196">    CHECK(sdk::aligned_capacity(1, 0, 1, out) == rt::Status::invalid_argument);</span>
+<span id="L197">    constexpr auto maximum = std::numeric_limits&lt;std::size_t&gt;::max();</span>
+<span id="L198">    CHECK(sdk::aligned_capacity(maximum, 2, 1, out) == rt::Status::capacity_exceeded);</span>
+<span id="L199">    CHECK(sdk::aligned_capacity(maximum, 1, 2, out) == rt::Status::capacity_exceeded);</span>
+<span id="L200">    CHECK(sdk::aligned_capacity(maximum, 1, 1, out) == rt::Status::ok &amp;&amp; out.total_bytes == maximum);</span>
+<span id="L201">    CHECK(sdk::aligned_capacity(0, 64, maximum, out) == rt::Status::ok &amp;&amp; out.total_bytes == 0);</span>
+<span id="L202">    sdk::NativeStorageEstimate estimate; estimate.queue_slots = 77;</span>
+<span id="L203">    auto c = config();</span>
+<span id="L204">    CHECK(sdk::estimate_native_storage(c, 3, estimate) == rt::Status::capacity_exceeded &amp;&amp; estimate.queue_slots == 77);</span>
+<span id="L205">    c.executor_policy = rt::ExecutorPolicy::host_adapter;</span>
+<span id="L206">    CHECK(sdk::estimate_native_storage(c, 2, estimate) == rt::Status::invalid_config);</span>
+<span id="L207">    c = config(); c.worker_count = maximum;</span>
+<span id="L208">    CHECK(sdk::estimate_native_storage(c, 2, estimate) == rt::Status::capacity_exceeded &amp;&amp; estimate.queue_slots == 77);</span>
+<span id="L209">    std::array&lt;char, 512&gt; full{};</span>
+<span id="L210">    const auto rendered = sdk::render_error(full, &quot;finalize&quot;, rt::Status::resource_conflict, &quot;conflicting phases&quot;);</span>
+<span id="L211">    const std::string_view text(full.data());</span>
+<span id="L212">    CHECK(!rendered.truncated &amp;&amp; rendered.required_bytes == text.size() + 1 &amp;&amp; rendered.written_bytes == text.size());</span>
+<span id="L213">    CHECK(text.starts_with(&quot;finalize: &quot;) &amp;&amp; text.find(&quot;(-10): conflicting phases&quot;) != text.npos &amp;&amp; text.find(&quot;dependency&quot;) != text.npos);</span>
+<span id="L214">    for (std::size_t size = 0; size &lt;= rendered.required_bytes + 1; ++size) {</span>
+<span id="L215">        std::array&lt;char, 512&gt; buffer{}; buffer.fill(&#x27;!&#x27;);</span>
+<span id="L216">        const auto result = sdk::render_error(std::span(buffer).first(size), &quot;finalize&quot;, rt::Status::resource_conflict, &quot;conflicting phases&quot;);</span>
+<span id="L217">        CHECK(result.required_bytes == rendered.required_bytes &amp;&amp; result.truncated == (size &lt; rendered.required_bytes));</span>
+<span id="L218">        CHECK(result.written_bytes == (size == 0 ? 0 : std::min(size - 1, text.size())));</span>
+<span id="L219">        if (size) CHECK(buffer[result.written_bytes] == &#x27;\0&#x27; &amp;&amp; std::string_view(buffer.data()) == text.substr(0, result.written_bytes));</span>
+<span id="L220">        CHECK(buffer[size] == &#x27;!&#x27;); // No write past caller span.</span>
+<span id="L221">    }</span>
+<span id="L222">    const auto unknown = sdk::render_error(full, &quot;unknown&quot;, static_cast&lt;rt::Status&gt;(-2147483647 - 1));</span>
+<span id="L223">    CHECK(!unknown.truncated &amp;&amp; std::string_view(full.data()).find(&quot;(-2147483648)&quot;) != text.npos);</span>
+<span id="L224">    for (int status = 0; status &gt;= -23; --status) CHECK(!sdk::recovery_hint(static_cast&lt;rt::Status&gt;(status)).empty());</span>
+<span id="L225">    return true;</span>
+<span id="L226">}</span>
+<span id="L227"></span>
+<span id="L228">// Test-only shutdown fault injection; original instance and all other callbacks</span>
+<span id="L229">// stay unchanged. This fixture is exercised serially, outside concurrent cases.</span>
+<span id="L230">rtfw_device_shutdown_fn original_shutdown = nullptr;</span>
+<span id="L231">int shutdown_failures = 0;</span>
+<span id="L232">int shutdown_calls = 0;</span>
+<span id="L233">rtfw_device_status shutdown(void* instance) {</span>
+<span id="L234">    ++shutdown_calls;</span>
+<span id="L235">    if (shutdown_failures &gt; 0) { --shutdown_failures; return RTFW_DEVICE_STATUS_RESET_REQUIRED; }</span>
+<span id="L236">    return original_shutdown(instance);</span>
+<span id="L237">}</span>
+<span id="L238">bool cleanup(bool death = false) {</span>
+<span id="L239">    rt::MockDeviceBackend backend;</span>
+<span id="L240">    State state; rt::Runtime runtime;</span>
+<span id="L241">    CHECK(prepare(runtime, state, true));</span>
+<span id="L242">    { sdk::CheckedStopGuard fallback(runtime); CHECK(fallback.armed());</span>
+<span id="L243">      CHECK(runtime.start() == rt::Status::ok); }</span>
+<span id="L244">    CHECK(runtime.state() == rt::RuntimeState::stopped);</span>
+<span id="L245">    rt::Runtime device;</span>
+<span id="L246">    CHECK(device.configure(config()) == rt::Status::ok);</span>
+<span id="L247">    auto api = backend.api(); original_shutdown = api.shutdown; api.shutdown = &amp;shutdown;</span>
+<span id="L248">    rt::DeviceBackendHandle handle;</span>
+<span id="L249">    CHECK(device.register_device_backend({&quot;cleanup&quot;, api}, handle) == rt::Status::ok);</span>
+<span id="L250">    CHECK(device.finalize() == rt::Status::ok);</span>
+<span id="L251">    sdk::CheckedStopGuard stop(device);</span>
+<span id="L252">    CHECK(device.start() == rt::Status::ok);</span>
+<span id="L253">    shutdown_calls = 0; shutdown_failures = death ? 100 : 1;</span>
+<span id="L254">    if (death) return true; // Destructor must terminate after exactly one failed attempt.</span>
+<span id="L255">    CHECK(stop.close() == rt::Status::device_reset_required &amp;&amp; stop.armed() &amp;&amp; shutdown_calls == 1);</span>
+<span id="L256">    CHECK(stop.close() == rt::Status::ok &amp;&amp; !stop.armed() &amp;&amp; shutdown_calls == 2);</span>
+<span id="L257">    CHECK(stop.close() == rt::Status::ok &amp;&amp; shutdown_calls == 2);</span>
+<span id="L258">    return true;</span>
+<span id="L259">}</span>
+<span id="L260"></span>
+<span id="L261">bool isolation() {</span>
+<span id="L262">    State a, b; rt::Runtime first, second;</span>
+<span id="L263">    CHECK(prepare(first, a, true) &amp;&amp; prepare(second, b, true));</span>
+<span id="L264">    sdk::CheckedStopGuard stop_a(first), stop_b(second);</span>
+<span id="L265">    rt::PhaseHandle foreign;</span>
+<span id="L266">    CHECK(first.compiled_phase_at(0, foreign));</span>
+<span id="L267">    CHECK(foreign.owner() != [&amp;] { rt::PhaseHandle p; (void)second.compiled_phase_at(0,p); return p.owner(); }());</span>
+<span id="L268">    CHECK(first.start() == rt::Status::ok &amp;&amp; second.start() == rt::Status::ok);</span>
+<span id="L269">    auto run = [](rt::Runtime&amp; runtime, std::uint64_t count, bool&amp; ok) {</span>
+<span id="L270">        ok = true;</span>
+<span id="L271">        for (std::uint64_t i = 0; i &lt; count; ++i)</span>
+<span id="L272">            if (runtime.step({i, std::chrono::milliseconds(1)}) != rt::Status::ok) ok = false;</span>
+<span id="L273">    };</span>
+<span id="L274">    bool good_a = false, good_b = false;</span>
+<span id="L275">    std::thread x(run, std::ref(first), 17, std::ref(good_a));</span>
+<span id="L276">    std::thread y(run, std::ref(second), 29, std::ref(good_b));</span>
+<span id="L277">    x.join(); y.join();</span>
+<span id="L278">    CHECK(good_a &amp;&amp; good_b &amp;&amp; a.consumed == 17 &amp;&amp; b.consumed == 29);</span>
+<span id="L279">    CHECK(stop_a.close() == rt::Status::ok &amp;&amp; stop_b.close() == rt::Status::ok);</span>
+<span id="L280">    return true;</span>
+<span id="L281">}</span>
+<span id="L282"></span>
+<span id="L283">int main(int argc, char**) {</span>
+<span id="L284">    if (argc &gt; 1) {</span>
+<span id="L285">        std::set_terminate([] { std::_Exit(shutdown_calls == 1 ? 73 : 74); });</span>
+<span id="L286">        return cleanup(true) ? 2 : 1;</span>
+<span id="L287">    }</span>
+<span id="L288">    if (!parity_and_allocation() || !errors() || !failure_status_parity() || !capacities_and_diagnostics() || !cleanup() || !isolation()) return 1;</span>
+<span id="L289">    std::cout &lt;&lt; &quot;typed SDK: parity, errors, capacities, diagnostics, allocation, cleanup and isolation passed\n&quot;;</span>
+<span id="L290">}</span></pre></html>

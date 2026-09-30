@@ -1,0 +1,329 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_xdma/io.hpp</title><h1>samples/golden_xdma/io.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;simulated_driver.hpp&quot;</span>
+<span id="L3">#include &lt;memory&gt;</span>
+<span id="L4"></span>
+<span id="L5">#if defined(_MSC_VER)</span>
+<span id="L6">#pragma warning(push)</span>
+<span id="L7">#pragma warning(disable : 4324)</span>
+<span id="L8">#endif</span>
+<span id="L9">namespace golden::xdma {</span>
+<span id="L10">class Io {</span>
+<span id="L11">  struct alignas(64) HostLane {</span>
+<span id="L12">    Frame input{}, output{};</span>
+<span id="L13">    std::array&lt;std::byte, 4&gt; ack{};</span>
+<span id="L14">  };</span>
+<span id="L15">  std::array&lt;HostLane, 2&gt; host_{};</span>
+<span id="L16">  SimulatedDriver *simulation_;</span>
+<span id="L17">  const bool simulated_;</span>
+<span id="L18">  std::unique_ptr&lt;rt::XdmaDeviceBackend&gt; backend_;</span>
+<span id="L19">  rt::HalV2BackendApi original_{};</span>
+<span id="L20">  rt::Runtime *runtime_ = nullptr;</span>
+<span id="L21">  World *world_ = nullptr;</span>
+<span id="L22">  rt::DeviceBackendHandle handle_{};</span>
+<span id="L23">  std::array&lt;rt::DeviceCommandBatch, 2&gt; batches_{};</span>
+<span id="L24">  std::array&lt;rt::DeviceTimelineHandle, 2&gt; timelines_{};</span>
+<span id="L25">  std::array&lt;std::uint64_t, 2&gt; expected_{};</span>
+<span id="L26">  rt::HalV2BackendRegistration</span>
+<span id="L27">  simulated(rt::HalV2BackendRegistration r) noexcept {</span>
+<span id="L28">    original_ = r.api;</span>
+<span id="L29">    r.name = &quot;golden.simulated.xdma&quot;;</span>
+<span id="L30">    r.api.instance = this;</span>
+<span id="L31">    r.api.get_capabilities = [](void *p, rt::HalV2Capabilities *c) {</span>
+<span id="L32">      auto &amp;s = *static_cast&lt;Io *&gt;(p);</span>
+<span id="L33">      const auto status = s.original_.get_capabilities(s.original_.instance, c);</span>
+<span id="L34">      if (status == rt::HalV2Status::ok) {</span>
+<span id="L35">        if (!s.simulation_)</span>
+<span id="L36">          return rt::HalV2Status::invalid_argument;</span>
+<span id="L37">        c-&gt;deterministic_mock = 1;</span>
+<span id="L38">        c-&gt;backend_id.fill(0);</span>
+<span id="L39">        constexpr char name[] = &quot;golden.sim.xdma.v1&quot;;</span>
+<span id="L40">        std::copy_n(name, sizeof(name), c-&gt;backend_id.begin());</span>
+<span id="L41">        c-&gt;control_storage_bytes += sizeof(rt::HalV2BackendApi);</span>
+<span id="L42">      }</span>
+<span id="L43">      return status;</span>
+<span id="L44">    };</span>
+<span id="L45">    r.api.initialize = [](void *p, const rt::HalV2InitializeConfig *v) {</span>
+<span id="L46">      auto &amp;s = *static_cast&lt;Io *&gt;(p);</span>
+<span id="L47">      return s.original_.initialize(s.original_.instance, v);</span>
+<span id="L48">    };</span>
+<span id="L49">    r.api.register_buffer = [](void *p, const rt::HalV2BufferRegistration *v,</span>
+<span id="L50">                               std::uint64_t *out) {</span>
+<span id="L51">      auto &amp;s = *static_cast&lt;Io *&gt;(p);</span>
+<span id="L52">      return s.original_.register_buffer(s.original_.instance, v, out);</span>
+<span id="L53">    };</span>
+<span id="L54">    r.api.unregister_buffer = [](void *p, std::uint64_t v) {</span>
+<span id="L55">      auto &amp;s = *static_cast&lt;Io *&gt;(p);</span>
+<span id="L56">      return s.original_.unregister_buffer(s.original_.instance, v);</span>
+<span id="L57">    };</span>
+<span id="L58">    r.api.submit = [](void *p, const rt::HalV2Submission *v) {</span>
+<span id="L59">      auto &amp;s = *static_cast&lt;Io *&gt;(p);</span>
+<span id="L60">      return s.original_.submit(s.original_.instance, v);</span>
+<span id="L61">    };</span>
+<span id="L62">    r.api.poll = [](void *p, rt::HalV2Completion *v, std::uint64_t n,</span>
+<span id="L63">                    std::uint64_t *out) {</span>
+<span id="L64">      auto &amp;s = *static_cast&lt;Io *&gt;(p);</span>
+<span id="L65">      return s.original_.poll(s.original_.instance, v, n, out);</span>
+<span id="L66">    };</span>
+<span id="L67">    r.api.cancel = [](void *p, std::uint64_t v) {</span>
+<span id="L68">      auto &amp;s = *static_cast&lt;Io *&gt;(p);</span>
+<span id="L69">      return s.original_.cancel(s.original_.instance, v);</span>
+<span id="L70">    };</span>
+<span id="L71">    r.api.get_health = [](void *p, rt::HalV2Health *v) {</span>
+<span id="L72">      auto &amp;s = *static_cast&lt;Io *&gt;(p);</span>
+<span id="L73">      return s.original_.get_health(s.original_.instance, v);</span>
+<span id="L74">    };</span>
+<span id="L75">    r.api.reset = [](void *p) {</span>
+<span id="L76">      auto &amp;s = *static_cast&lt;Io *&gt;(p);</span>
+<span id="L77">      return s.original_.reset(s.original_.instance);</span>
+<span id="L78">    };</span>
+<span id="L79">    r.api.shutdown = [](void *p) {</span>
+<span id="L80">      auto &amp;s = *static_cast&lt;Io *&gt;(p);</span>
+<span id="L81">      return s.original_.shutdown(s.original_.instance);</span>
+<span id="L82">    };</span>
+<span id="L83">    // Memory and command extensions retain their original backend instances.</span>
+<span id="L84">    return r;</span>
+<span id="L85">  }</span>
+<span id="L86"></span>
+<span id="L87">  static rt::CallbackResult provide(void *p,</span>
+<span id="L88">                                    const rt::DeviceCallbackContext &amp;ctx,</span>
+<span id="L89">                                    rt::DeviceCommandBatch &amp;batch) noexcept {</span>
+<span id="L90">    auto &amp;s = *static_cast&lt;Io *&gt;(p);</span>
+<span id="L91">    if (!ctx.rate_release || !s.world_-&gt;configuration.consume(ctx.live_control))</span>
+<span id="L92">      return rt::CallbackResult::error;</span>
+<span id="L93">    const auto phase = ctx.rate_release-&gt;phase.index();</span>
+<span id="L94">    if (phase != 3 &amp;&amp; phase != 5)</span>
+<span id="L95">      return rt::CallbackResult::error;</span>
+<span id="L96">    const auto lane = (phase - 3) / 2;</span>
+<span id="L97">    if (!s.read(*ctx.rate_release, lane * 2))</span>
+<span id="L98">      return rt::CallbackResult::error;</span>
+<span id="L99">    if (s.world_-&gt;configuration.fault == 4 &amp;&amp; phase == 3) {</span>
+<span id="L100">      Frame duplicate{};</span>
+<span id="L101">      const auto generation = ctx.rate_release-&gt;domain_release_sequence + 1;</span>
+<span id="L102">      sampled_header(duplicate, 1, generation + 1, generation,</span>
+<span id="L103">                     ctx.rate_release-&gt;nominal_release_ns,</span>
+<span id="L104">                     rt::SampledIoFrameStatus::produced);</span>
+<span id="L105">      s.first_duplicate = ctx.rate_release-&gt;publish(s.world_-&gt;channels[1],</span>
+<span id="L106">                                                    frame_span(duplicate, 1));</span>
+<span id="L107">      duplicate[header_bytes] = std::byte{1};</span>
+<span id="L108">      sampled_header(duplicate, 1, generation + 1, generation,</span>
+<span id="L109">                     ctx.rate_release-&gt;nominal_release_ns,</span>
+<span id="L110">                     rt::SampledIoFrameStatus::produced);</span>
+<span id="L111">      s.second_duplicate = ctx.rate_release-&gt;publish(s.world_-&gt;channels[1],</span>
+<span id="L112">                                                     frame_span(duplicate, 1));</span>
+<span id="L113">      return rt::CallbackResult::error;</span>
+<span id="L114">    }</span>
+<span id="L115">    if (s.world_-&gt;configuration.fault == 9 &amp;&amp; phase == 5)</span>
+<span id="L116">      s.simulation_-&gt;fault = SimulatedDriver::Fault::missing_ack;</span>
+<span id="L117">    rt::DeviceTimelineInfo info;</span>
+<span id="L118">    if (!s.runtime_-&gt;device_timeline_at(s.handle_, lane, info) ||</span>
+<span id="L119">        info.last_accepted_value == UINT64_MAX)</span>
+<span id="L120">      return rt::CallbackResult::error;</span>
+<span id="L121">    batch = s.batches_[lane];</span>
+<span id="L122">    batch.timeout_ns = completion_ns;</span>
+<span id="L123">    s.expected_[lane] = info.last_accepted_value + 1;</span>
+<span id="L124">    batch.signals[0].value = s.expected_[lane];</span>
+<span id="L125">    if (!rt::set_xdma_control_write(</span>
+<span id="L126">            batch.commands[2], static_cast&lt;std::uint32_t&gt;(lane * 4),</span>
+<span id="L127">            std::bit_cast&lt;std::uint32_t&gt;(s.world_-&gt;configuration.calibration)))</span>
+<span id="L128">      return rt::CallbackResult::error;</span>
+<span id="L129">    ++s.world_-&gt;calls[phase];</span>
+<span id="L130">    ++s.providers[lane];</span>
+<span id="L131">    return rt::CallbackResult::ok;</span>
+<span id="L132">  }</span>
+<span id="L133"></span>
+<span id="L134">public:</span>
+<span id="L135">  rt::CrossRateReadResult last_read{};</span>
+<span id="L136">  std::size_t last_read_channel = 0;</span>
+<span id="L137">  bool last_decoded = false;</span>
+<span id="L138">  rt::Status first_duplicate = rt::Status::internal_error,</span>
+<span id="L139">             second_duplicate = rt::Status::internal_error;</span>
+<span id="L140">  rt::Status reset() noexcept { return runtime_-&gt;reset_device(handle_); }</span>
+<span id="L141">  rt::Status health(rt::DeviceHealth &amp;value) noexcept {</span>
+<span id="L142">    return runtime_-&gt;device_health(handle_, value);</span>
+<span id="L143">  }</span>
+<span id="L144">  std::array&lt;std::uint64_t, 2&gt; providers{}, publications{};</span>
+<span id="L145">  explicit Io(SimulatedDriver &amp;driver, bool simulated = true)</span>
+<span id="L146">      : simulation_(&amp;driver), simulated_(simulated) {}</span>
+<span id="L147">  bool timeline(std::size_t lane, rt::DeviceTimelineInfo &amp;info) const noexcept {</span>
+<span id="L148">    return runtime_-&gt;device_timeline_at(handle_, lane, info);</span>
+<span id="L149">  }</span>
+<span id="L150">  rt::HalV2Capabilities native_capabilities() noexcept {</span>
+<span id="L151">    auto registration =</span>
+<span id="L152">        backend_-&gt;hal_v2_registration(&quot;native.capability.probe&quot;);</span>
+<span id="L153">    rt::HalV2Capabilities capabilities{};</span>
+<span id="L154">    if (registration.api.get_capabilities(registration.api.instance,</span>
+<span id="L155">                                          &amp;capabilities) != rt::HalV2Status::ok)</span>
+<span id="L156">      capabilities.deterministic_mock = UINT8_MAX;</span>
+<span id="L157">    return capabilities;</span>
+<span id="L158">  }</span>
+<span id="L159">  static void limits(rt::RuntimeConfig &amp;c, bool combined) noexcept {</span>
+<span id="L160">    c.device_backend_capacity = combined ? 2 : 1;</span>
+<span id="L161">    c.device_buffer_capacity = combined ? 8 : 6;</span>
+<span id="L162">    c.device_outstanding_capacity = combined ? 3 : 2;</span>
+<span id="L163">    c.device_completion_batch = combined ? 3 : 2;</span>
+<span id="L164">  }</span>
+<span id="L165">  rt::Status configure(rt::Runtime &amp;r, World &amp;w) noexcept {</span>
+<span id="L166">    runtime_ = &amp;r;</span>
+<span id="L167">    world_ = &amp;w;</span>
+<span id="L168">    rt::XdmaBackendConfig c;</span>
+<span id="L169">    c.queue_capacity = 2;</span>
+<span id="L170">    c.buffer_capacity = 6;</span>
+<span id="L171">    c.worker_count = 2;</span>
+<span id="L172">    c.h2c_channel_count = c.c2h_channel_count = 2;</span>
+<span id="L173">    c.max_transfer_bytes = c.max_buffer_bytes = maximum_frame_bytes;</span>
+<span id="L174">    c.transfer_alignment = 1;</span>
+<span id="L175">    c.control_aperture_bytes = 8;</span>
+<span id="L176">    c.user_event_count = 2;</span>
+<span id="L177">    try {</span>
+<span id="L178">      backend_ = std::make_unique&lt;rt::XdmaDeviceBackend&gt;(simulation_-&gt;api(), c);</span>
+<span id="L179">    } catch (...) {</span>
+<span id="L180">      return rt::Status::resource_exhausted;</span>
+<span id="L181">    }</span>
+<span id="L182">    auto registration = backend_-&gt;hal_v2_registration(&quot;golden.native.xdma&quot;);</span>
+<span id="L183">    auto s = r.register_device_backend(</span>
+<span id="L184">        simulated_ ? simulated(registration) : registration, handle_);</span>
+<span id="L185">    if (s != rt::Status::ok)</span>
+<span id="L186">      return s;</span>
+<span id="L187">    rt::DeviceMemoryDomainHandle memory;</span>
+<span id="L188">    rt::HalV2MemoryDomain descriptor;</span>
+<span id="L189">    if (!r.device_memory_domain_at(handle_, 0, memory, descriptor))</span>
+<span id="L190">      return rt::Status::device_error;</span>
+<span id="L191">    constexpr std::array&lt;std::string_view, 6&gt; names{</span>
+<span id="L192">        &quot;sensor.in&quot;,   &quot;sensor.out&quot;,   &quot;sensor.ack&quot;,</span>
+<span id="L193">        &quot;actuator.in&quot;, &quot;actuator.out&quot;, &quot;actuator.ack&quot;};</span>
+<span id="L194">    constexpr std::array&lt;std::string_view, 2&gt; timeline_names{</span>
+<span id="L195">        &quot;sensor.timeline&quot;, &quot;actuator.timeline&quot;};</span>
+<span id="L196">    for (std::size_t lane = 0; lane &lt; 2; ++lane) {</span>
+<span id="L197">      std::array&lt;rt::HalV2BufferReference, 3&gt; refs{};</span>
+<span id="L198">      std::array&lt;std::span&lt;std::byte&gt;, 3&gt; storage{</span>
+<span id="L199">          frame_span(host_[lane].input, lane * 2),</span>
+<span id="L200">          frame_span(host_[lane].output, lane * 2 + 1), host_[lane].ack};</span>
+<span id="L201">      for (std::size_t i = 0; i &lt; 3; ++i) {</span>
+<span id="L202">        rt::DeviceBufferHandle buffer;</span>
+<span id="L203">        s = r.register_device_buffer({names[lane * 3 + i],</span>
+<span id="L204">                                      handle_,</span>
+<span id="L205">                                      memory,</span>
+<span id="L206">                                      storage[i],</span>
+<span id="L207">                                      {},</span>
+<span id="L208">                                      storage[i].size(),</span>
+<span id="L209">                                      rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L210">                                      RTFW_DEVICE_BUFFER_HOST_READ |</span>
+<span id="L211">                                          RTFW_DEVICE_BUFFER_HOST_WRITE |</span>
+<span id="L212">                                          RTFW_DEVICE_BUFFER_DEVICE_READ |</span>
+<span id="L213">                                          RTFW_DEVICE_BUFFER_DEVICE_WRITE,</span>
+<span id="L214">                                      rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L215">                                      rt::hal_v2_memory_sync_none},</span>
+<span id="L216">                                     buffer);</span>
+<span id="L217">        if (s != rt::Status::ok)</span>
+<span id="L218">          return s;</span>
+<span id="L219">        refs[i].buffer_token = buffer.value;</span>
+<span id="L220">        refs[i].bytes = storage[i].size();</span>
+<span id="L221">      }</span>
+<span id="L222">      s = r.register_device_timeline({timeline_names[lane], handle_, 0},</span>
+<span id="L223">                                     timelines_[lane]);</span>
+<span id="L224">      if (s != rt::Status::ok)</span>
+<span id="L225">        return s;</span>
+<span id="L226">      auto &amp;b = batches_[lane];</span>
+<span id="L227">      b.command_count = 5;</span>
+<span id="L228">      b.signal_count = 1;</span>
+<span id="L229">      b.signals[0].timeline_handle = timelines_[lane].value;</span>
+<span id="L230">      const auto transfer = [&amp;](std::size_t at, std::size_t ref, bool down) {</span>
+<span id="L231">        auto &amp;cmd = b.commands[at];</span>
+<span id="L232">        cmd.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::dispatch);</span>
+<span id="L233">        cmd.opcode = down ? rt::xdma_device_opcode_card_to_host</span>
+<span id="L234">                          : rt::xdma_device_opcode_host_to_card;</span>
+<span id="L235">        cmd.buffer_count = 1;</span>
+<span id="L236">        cmd.buffers[0] = refs[ref];</span>
+<span id="L237">        cmd.buffers[0].access =</span>
+<span id="L238">            down ? RTFW_DEVICE_ACCESS_WRITE : RTFW_DEVICE_ACCESS_READ;</span>
+<span id="L239">        rt::XdmaTransfer t;</span>
+<span id="L240">        t.device_offset = ref ? 8192 : 0;</span>
+<span id="L241">        t.channel = static_cast&lt;std::uint32_t&gt;(lane);</span>
+<span id="L242">        cmd.payload_size = sizeof(t);</span>
+<span id="L243">        std::memcpy(cmd.payload.data(), &amp;t, sizeof(t));</span>
+<span id="L244">      };</span>
+<span id="L245">      transfer(0, 0, false);</span>
+<span id="L246">      transfer(1, 1, false);</span>
+<span id="L247">      transfer(4, 1, true);</span>
+<span id="L248">      if (!rt::set_xdma_control_write(b.commands[2],</span>
+<span id="L249">                                      static_cast&lt;std::uint32_t&gt;(lane * 4), 0))</span>
+<span id="L250">        return rt::Status::internal_error;</span>
+<span id="L251">      refs[2].access = RTFW_DEVICE_ACCESS_WRITE;</span>
+<span id="L252">      if (!rt::set_xdma_user_event_wait(</span>
+<span id="L253">              b.commands[3], static_cast&lt;std::uint32_t&gt;(lane), refs[2]))</span>
+<span id="L254">        return rt::Status::internal_error;</span>
+<span id="L255">    }</span>
+<span id="L256">    return rt::Status::ok;</span>
+<span id="L257">  }</span>
+<span id="L258">  rt::Status register_phase(rt::Runtime &amp;r, std::size_t phase,</span>
+<span id="L259">                            rt::RateDomainHandle domain,</span>
+<span id="L260">                            rt::PhaseHandle &amp;out) noexcept {</span>
+<span id="L261">    const auto lane = (phase - 3) / 2;</span>
+<span id="L262">    auto s = r.register_device_batch_phase(</span>
+<span id="L263">        {fixed::phase_names[phase], handle_, provide, this, batches_[lane]},</span>
+<span id="L264">        out);</span>
+<span id="L265">    if (s != rt::Status::ok)</span>
+<span id="L266">      return s;</span>
+<span id="L267">    using R = rt::DeviceRatePayloadRole;</span>
+<span id="L268">    const std::array roles{R::input, R::input, R::output, R::output};</span>
+<span id="L269">    rt::DeviceRatePhaseBinding binding{out, domain, completion_ns, 1, roles};</span>
+<span id="L270">    if (simulated_)</span>
+<span id="L271">      binding.simulation = rt::DeviceRateSimulationPolicy{5&#x27;000&#x27;000&#x27;000ull};</span>
+<span id="L272">    return r.bind_device_phase_to_rate_domain(binding);</span>
+<span id="L273">  }</span>
+<span id="L274">  bool read(const rt::RateReleaseView &amp;release, std::size_t c) noexcept {</span>
+<span id="L275">    Frame sampled{};</span>
+<span id="L276">    rt::CrossRateReadResult result;</span>
+<span id="L277">    const auto copied =</span>
+<span id="L278">        release.copy(world_-&gt;channels[c], frame_span(sampled, c), result);</span>
+<span id="L279">    last_read = result;</span>
+<span id="L280">    last_read_channel = c;</span>
+<span id="L281">    last_decoded = copied == rt::CrossRateReadStatus::ok &amp;&amp;</span>
+<span id="L282">                   application_frame(sampled, world_-&gt;buffers[c], c,</span>
+<span id="L283">                                     world_-&gt;options.count);</span>
+<span id="L284">    if (!last_decoded)</span>
+<span id="L285">      return false;</span>
+<span id="L286">    ++world_-&gt;selections[c];</span>
+<span id="L287">    world_-&gt;ages[c] = result.age_ns;</span>
+<span id="L288">    world_-&gt;generations[c] = result.generation;</span>
+<span id="L289">    world_-&gt;producer_releases[c] = result.producer_release_sequence;</span>
+<span id="L290">    world_-&gt;timestamps[c] = get(world_-&gt;buffers[c], 48, 8);</span>
+<span id="L291">    return result.producer_completion_status == rt::Status::ok;</span>
+<span id="L292">  }</span>
+<span id="L293">  bool publish(const rt::RateReleaseView &amp;release, std::size_t c) noexcept {</span>
+<span id="L294">    Frame sampled = world_-&gt;buffers[c];</span>
+<span id="L295">    const auto generation = release.domain_release_sequence + 1;</span>
+<span id="L296">    sampled_header(sampled, c, generation + 1, generation,</span>
+<span id="L297">                   release.nominal_release_ns,</span>
+<span id="L298">                   rt::SampledIoFrameStatus::produced);</span>
+<span id="L299">    if (release.publish(world_-&gt;channels[c], frame_span(sampled, c)) !=</span>
+<span id="L300">        rt::Status::ok)</span>
+<span id="L301">      return false;</span>
+<span id="L302">    seal(world_-&gt;buffers[c], c, release.logical_release_ns / fixed::tick_ns,</span>
+<span id="L303">         ++world_-&gt;publications[c]);</span>
+<span id="L304">    return true;</span>
+<span id="L305">  }</span>
+<span id="L306">  bool complete(std::size_t lane) noexcept {</span>
+<span id="L307">    rt::DeviceTimelineInfo info;</span>
+<span id="L308">    if (!runtime_-&gt;device_timeline_at(handle_, lane, info) ||</span>
+<span id="L309">        !expected_[lane] || info.completed_value != expected_[lane])</span>
+<span id="L310">      return false;</span>
+<span id="L311">    const auto c = lane * 2 + 1;</span>
+<span id="L312">    if (!application_frame(host_[lane].output, world_-&gt;buffers[c], c,</span>
+<span id="L313">                           world_-&gt;options.count))</span>
+<span id="L314">      return false;</span>
+<span id="L315">    if (!lane) {</span>
+<span id="L316">      unpack_vector(world_-&gt;buffers[c], world_-&gt;sensor.position);</span>
+<span id="L317">      unpack_vector(world_-&gt;buffers[c], world_-&gt;sensor.velocity, 3);</span>
+<span id="L318">    }</span>
+<span id="L319">    ++world_-&gt;publications[c];</span>
+<span id="L320">    ++publications[lane];</span>
+<span id="L321">    return true;</span>
+<span id="L322">  }</span>
+<span id="L323">  void time(std::uint64_t value) noexcept { simulation_-&gt;now.store(value); }</span>
+<span id="L324">};</span>
+<span id="L325">} // namespace golden::xdma</span>
+<span id="L326"></span>
+<span id="L327">#if defined(_MSC_VER)</span>
+<span id="L328">#pragma warning(pop)</span>
+<span id="L329">#endif</span></pre></html>

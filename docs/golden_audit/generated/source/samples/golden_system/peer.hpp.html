@@ -1,0 +1,93 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_system/peer.hpp</title><h1>samples/golden_system/peer.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;common.hpp&quot;</span>
+<span id="L3">#include &quot;world.hpp&quot;</span>
+<span id="L4">namespace golden {</span>
+<span id="L5">// Control-thread transport. Runtime callbacks only see the copied World</span>
+<span id="L6">// snapshot.</span>
+<span id="L7">class Peer {</span>
+<span id="L8">  cil::Mapping mapping_;</span>
+<span id="L9">  cil::Endpoint endpoint_{};</span>
+<span id="L10">  cil::Options options_;</span>
+<span id="L11"></span>
+<span id="L12">public:</span>
+<span id="L13">  cil::Code result = cil::Code::ok, cleanup = cil::Code::ok;</span>
+<span id="L14">  std::uint64_t requests = 0, responses = 0;</span>
+<span id="L15">  explicit Peer(cil::Options options) : options_(options) {}</span>
+<span id="L16">  ~Peer() { (void)close(); }</span>
+<span id="L17">  bool start() {</span>
+<span id="L18">    result = mapping_.open(options_.key, true);</span>
+<span id="L19">    if (result != cil::Code::ok)</span>
+<span id="L20">      return false;</span>
+<span id="L21">    result = cil::initialize(*mapping_.region(), options_.generation);</span>
+<span id="L22">    if (result != cil::Code::ok)</span>
+<span id="L23">      return false;</span>
+<span id="L24">    endpoint_ = {mapping_.region(), options_.generation, {}, {}, true};</span>
+<span id="L25">    std::cout &lt;&lt; &quot;ready plant\n&quot; &lt;&lt; std::flush;</span>
+<span id="L26">    const auto end = cil::deadline(options_);</span>
+<span id="L27">    while (!cil::load(mapping_.region()-&gt;controller) &amp;&amp; cil::now_ns() &lt; end)</span>
+<span id="L28">      cil::pause();</span>
+<span id="L29">    if (!cil::load(mapping_.region()-&gt;controller))</span>
+<span id="L30">      result = cil::Code::timeout;</span>
+<span id="L31">    return true; // A missing peer is an explicit safe-input campaign.</span>
+<span id="L32">  }</span>
+<span id="L33">  void exchange(std::size_t tick, World &amp;world) noexcept {</span>
+<span id="L34">    world.external_command = {};</span>
+<span id="L35">    world.external_ready = false;</span>
+<span id="L36">    if (result != cil::Code::ok)</span>
+<span id="L37">      return;</span>
+<span id="L38">    cil::Record request;</span>
+<span id="L39">    request.count = static_cast&lt;std::uint32_t&gt;(world.options.count);</span>
+<span id="L40">    request.generation = options_.generation;</span>
+<span id="L41">    request.sequence = endpoint_.sent.next;</span>
+<span id="L42">    request.issued_tick = tick;</span>
+<span id="L43">    request.expiry_tick = tick + 1;</span>
+<span id="L44">    request.values = world.sensor.velocity;</span>
+<span id="L45">    // This declared fault substitutes the initial sensor before the off-lane</span>
+<span id="L46">    // request. The callback still detects the backdated application frame.</span>
+<span id="L47">    if (world.options.campaign == Campaign::stale_input &amp;&amp; tick == 6)</span>
+<span id="L48">      request.values = {};</span>
+<span id="L49">    request.target = tick &gt;= 1 ? 16 : 8;</span>
+<span id="L50">    request.gain = tick &gt;= 3 ? 2 : 1;</span>
+<span id="L51">    if (tick &gt;= 6 &amp;&amp; world.options.campaign == Campaign::control_replaced)</span>
+<span id="L52">      request.gain = 3;</span>
+<span id="L53">    result = endpoint_.send(request);</span>
+<span id="L54">    if (result != cil::Code::ok)</span>
+<span id="L55">      return;</span>
+<span id="L56">    ++requests;</span>
+<span id="L57">    cil::Record response;</span>
+<span id="L58">    const auto end = cil::deadline(options_);</span>
+<span id="L59">    do {</span>
+<span id="L60">      result = endpoint_.receive(tick, response, &amp;request);</span>
+<span id="L61">      if (result != cil::Code::empty)</span>
+<span id="L62">        break;</span>
+<span id="L63">      cil::pause();</span>
+<span id="L64">    } while (cil::now_ns() &lt; end);</span>
+<span id="L65">    if (result == cil::Code::empty)</span>
+<span id="L66">      result = cil::Code::timeout;</span>
+<span id="L67">    if (result == cil::Code::ok) {</span>
+<span id="L68">      world.external_command = response.values;</span>
+<span id="L69">      world.external_ready = true;</span>
+<span id="L70">      ++responses;</span>
+<span id="L71">    }</span>
+<span id="L72">  }</span>
+<span id="L73">  bool close() noexcept {</span>
+<span id="L74">    if (auto *region = mapping_.region()) {</span>
+<span id="L75">      cil::store(region-&gt;stopping, 1);</span>
+<span id="L76">      const auto end = cil::deadline(options_);</span>
+<span id="L77">      while (cil::load(region-&gt;controller) &amp;&amp;</span>
+<span id="L78">             !cil::load(region-&gt;acknowledged) &amp;&amp; cil::now_ns() &lt; end)</span>
+<span id="L79">        cil::pause();</span>
+<span id="L80">      if (cil::load(region-&gt;controller) &amp;&amp; !cil::load(region-&gt;acknowledged))</span>
+<span id="L81">        cleanup = cil::Code::no_ack;</span>
+<span id="L82">    }</span>
+<span id="L83">    endpoint_.detach();</span>
+<span id="L84">    auto code = mapping_.close();</span>
+<span id="L85">    if (code != cil::Code::ok) {</span>
+<span id="L86">      cleanup = code;</span>
+<span id="L87">      if (mapping_.close() != cil::Code::ok)</span>
+<span id="L88">        std::terminate();</span>
+<span id="L89">    }</span>
+<span id="L90">    return cleanup == cil::Code::ok;</span>
+<span id="L91">  }</span>
+<span id="L92">};</span>
+<span id="L93">} // namespace golden</span></pre></html>

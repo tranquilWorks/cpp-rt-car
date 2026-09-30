@@ -3,8 +3,9 @@
 M26-01 freezes the `rtfw.golden.vehicle.v1`
 [machine-readable contract](../samples/golden_system/contract.json). M26-02 adds
 the [portable execution kit](#m26-02-portable-execution-kit), installed public-SDK
-consumers and actual run/state/replay evidence. CUDA/XDMA, benchmarks and the final
-audit remain later batches. No physical or real-time qualification is implied.
+consumers and actual run/state/replay evidence. M26-03 through M26-05 deliver
+CUDA/XDMA and benchmarks; the [M26-06 audit](golden_audit.md) maps current source
+and remaining gates. No physical or real-time qualification is implied.
 
 The original [design validator](../tools/check_golden_contract.py) and
 [mutation tests](../tests/golden_system/test_contract.py) continue to check frozen
@@ -50,7 +51,7 @@ acknowledged acceleration: `v=v0+n*a`, `x=x0+n*v0+a*n*(n+1)/2`. Split segments
 at command changes. Compare the entire state, release counts, status and cleanup;
 a checksum alone cannot establish correctness. The contract validator separately
 checks signed extremal iterative paths and a weighted-sum piecewise oracle.
-Future CUDA substitutes only the physics phase; controls, channels and scenario
+The delivered CUDA variant substitutes only the physics phase; controls, channels and scenario
 identities remain shared. No arbitrary floating-point identity is promised.
 
 ## Rates, phases and data flow
@@ -245,8 +246,8 @@ above remains a specification: its historical `planned` tags do not serve as
 execution evidence. The kit supplies actual native workers, an independent host
 job system, five active rate domains, five CPU cross-rate channels, typed controls,
 checkpoint recovery, originating-owner replay and an optional separate controller
-process. CUDA, XDMA, the lever/benchmark showcase and final capability audit remain
-M26-03 through M26-06. No physical device or RT qualification is established.
+process. Delivered M26-03 through M26-05 add CUDA, XDMA and the lever/benchmark
+showcase; M26-06 provides the source-linked capability audit. No physical device or RT qualification is established.
 
 After installing the SDK, build, run and validate the shipped source with:
 

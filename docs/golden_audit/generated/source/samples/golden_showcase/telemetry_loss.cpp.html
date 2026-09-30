@@ -1,0 +1,113 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_showcase/telemetry_loss.cpp</title><h1>samples/golden_showcase/telemetry_loss.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;session.hpp&quot;</span>
+<span id="L2">#include &quot;replay.hpp&quot;</span>
+<span id="L3">#include &quot;replay_gate.hpp&quot;</span>
+<span id="L4">#include &quot;../golden_system/oracle.hpp&quot;</span>
+<span id="L5">#include &quot;../golden_system/telemetry.hpp&quot;</span>
+<span id="L6">#include &lt;fstream&gt;</span>
+<span id="L7">#include &lt;filesystem&gt;</span>
+<span id="L8">#include &lt;iostream&gt;</span>
+<span id="L9">#include &lt;memory&gt;</span>
+<span id="L10">namespace s = golden::showcase;</span>
+<span id="L11">using namespace golden;</span>
+<span id="L12">bool save(const std::filesystem::path &amp;path,std::span&lt;const std::byte&gt; bytes) {</span>
+<span id="L13">  std::ofstream f(path,std::ios::binary);</span>
+<span id="L14">  f.write(reinterpret_cast&lt;const char *&gt;(bytes.data()),static_cast&lt;std::streamsize&gt;(bytes.size()));</span>
+<span id="L15">  f.close();return !f.fail();</span>
+<span id="L16">}</span>
+<span id="L17">int failure(int line) { std::cerr &lt;&lt; &quot;telemetry loss validation failed at line &quot; &lt;&lt; line &lt;&lt; &#x27;\n&#x27;; return 1; }</span>
+<span id="L18">int main(int argc, char **argv) {</span>
+<span id="L19">  try {</span>
+<span id="L20">    if (argc != 2) return 2;</span>
+<span id="L21">    const auto directory=std::filesystem::path(argv[1]).parent_path();</span>
+<span id="L22">    Options options;</span>
+<span id="L23">    auto memory = std::make_unique&lt;Memory&gt;();</span>
+<span id="L24">    auto session = std::make_unique&lt;s::Session&gt;(options,nullptr,*memory);</span>
+<span id="L25">    if (session-&gt;prepare(fixed::action_capacity,nullptr,64) != rt::Status::ok) return failure(__LINE__);</span>
+<span id="L26">    s::Replay replay(options.ticks);</span>
+<span id="L27">    if (!replay.begin(*session) || !session-&gt;controls()) return failure(__LINE__);</span>
+<span id="L28">    Oracle oracle(options);</span>
+<span id="L29">    Telemetry telemetry;</span>
+<span id="L30">    std::uint64_t detected = 0, before_sequence = 0, first_sequence = 0,</span>
+<span id="L31">                  next_sequence = 0, lost = 0, emitted = 0;</span>
+<span id="L32">    std::vector&lt;std::byte&gt; checkpoint;</span>
+<span id="L33">    rt::Status status = rt::Status::ok;</span>
+<span id="L34">    // Injection at tick6 is an explicit paused consumer, while the real</span>
+<span id="L35">    // producer continues into its finite64-slot trace store. Resume at tick12.</span>
+<span id="L36">    for (std::size_t tick = 0; tick &lt; options.ticks; ++tick) {</span>
+<span id="L37">      if (tick == 6) {</span>
+<span id="L38">        checkpoint = session-&gt;checkpoint(5);</span>
+<span id="L39">        before_sequence = telemetry.cursor.next_sequence;</span>
+<span id="L40">      }</span>
+<span id="L41">      replay.record(*session,tick);</span>
+<span id="L42">      if (session-&gt;step(tick) != rt::Status::ok || !oracle.step(tick,session-&gt;world)) return failure(__LINE__);</span>
+<span id="L43">      if (tick &lt; 6) {</span>
+<span id="L44">        if (telemetry.drain(*session-&gt;runtime) != rt::Status::ok) return failure(__LINE__);</span>
+<span id="L45">      } else if (tick == 12) {</span>
+<span id="L46">        std::array&lt;rt::RuntimeTraceEvent,64&gt; events{};</span>
+<span id="L47">        rt::RuntimeTraceReadResult read;</span>
+<span id="L48">        status = session-&gt;runtime-&gt;read_trace(telemetry.cursor,events,read);</span>
+<span id="L49">        if (status != rt::Status::ok || !read.lost_events || read.events_read != events.size() || read.remaining_sequence_count) return failure(__LINE__);</span>
+<span id="L50">        first_sequence = read.first_sequence;</span>
+<span id="L51">        next_sequence = telemetry.cursor.next_sequence;</span>
+<span id="L52">        lost = read.lost_events;</span>
+<span id="L53">        if (first_sequence &lt; before_sequence || first_sequence - before_sequence != lost ||</span>
+<span id="L54">            next_sequence - first_sequence != events.size()) return failure(__LINE__);</span>
+<span id="L55">        for (std::size_t i = 0; i &lt; events.size(); ++i)</span>
+<span id="L56">          if (events[i].sequence != first_sequence + i) return failure(__LINE__);</span>
+<span id="L57">        detected = tick;</span>
+<span id="L58">        telemetry.next = next_sequence;</span>
+<span id="L59">      } else if (tick &gt; 12 &amp;&amp; telemetry.drain(*session-&gt;runtime) != rt::Status::ok) {</span>
+<span id="L60">        return failure(__LINE__);</span>
+<span id="L61">      }</span>
+<span id="L62">    }</span>
+<span id="L63">    // The adapter refuses replay on a measured gap before calling Runtime.</span>
+<span id="L64">    // Record the exact state on both sides; Runtime itself does not promise</span>
+<span id="L65">    // that a host trace gap invalidates an otherwise valid action artifact.</span>
+<span id="L66">    const auto final = session-&gt;world.canonical;</span>
+<span id="L67">    const bool sealed = replay.seal(*session);</span>
+<span id="L68">    const auto before = session-&gt;world.canonical;</span>
+<span id="L69">    std::uint64_t replay_calls=0;</span>
+<span id="L70">    const auto refusal = s::checked_replay(*session,replay,lost,replay_calls);</span>
+<span id="L71">    if (!sealed || refusal != rt::Status::resource_exhausted || before != session-&gt;world.canonical || checkpoint.empty()) return failure(__LINE__);</span>
+<span id="L72">    rt::RuntimeMetricSnapshot metrics;</span>
+<span id="L73">    if (session-&gt;runtime-&gt;metrics_snapshot(rt::RuntimeMetricWindow::cumulative,nullptr,metrics) != rt::Status::ok) return failure(__LINE__);</span>
+<span id="L74">    for (std::size_t i = 0; i &lt; metrics.sample_count; ++i)</span>
+<span id="L75">      if (metrics.samples[i].id == rt::RuntimeMetricId::trace_events_emitted) emitted = metrics.samples[i].value;</span>
+<span id="L76">    rt::RateTelemetryMetadata identity;</span>
+<span id="L77">    if (session-&gt;runtime-&gt;rate_telemetry_metadata(identity) != rt::Status::ok) return failure(__LINE__);</span>
+<span id="L78">    const auto old_id = identity.runtime_id;</span>
+<span id="L79">    if (!save(directory/&quot;state.bin&quot;,final) || !save(directory/&quot;checkpoint.bin&quot;,replay.initial) ||</span>
+<span id="L80">        !save(directory/&quot;active.bin&quot;,replay.active) || !save(directory/&quot;trusted.bin&quot;,replay.trusted)) return failure(__LINE__);</span>
+<span id="L81">    if (session-&gt;close() != rt::Status::ok) return failure(__LINE__);</span>
+<span id="L82">    session = std::make_unique&lt;s::Session&gt;(options,nullptr,*memory);</span>
+<span id="L83">    if (session-&gt;prepare(fixed::action_capacity,nullptr,64) != rt::Status::ok ||</span>
+<span id="L84">        session-&gt;runtime-&gt;restore_checkpoint(checkpoint) != rt::Status::ok || !session-&gt;world.decode() ||</span>
+<span id="L85">        session-&gt;runtime-&gt;rate_telemetry_metadata(identity) != rt::Status::ok || identity.runtime_id == old_id) return failure(__LINE__);</span>
+<span id="L86">    const auto restored=session-&gt;world.canonical;</span>
+<span id="L87">    if (s::checked_replay(*session,replay,0,replay_calls)!=rt::Status::invalid_argument || replay_calls!=0 ||</span>
+<span id="L88">        session-&gt;world.canonical!=restored) return failure(__LINE__);</span>
+<span id="L89">    // Recovery gets its own paired checkpoint/active/trusted identities. No</span>
+<span id="L90">    // patching of the originating owner&#x27;s replay artifact is permitted.</span>
+<span id="L91">    s::Replay recovery(options.ticks,false,6);</span>
+<span id="L92">    recovery.initial = session-&gt;checkpoint(5);</span>
+<span id="L93">    for (std::size_t tick = 6; tick &lt; options.ticks; ++tick) {</span>
+<span id="L94">      recovery.record(*session,tick);</span>
+<span id="L95">      if (session-&gt;step(tick) != rt::Status::ok) return failure(__LINE__);</span>
+<span id="L96">    }</span>
+<span id="L97">    if (session-&gt;world.canonical != final) return failure(__LINE__);</span>
+<span id="L98">    if (!recovery.seal(*session)) { std::cerr &lt;&lt; session-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;; return failure(__LINE__); }</span>
+<span id="L99">    if (!recovery.verify(*session)) { std::cerr &lt;&lt; session-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;; return failure(__LINE__); }</span>
+<span id="L100">    if (session-&gt;close() != rt::Status::ok || memory-&gt;live_count() || memory-&gt;acquisitions != memory-&gt;releases) return failure(__LINE__);</span>
+<span id="L101">    if (!save(directory/&quot;recovery_checkpoint.bin&quot;,recovery.initial) || !save(directory/&quot;recovery_active.bin&quot;,recovery.active) ||</span>
+<span id="L102">        !save(directory/&quot;recovery_trusted.bin&quot;,recovery.trusted)) return failure(__LINE__);</span>
+<span id="L103">    std::ofstream f(argv[1]);</span>
+<span id="L104">    f &lt;&lt; &quot;{\&quot;schema\&quot;:1,\&quot;fault\&quot;:\&quot;telemetry_loss\&quot;,\&quot;injected_tick\&quot;:6,\&quot;detected_tick\&quot;:&quot; &lt;&lt; detected</span>
+<span id="L105">      &lt;&lt; &quot;,\&quot;capacity\&quot;:64,\&quot;consumer_before\&quot;:&quot; &lt;&lt; before_sequence &lt;&lt; &quot;,\&quot;first_sequence\&quot;:&quot; &lt;&lt; first_sequence</span>
+<span id="L106">      &lt;&lt; &quot;,\&quot;next_sequence\&quot;:&quot; &lt;&lt; next_sequence &lt;&lt; &quot;,\&quot;lost\&quot;:&quot; &lt;&lt; lost &lt;&lt; &quot;,\&quot;emitted\&quot;:&quot; &lt;&lt; emitted</span>
+<span id="L107">      &lt;&lt; &quot;,\&quot;refusal_status\&quot;:&quot; &lt;&lt; static_cast&lt;int&gt;(refusal) &lt;&lt; &quot;,\&quot;state_unchanged\&quot;:true,\&quot;replay_calls_before_refusal\&quot;:0&quot;</span>
+<span id="L108">      &lt;&lt; &quot;,\&quot;original_runtime\&quot;:&quot; &lt;&lt; old_id &lt;&lt; &quot;,\&quot;recovery_runtime\&quot;:&quot; &lt;&lt; identity.runtime_id</span>
+<span id="L109">      &lt;&lt; &quot;,\&quot;recovery_frames\&quot;:&quot; &lt;&lt; recovery.result.frames_replayed &lt;&lt; &quot;,\&quot;memory_acquired\&quot;:&quot; &lt;&lt; memory-&gt;acquisitions</span>
+<span id="L110">      &lt;&lt; &quot;,\&quot;memory_released\&quot;:&quot; &lt;&lt; memory-&gt;releases &lt;&lt; &quot;,\&quot;cleanup\&quot;:true,\&quot;correct\&quot;:true}\n&quot;;</span>
+<span id="L111">    f.close(); return f.fail() ? 1 : 0;</span>
+<span id="L112">  } catch (const std::exception &amp;e) { std::cerr &lt;&lt; e.what() &lt;&lt; &#x27;\n&#x27;; return failure(__LINE__); }</span>
+<span id="L113">}</span></pre></html>

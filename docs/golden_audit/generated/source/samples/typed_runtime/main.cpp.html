@@ -1,0 +1,61 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/typed_runtime/main.cpp</title><h1>samples/typed_runtime/main.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;rt/sdk.hpp&gt;</span>
+<span id="L2">#include &lt;array&gt;</span>
+<span id="L3">#include &lt;chrono&gt;</span>
+<span id="L4">#include &lt;iostream&gt;</span>
+<span id="L5"></span>
+<span id="L6">struct State {</span>
+<span id="L7">    int produced = 0;</span>
+<span id="L8">    int consumed = 0;</span>
+<span id="L9">    rt::CallbackResult produce(const rt::CallbackContext&amp;) noexcept {</span>
+<span id="L10">        ++produced;</span>
+<span id="L11">        return rt::CallbackResult::ok;</span>
+<span id="L12">    }</span>
+<span id="L13">    rt::CallbackResult consume(const rt::CallbackContext&amp;) noexcept {</span>
+<span id="L14">        if (produced != consumed + 1) return rt::CallbackResult::error;</span>
+<span id="L15">        consumed = produced;</span>
+<span id="L16">        return rt::CallbackResult::ok;</span>
+<span id="L17">    }</span>
+<span id="L18">};</span>
+<span id="L19"></span>
+<span id="L20">int main() {</span>
+<span id="L21">    State state; // Borrowed state outlives Runtime and the stop guard.</span>
+<span id="L22">    rt::Runtime runtime;</span>
+<span id="L23">    auto check = [&amp;](rt::Status status, std::string_view operation) {</span>
+<span id="L24">        if (status == rt::Status::ok) return true;</span>
+<span id="L25">        std::array&lt;char, 512&gt; text{};</span>
+<span id="L26">        const auto rendered = rt::sdk::render_error(text, operation, status, runtime.last_error());</span>
+<span id="L27">        std::cerr &lt;&lt; text.data() &lt;&lt; (rendered.truncated ? &quot; [truncated]\n&quot; : &quot;\n&quot;);</span>
+<span id="L28">        return false;</span>
+<span id="L29">    };</span>
+<span id="L30">    rt::RuntimeConfig config;</span>
+<span id="L31">    config.callback_capacity = 2;</span>
+<span id="L32">    config.worker_count = 2;</span>
+<span id="L33">    config.executor_queue_capacity = 2;</span>
+<span id="L34">    config.scratch_bytes = 0;</span>
+<span id="L35">    config.task_scratch_bytes = 0;</span>
+<span id="L36">    config.task_scratch_slots = 2;</span>
+<span id="L37">    config.trace_capacity = 32;</span>
+<span id="L38">    rt::sdk::ConfigBuilder configuration(config);</span>
+<span id="L39">    if (!check(configuration.apply(runtime), &quot;configure&quot;)) return 1;</span>
+<span id="L40">    rt::sdk::NativeStorageEstimate estimate;</span>
+<span id="L41">    if (!check(rt::sdk::estimate_native_storage(configuration.value(), 2, estimate), &quot;estimate&quot;)) return 1;</span>
+<span id="L42">    rt::sdk::GraphBuilder graph(runtime);</span>
+<span id="L43">    rt::PhaseHandle producer, consumer;</span>
+<span id="L44">    rt::ResourceHandle resource;</span>
+<span id="L45">    if (!check(graph.phase&lt;&amp;State::produce&gt;(&quot;produce&quot;, state, producer), &quot;register produce&quot;) ||</span>
+<span id="L46">        !check(graph.phase&lt;&amp;State::consume&gt;(&quot;consume&quot;, state, consumer), &quot;register consume&quot;) ||</span>
+<span id="L47">        !check(graph.resource(&quot;state&quot;, resource), &quot;register resource&quot;) ||</span>
+<span id="L48">        !check(graph.depends_on(consumer, producer), &quot;dependency&quot;) ||</span>
+<span id="L49">        !check(graph.access(producer, resource, rt::ResourceAccess::write), &quot;produce access&quot;) ||</span>
+<span id="L50">        !check(graph.access(consumer, resource, rt::ResourceAccess::write), &quot;consume access&quot;) ||</span>
+<span id="L51">        !check(graph.finalize(), &quot;finalize&quot;)) return 1;</span>
+<span id="L52">    rt::sdk::CheckedStopGuard stop(runtime); // Construct only after successful finalize.</span>
+<span id="L53">    rt::MemoryPlan plan;</span>
+<span id="L54">    if (!runtime.memory_plan(plan) || plan.queue_slots != estimate.queue_slots) return 1;</span>
+<span id="L55">    bool ok = check(runtime.start(), &quot;start&quot;);</span>
+<span id="L56">    for (std::uint64_t frame = 0; ok &amp;&amp; frame &lt; 3; ++frame)</span>
+<span id="L57">        ok = check(runtime.step({frame, std::chrono::milliseconds(1)}), &quot;step&quot;);</span>
+<span id="L58">    const bool stopped = check(stop.close(), &quot;stop&quot;);</span>
+<span id="L59">    if (!ok || !stopped || state.produced != 3 || state.consumed != 3) return 1;</span>
+<span id="L60">    std::cout &lt;&lt; &quot;typed_runtime: frames=3 produced=3 consumed=3 stopped=ok\n&quot;;</span>
+<span id="L61">}</span></pre></html>

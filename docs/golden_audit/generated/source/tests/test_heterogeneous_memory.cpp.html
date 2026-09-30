@@ -1,0 +1,1667 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_heterogeneous_memory.cpp</title><h1>tests/test_heterogeneous_memory.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;array&gt;</span>
+<span id="L5">#include &lt;atomic&gt;</span>
+<span id="L6">#include &lt;chrono&gt;</span>
+<span id="L7">#include &lt;cstddef&gt;</span>
+<span id="L8">#include &lt;cstdint&gt;</span>
+<span id="L9">#include &lt;latch&gt;</span>
+<span id="L10">#include &lt;limits&gt;</span>
+<span id="L11">#include &lt;optional&gt;</span>
+<span id="L12">#include &lt;stdexcept&gt;</span>
+<span id="L13">#include &lt;string_view&gt;</span>
+<span id="L14">#include &lt;thread&gt;</span>
+<span id="L15">#include &lt;type_traits&gt;</span>
+<span id="L16">#include &lt;vector&gt;</span>
+<span id="L17"></span>
+<span id="L18">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L19"></span>
+<span id="L20">namespace {</span>
+<span id="L21"></span>
+<span id="L22">template &lt;typename Range&gt; bool all_zero(const Range &amp;values) {</span>
+<span id="L23">  return std::all_of(values.begin(), values.end(),</span>
+<span id="L24">                     [](const auto value) { return value == 0; });</span>
+<span id="L25">}</span>
+<span id="L26"></span>
+<span id="L27">template &lt;typename Range&gt;</span>
+<span id="L28">void set_identifier(Range &amp;output, std::string_view value) {</span>
+<span id="L29">  output.fill(0);</span>
+<span id="L30">  std::copy(value.begin(), value.end(), output.begin());</span>
+<span id="L31">}</span>
+<span id="L32"></span>
+<span id="L33">rt::RuntimeConfig memory_config(std::size_t backend_capacity = 1,</span>
+<span id="L34">                                std::size_t buffer_capacity = 8) {</span>
+<span id="L35">  rt::RuntimeConfig config;</span>
+<span id="L36">  config.callback_capacity = 1;</span>
+<span id="L37">  config.worker_count = 1;</span>
+<span id="L38">  config.executor_queue_capacity = 4;</span>
+<span id="L39">  config.task_scratch_slots = 4;</span>
+<span id="L40">  config.trace_capacity = 32;</span>
+<span id="L41">  config.device_backend_capacity = backend_capacity;</span>
+<span id="L42">  config.device_buffer_capacity = buffer_capacity;</span>
+<span id="L43">  config.device_outstanding_capacity = 4;</span>
+<span id="L44">  config.device_completion_batch = 4;</span>
+<span id="L45">  return config;</span>
+<span id="L46">}</span>
+<span id="L47"></span>
+<span id="L48">rt::HalV2MemoryTopologySnapshot six_domain_snapshot() {</span>
+<span id="L49">  rt::HalV2MemoryTopologySnapshot snapshot;</span>
+<span id="L50">  snapshot.memory_domain_count = 6;</span>
+<span id="L51">  snapshot.topology_node_count = 6;</span>
+<span id="L52">  snapshot.topology_link_count = 2;</span>
+<span id="L53">  snapshot.timestamp_domain_count = 2;</span>
+<span id="L54">  snapshot.completion_timestamp_domain_identity = 202;</span>
+<span id="L55"></span>
+<span id="L56">  constexpr std::array&lt;rt::HalV2TopologyNodeKind, 6&gt; node_kinds{</span>
+<span id="L57">      rt::HalV2TopologyNodeKind::host,</span>
+<span id="L58">      rt::HalV2TopologyNodeKind::numa,</span>
+<span id="L59">      rt::HalV2TopologyNodeKind::device,</span>
+<span id="L60">      rt::HalV2TopologyNodeKind::dma_endpoint,</span>
+<span id="L61">      rt::HalV2TopologyNodeKind::peer_endpoint,</span>
+<span id="L62">      rt::HalV2TopologyNodeKind::peer_endpoint,</span>
+<span id="L63">  };</span>
+<span id="L64">  for (std::size_t index = 0; index &lt; node_kinds.size(); ++index) {</span>
+<span id="L65">    snapshot.topology_nodes[index].identity = 101 + index;</span>
+<span id="L66">    snapshot.topology_nodes[index].kind =</span>
+<span id="L67">        static_cast&lt;std::uint32_t&gt;(node_kinds[index]);</span>
+<span id="L68">  }</span>
+<span id="L69">  snapshot.topology_links[0].identity = 301;</span>
+<span id="L70">  snapshot.topology_links[0].source_node_identity = 101;</span>
+<span id="L71">  snapshot.topology_links[0].destination_node_identity = 101;</span>
+<span id="L72">  snapshot.topology_links[0].kind =</span>
+<span id="L73">      static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyLinkKind::local);</span>
+<span id="L74">  snapshot.topology_links[1].identity = 302;</span>
+<span id="L75">  snapshot.topology_links[1].source_node_identity = 105;</span>
+<span id="L76">  snapshot.topology_links[1].destination_node_identity = 106;</span>
+<span id="L77">  snapshot.topology_links[1].kind =</span>
+<span id="L78">      static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyLinkKind::peer);</span>
+<span id="L79"></span>
+<span id="L80">  auto &amp;host_time = snapshot.timestamp_domains[0];</span>
+<span id="L81">  host_time.identity = 201;</span>
+<span id="L82">  host_time.kind = static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L83">      rt::HalV2TimestampDomainKind::runtime_monotonic);</span>
+<span id="L84">  host_time.tick_numerator_ns = 1;</span>
+<span id="L85">  host_time.tick_denominator = 1;</span>
+<span id="L86">  host_time.monotonic = 1;</span>
+<span id="L87"></span>
+<span id="L88">  auto &amp;device_time = snapshot.timestamp_domains[1];</span>
+<span id="L89">  device_time.identity = 202;</span>
+<span id="L90">  device_time.kind =</span>
+<span id="L91">      static_cast&lt;std::uint32_t&gt;(rt::HalV2TimestampDomainKind::backend_device);</span>
+<span id="L92">  device_time.tick_numerator_ns = 1;</span>
+<span id="L93">  device_time.tick_denominator = 1;</span>
+<span id="L94">  device_time.wrap_ticks = std::uint64_t{1} &lt;&lt; 48u;</span>
+<span id="L95">  device_time.correlation_destination_identity = 201;</span>
+<span id="L96">  device_time.monotonic = 1;</span>
+<span id="L97">  device_time.resets_on_backend_reset = 1;</span>
+<span id="L98">  device_time.supports_correlation = 1;</span>
+<span id="L99"></span>
+<span id="L100">  constexpr std::array&lt;rt::HalV2MemoryDomainKind, 6&gt; domain_kinds{</span>
+<span id="L101">      rt::HalV2MemoryDomainKind::host,</span>
+<span id="L102">      rt::HalV2MemoryDomainKind::pinned_host,</span>
+<span id="L103">      rt::HalV2MemoryDomainKind::cuda_device,</span>
+<span id="L104">      rt::HalV2MemoryDomainKind::imported,</span>
+<span id="L105">      rt::HalV2MemoryDomainKind::dma_mapped,</span>
+<span id="L106">      rt::HalV2MemoryDomainKind::peer,</span>
+<span id="L107">  };</span>
+<span id="L108">  for (std::size_t index = 0; index &lt; domain_kinds.size(); ++index) {</span>
+<span id="L109">    auto &amp;domain = snapshot.memory_domains[index];</span>
+<span id="L110">    domain.identity = index + 1;</span>
+<span id="L111">    domain.kind = static_cast&lt;std::uint32_t&gt;(domain_kinds[index]);</span>
+<span id="L112">    domain.maximum_bytes = 4096;</span>
+<span id="L113">    domain.byte_granularity = 8;</span>
+<span id="L114">    domain.alignment = 8;</span>
+<span id="L115">    domain.offset_granularity = 8;</span>
+<span id="L116">    domain.topology_node_identity = 101 + index;</span>
+<span id="L117">    domain.timestamp_domain_identity = index &lt; 2 ? 201 : 202;</span>
+<span id="L118">    if (index &lt; 2) {</span>
+<span id="L119">      domain.ownership_modes = rt::hal_v2_memory_ownership_borrowed_host;</span>
+<span id="L120">      domain.access =</span>
+<span id="L121">          RTFW_DEVICE_BUFFER_HOST_READ | RTFW_DEVICE_BUFFER_HOST_WRITE |</span>
+<span id="L122">          RTFW_DEVICE_BUFFER_DEVICE_READ | RTFW_DEVICE_BUFFER_DEVICE_WRITE;</span>
+<span id="L123">      domain.coherency =</span>
+<span id="L124">          static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryCoherency::host_coherent);</span>
+<span id="L125">    } else {</span>
+<span id="L126">      domain.ownership_modes =</span>
+<span id="L127">          index == 2 ? rt::hal_v2_memory_ownership_backend</span>
+<span id="L128">                     : rt::hal_v2_memory_ownership_borrowed_opaque;</span>
+<span id="L129">      domain.access =</span>
+<span id="L130">          RTFW_DEVICE_BUFFER_DEVICE_READ | RTFW_DEVICE_BUFFER_DEVICE_WRITE;</span>
+<span id="L131">      domain.coherency =</span>
+<span id="L132">          static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryCoherency::device_only);</span>
+<span id="L133">    }</span>
+<span id="L134">  }</span>
+<span id="L135">  return snapshot;</span>
+<span id="L136">}</span>
+<span id="L137"></span>
+<span id="L138">struct MemoryBackend {</span>
+<span id="L139">  MemoryBackend() {</span>
+<span id="L140">    set_identifier(capabilities.backend_id, &quot;test.heterogeneous.v2&quot;);</span>
+<span id="L141">  }</span>
+<span id="L142"></span>
+<span id="L143">  rt::HalV2BackendApi api() {</span>
+<span id="L144">    rt::HalV2BackendApi table;</span>
+<span id="L145">    table.instance = this;</span>
+<span id="L146">    table.get_capabilities = &amp;get_capabilities;</span>
+<span id="L147">    table.initialize = &amp;initialize;</span>
+<span id="L148">    table.register_buffer = &amp;register_buffer;</span>
+<span id="L149">    table.unregister_buffer = &amp;unregister_buffer;</span>
+<span id="L150">    table.submit = &amp;submit;</span>
+<span id="L151">    table.poll = &amp;poll;</span>
+<span id="L152">    table.cancel = &amp;cancel;</span>
+<span id="L153">    table.get_health = &amp;get_health;</span>
+<span id="L154">    table.reset = &amp;reset;</span>
+<span id="L155">    table.shutdown = &amp;shutdown;</span>
+<span id="L156">    return table;</span>
+<span id="L157">  }</span>
+<span id="L158"></span>
+<span id="L159">  rt::HalV2MemoryTopologyExtension extension() {</span>
+<span id="L160">    rt::HalV2MemoryTopologyExtension table;</span>
+<span id="L161">    table.instance = this;</span>
+<span id="L162">    table.discover = &amp;discover;</span>
+<span id="L163">    table.register_memory = &amp;register_memory;</span>
+<span id="L164">    table.unregister_memory = &amp;unregister_memory;</span>
+<span id="L165">    table.query_timestamp_correlation = &amp;query_correlation;</span>
+<span id="L166">    return table;</span>
+<span id="L167">  }</span>
+<span id="L168"></span>
+<span id="L169">  rt::HalV2Capabilities capabilities = [] {</span>
+<span id="L170">    rt::HalV2Capabilities value;</span>
+<span id="L171">    value.max_in_flight = 8;</span>
+<span id="L172">    value.max_registered_buffers = 16;</span>
+<span id="L173">    value.max_buffer_bytes = 4096;</span>
+<span id="L174">    value.supports_cancel = 1;</span>
+<span id="L175">    value.supports_reset = 1;</span>
+<span id="L176">    value.deterministic_mock = 1;</span>
+<span id="L177">    return value;</span>
+<span id="L178">  }();</span>
+<span id="L179">  rt::HalV2MemoryTopologySnapshot snapshot = six_domain_snapshot();</span>
+<span id="L180">  bool leave_discovery_untouched = false;</span>
+<span id="L181">  bool partially_write_discovery = false;</span>
+<span id="L182">  bool throw_discovery = false;</span>
+<span id="L183">  bool throw_register = false;</span>
+<span id="L184">  bool throw_correlation = false;</span>
+<span id="L185">  std::size_t fail_registration_call = 0;</span>
+<span id="L186">  bool failed_registration_has_empty_token = false;</span>
+<span id="L187">  rt::HalV2Status unregister_status = rt::HalV2Status::ok;</span>
+<span id="L188">  rt::HalV2Status correlation_status = rt::HalV2Status::ok;</span>
+<span id="L189">  bool malformed_correlation = false;</span>
+<span id="L190">  std::size_t discovery_calls = 0;</span>
+<span id="L191">  std::size_t memory_register_calls = 0;</span>
+<span id="L192">  std::size_t memory_unregister_calls = 0;</span>
+<span id="L193">  std::size_t legacy_register_calls = 0;</span>
+<span id="L194">  std::size_t legacy_unregister_calls = 0;</span>
+<span id="L195">  std::size_t correlation_calls = 0;</span>
+<span id="L196">  std::atomic&lt;std::size_t&gt; submit_calls{0};</span>
+<span id="L197">  std::atomic&lt;std::uint64_t&gt; pending_submission{0};</span>
+<span id="L198">  rt::HalV2Submission last_submission{};</span>
+<span id="L199">  std::vector&lt;char&gt; order;</span>
+<span id="L200">  std::vector&lt;rt::HalV2MemoryRegistration&gt; registrations;</span>
+<span id="L201">  std::vector&lt;rt::HalV2MemoryRegistration&gt; unregistrations;</span>
+<span id="L202">  std::vector&lt;rt::HalV2MemoryToken&gt; unregistration_tokens;</span>
+<span id="L203"></span>
+<span id="L204">  static MemoryBackend *self(void *instance) {</span>
+<span id="L205">    return static_cast&lt;MemoryBackend *&gt;(instance);</span>
+<span id="L206">  }</span>
+<span id="L207"></span>
+<span id="L208">  static rt::HalV2Status get_capabilities(void *instance,</span>
+<span id="L209">                                          rt::HalV2Capabilities *output) {</span>
+<span id="L210">    if (!instance || !output)</span>
+<span id="L211">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L212">    *output = self(instance)-&gt;capabilities;</span>
+<span id="L213">    return rt::HalV2Status::ok;</span>
+<span id="L214">  }</span>
+<span id="L215"></span>
+<span id="L216">  static rt::HalV2Status initialize(void *instance,</span>
+<span id="L217">                                    const rt::HalV2InitializeConfig *) {</span>
+<span id="L218">    return instance ? rt::HalV2Status::ok : rt::HalV2Status::invalid_argument;</span>
+<span id="L219">  }</span>
+<span id="L220"></span>
+<span id="L221">  static rt::HalV2Status register_buffer(void *instance,</span>
+<span id="L222">                                         const rt::HalV2BufferRegistration *,</span>
+<span id="L223">                                         std::uint64_t *token) {</span>
+<span id="L224">    if (!instance || !token)</span>
+<span id="L225">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L226">    auto &amp;backend = *self(instance);</span>
+<span id="L227">    ++backend.legacy_register_calls;</span>
+<span id="L228">    backend.order.push_back(&#x27;L&#x27;);</span>
+<span id="L229">    *token = 0x1000u + backend.legacy_register_calls;</span>
+<span id="L230">    return rt::HalV2Status::ok;</span>
+<span id="L231">  }</span>
+<span id="L232"></span>
+<span id="L233">  static rt::HalV2Status unregister_buffer(void *instance, std::uint64_t) {</span>
+<span id="L234">    if (!instance)</span>
+<span id="L235">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L236">    auto &amp;backend = *self(instance);</span>
+<span id="L237">    ++backend.legacy_unregister_calls;</span>
+<span id="L238">    backend.order.push_back(&#x27;l&#x27;);</span>
+<span id="L239">    return rt::HalV2Status::ok;</span>
+<span id="L240">  }</span>
+<span id="L241"></span>
+<span id="L242">  static rt::HalV2Status submit(void *instance,</span>
+<span id="L243">                                const rt::HalV2Submission *submission) {</span>
+<span id="L244">    if (!instance || !submission) {</span>
+<span id="L245">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L246">    }</span>
+<span id="L247">    auto &amp;backend = *self(instance);</span>
+<span id="L248">    backend.last_submission = *submission;</span>
+<span id="L249">    backend.submit_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L250">    backend.pending_submission.store(submission-&gt;submission_id,</span>
+<span id="L251">                                     std::memory_order_release);</span>
+<span id="L252">    return rt::HalV2Status::ok;</span>
+<span id="L253">  }</span>
+<span id="L254"></span>
+<span id="L255">  static rt::HalV2Status poll(void *instance, rt::HalV2Completion *completions,</span>
+<span id="L256">                              std::uint64_t capacity, std::uint64_t *count) {</span>
+<span id="L257">    if (!instance || !count || (capacity != 0 &amp;&amp; !completions)) {</span>
+<span id="L258">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L259">    }</span>
+<span id="L260">    auto &amp;backend = *self(instance);</span>
+<span id="L261">    const auto submission =</span>
+<span id="L262">        capacity == 0</span>
+<span id="L263">            ? 0</span>
+<span id="L264">            : backend.pending_submission.exchange(0, std::memory_order_acq_rel);</span>
+<span id="L265">    if (submission != 0) {</span>
+<span id="L266">      completions[0] = {};</span>
+<span id="L267">      completions[0].submission_id = submission;</span>
+<span id="L268">      *count = 1;</span>
+<span id="L269">      return rt::HalV2Status::ok;</span>
+<span id="L270">    }</span>
+<span id="L271">    *count = 0;</span>
+<span id="L272">    return rt::HalV2Status::ok;</span>
+<span id="L273">  }</span>
+<span id="L274"></span>
+<span id="L275">  static rt::HalV2Status cancel(void *, std::uint64_t) {</span>
+<span id="L276">    return rt::HalV2Status::unsupported;</span>
+<span id="L277">  }</span>
+<span id="L278"></span>
+<span id="L279">  static rt::HalV2Status get_health(void *instance, rt::HalV2Health *output) {</span>
+<span id="L280">    if (!instance || !output)</span>
+<span id="L281">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L282">    *output = {};</span>
+<span id="L283">    output-&gt;state = static_cast&lt;std::uint32_t&gt;(rt::HalV2HealthState::healthy);</span>
+<span id="L284">    return rt::HalV2Status::ok;</span>
+<span id="L285">  }</span>
+<span id="L286"></span>
+<span id="L287">  static rt::HalV2Status reset(void *instance) {</span>
+<span id="L288">    return instance ? rt::HalV2Status::ok : rt::HalV2Status::invalid_argument;</span>
+<span id="L289">  }</span>
+<span id="L290"></span>
+<span id="L291">  static rt::HalV2Status shutdown(void *instance) {</span>
+<span id="L292">    return instance ? rt::HalV2Status::ok : rt::HalV2Status::invalid_argument;</span>
+<span id="L293">  }</span>
+<span id="L294"></span>
+<span id="L295">  static rt::HalV2Status discover(void *instance,</span>
+<span id="L296">                                  rt::HalV2MemoryTopologySnapshot *output) {</span>
+<span id="L297">    if (!instance || !output)</span>
+<span id="L298">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L299">    auto &amp;backend = *self(instance);</span>
+<span id="L300">    ++backend.discovery_calls;</span>
+<span id="L301">    if (backend.throw_discovery)</span>
+<span id="L302">      throw std::runtime_error(&quot;discover&quot;);</span>
+<span id="L303">    if (backend.partially_write_discovery) {</span>
+<span id="L304">      *output = {};</span>
+<span id="L305">      output-&gt;memory_domain_count = 1;</span>
+<span id="L306">      output-&gt;topology_node_count = 1;</span>
+<span id="L307">      output-&gt;timestamp_domain_count = 1;</span>
+<span id="L308">    } else if (!backend.leave_discovery_untouched) {</span>
+<span id="L309">      *output = backend.snapshot;</span>
+<span id="L310">    }</span>
+<span id="L311">    return rt::HalV2Status::ok;</span>
+<span id="L312">  }</span>
+<span id="L313"></span>
+<span id="L314">  static rt::HalV2Status</span>
+<span id="L315">  register_memory(void *instance,</span>
+<span id="L316">                  const rt::HalV2MemoryRegistration *registration,</span>
+<span id="L317">                  rt::HalV2MemoryToken *token) {</span>
+<span id="L318">    if (!instance || !registration || !token) {</span>
+<span id="L319">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L320">    }</span>
+<span id="L321">    auto &amp;backend = *self(instance);</span>
+<span id="L322">    ++backend.memory_register_calls;</span>
+<span id="L323">    backend.order.push_back(&#x27;H&#x27;);</span>
+<span id="L324">    backend.registrations.push_back(*registration);</span>
+<span id="L325">    if (backend.throw_register)</span>
+<span id="L326">      throw std::runtime_error(&quot;register&quot;);</span>
+<span id="L327">    const bool fail =</span>
+<span id="L328">        backend.fail_registration_call == backend.memory_register_calls;</span>
+<span id="L329">    if (!fail || !backend.failed_registration_has_empty_token) {</span>
+<span id="L330">      token-&gt;submission_token = 0x2000u + backend.memory_register_calls;</span>
+<span id="L331">      token-&gt;native_token.size = 1;</span>
+<span id="L332">      token-&gt;native_token.bytes[0] = std::byte{0x5a};</span>
+<span id="L333">    }</span>
+<span id="L334">    return fail ? rt::HalV2Status::error : rt::HalV2Status::ok;</span>
+<span id="L335">  }</span>
+<span id="L336"></span>
+<span id="L337">  static rt::HalV2Status</span>
+<span id="L338">  unregister_memory(void *instance,</span>
+<span id="L339">                    const rt::HalV2MemoryRegistration *registration,</span>
+<span id="L340">                    const rt::HalV2MemoryToken *token) {</span>
+<span id="L341">    if (!instance || !registration || !token) {</span>
+<span id="L342">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L343">    }</span>
+<span id="L344">    auto &amp;backend = *self(instance);</span>
+<span id="L345">    ++backend.memory_unregister_calls;</span>
+<span id="L346">    backend.order.push_back(&#x27;U&#x27;);</span>
+<span id="L347">    backend.unregistrations.push_back(*registration);</span>
+<span id="L348">    backend.unregistration_tokens.push_back(*token);</span>
+<span id="L349">    return backend.unregister_status;</span>
+<span id="L350">  }</span>
+<span id="L351"></span>
+<span id="L352">  static rt::HalV2Status</span>
+<span id="L353">  query_correlation(void *instance,</span>
+<span id="L354">                    const rt::HalV2TimestampCorrelationQuery *query,</span>
+<span id="L355">                    rt::HalV2TimestampCorrelation *output) {</span>
+<span id="L356">    if (!instance || !query || !output) {</span>
+<span id="L357">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L358">    }</span>
+<span id="L359">    auto &amp;backend = *self(instance);</span>
+<span id="L360">    ++backend.correlation_calls;</span>
+<span id="L361">    if (backend.throw_correlation)</span>
+<span id="L362">      throw std::runtime_error(&quot;correlation&quot;);</span>
+<span id="L363">    if (backend.correlation_status != rt::HalV2Status::ok) {</span>
+<span id="L364">      return backend.correlation_status;</span>
+<span id="L365">    }</span>
+<span id="L366">    *output = {};</span>
+<span id="L367">    output-&gt;source_domain_identity = query-&gt;source_domain_identity;</span>
+<span id="L368">    output-&gt;destination_domain_identity = query-&gt;destination_domain_identity;</span>
+<span id="L369">    output-&gt;generation = backend.malformed_correlation ? 0 : 7;</span>
+<span id="L370">    output-&gt;source_value = 1000;</span>
+<span id="L371">    output-&gt;destination_value = 2000;</span>
+<span id="L372">    output-&gt;uncertainty_ns = 25;</span>
+<span id="L373">    return rt::HalV2Status::ok;</span>
+<span id="L374">  }</span>
+<span id="L375">};</span>
+<span id="L376"></span>
+<span id="L377">struct V1Backend {</span>
+<span id="L378">  rtfw_device_backend_api api() {</span>
+<span id="L379">    rtfw_device_backend_api table{};</span>
+<span id="L380">    table.struct_size = sizeof(table);</span>
+<span id="L381">    table.abi_version = RTFW_DEVICE_ABI_VERSION;</span>
+<span id="L382">    table.instance = this;</span>
+<span id="L383">    table.get_capabilities = &amp;get_capabilities;</span>
+<span id="L384">    table.initialize = &amp;initialize;</span>
+<span id="L385">    table.register_buffer = &amp;register_buffer;</span>
+<span id="L386">    table.unregister_buffer = &amp;unregister_buffer;</span>
+<span id="L387">    table.submit = &amp;submit;</span>
+<span id="L388">    table.poll = &amp;poll;</span>
+<span id="L389">    table.cancel = &amp;cancel;</span>
+<span id="L390">    table.get_health = &amp;get_health;</span>
+<span id="L391">    table.reset = &amp;reset;</span>
+<span id="L392">    table.shutdown = &amp;shutdown;</span>
+<span id="L393">    return table;</span>
+<span id="L394">  }</span>
+<span id="L395"></span>
+<span id="L396">  static rtfw_device_status get_capabilities(void *instance,</span>
+<span id="L397">                                             rtfw_device_capabilities *output) {</span>
+<span id="L398">    if (!instance || !output)</span>
+<span id="L399">      return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L400">    *output = {};</span>
+<span id="L401">    output-&gt;struct_size = sizeof(*output);</span>
+<span id="L402">    output-&gt;abi_version = RTFW_DEVICE_ABI_VERSION;</span>
+<span id="L403">    output-&gt;max_in_flight = 8;</span>
+<span id="L404">    output-&gt;max_registered_buffers = 8;</span>
+<span id="L405">    output-&gt;max_buffer_bytes = 4096;</span>
+<span id="L406">    output-&gt;inline_payload_capacity = RTFW_DEVICE_INLINE_PAYLOAD_CAPACITY;</span>
+<span id="L407">    output-&gt;buffer_ref_capacity = RTFW_DEVICE_BUFFER_REF_CAPACITY;</span>
+<span id="L408">    output-&gt;supports_cancel = 1;</span>
+<span id="L409">    output-&gt;supports_reset = 1;</span>
+<span id="L410">    output-&gt;deterministic_mock = 1;</span>
+<span id="L411">    constexpr std::string_view id = &quot;test.heterogeneous.v1&quot;;</span>
+<span id="L412">    std::copy(id.begin(), id.end(), std::begin(output-&gt;backend_id));</span>
+<span id="L413">    return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L414">  }</span>
+<span id="L415"></span>
+<span id="L416">  static rtfw_device_status initialize(void *instance,</span>
+<span id="L417">                                       const rtfw_device_init_config *) {</span>
+<span id="L418">    return instance ? RTFW_DEVICE_STATUS_OK</span>
+<span id="L419">                    : RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L420">  }</span>
+<span id="L421"></span>
+<span id="L422">  static rtfw_device_status</span>
+<span id="L423">  register_buffer(void *instance, const rtfw_device_buffer_registration *,</span>
+<span id="L424">                  std::uint64_t *token) {</span>
+<span id="L425">    if (!instance || !token)</span>
+<span id="L426">      return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L427">    *token = 0x1234;</span>
+<span id="L428">    return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L429">  }</span>
+<span id="L430"></span>
+<span id="L431">  static rtfw_device_status unregister_buffer(void *instance, std::uint64_t) {</span>
+<span id="L432">    return instance ? RTFW_DEVICE_STATUS_OK</span>
+<span id="L433">                    : RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L434">  }</span>
+<span id="L435"></span>
+<span id="L436">  static rtfw_device_status submit(void *instance,</span>
+<span id="L437">                                   const rtfw_device_submission *) {</span>
+<span id="L438">    return instance ? RTFW_DEVICE_STATUS_OK</span>
+<span id="L439">                    : RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L440">  }</span>
+<span id="L441"></span>
+<span id="L442">  static rtfw_device_status poll(void *instance, rtfw_device_completion *,</span>
+<span id="L443">                                 std::uint64_t, std::uint64_t *count) {</span>
+<span id="L444">    if (!instance || !count)</span>
+<span id="L445">      return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L446">    *count = 0;</span>
+<span id="L447">    return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L448">  }</span>
+<span id="L449"></span>
+<span id="L450">  static rtfw_device_status cancel(void *, std::uint64_t) {</span>
+<span id="L451">    return RTFW_DEVICE_STATUS_UNSUPPORTED;</span>
+<span id="L452">  }</span>
+<span id="L453"></span>
+<span id="L454">  static rtfw_device_status get_health(void *instance,</span>
+<span id="L455">                                       rtfw_device_health *output) {</span>
+<span id="L456">    if (!instance || !output)</span>
+<span id="L457">      return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L458">    *output = {};</span>
+<span id="L459">    output-&gt;struct_size = sizeof(*output);</span>
+<span id="L460">    output-&gt;state = RTFW_DEVICE_HEALTH_HEALTHY;</span>
+<span id="L461">    return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L462">  }</span>
+<span id="L463"></span>
+<span id="L464">  static rtfw_device_status reset(void *instance) {</span>
+<span id="L465">    return instance ? RTFW_DEVICE_STATUS_OK</span>
+<span id="L466">                    : RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L467">  }</span>
+<span id="L468"></span>
+<span id="L469">  static rtfw_device_status shutdown(void *instance) {</span>
+<span id="L470">    return instance ? RTFW_DEVICE_STATUS_OK</span>
+<span id="L471">                    : RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L472">  }</span>
+<span id="L473">};</span>
+<span id="L474"></span>
+<span id="L475">rt::Status register_memory_backend(rt::Runtime &amp;runtime, MemoryBackend &amp;backend,</span>
+<span id="L476">                                   std::string_view name,</span>
+<span id="L477">                                   rt::DeviceBackendHandle &amp;handle) {</span>
+<span id="L478">  auto extension = backend.extension();</span>
+<span id="L479">  return runtime.register_device_backend({name, backend.api(), &amp;extension},</span>
+<span id="L480">                                         handle);</span>
+<span id="L481">}</span>
+<span id="L482"></span>
+<span id="L483">rt::HalV2OpaqueHandle opaque_handle(std::byte value = std::byte{0x44}) {</span>
+<span id="L484">  rt::HalV2OpaqueHandle handle;</span>
+<span id="L485">  handle.size = 4;</span>
+<span id="L486">  std::fill_n(handle.bytes.begin(), 4, value);</span>
+<span id="L487">  return handle;</span>
+<span id="L488">}</span>
+<span id="L489"></span>
+<span id="L490">rt::DeviceMemoryDomainHandle domain_at(rt::Runtime &amp;runtime,</span>
+<span id="L491">                                       rt::DeviceBackendHandle backend,</span>
+<span id="L492">                                       std::size_t index) {</span>
+<span id="L493">  rt::DeviceMemoryDomainHandle handle;</span>
+<span id="L494">  rt::HalV2MemoryDomain ignored;</span>
+<span id="L495">  EXPECT_TRUE(runtime.device_memory_domain_at(backend, index, handle, ignored));</span>
+<span id="L496">  return handle;</span>
+<span id="L497">}</span>
+<span id="L498"></span>
+<span id="L499">std::uint64_t graph_id(rt::Runtime &amp;runtime) {</span>
+<span id="L500">  std::array&lt;std::byte, 1024&gt; bytes{};</span>
+<span id="L501">  rt::ArtifactWriteResult result;</span>
+<span id="L502">  EXPECT_EQ(runtime.write_checkpoint(0, bytes, result), rt::Status::ok);</span>
+<span id="L503">  rt::CheckpointMetadata metadata;</span>
+<span id="L504">  EXPECT_EQ(rt::inspect_checkpoint_artifact(</span>
+<span id="L505">                std::span&lt;const std::byte&gt;(bytes.data(), result.bytes_written),</span>
+<span id="L506">                metadata),</span>
+<span id="L507">            rt::Status::ok);</span>
+<span id="L508">  return metadata.graph_id;</span>
+<span id="L509">}</span>
+<span id="L510"></span>
+<span id="L511">struct BufferCommand {</span>
+<span id="L512">  rt::DeviceBufferHandle buffer{};</span>
+<span id="L513">  std::uint32_t access = RTFW_DEVICE_ACCESS_READ;</span>
+<span id="L514">  std::uint64_t offset = 0;</span>
+<span id="L515">  std::uint64_t bytes = 0;</span>
+<span id="L516">};</span>
+<span id="L517"></span>
+<span id="L518">struct ActiveFrameGate {</span>
+<span id="L519">  std::latch entered{1};</span>
+<span id="L520">  std::latch release{1};</span>
+<span id="L521">};</span>
+<span id="L522"></span>
+<span id="L523">rt::CallbackResult hold_active_frame(void *user_data,</span>
+<span id="L524">                                     const rt::CallbackContext &amp;) {</span>
+<span id="L525">  auto &amp;gate = *static_cast&lt;ActiveFrameGate *&gt;(user_data);</span>
+<span id="L526">  gate.entered.count_down();</span>
+<span id="L527">  gate.release.wait();</span>
+<span id="L528">  return rt::CallbackResult::ok;</span>
+<span id="L529">}</span>
+<span id="L530"></span>
+<span id="L531">rt::CallbackResult submit_buffer(void *user_data,</span>
+<span id="L532">                                 const rt::DeviceCallbackContext &amp;,</span>
+<span id="L533">                                 rt::DeviceSubmission &amp;submission) {</span>
+<span id="L534">  const auto &amp;command = *static_cast&lt;BufferCommand *&gt;(user_data);</span>
+<span id="L535">  submission.timeout_ns = 10&#x27;000&#x27;000;</span>
+<span id="L536">  submission.opcode = 7;</span>
+<span id="L537">  submission.buffer_count = 1;</span>
+<span id="L538">  submission.buffers[0].buffer_token = command.buffer.value;</span>
+<span id="L539">  submission.buffers[0].access = command.access;</span>
+<span id="L540">  submission.buffers[0].offset = command.offset;</span>
+<span id="L541">  submission.buffers[0].bytes = command.bytes;</span>
+<span id="L542">  return rt::CallbackResult::ok;</span>
+<span id="L543">}</span>
+<span id="L544"></span>
+<span id="L545">const rt::MemoryPolicyReport *</span>
+<span id="L546">find_memory_row(const rt::CpuMemoryPolicyReport &amp;report,</span>
+<span id="L547">                rt::MemoryRegionId region) {</span>
+<span id="L548">  const auto found = std::find_if(</span>
+<span id="L549">      report.memory.begin(),</span>
+<span id="L550">      report.memory.begin() + static_cast&lt;std::ptrdiff_t&gt;(report.memory_count),</span>
+<span id="L551">      [region](const auto &amp;row) { return row.region == region; });</span>
+<span id="L552">  return found == report.memory.begin() +</span>
+<span id="L553">                      static_cast&lt;std::ptrdiff_t&gt;(report.memory_count)</span>
+<span id="L554">             ? nullptr</span>
+<span id="L555">             : &amp;*found;</span>
+<span id="L556">}</span>
+<span id="L557"></span>
+<span id="L558">} // namespace</span>
+<span id="L559"></span>
+<span id="L560">TEST(HeterogeneousMemory,</span>
+<span id="L561">     ConstantsEnumsDefaultsLayoutsAndReservedTailsAreExact) {</span>
+<span id="L562">  EXPECT_EQ(rt::hal_v2_memory_topology_extension_version, 1u);</span>
+<span id="L563">  EXPECT_EQ(rt::hal_v2_memory_domain_capacity, 16u);</span>
+<span id="L564">  EXPECT_EQ(rt::hal_v2_topology_node_capacity, 32u);</span>
+<span id="L565">  EXPECT_EQ(rt::hal_v2_topology_link_capacity, 64u);</span>
+<span id="L566">  EXPECT_EQ(rt::hal_v2_timestamp_domain_capacity, 8u);</span>
+<span id="L567">  EXPECT_EQ(rt::hal_v2_opaque_handle_capacity, 64u);</span>
+<span id="L568">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryDomainKind::host), 1u);</span>
+<span id="L569">  EXPECT_EQ(</span>
+<span id="L570">      static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryDomainKind::pinned_host), 2u);</span>
+<span id="L571">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryDomainKind::cuda_device),</span>
+<span id="L572">            3u);</span>
+<span id="L573">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryDomainKind::imported),</span>
+<span id="L574">            4u);</span>
+<span id="L575">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryDomainKind::dma_mapped),</span>
+<span id="L576">            5u);</span>
+<span id="L577">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryDomainKind::peer), 6u);</span>
+<span id="L578">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryOwnership::borrowed_host),</span>
+<span id="L579">            1u);</span>
+<span id="L580">  EXPECT_EQ(</span>
+<span id="L581">      static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryOwnership::borrowed_opaque),</span>
+<span id="L582">      2u);</span>
+<span id="L583">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryOwnership::backend), 3u);</span>
+<span id="L584">  EXPECT_EQ(rt::hal_v2_memory_ownership_borrowed_host, 1u);</span>
+<span id="L585">  EXPECT_EQ(rt::hal_v2_memory_ownership_borrowed_opaque, 2u);</span>
+<span id="L586">  EXPECT_EQ(rt::hal_v2_memory_ownership_backend, 4u);</span>
+<span id="L587">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryCoherency::host_coherent),</span>
+<span id="L588">            1u);</span>
+<span id="L589">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L590">                rt::HalV2MemoryCoherency::explicit_flush_invalidate),</span>
+<span id="L591">            2u);</span>
+<span id="L592">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryCoherency::staged_copy),</span>
+<span id="L593">            3u);</span>
+<span id="L594">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryCoherency::device_only),</span>
+<span id="L595">            4u);</span>
+<span id="L596">  EXPECT_EQ(rt::hal_v2_memory_sync_none, 0u);</span>
+<span id="L597">  EXPECT_EQ(rt::hal_v2_memory_sync_flush, 1u);</span>
+<span id="L598">  EXPECT_EQ(rt::hal_v2_memory_sync_invalidate, 2u);</span>
+<span id="L599">  EXPECT_EQ(rt::hal_v2_memory_sync_copy_to_device, 4u);</span>
+<span id="L600">  EXPECT_EQ(rt::hal_v2_memory_sync_copy_from_device, 8u);</span>
+<span id="L601">  EXPECT_EQ(rt::hal_v2_memory_sync_timeline, 16u);</span>
+<span id="L602">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyNodeKind::host), 1u);</span>
+<span id="L603">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyNodeKind::numa), 2u);</span>
+<span id="L604">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyNodeKind::device), 3u);</span>
+<span id="L605">  EXPECT_EQ(</span>
+<span id="L606">      static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyNodeKind::dma_endpoint), 4u);</span>
+<span id="L607">  EXPECT_EQ(</span>
+<span id="L608">      static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyNodeKind::peer_endpoint), 5u);</span>
+<span id="L609">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyLinkKind::local), 1u);</span>
+<span id="L610">  EXPECT_EQ(</span>
+<span id="L611">      static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyLinkKind::host_access), 2u);</span>
+<span id="L612">  EXPECT_EQ(</span>
+<span id="L613">      static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyLinkKind::device_access),</span>
+<span id="L614">      3u);</span>
+<span id="L615">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyLinkKind::dma), 4u);</span>
+<span id="L616">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyLinkKind::peer), 5u);</span>
+<span id="L617">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L618">                rt::HalV2TimestampDomainKind::runtime_monotonic),</span>
+<span id="L619">            1u);</span>
+<span id="L620">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L621">                rt::HalV2TimestampDomainKind::backend_device),</span>
+<span id="L622">            2u);</span>
+<span id="L623">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2TimestampDomainKind::external),</span>
+<span id="L624">            3u);</span>
+<span id="L625"></span>
+<span id="L626">  EXPECT_EQ(sizeof(rt::HalV2OpaqueHandle), 88u);</span>
+<span id="L627">  EXPECT_EQ(sizeof(rt::HalV2MemoryDomain), 120u);</span>
+<span id="L628">  EXPECT_EQ(sizeof(rt::HalV2TopologyNode), 56u);</span>
+<span id="L629">  EXPECT_EQ(sizeof(rt::HalV2TopologyLink), 72u);</span>
+<span id="L630">  EXPECT_EQ(sizeof(rt::HalV2TimestampDomain), 96u);</span>
+<span id="L631">  EXPECT_EQ(sizeof(rt::HalV2MemoryTopologySnapshot), 9184u);</span>
+<span id="L632">  EXPECT_EQ(sizeof(rt::HalV2MemoryRegistration), 232u);</span>
+<span id="L633">  EXPECT_EQ(sizeof(rt::HalV2MemoryToken), 136u);</span>
+<span id="L634">  EXPECT_EQ(sizeof(rt::HalV2TimestampCorrelationQuery), 56u);</span>
+<span id="L635">  EXPECT_EQ(sizeof(rt::HalV2TimestampCorrelation), 88u);</span>
+<span id="L636">  EXPECT_EQ(sizeof(rt::HalV2MemoryTopologyExtension), 112u);</span>
+<span id="L637">  EXPECT_EQ(sizeof(rt::HalV2BackendRegistration), 192u);</span>
+<span id="L638">  EXPECT_EQ(sizeof(rt::DeviceMemoryDomainHandle), 16u);</span>
+<span id="L639">  EXPECT_EQ(sizeof(rt::DeviceTopologyNodeHandle), 16u);</span>
+<span id="L640">  EXPECT_EQ(sizeof(rt::DeviceTopologyLinkHandle), 16u);</span>
+<span id="L641">  EXPECT_EQ(sizeof(rt::DeviceTimestampDomainHandle), 16u);</span>
+<span id="L642">  EXPECT_EQ(sizeof(rt::HeterogeneousDeviceBufferRegistration), 168u);</span>
+<span id="L643">  EXPECT_EQ(sizeof(rt::DeviceMemoryObjectInfo), 96u);</span>
+<span id="L644">  static_assert(std::is_standard_layout_v&lt;rt::HalV2MemoryDomain&gt;);</span>
+<span id="L645">  static_assert(std::is_standard_layout_v&lt;rt::HalV2MemoryTopologySnapshot&gt;);</span>
+<span id="L646">  static_assert(std::is_standard_layout_v&lt;rt::HalV2MemoryRegistration&gt;);</span>
+<span id="L647"></span>
+<span id="L648">  const rt::HalV2OpaqueHandle opaque;</span>
+<span id="L649">  const rt::HalV2MemoryDomain domain;</span>
+<span id="L650">  const rt::HalV2TopologyNode node;</span>
+<span id="L651">  const rt::HalV2TopologyLink link;</span>
+<span id="L652">  const rt::HalV2TimestampDomain timestamp;</span>
+<span id="L653">  const rt::HalV2MemoryTopologySnapshot snapshot;</span>
+<span id="L654">  const rt::HalV2MemoryRegistration registration;</span>
+<span id="L655">  const rt::HalV2MemoryToken token;</span>
+<span id="L656">  const rt::HalV2TimestampCorrelationQuery query;</span>
+<span id="L657">  const rt::HalV2TimestampCorrelation correlation;</span>
+<span id="L658">  const rt::HalV2MemoryTopologyExtension extension;</span>
+<span id="L659">  const rt::HeterogeneousDeviceBufferRegistration heterogeneous;</span>
+<span id="L660">  const rt::DeviceMemoryObjectInfo object;</span>
+<span id="L661">  EXPECT_EQ(opaque.struct_size, sizeof(opaque));</span>
+<span id="L662">  EXPECT_EQ(domain.struct_size, sizeof(domain));</span>
+<span id="L663">  EXPECT_EQ(node.struct_size, sizeof(node));</span>
+<span id="L664">  EXPECT_EQ(link.struct_size, sizeof(link));</span>
+<span id="L665">  EXPECT_EQ(timestamp.struct_size, sizeof(timestamp));</span>
+<span id="L666">  EXPECT_EQ(snapshot.struct_size, sizeof(snapshot));</span>
+<span id="L667">  EXPECT_EQ(registration.struct_size, sizeof(registration));</span>
+<span id="L668">  EXPECT_EQ(token.struct_size, sizeof(token));</span>
+<span id="L669">  EXPECT_EQ(query.struct_size, sizeof(query));</span>
+<span id="L670">  EXPECT_EQ(correlation.struct_size, sizeof(correlation));</span>
+<span id="L671">  EXPECT_EQ(extension.struct_size, sizeof(extension));</span>
+<span id="L672">  EXPECT_EQ(opaque.size, 0u);</span>
+<span id="L673">  EXPECT_EQ(domain.identity, 0u);</span>
+<span id="L674">  EXPECT_EQ(domain.kind, 0u);</span>
+<span id="L675">  EXPECT_EQ(domain.ownership_modes, 0u);</span>
+<span id="L676">  EXPECT_EQ(domain.maximum_bytes, 0u);</span>
+<span id="L677">  EXPECT_EQ(node.identity, 0u);</span>
+<span id="L678">  EXPECT_EQ(node.kind, 0u);</span>
+<span id="L679">  EXPECT_EQ(link.identity, 0u);</span>
+<span id="L680">  EXPECT_EQ(link.source_node_identity, 0u);</span>
+<span id="L681">  EXPECT_EQ(link.destination_node_identity, 0u);</span>
+<span id="L682">  EXPECT_EQ(timestamp.identity, 0u);</span>
+<span id="L683">  EXPECT_EQ(timestamp.tick_numerator_ns, 0u);</span>
+<span id="L684">  EXPECT_EQ(snapshot.memory_domain_count, 0u);</span>
+<span id="L685">  EXPECT_EQ(snapshot.topology_node_count, 0u);</span>
+<span id="L686">  EXPECT_EQ(snapshot.topology_link_count, 0u);</span>
+<span id="L687">  EXPECT_EQ(snapshot.timestamp_domain_count, 0u);</span>
+<span id="L688">  EXPECT_EQ(registration.domain_identity, 0u);</span>
+<span id="L689">  EXPECT_EQ(registration.bytes, 0u);</span>
+<span id="L690">  EXPECT_EQ(registration.host_data, nullptr);</span>
+<span id="L691">  EXPECT_EQ(token.submission_token, 0u);</span>
+<span id="L692">  EXPECT_EQ(query.source_domain_identity, 0u);</span>
+<span id="L693">  EXPECT_EQ(query.destination_domain_identity, 0u);</span>
+<span id="L694">  EXPECT_EQ(correlation.generation, 0u);</span>
+<span id="L695">  EXPECT_EQ(extension.instance, nullptr);</span>
+<span id="L696">  EXPECT_EQ(extension.discover, nullptr);</span>
+<span id="L697">  EXPECT_EQ(extension.register_memory, nullptr);</span>
+<span id="L698">  EXPECT_EQ(extension.unregister_memory, nullptr);</span>
+<span id="L699">  EXPECT_EQ(extension.query_timestamp_correlation, nullptr);</span>
+<span id="L700">  EXPECT_FALSE(heterogeneous.backend.valid());</span>
+<span id="L701">  EXPECT_FALSE(heterogeneous.domain.valid());</span>
+<span id="L702">  EXPECT_TRUE(heterogeneous.host_storage.empty());</span>
+<span id="L703">  EXPECT_EQ(heterogeneous.bytes, 0u);</span>
+<span id="L704">  EXPECT_EQ(heterogeneous.ownership,</span>
+<span id="L705">            rt::HalV2MemoryOwnership::borrowed_host);</span>
+<span id="L706">  EXPECT_EQ(heterogeneous.access, 0u);</span>
+<span id="L707">  EXPECT_EQ(heterogeneous.coherency,</span>
+<span id="L708">            rt::HalV2MemoryCoherency::host_coherent);</span>
+<span id="L709">  EXPECT_EQ(heterogeneous.synchronization, 0u);</span>
+<span id="L710">  EXPECT_FALSE(object.buffer.valid());</span>
+<span id="L711">  EXPECT_FALSE(object.backend.valid());</span>
+<span id="L712">  EXPECT_FALSE(object.domain.valid());</span>
+<span id="L713">  EXPECT_TRUE(all_zero(opaque.reserved));</span>
+<span id="L714">  EXPECT_TRUE(all_zero(domain.reserved));</span>
+<span id="L715">  EXPECT_TRUE(all_zero(node.reserved));</span>
+<span id="L716">  EXPECT_TRUE(all_zero(link.reserved));</span>
+<span id="L717">  EXPECT_TRUE(all_zero(timestamp.reserved));</span>
+<span id="L718">  EXPECT_TRUE(all_zero(snapshot.reserved));</span>
+<span id="L719">  EXPECT_TRUE(all_zero(registration.reserved));</span>
+<span id="L720">  EXPECT_TRUE(all_zero(token.reserved));</span>
+<span id="L721">  EXPECT_TRUE(all_zero(query.reserved));</span>
+<span id="L722">  EXPECT_TRUE(all_zero(correlation.reserved));</span>
+<span id="L723">  EXPECT_TRUE(all_zero(extension.reserved));</span>
+<span id="L724"></span>
+<span id="L725">  const rt::HalV2BackendRegistration old_prefix{&quot;old&quot;, {}};</span>
+<span id="L726">  const rt::DeviceBufferRegistration legacy_prefix{&quot;old.buffer&quot;, {}, {}};</span>
+<span id="L727">  EXPECT_EQ(old_prefix.memory_topology, nullptr);</span>
+<span id="L728">  EXPECT_EQ(old_prefix.command_timeline, nullptr);</span>
+<span id="L729">  EXPECT_EQ(legacy_prefix.flags, RTFW_DEVICE_BUFFER_HOST_READ |</span>
+<span id="L730">                                     RTFW_DEVICE_BUFFER_HOST_WRITE |</span>
+<span id="L731">                                     RTFW_DEVICE_BUFFER_DEVICE_READ |</span>
+<span id="L732">                                     RTFW_DEVICE_BUFFER_DEVICE_WRITE);</span>
+<span id="L733">}</span>
+<span id="L734"></span>
+<span id="L735">TEST(HeterogeneousMemory,</span>
+<span id="L736">     DiscoversSixKindsAndFreezesInspectorsAcrossLifecycle) {</span>
+<span id="L737">  MemoryBackend probe;</span>
+<span id="L738">  rt::Runtime runtime;</span>
+<span id="L739">  ASSERT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L740">  rt::DeviceBackendHandle backend;</span>
+<span id="L741">  ASSERT_EQ(register_memory_backend(runtime, probe, &quot;memory&quot;, backend),</span>
+<span id="L742">            rt::Status::ok);</span>
+<span id="L743">  ASSERT_EQ(probe.discovery_calls, 1u);</span>
+<span id="L744">  ASSERT_EQ(runtime.device_memory_domain_count(backend), 6u);</span>
+<span id="L745">  ASSERT_EQ(runtime.device_topology_node_count(backend), 6u);</span>
+<span id="L746">  ASSERT_EQ(runtime.device_topology_link_count(backend), 2u);</span>
+<span id="L747">  ASSERT_EQ(runtime.device_timestamp_domain_count(backend), 2u);</span>
+<span id="L748">  for (std::size_t index = 0; index &lt; 6; ++index) {</span>
+<span id="L749">    rt::DeviceMemoryDomainHandle handle;</span>
+<span id="L750">    rt::HalV2MemoryDomain domain;</span>
+<span id="L751">    ASSERT_TRUE(</span>
+<span id="L752">        runtime.device_memory_domain_at(backend, index, handle, domain));</span>
+<span id="L753">    EXPECT_EQ(handle.backend, backend);</span>
+<span id="L754">    EXPECT_EQ(handle.identity, index + 1);</span>
+<span id="L755">    EXPECT_EQ(domain.kind, index + 1);</span>
+<span id="L756">  }</span>
+<span id="L757">  rt::DeviceTopologyLinkHandle link_handle;</span>
+<span id="L758">  rt::HalV2TopologyLink link;</span>
+<span id="L759">  ASSERT_TRUE(runtime.device_topology_link_at(backend, 1, link_handle, link));</span>
+<span id="L760">  EXPECT_EQ(link_handle.backend, backend);</span>
+<span id="L761">  EXPECT_EQ(link_handle.identity, 302u);</span>
+<span id="L762">  EXPECT_EQ(link.kind,</span>
+<span id="L763">            static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyLinkKind::peer));</span>
+<span id="L764">  rt::DeviceTimestampDomainHandle completion_domain;</span>
+<span id="L765">  ASSERT_TRUE(</span>
+<span id="L766">      runtime.device_completion_timestamp_domain(backend, completion_domain));</span>
+<span id="L767">  EXPECT_EQ(completion_domain.identity, 202u);</span>
+<span id="L768"></span>
+<span id="L769">  probe.snapshot.memory_domains[0].identity = 999;</span>
+<span id="L770">  ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L771">  EXPECT_EQ(domain_at(runtime, backend, 0).identity, 1u);</span>
+<span id="L772">  ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L773">  EXPECT_EQ(runtime.device_memory_domain_count(backend), 6u);</span>
+<span id="L774">  ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L775">  EXPECT_EQ(runtime.device_memory_domain_count(backend), 6u);</span>
+<span id="L776">  EXPECT_EQ(domain_at(runtime, backend, 5).identity, 6u);</span>
+<span id="L777">}</span>
+<span id="L778"></span>
+<span id="L779">TEST(HeterogeneousMemory, MalformedDiscoveryFailsWithoutPublication) {</span>
+<span id="L780">  const auto expect_rejected = [](auto mutate) {</span>
+<span id="L781">    MemoryBackend probe;</span>
+<span id="L782">    mutate(probe);</span>
+<span id="L783">    rt::Runtime runtime;</span>
+<span id="L784">    EXPECT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L785">    rt::DeviceBackendHandle backend;</span>
+<span id="L786">    EXPECT_EQ(register_memory_backend(runtime, probe, &quot;bad&quot;, backend),</span>
+<span id="L787">              rt::Status::invalid_argument);</span>
+<span id="L788">    EXPECT_FALSE(backend.valid());</span>
+<span id="L789">    EXPECT_EQ(runtime.device_backend_count(), 0u);</span>
+<span id="L790">  };</span>
+<span id="L791"></span>
+<span id="L792">  expect_rejected([](auto &amp;p) {</span>
+<span id="L793">    p.snapshot.memory_domain_count = rt::hal_v2_memory_domain_capacity + 1;</span>
+<span id="L794">  });</span>
+<span id="L795">  expect_rejected(</span>
+<span id="L796">      [](auto &amp;p) { p.snapshot.struct_size = sizeof(p.snapshot) - 1; });</span>
+<span id="L797">  expect_rejected([](auto &amp;p) { p.snapshot.extension_version = 2; });</span>
+<span id="L798">  expect_rejected([](auto &amp;p) {</span>
+<span id="L799">    p.snapshot.topology_node_count = rt::hal_v2_topology_node_capacity + 1;</span>
+<span id="L800">  });</span>
+<span id="L801">  expect_rejected([](auto &amp;p) {</span>
+<span id="L802">    p.snapshot.timestamp_domain_count =</span>
+<span id="L803">        rt::hal_v2_timestamp_domain_capacity + 1;</span>
+<span id="L804">  });</span>
+<span id="L805">  expect_rejected([](auto &amp;p) {</span>
+<span id="L806">    p.snapshot.memory_domains[1].identity =</span>
+<span id="L807">        p.snapshot.memory_domains[0].identity;</span>
+<span id="L808">  });</span>
+<span id="L809">  expect_rejected([](auto &amp;p) {</span>
+<span id="L810">    p.snapshot.memory_domains[0].struct_size =</span>
+<span id="L811">        sizeof(rt::HalV2MemoryDomain) - 1;</span>
+<span id="L812">  });</span>
+<span id="L813">  expect_rejected(</span>
+<span id="L814">      [](auto &amp;p) { p.snapshot.memory_domains[0].extension_version = 2; });</span>
+<span id="L815">  expect_rejected([](auto &amp;p) {</span>
+<span id="L816">    p.snapshot.memory_domains[0].topology_node_identity = 999;</span>
+<span id="L817">  });</span>
+<span id="L818">  expect_rejected(</span>
+<span id="L819">      [](auto &amp;p) { p.snapshot.memory_domains[0].byte_granularity = 0; });</span>
+<span id="L820">  expect_rejected([](auto &amp;p) { p.snapshot.memory_domains[0].alignment = 3; });</span>
+<span id="L821">  expect_rejected(</span>
+<span id="L822">      [](auto &amp;p) { p.snapshot.memory_domains[0].offset_granularity = 3; });</span>
+<span id="L823">  expect_rejected([](auto &amp;p) { p.snapshot.memory_domains[0].kind = 99; });</span>
+<span id="L824">  expect_rejected([](auto &amp;p) {</span>
+<span id="L825">    p.snapshot.memory_domains[2].ownership_modes =</span>
+<span id="L826">        rt::hal_v2_memory_ownership_borrowed_host;</span>
+<span id="L827">  });</span>
+<span id="L828">  expect_rejected([](auto &amp;p) {</span>
+<span id="L829">    p.snapshot.memory_domains[0].access = RTFW_DEVICE_BUFFER_DEVICE_READ;</span>
+<span id="L830">  });</span>
+<span id="L831">  expect_rejected([](auto &amp;p) {</span>
+<span id="L832">    p.snapshot.memory_domains[0].required_synchronization =</span>
+<span id="L833">        rt::hal_v2_memory_sync_flush;</span>
+<span id="L834">  });</span>
+<span id="L835">  expect_rejected(</span>
+<span id="L836">      [](auto &amp;p) { p.snapshot.memory_domains[0].reserved[0] = 1; });</span>
+<span id="L837">  expect_rejected([](auto &amp;p) { p.snapshot.topology_nodes[0].reserved0 = 1; });</span>
+<span id="L838">  expect_rejected([](auto &amp;p) {</span>
+<span id="L839">    p.snapshot.topology_links[1].destination_node_identity = 999;</span>
+<span id="L840">  });</span>
+<span id="L841">  expect_rejected([](auto &amp;p) {</span>
+<span id="L842">    p.snapshot.topology_links[1].destination_node_identity = 105;</span>
+<span id="L843">  });</span>
+<span id="L844">  expect_rejected([](auto &amp;p) {</span>
+<span id="L845">    p.snapshot.topology_links[0] = p.snapshot.topology_links[1];</span>
+<span id="L846">    p.snapshot.topology_links[0].identity = 303;</span>
+<span id="L847">  });</span>
+<span id="L848">  expect_rejected(</span>
+<span id="L849">      [](auto &amp;p) { p.snapshot.topology_links[1].source_node_identity = 104; });</span>
+<span id="L850">  expect_rejected([](auto &amp;p) {</span>
+<span id="L851">    p.snapshot.memory_domains[5].topology_node_identity = 104;</span>
+<span id="L852">  });</span>
+<span id="L853">  expect_rejected(</span>
+<span id="L854">      [](auto &amp;p) { p.snapshot.topology_links[1].reserved[0] = 1; });</span>
+<span id="L855">  expect_rejected([](auto &amp;p) { p.snapshot.topology_link_count = 1; });</span>
+<span id="L856">  expect_rejected([](auto &amp;p) {</span>
+<span id="L857">    p.snapshot.timestamp_domains[1].supports_correlation = 2;</span>
+<span id="L858">  });</span>
+<span id="L859">  expect_rejected([](auto &amp;p) {</span>
+<span id="L860">    p.snapshot.timestamp_domains[1].correlation_destination_identity = 999;</span>
+<span id="L861">  });</span>
+<span id="L862">  expect_rejected(</span>
+<span id="L863">      [](auto &amp;p) { p.snapshot.completion_timestamp_domain_identity = 999; });</span>
+<span id="L864">  expect_rejected(</span>
+<span id="L865">      [](auto &amp;p) { p.snapshot.timestamp_domains[0].tick_denominator = 0; });</span>
+<span id="L866">  expect_rejected([](auto &amp;p) {</span>
+<span id="L867">    p.snapshot.timestamp_domains[1].wrap_ticks =</span>
+<span id="L868">        std::numeric_limits&lt;std::uint64_t&gt;::max();</span>
+<span id="L869">    p.snapshot.timestamp_domains[1].tick_numerator_ns = 2;</span>
+<span id="L870">  });</span>
+<span id="L871">  expect_rejected(</span>
+<span id="L872">      [](auto &amp;p) { p.snapshot.timestamp_domains[0].reserved2 = 1; });</span>
+<span id="L873">  expect_rejected([](auto &amp;p) { p.leave_discovery_untouched = true; });</span>
+<span id="L874">  expect_rejected([](auto &amp;p) { p.partially_write_discovery = true; });</span>
+<span id="L875">}</span>
+<span id="L876"></span>
+<span id="L877">TEST(HeterogeneousMemory, MalformedExtensionTableFailsWithoutDiscovery) {</span>
+<span id="L878">  const auto expect_rejected = [](auto mutate) {</span>
+<span id="L879">    MemoryBackend probe;</span>
+<span id="L880">    auto extension = probe.extension();</span>
+<span id="L881">    mutate(extension);</span>
+<span id="L882">    rt::Runtime runtime;</span>
+<span id="L883">    ASSERT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L884">    rt::DeviceBackendHandle backend;</span>
+<span id="L885">    EXPECT_EQ(runtime.register_device_backend(</span>
+<span id="L886">                  {&quot;bad-extension&quot;, probe.api(), &amp;extension}, backend),</span>
+<span id="L887">              rt::Status::invalid_argument);</span>
+<span id="L888">    EXPECT_FALSE(backend.valid());</span>
+<span id="L889">    EXPECT_EQ(runtime.device_backend_count(), 0u);</span>
+<span id="L890">    EXPECT_EQ(probe.discovery_calls, 0u);</span>
+<span id="L891">  };</span>
+<span id="L892">  expect_rejected(</span>
+<span id="L893">      [](auto &amp;extension) { extension.struct_size = sizeof(extension) - 1; });</span>
+<span id="L894">  expect_rejected([](auto &amp;extension) { extension.extension_version = 2; });</span>
+<span id="L895">  expect_rejected([](auto &amp;extension) { extension.instance = nullptr; });</span>
+<span id="L896">  expect_rejected([](auto &amp;extension) { extension.discover = nullptr; });</span>
+<span id="L897">  expect_rejected([](auto &amp;extension) { extension.register_memory = nullptr; });</span>
+<span id="L898">  expect_rejected(</span>
+<span id="L899">      [](auto &amp;extension) { extension.unregister_memory = nullptr; });</span>
+<span id="L900">  expect_rejected(</span>
+<span id="L901">      [](auto &amp;extension) { extension.query_timestamp_correlation = nullptr; });</span>
+<span id="L902">  expect_rejected([](auto &amp;extension) { extension.reserved[0] = 1; });</span>
+<span id="L903">}</span>
+<span id="L904"></span>
+<span id="L905">TEST(HeterogeneousMemory, DiscoveryAndCorrelationExceptionsAreContained) {</span>
+<span id="L906">  MemoryBackend discovery_probe;</span>
+<span id="L907">  discovery_probe.throw_discovery = true;</span>
+<span id="L908">  rt::Runtime rejected;</span>
+<span id="L909">  ASSERT_EQ(rejected.configure(memory_config()), rt::Status::ok);</span>
+<span id="L910">  rt::DeviceBackendHandle ignored;</span>
+<span id="L911">  EXPECT_EQ(</span>
+<span id="L912">      register_memory_backend(rejected, discovery_probe, &quot;throw&quot;, ignored),</span>
+<span id="L913">      rt::Status::internal_error);</span>
+<span id="L914">  EXPECT_FALSE(ignored.valid());</span>
+<span id="L915"></span>
+<span id="L916">  MemoryBackend correlation_probe;</span>
+<span id="L917">  rt::Runtime runtime;</span>
+<span id="L918">  ASSERT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L919">  rt::DeviceBackendHandle backend;</span>
+<span id="L920">  ASSERT_EQ(</span>
+<span id="L921">      register_memory_backend(runtime, correlation_probe, &quot;corr&quot;, backend),</span>
+<span id="L922">      rt::Status::ok);</span>
+<span id="L923">  ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L924">  ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L925">  rt::DeviceTimestampDomainHandle destination;</span>
+<span id="L926">  rt::DeviceTimestampDomainHandle source;</span>
+<span id="L927">  rt::HalV2TimestampDomain descriptor;</span>
+<span id="L928">  ASSERT_TRUE(</span>
+<span id="L929">      runtime.device_timestamp_domain_at(backend, 0, destination, descriptor));</span>
+<span id="L930">  ASSERT_TRUE(</span>
+<span id="L931">      runtime.device_timestamp_domain_at(backend, 1, source, descriptor));</span>
+<span id="L932">  correlation_probe.throw_correlation = true;</span>
+<span id="L933">  rt::HalV2TimestampCorrelation output;</span>
+<span id="L934">  EXPECT_EQ(runtime.query_device_timestamp_correlation(backend, source,</span>
+<span id="L935">                                                       destination, output),</span>
+<span id="L936">            rt::Status::device_error);</span>
+<span id="L937">  EXPECT_EQ(output.generation, 0u);</span>
+<span id="L938">  EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L939">}</span>
+<span id="L940"></span>
+<span id="L941">TEST(HeterogeneousMemory, CoreOnlyNativeAndV1ExposeOnlyImplicitHost) {</span>
+<span id="L942">  MemoryBackend native;</span>
+<span id="L943">  rt::Runtime runtime;</span>
+<span id="L944">  ASSERT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L945">  rt::DeviceBackendHandle native_handle;</span>
+<span id="L946">  ASSERT_EQ(runtime.register_device_backend({&quot;core-only&quot;, native.api()},</span>
+<span id="L947">                                            native_handle),</span>
+<span id="L948">            rt::Status::ok);</span>
+<span id="L949">  ASSERT_EQ(runtime.device_memory_domain_count(native_handle), 1u);</span>
+<span id="L950">  rt::DeviceMemoryDomainHandle domain;</span>
+<span id="L951">  rt::HalV2MemoryDomain descriptor;</span>
+<span id="L952">  ASSERT_TRUE(</span>
+<span id="L953">      runtime.device_memory_domain_at(native_handle, 0, domain, descriptor));</span>
+<span id="L954">  EXPECT_EQ(descriptor.kind,</span>
+<span id="L955">            static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryDomainKind::host));</span>
+<span id="L956">  EXPECT_EQ(descriptor.ownership_modes,</span>
+<span id="L957">            rt::hal_v2_memory_ownership_borrowed_host);</span>
+<span id="L958">  EXPECT_EQ(descriptor.required_synchronization, 0u);</span>
+<span id="L959">  EXPECT_EQ(runtime.device_topology_node_count(native_handle), 0u);</span>
+<span id="L960">  EXPECT_EQ(runtime.device_timestamp_domain_count(native_handle), 0u);</span>
+<span id="L961"></span>
+<span id="L962">  // A native core-only backend cannot turn its implicit compatibility domain</span>
+<span id="L963">  // into an explicit heterogeneous registration.</span>
+<span id="L964">  alignas(8) std::array&lt;std::byte, 8&gt; storage{};</span>
+<span id="L965">  rt::DeviceBufferHandle buffer;</span>
+<span id="L966">  EXPECT_EQ(</span>
+<span id="L967">      runtime.register_device_buffer({&quot;heterogeneous&quot;,</span>
+<span id="L968">                                      native_handle,</span>
+<span id="L969">                                      domain,</span>
+<span id="L970">                                      storage,</span>
+<span id="L971">                                      {},</span>
+<span id="L972">                                      8,</span>
+<span id="L973">                                      rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L974">                                      RTFW_DEVICE_BUFFER_HOST_READ,</span>
+<span id="L975">                                      rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L976">                                      0},</span>
+<span id="L977">                                     buffer),</span>
+<span id="L978">      rt::Status::invalid_argument);</span>
+<span id="L979"></span>
+<span id="L980">  V1Backend v1;</span>
+<span id="L981">  rt::Runtime adapted;</span>
+<span id="L982">  ASSERT_EQ(adapted.configure(memory_config()), rt::Status::ok);</span>
+<span id="L983">  rt::DeviceBackendHandle adapted_handle;</span>
+<span id="L984">  ASSERT_EQ(</span>
+<span id="L985">      adapted.register_device_backend({&quot;adapted&quot;, v1.api()}, adapted_handle),</span>
+<span id="L986">      rt::Status::ok);</span>
+<span id="L987">  ASSERT_EQ(adapted.device_memory_domain_count(adapted_handle), 1u);</span>
+<span id="L988">  ASSERT_TRUE(</span>
+<span id="L989">      adapted.device_memory_domain_at(adapted_handle, 0, domain, descriptor));</span>
+<span id="L990">  EXPECT_EQ(descriptor.kind,</span>
+<span id="L991">            static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryDomainKind::host));</span>
+<span id="L992">  EXPECT_EQ(descriptor.ownership_modes,</span>
+<span id="L993">            rt::hal_v2_memory_ownership_borrowed_host);</span>
+<span id="L994">  EXPECT_EQ(adapted.device_topology_node_count(adapted_handle), 0u);</span>
+<span id="L995">  EXPECT_EQ(adapted.device_topology_link_count(adapted_handle), 0u);</span>
+<span id="L996">  EXPECT_EQ(adapted.device_timestamp_domain_count(adapted_handle), 0u);</span>
+<span id="L997">}</span>
+<span id="L998"></span>
+<span id="L999">TEST(HeterogeneousMemory,</span>
+<span id="L1000">     HeterogeneousHostOpaqueAndRejectionPathsAreTransactional) {</span>
+<span id="L1001">  MemoryBackend probe;</span>
+<span id="L1002">  rt::Runtime runtime;</span>
+<span id="L1003">  ASSERT_EQ(runtime.configure(memory_config(1, 8)), rt::Status::ok);</span>
+<span id="L1004">  rt::DeviceBackendHandle backend;</span>
+<span id="L1005">  ASSERT_EQ(register_memory_backend(runtime, probe, &quot;memory&quot;, backend),</span>
+<span id="L1006">            rt::Status::ok);</span>
+<span id="L1007">  const auto host_domain = domain_at(runtime, backend, 0);</span>
+<span id="L1008">  const auto imported_domain = domain_at(runtime, backend, 3);</span>
+<span id="L1009">  alignas(64) std::array&lt;std::byte, 128&gt; storage{};</span>
+<span id="L1010">  rt::DeviceBufferHandle host_buffer;</span>
+<span id="L1011">  ASSERT_EQ(runtime.register_device_buffer(</span>
+<span id="L1012">                {&quot;host&quot;,</span>
+<span id="L1013">                 backend,</span>
+<span id="L1014">                 host_domain,</span>
+<span id="L1015">                 std::span&lt;std::byte&gt;(storage.data(), 64),</span>
+<span id="L1016">                 {},</span>
+<span id="L1017">                 64,</span>
+<span id="L1018">                 rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L1019">                 RTFW_DEVICE_BUFFER_HOST_READ | RTFW_DEVICE_BUFFER_DEVICE_READ,</span>
+<span id="L1020">                 rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L1021">                 0},</span>
+<span id="L1022">                host_buffer),</span>
+<span id="L1023">            rt::Status::ok);</span>
+<span id="L1024">  rt::DeviceBufferHandle opaque_buffer;</span>
+<span id="L1025">  ASSERT_EQ(</span>
+<span id="L1026">      runtime.register_device_buffer({&quot;opaque&quot;,</span>
+<span id="L1027">                                      backend,</span>
+<span id="L1028">                                      imported_domain,</span>
+<span id="L1029">                                      {},</span>
+<span id="L1030">                                      opaque_handle(),</span>
+<span id="L1031">                                      64,</span>
+<span id="L1032">                                      rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1033">                                      RTFW_DEVICE_BUFFER_DEVICE_READ,</span>
+<span id="L1034">                                      rt::HalV2MemoryCoherency::device_only,</span>
+<span id="L1035">                                      0},</span>
+<span id="L1036">                                     opaque_buffer),</span>
+<span id="L1037">      rt::Status::ok);</span>
+<span id="L1038">  rt::DeviceMemoryObjectInfo object;</span>
+<span id="L1039">  ASSERT_TRUE(runtime.device_memory_object_at(0, object));</span>
+<span id="L1040">  EXPECT_EQ(object.buffer, host_buffer);</span>
+<span id="L1041">  EXPECT_EQ(object.heterogeneous, 1u);</span>
+<span id="L1042">  EXPECT_EQ(object.host_addressable, 1u);</span>
+<span id="L1043">  ASSERT_TRUE(runtime.device_memory_object_at(1, object));</span>
+<span id="L1044">  EXPECT_EQ(object.buffer, opaque_buffer);</span>
+<span id="L1045">  EXPECT_EQ(object.host_addressable, 0u);</span>
+<span id="L1046">  EXPECT_EQ(object.opaque_handle_size, 4u);</span>
+<span id="L1047"></span>
+<span id="L1048">  const auto before = runtime.device_buffer_count();</span>
+<span id="L1049">  const auto reject = [&amp;](auto registration, rt::Status expected) {</span>
+<span id="L1050">    rt::DeviceBufferHandle result;</span>
+<span id="L1051">    EXPECT_EQ(runtime.register_device_buffer(registration, result), expected);</span>
+<span id="L1052">    EXPECT_FALSE(result.valid());</span>
+<span id="L1053">    EXPECT_EQ(runtime.device_buffer_count(), before);</span>
+<span id="L1054">  };</span>
+<span id="L1055">  reject(</span>
+<span id="L1056">      rt::HeterogeneousDeviceBufferRegistration{</span>
+<span id="L1057">          &quot;empty&quot;,</span>
+<span id="L1058">          backend,</span>
+<span id="L1059">          host_domain,</span>
+<span id="L1060">          {},</span>
+<span id="L1061">          {},</span>
+<span id="L1062">          64,</span>
+<span id="L1063">          rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L1064">          RTFW_DEVICE_BUFFER_HOST_READ,</span>
+<span id="L1065">          rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L1066">          0},</span>
+<span id="L1067">      rt::Status::invalid_argument);</span>
+<span id="L1068">  reject(</span>
+<span id="L1069">      rt::HeterogeneousDeviceBufferRegistration{</span>
+<span id="L1070">          &quot;range&quot;,</span>
+<span id="L1071">          backend,</span>
+<span id="L1072">          host_domain,</span>
+<span id="L1073">          std::span&lt;std::byte&gt;(storage.data() + 64, 64),</span>
+<span id="L1074">          {},</span>
+<span id="L1075">          32,</span>
+<span id="L1076">          rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L1077">          RTFW_DEVICE_BUFFER_HOST_READ,</span>
+<span id="L1078">          rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L1079">          0},</span>
+<span id="L1080">      rt::Status::invalid_argument);</span>
+<span id="L1081">  reject(</span>
+<span id="L1082">      rt::HeterogeneousDeviceBufferRegistration{</span>
+<span id="L1083">          &quot;unaligned&quot;,</span>
+<span id="L1084">          backend,</span>
+<span id="L1085">          host_domain,</span>
+<span id="L1086">          std::span&lt;std::byte&gt;(storage.data() + 1, 8),</span>
+<span id="L1087">          {},</span>
+<span id="L1088">          8,</span>
+<span id="L1089">          rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L1090">          RTFW_DEVICE_BUFFER_HOST_READ,</span>
+<span id="L1091">          rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L1092">          0},</span>
+<span id="L1093">      rt::Status::invalid_argument);</span>
+<span id="L1094">  reject(</span>
+<span id="L1095">      rt::HeterogeneousDeviceBufferRegistration{</span>
+<span id="L1096">          &quot;overlap&quot;,</span>
+<span id="L1097">          backend,</span>
+<span id="L1098">          host_domain,</span>
+<span id="L1099">          std::span&lt;std::byte&gt;(storage.data() + 8, 8),</span>
+<span id="L1100">          {},</span>
+<span id="L1101">          8,</span>
+<span id="L1102">          rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L1103">          RTFW_DEVICE_BUFFER_HOST_READ,</span>
+<span id="L1104">          rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L1105">          0},</span>
+<span id="L1106">      rt::Status::invalid_argument);</span>
+<span id="L1107">  reject(</span>
+<span id="L1108">      rt::HeterogeneousDeviceBufferRegistration{</span>
+<span id="L1109">          &quot;access&quot;,</span>
+<span id="L1110">          backend,</span>
+<span id="L1111">          imported_domain,</span>
+<span id="L1112">          {},</span>
+<span id="L1113">          opaque_handle(),</span>
+<span id="L1114">          64,</span>
+<span id="L1115">          rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1116">          RTFW_DEVICE_BUFFER_HOST_READ,</span>
+<span id="L1117">          rt::HalV2MemoryCoherency::device_only,</span>
+<span id="L1118">          0},</span>
+<span id="L1119">      rt::Status::invalid_argument);</span>
+<span id="L1120">  reject(</span>
+<span id="L1121">      rt::HeterogeneousDeviceBufferRegistration{</span>
+<span id="L1122">          &quot;sync&quot;,</span>
+<span id="L1123">          backend,</span>
+<span id="L1124">          host_domain,</span>
+<span id="L1125">          std::span&lt;std::byte&gt;(storage.data() + 64, 64),</span>
+<span id="L1126">          {},</span>
+<span id="L1127">          64,</span>
+<span id="L1128">          rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L1129">          RTFW_DEVICE_BUFFER_HOST_READ,</span>
+<span id="L1130">          rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L1131">          rt::hal_v2_memory_sync_flush},</span>
+<span id="L1132">      rt::Status::invalid_argument);</span>
+<span id="L1133">  auto malformed = opaque_handle();</span>
+<span id="L1134">  malformed.bytes[4] = std::byte{1};</span>
+<span id="L1135">  reject(</span>
+<span id="L1136">      rt::HeterogeneousDeviceBufferRegistration{</span>
+<span id="L1137">          &quot;opaque-tail&quot;,</span>
+<span id="L1138">          backend,</span>
+<span id="L1139">          imported_domain,</span>
+<span id="L1140">          {},</span>
+<span id="L1141">          malformed,</span>
+<span id="L1142">          64,</span>
+<span id="L1143">          rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1144">          RTFW_DEVICE_BUFFER_DEVICE_READ,</span>
+<span id="L1145">          rt::HalV2MemoryCoherency::device_only,</span>
+<span id="L1146">          0},</span>
+<span id="L1147">      rt::Status::invalid_argument);</span>
+<span id="L1148"></span>
+<span id="L1149">  ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1150">  ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1151">  ASSERT_EQ(probe.memory_register_calls, 2u);</span>
+<span id="L1152">  ASSERT_EQ(probe.registrations.size(), 2u);</span>
+<span id="L1153">  EXPECT_EQ(probe.registrations[0].domain_identity, host_domain.identity);</span>
+<span id="L1154">  EXPECT_EQ(probe.registrations[0].host_data, storage.data());</span>
+<span id="L1155">  EXPECT_EQ(probe.registrations[0].opaque_handle.size, 0u);</span>
+<span id="L1156">  EXPECT_EQ(probe.registrations[1].domain_identity, imported_domain.identity);</span>
+<span id="L1157">  EXPECT_EQ(probe.registrations[1].host_data, nullptr);</span>
+<span id="L1158">  EXPECT_EQ(probe.registrations[1].opaque_handle.size, 4u);</span>
+<span id="L1159">  ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1160">  ASSERT_EQ(probe.memory_unregister_calls, 2u);</span>
+<span id="L1161">  ASSERT_EQ(probe.unregistrations.size(), 2u);</span>
+<span id="L1162">  EXPECT_EQ(probe.unregistrations[0].domain_identity, imported_domain.identity);</span>
+<span id="L1163">  EXPECT_EQ(probe.unregistrations[1].domain_identity, host_domain.identity);</span>
+<span id="L1164">}</span>
+<span id="L1165"></span>
+<span id="L1166">TEST(HeterogeneousMemory,</span>
+<span id="L1167">     ForeignHandlesAndBackendCapabilitiesRejectBeforePublication) {</span>
+<span id="L1168">  MemoryBackend first;</span>
+<span id="L1169">  MemoryBackend second;</span>
+<span id="L1170">  second.capabilities.max_buffer_bytes = 32;</span>
+<span id="L1171">  rt::Runtime one;</span>
+<span id="L1172">  rt::Runtime two;</span>
+<span id="L1173">  ASSERT_EQ(one.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1174">  ASSERT_EQ(two.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1175">  rt::DeviceBackendHandle one_backend;</span>
+<span id="L1176">  rt::DeviceBackendHandle two_backend;</span>
+<span id="L1177">  ASSERT_EQ(register_memory_backend(one, first, &quot;one&quot;, one_backend),</span>
+<span id="L1178">            rt::Status::ok);</span>
+<span id="L1179">  ASSERT_EQ(register_memory_backend(two, second, &quot;two&quot;, two_backend),</span>
+<span id="L1180">            rt::Status::ok);</span>
+<span id="L1181">  const auto foreign_domain = domain_at(one, one_backend, 0);</span>
+<span id="L1182">  const auto two_domain = domain_at(two, two_backend, 0);</span>
+<span id="L1183">  alignas(64) std::array&lt;std::byte, 64&gt; storage{};</span>
+<span id="L1184">  rt::DeviceBufferHandle output;</span>
+<span id="L1185">  EXPECT_EQ(two.register_device_buffer({&quot;foreign&quot;,</span>
+<span id="L1186">                                        two_backend,</span>
+<span id="L1187">                                        foreign_domain,</span>
+<span id="L1188">                                        storage,</span>
+<span id="L1189">                                        {},</span>
+<span id="L1190">                                        64,</span>
+<span id="L1191">                                        rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L1192">                                        RTFW_DEVICE_BUFFER_HOST_READ,</span>
+<span id="L1193">                                        rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L1194">                                        0},</span>
+<span id="L1195">                                       output),</span>
+<span id="L1196">            rt::Status::invalid_handle);</span>
+<span id="L1197">  EXPECT_EQ(two.register_device_buffer({&quot;too-large&quot;,</span>
+<span id="L1198">                                        two_backend,</span>
+<span id="L1199">                                        two_domain,</span>
+<span id="L1200">                                        storage,</span>
+<span id="L1201">                                        {},</span>
+<span id="L1202">                                        64,</span>
+<span id="L1203">                                        rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L1204">                                        RTFW_DEVICE_BUFFER_HOST_READ,</span>
+<span id="L1205">                                        rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L1206">                                        0},</span>
+<span id="L1207">                                       output),</span>
+<span id="L1208">            rt::Status::capacity_exceeded);</span>
+<span id="L1209">  EXPECT_EQ(two.device_buffer_count(), 0u);</span>
+<span id="L1210">}</span>
+<span id="L1211"></span>
+<span id="L1212">TEST(HeterogeneousMemory, MixedRegistrationRollbackIsReverseAndRetryable) {</span>
+<span id="L1213">  MemoryBackend probe;</span>
+<span id="L1214">  probe.fail_registration_call = 1;</span>
+<span id="L1215">  rt::Runtime runtime;</span>
+<span id="L1216">  ASSERT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1217">  rt::DeviceBackendHandle backend;</span>
+<span id="L1218">  ASSERT_EQ(register_memory_backend(runtime, probe, &quot;mixed&quot;, backend),</span>
+<span id="L1219">            rt::Status::ok);</span>
+<span id="L1220">  alignas(64) std::array&lt;std::byte, 64&gt; legacy_storage{};</span>
+<span id="L1221">  rt::DeviceBufferHandle legacy;</span>
+<span id="L1222">  ASSERT_EQ(runtime.register_device_buffer({&quot;legacy&quot;, backend, legacy_storage},</span>
+<span id="L1223">                                           legacy),</span>
+<span id="L1224">            rt::Status::ok);</span>
+<span id="L1225">  const auto imported = domain_at(runtime, backend, 3);</span>
+<span id="L1226">  rt::DeviceBufferHandle heterogeneous;</span>
+<span id="L1227">  ASSERT_EQ(</span>
+<span id="L1228">      runtime.register_device_buffer({&quot;heterogeneous&quot;,</span>
+<span id="L1229">                                      backend,</span>
+<span id="L1230">                                      imported,</span>
+<span id="L1231">                                      {},</span>
+<span id="L1232">                                      opaque_handle(),</span>
+<span id="L1233">                                      64,</span>
+<span id="L1234">                                      rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1235">                                      RTFW_DEVICE_BUFFER_DEVICE_READ,</span>
+<span id="L1236">                                      rt::HalV2MemoryCoherency::device_only,</span>
+<span id="L1237">                                      0},</span>
+<span id="L1238">                                     heterogeneous),</span>
+<span id="L1239">      rt::Status::ok);</span>
+<span id="L1240">  ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1241">  EXPECT_EQ(runtime.start(), rt::Status::device_error);</span>
+<span id="L1242">  EXPECT_EQ(probe.order, (std::vector&lt;char&gt;{&#x27;L&#x27;, &#x27;H&#x27;, &#x27;U&#x27;, &#x27;l&#x27;}));</span>
+<span id="L1243">  probe.fail_registration_call = 0;</span>
+<span id="L1244">  probe.order.clear();</span>
+<span id="L1245">  ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1246">  EXPECT_EQ(probe.order, (std::vector&lt;char&gt;{&#x27;L&#x27;, &#x27;H&#x27;}));</span>
+<span id="L1247">  ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1248">  EXPECT_EQ(probe.order, (std::vector&lt;char&gt;{&#x27;L&#x27;, &#x27;H&#x27;, &#x27;U&#x27;, &#x27;l&#x27;}));</span>
+<span id="L1249">}</span>
+<span id="L1250"></span>
+<span id="L1251">TEST(HeterogeneousMemory,</span>
+<span id="L1252">     UncertainEmptyTokenBlocksShutdownAndRetriesOnlyUnresolved) {</span>
+<span id="L1253">  MemoryBackend probe;</span>
+<span id="L1254">  probe.fail_registration_call = 1;</span>
+<span id="L1255">  probe.failed_registration_has_empty_token = true;</span>
+<span id="L1256">  probe.unregister_status = rt::HalV2Status::error;</span>
+<span id="L1257">  rt::Runtime runtime;</span>
+<span id="L1258">  ASSERT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1259">  rt::DeviceBackendHandle backend;</span>
+<span id="L1260">  ASSERT_EQ(register_memory_backend(runtime, probe, &quot;uncertain&quot;, backend),</span>
+<span id="L1261">            rt::Status::ok);</span>
+<span id="L1262">  const auto imported = domain_at(runtime, backend, 3);</span>
+<span id="L1263">  rt::DeviceBufferHandle buffer;</span>
+<span id="L1264">  ASSERT_EQ(</span>
+<span id="L1265">      runtime.register_device_buffer({&quot;opaque&quot;,</span>
+<span id="L1266">                                      backend,</span>
+<span id="L1267">                                      imported,</span>
+<span id="L1268">                                      {},</span>
+<span id="L1269">                                      opaque_handle(),</span>
+<span id="L1270">                                      64,</span>
+<span id="L1271">                                      rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1272">                                      RTFW_DEVICE_BUFFER_DEVICE_READ,</span>
+<span id="L1273">                                      rt::HalV2MemoryCoherency::device_only,</span>
+<span id="L1274">                                      0},</span>
+<span id="L1275">                                     buffer),</span>
+<span id="L1276">      rt::Status::ok);</span>
+<span id="L1277">  ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1278">  EXPECT_EQ(runtime.start(), rt::Status::device_error);</span>
+<span id="L1279">  ASSERT_EQ(probe.memory_unregister_calls, 1u);</span>
+<span id="L1280">  ASSERT_EQ(probe.unregistration_tokens.size(), 1u);</span>
+<span id="L1281">  EXPECT_EQ(probe.unregistration_tokens[0].submission_token, 0u);</span>
+<span id="L1282">  EXPECT_EQ(probe.unregistration_tokens[0].native_token.size, 0u);</span>
+<span id="L1283">  probe.unregister_status = rt::HalV2Status::ok;</span>
+<span id="L1284">  EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1285">  EXPECT_EQ(probe.memory_unregister_calls, 2u);</span>
+<span id="L1286">  EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1287">  EXPECT_EQ(probe.memory_unregister_calls, 2u);</span>
+<span id="L1288">}</span>
+<span id="L1289"></span>
+<span id="L1290">TEST(HeterogeneousMemory,</span>
+<span id="L1291">     CorrelationSuccessUnsupportedAndMalformedAreObservable) {</span>
+<span id="L1292">  MemoryBackend probe;</span>
+<span id="L1293">  rt::Runtime runtime;</span>
+<span id="L1294">  ASSERT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1295">  rt::DeviceBackendHandle backend;</span>
+<span id="L1296">  ASSERT_EQ(register_memory_backend(runtime, probe, &quot;correlation&quot;, backend),</span>
+<span id="L1297">            rt::Status::ok);</span>
+<span id="L1298">  rt::DeviceTimestampDomainHandle destination;</span>
+<span id="L1299">  rt::DeviceTimestampDomainHandle source;</span>
+<span id="L1300">  rt::HalV2TimestampDomain descriptor;</span>
+<span id="L1301">  ASSERT_TRUE(</span>
+<span id="L1302">      runtime.device_timestamp_domain_at(backend, 0, destination, descriptor));</span>
+<span id="L1303">  ASSERT_TRUE(</span>
+<span id="L1304">      runtime.device_timestamp_domain_at(backend, 1, source, descriptor));</span>
+<span id="L1305">  rt::HalV2TimestampCorrelation output;</span>
+<span id="L1306">  EXPECT_EQ(runtime.query_device_timestamp_correlation(backend, source,</span>
+<span id="L1307">                                                       destination, output),</span>
+<span id="L1308">            rt::Status::invalid_state);</span>
+<span id="L1309">  ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1310">  ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1311">  ASSERT_EQ(runtime.query_device_timestamp_correlation(backend, source,</span>
+<span id="L1312">                                                       destination, output),</span>
+<span id="L1313">            rt::Status::ok);</span>
+<span id="L1314">  EXPECT_EQ(output.generation, 7u);</span>
+<span id="L1315">  EXPECT_EQ(output.source_value, 1000u);</span>
+<span id="L1316">  EXPECT_EQ(output.destination_value, 2000u);</span>
+<span id="L1317">  EXPECT_EQ(output.uncertainty_ns, 25u);</span>
+<span id="L1318">  const auto successful_calls = probe.correlation_calls;</span>
+<span id="L1319">  EXPECT_EQ(runtime.query_device_timestamp_correlation(backend, destination,</span>
+<span id="L1320">                                                       source, output),</span>
+<span id="L1321">            rt::Status::device_error);</span>
+<span id="L1322">  EXPECT_EQ(probe.correlation_calls, successful_calls);</span>
+<span id="L1323">  probe.malformed_correlation = true;</span>
+<span id="L1324">  EXPECT_EQ(runtime.query_device_timestamp_correlation(backend, source,</span>
+<span id="L1325">                                                       destination, output),</span>
+<span id="L1326">            rt::Status::device_error);</span>
+<span id="L1327">  EXPECT_EQ(output.generation, 0u);</span>
+<span id="L1328">  probe.malformed_correlation = false;</span>
+<span id="L1329">  probe.correlation_status = rt::HalV2Status::unsupported;</span>
+<span id="L1330">  EXPECT_EQ(runtime.query_device_timestamp_correlation(backend, source,</span>
+<span id="L1331">                                                       destination, output),</span>
+<span id="L1332">            rt::Status::device_error);</span>
+<span id="L1333">  EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1334">  EXPECT_EQ(runtime.query_device_timestamp_correlation(backend, source,</span>
+<span id="L1335">                                                       destination, output),</span>
+<span id="L1336">            rt::Status::invalid_state);</span>
+<span id="L1337">}</span>
+<span id="L1338"></span>
+<span id="L1339">TEST(HeterogeneousMemory,</span>
+<span id="L1340">     CorrelationRejectsAnActiveFrameWithoutEnteringTheBackend) {</span>
+<span id="L1341">  using namespace std::chrono_literals;</span>
+<span id="L1342"></span>
+<span id="L1343">  MemoryBackend probe;</span>
+<span id="L1344">  ActiveFrameGate gate;</span>
+<span id="L1345">  rt::Runtime runtime;</span>
+<span id="L1346">  ASSERT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1347">  rt::DeviceBackendHandle backend;</span>
+<span id="L1348">  ASSERT_EQ(register_memory_backend(runtime, probe, &quot;active-correlation&quot;,</span>
+<span id="L1349">                                    backend),</span>
+<span id="L1350">            rt::Status::ok);</span>
+<span id="L1351">  rt::DeviceTimestampDomainHandle destination;</span>
+<span id="L1352">  rt::DeviceTimestampDomainHandle source;</span>
+<span id="L1353">  rt::HalV2TimestampDomain descriptor;</span>
+<span id="L1354">  ASSERT_TRUE(</span>
+<span id="L1355">      runtime.device_timestamp_domain_at(backend, 0, destination, descriptor));</span>
+<span id="L1356">  ASSERT_TRUE(</span>
+<span id="L1357">      runtime.device_timestamp_domain_at(backend, 1, source, descriptor));</span>
+<span id="L1358">  rt::PhaseHandle phase;</span>
+<span id="L1359">  ASSERT_EQ(runtime.register_callback({&quot;hold&quot;, &amp;hold_active_frame, &amp;gate},</span>
+<span id="L1360">                                      phase),</span>
+<span id="L1361">            rt::Status::ok);</span>
+<span id="L1362">  ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1363">  ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1364"></span>
+<span id="L1365">  rt::Status step_status = rt::Status::internal_error;</span>
+<span id="L1366">  std::thread step_thread([&amp;] {</span>
+<span id="L1367">    step_status = runtime.step({1, 1ms, std::nullopt});</span>
+<span id="L1368">  });</span>
+<span id="L1369">  gate.entered.wait();</span>
+<span id="L1370"></span>
+<span id="L1371">  rt::HalV2TimestampCorrelation output;</span>
+<span id="L1372">  output.generation = 99;</span>
+<span id="L1373">  EXPECT_EQ(runtime.query_device_timestamp_correlation(backend, source,</span>
+<span id="L1374">                                                       destination, output),</span>
+<span id="L1375">            rt::Status::invalid_state);</span>
+<span id="L1376">  EXPECT_EQ(output.generation, 0u);</span>
+<span id="L1377">  EXPECT_EQ(probe.correlation_calls, 0u);</span>
+<span id="L1378"></span>
+<span id="L1379">  gate.release.count_down();</span>
+<span id="L1380">  step_thread.join();</span>
+<span id="L1381">  EXPECT_EQ(step_status, rt::Status::ok);</span>
+<span id="L1382">  EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1383">}</span>
+<span id="L1384"></span>
+<span id="L1385">TEST(HeterogeneousMemory, RuntimeHandlesSnapshotsAndTokensAreIsolated) {</span>
+<span id="L1386">  MemoryBackend first;</span>
+<span id="L1387">  MemoryBackend second;</span>
+<span id="L1388">  second.snapshot.memory_domains[0].maximum_bytes = 2048;</span>
+<span id="L1389">  rt::Runtime one;</span>
+<span id="L1390">  rt::Runtime two;</span>
+<span id="L1391">  ASSERT_EQ(one.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1392">  ASSERT_EQ(two.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1393">  rt::DeviceBackendHandle one_backend;</span>
+<span id="L1394">  rt::DeviceBackendHandle two_backend;</span>
+<span id="L1395">  ASSERT_EQ(register_memory_backend(one, first, &quot;same&quot;, one_backend),</span>
+<span id="L1396">            rt::Status::ok);</span>
+<span id="L1397">  ASSERT_EQ(register_memory_backend(two, second, &quot;same&quot;, two_backend),</span>
+<span id="L1398">            rt::Status::ok);</span>
+<span id="L1399">  EXPECT_NE(one_backend.owner(), two_backend.owner());</span>
+<span id="L1400">  rt::DeviceMemoryDomainHandle handle;</span>
+<span id="L1401">  rt::HalV2MemoryDomain descriptor;</span>
+<span id="L1402">  ASSERT_TRUE(one.device_memory_domain_at(one_backend, 0, handle, descriptor));</span>
+<span id="L1403">  EXPECT_EQ(descriptor.maximum_bytes, 4096u);</span>
+<span id="L1404">  ASSERT_TRUE(two.device_memory_domain_at(two_backend, 0, handle, descriptor));</span>
+<span id="L1405">  EXPECT_EQ(descriptor.maximum_bytes, 2048u);</span>
+<span id="L1406">  EXPECT_FALSE(two.device_memory_domain_at(one_backend, 0, handle, descriptor));</span>
+<span id="L1407">}</span>
+<span id="L1408"></span>
+<span id="L1409">TEST(HeterogeneousMemory, SemanticSnapshotFieldsParticipateInGraphIdentity) {</span>
+<span id="L1410">  MemoryBackend first;</span>
+<span id="L1411">  MemoryBackend second;</span>
+<span id="L1412">  second.snapshot.memory_domains[0].alignment = 16;</span>
+<span id="L1413">  rt::Runtime one;</span>
+<span id="L1414">  rt::Runtime two;</span>
+<span id="L1415">  ASSERT_EQ(one.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1416">  ASSERT_EQ(two.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1417">  rt::DeviceBackendHandle backend;</span>
+<span id="L1418">  ASSERT_EQ(register_memory_backend(one, first, &quot;same&quot;, backend),</span>
+<span id="L1419">            rt::Status::ok);</span>
+<span id="L1420">  ASSERT_EQ(register_memory_backend(two, second, &quot;same&quot;, backend),</span>
+<span id="L1421">            rt::Status::ok);</span>
+<span id="L1422">  ASSERT_EQ(one.finalize(), rt::Status::ok);</span>
+<span id="L1423">  ASSERT_EQ(two.finalize(), rt::Status::ok);</span>
+<span id="L1424">  EXPECT_NE(graph_id(one), graph_id(two));</span>
+<span id="L1425">}</span>
+<span id="L1426"></span>
+<span id="L1427">TEST(HeterogeneousMemory, CoherentSubmissionTranslatesAndSyncRequiredRejects) {</span>
+<span id="L1428">  using namespace std::chrono_literals;</span>
+<span id="L1429">  {</span>
+<span id="L1430">    MemoryBackend probe;</span>
+<span id="L1431">    rt::Runtime runtime;</span>
+<span id="L1432">    ASSERT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1433">    rt::DeviceBackendHandle backend;</span>
+<span id="L1434">    ASSERT_EQ(register_memory_backend(runtime, probe, &quot;coherent&quot;, backend),</span>
+<span id="L1435">              rt::Status::ok);</span>
+<span id="L1436">    const auto imported = domain_at(runtime, backend, 3);</span>
+<span id="L1437">    rt::DeviceBufferHandle buffer;</span>
+<span id="L1438">    ASSERT_EQ(runtime.register_device_buffer(</span>
+<span id="L1439">                  {&quot;opaque&quot;,</span>
+<span id="L1440">                   backend,</span>
+<span id="L1441">                   imported,</span>
+<span id="L1442">                   {},</span>
+<span id="L1443">                   opaque_handle(),</span>
+<span id="L1444">                   64,</span>
+<span id="L1445">                   rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1446">                   RTFW_DEVICE_BUFFER_DEVICE_READ,</span>
+<span id="L1447">                   rt::HalV2MemoryCoherency::device_only,</span>
+<span id="L1448">                   0},</span>
+<span id="L1449">                  buffer),</span>
+<span id="L1450">              rt::Status::ok);</span>
+<span id="L1451">    BufferCommand command{buffer, RTFW_DEVICE_ACCESS_READ, 8, 16};</span>
+<span id="L1452">    rt::PhaseHandle phase;</span>
+<span id="L1453">    ASSERT_EQ(runtime.register_device_phase(</span>
+<span id="L1454">                  {&quot;read&quot;, backend, &amp;submit_buffer, &amp;command}, phase),</span>
+<span id="L1455">              rt::Status::ok);</span>
+<span id="L1456">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1457">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1458">    ASSERT_EQ(runtime.step({1, 1ms, std::nullopt}), rt::Status::ok);</span>
+<span id="L1459">    EXPECT_EQ(probe.submit_calls.load(std::memory_order_relaxed), 1u);</span>
+<span id="L1460">    EXPECT_EQ(probe.last_submission.buffer_count, 1u);</span>
+<span id="L1461">    EXPECT_EQ(probe.last_submission.buffers[0].buffer_token, 0x2001u);</span>
+<span id="L1462">    EXPECT_EQ(probe.last_submission.buffers[0].offset, 8u);</span>
+<span id="L1463">    EXPECT_EQ(probe.last_submission.buffers[0].bytes, 16u);</span>
+<span id="L1464">    EXPECT_EQ(probe.last_submission.buffers[0].access, RTFW_DEVICE_ACCESS_READ);</span>
+<span id="L1465">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1466">  }</span>
+<span id="L1467"></span>
+<span id="L1468">  {</span>
+<span id="L1469">    MemoryBackend probe;</span>
+<span id="L1470">    auto &amp;imported = probe.snapshot.memory_domains[3];</span>
+<span id="L1471">    imported.coherency = static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L1472">        rt::HalV2MemoryCoherency::explicit_flush_invalidate);</span>
+<span id="L1473">    imported.required_synchronization = rt::hal_v2_memory_sync_flush;</span>
+<span id="L1474">    rt::Runtime runtime;</span>
+<span id="L1475">    ASSERT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1476">    rt::DeviceBackendHandle backend;</span>
+<span id="L1477">    ASSERT_EQ(register_memory_backend(runtime, probe, &quot;synchronized&quot;, backend),</span>
+<span id="L1478">              rt::Status::ok);</span>
+<span id="L1479">    const auto domain = domain_at(runtime, backend, 3);</span>
+<span id="L1480">    rt::DeviceBufferHandle buffer;</span>
+<span id="L1481">    ASSERT_EQ(runtime.register_device_buffer(</span>
+<span id="L1482">                  {&quot;opaque&quot;,</span>
+<span id="L1483">                   backend,</span>
+<span id="L1484">                   domain,</span>
+<span id="L1485">                   {},</span>
+<span id="L1486">                   opaque_handle(),</span>
+<span id="L1487">                   64,</span>
+<span id="L1488">                   rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1489">                   RTFW_DEVICE_BUFFER_DEVICE_READ,</span>
+<span id="L1490">                   rt::HalV2MemoryCoherency::explicit_flush_invalidate,</span>
+<span id="L1491">                   rt::hal_v2_memory_sync_flush},</span>
+<span id="L1492">                  buffer),</span>
+<span id="L1493">              rt::Status::ok);</span>
+<span id="L1494">    BufferCommand command{buffer, RTFW_DEVICE_ACCESS_READ, 0, 16};</span>
+<span id="L1495">    rt::PhaseHandle phase;</span>
+<span id="L1496">    ASSERT_EQ(runtime.register_device_phase(</span>
+<span id="L1497">                  {&quot;read&quot;, backend, &amp;submit_buffer, &amp;command}, phase),</span>
+<span id="L1498">              rt::Status::ok);</span>
+<span id="L1499">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1500">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1501">    EXPECT_EQ(runtime.step({1, 1ms, std::nullopt}), rt::Status::device_error);</span>
+<span id="L1502">    EXPECT_EQ(probe.submit_calls.load(std::memory_order_relaxed), 0u);</span>
+<span id="L1503">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1504">  }</span>
+<span id="L1505">}</span>
+<span id="L1506"></span>
+<span id="L1507">TEST(MemoryPlan, HeterogeneousPayloadBytesRemainExternalAndControlIsExact) {</span>
+<span id="L1508">  const auto build = [](std::uint64_t opaque_bytes) {</span>
+<span id="L1509">    struct Result {</span>
+<span id="L1510">      rt::MemoryPlan plan{};</span>
+<span id="L1511">      rt::CpuMemoryPolicyReport report{};</span>
+<span id="L1512">    } result;</span>
+<span id="L1513">    MemoryBackend probe;</span>
+<span id="L1514">    rt::Runtime runtime;</span>
+<span id="L1515">    EXPECT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1516">    rt::DeviceBackendHandle backend;</span>
+<span id="L1517">    EXPECT_EQ(register_memory_backend(runtime, probe, &quot;accounting&quot;, backend),</span>
+<span id="L1518">              rt::Status::ok);</span>
+<span id="L1519">    alignas(64) std::array&lt;std::byte, 64&gt; host_storage{};</span>
+<span id="L1520">    rt::DeviceBufferHandle buffer;</span>
+<span id="L1521">    EXPECT_EQ(</span>
+<span id="L1522">        runtime.register_device_buffer(</span>
+<span id="L1523">            {&quot;host&quot;,</span>
+<span id="L1524">             backend,</span>
+<span id="L1525">             domain_at(runtime, backend, 0),</span>
+<span id="L1526">             host_storage,</span>
+<span id="L1527">             {},</span>
+<span id="L1528">             host_storage.size(),</span>
+<span id="L1529">             rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L1530">             RTFW_DEVICE_BUFFER_HOST_READ | RTFW_DEVICE_BUFFER_DEVICE_READ,</span>
+<span id="L1531">             rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L1532">             0},</span>
+<span id="L1533">            buffer),</span>
+<span id="L1534">        rt::Status::ok);</span>
+<span id="L1535">    EXPECT_EQ(runtime.register_device_buffer(</span>
+<span id="L1536">                  {&quot;opaque&quot;,</span>
+<span id="L1537">                   backend,</span>
+<span id="L1538">                   domain_at(runtime, backend, 3),</span>
+<span id="L1539">                   {},</span>
+<span id="L1540">                   opaque_handle(),</span>
+<span id="L1541">                   opaque_bytes,</span>
+<span id="L1542">                   rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1543">                   RTFW_DEVICE_BUFFER_DEVICE_READ,</span>
+<span id="L1544">                   rt::HalV2MemoryCoherency::device_only,</span>
+<span id="L1545">                   0},</span>
+<span id="L1546">                  buffer),</span>
+<span id="L1547">              rt::Status::ok);</span>
+<span id="L1548">    EXPECT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1549">    EXPECT_TRUE(runtime.memory_plan(result.plan));</span>
+<span id="L1550">    EXPECT_TRUE(runtime.cpu_memory_policy_report(result.report));</span>
+<span id="L1551">    return result;</span>
+<span id="L1552">  };</span>
+<span id="L1553"></span>
+<span id="L1554">  const auto small = build(64);</span>
+<span id="L1555">  const auto large = build(128);</span>
+<span id="L1556">  EXPECT_EQ(small.plan.device_backend_count, 1u);</span>
+<span id="L1557">  EXPECT_EQ(small.plan.device_buffer_count, 2u);</span>
+<span id="L1558">  EXPECT_GT(small.plan.device_control_bytes, 0u);</span>
+<span id="L1559">  EXPECT_EQ(small.plan.device_control_bytes, large.plan.device_control_bytes);</span>
+<span id="L1560">  EXPECT_EQ(small.plan.planned_bytes, large.plan.planned_bytes);</span>
+<span id="L1561">  EXPECT_EQ(small.plan.planned_bytes, small.plan.runtime_control_bytes +</span>
+<span id="L1562">                                          small.plan.executor_control_bytes +</span>
+<span id="L1563">                                          small.plan.device_control_bytes +</span>
+<span id="L1564">                                          small.plan.phase_scratch_total_bytes +</span>
+<span id="L1565">                                          small.plan.task_scratch_total_bytes +</span>
+<span id="L1566">                                          small.plan.trace_storage_bytes);</span>
+<span id="L1567">  EXPECT_EQ(small.report.memory_count, 12u);</span>
+<span id="L1568">  const auto *device_control =</span>
+<span id="L1569">      find_memory_row(small.report, rt::memory_region_device_control);</span>
+<span id="L1570">  const auto *small_payload =</span>
+<span id="L1571">      find_memory_row(small.report, rt::memory_region_registered_device_buffer);</span>
+<span id="L1572">  const auto *large_payload =</span>
+<span id="L1573">      find_memory_row(large.report, rt::memory_region_registered_device_buffer);</span>
+<span id="L1574">  ASSERT_NE(device_control, nullptr);</span>
+<span id="L1575">  ASSERT_NE(small_payload, nullptr);</span>
+<span id="L1576">  ASSERT_NE(large_payload, nullptr);</span>
+<span id="L1577">  EXPECT_EQ(device_control-&gt;accounted_bytes, small.plan.device_control_bytes);</span>
+<span id="L1578">  EXPECT_EQ(device_control-&gt;accounting_exactness,</span>
+<span id="L1579">            rt::ResourceAccountingExactness::exact);</span>
+<span id="L1580">  EXPECT_EQ(small_payload-&gt;logical_region_count, 2u);</span>
+<span id="L1581">  EXPECT_EQ(small_payload-&gt;accounted_bytes, 128u);</span>
+<span id="L1582">  EXPECT_EQ(large_payload-&gt;accounted_bytes, 192u);</span>
+<span id="L1583">  EXPECT_EQ(small_payload-&gt;accounting_scope,</span>
+<span id="L1584">            rt::MemoryAccountingScope::informational_external);</span>
+<span id="L1585">  EXPECT_EQ(small_payload-&gt;accounting_exactness,</span>
+<span id="L1586">            rt::ResourceAccountingExactness::declared_only);</span>
+<span id="L1587">}</span>
+<span id="L1588"></span>
+<span id="L1589">TEST(DeterminismReplay, HeterogeneousRegistrationIdentityIsSemanticOnly) {</span>
+<span id="L1590">  const auto opaque_id = [](std::size_t domain_index, std::uint64_t bytes,</span>
+<span id="L1591">                            rt::HalV2MemoryOwnership ownership,</span>
+<span id="L1592">                            std::uint32_t access, std::byte handle_value) {</span>
+<span id="L1593">    MemoryBackend probe;</span>
+<span id="L1594">    probe.snapshot.memory_domains[3].ownership_modes |=</span>
+<span id="L1595">        rt::hal_v2_memory_ownership_backend;</span>
+<span id="L1596">    rt::Runtime runtime;</span>
+<span id="L1597">    EXPECT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1598">    rt::DeviceBackendHandle backend;</span>
+<span id="L1599">    EXPECT_EQ(register_memory_backend(runtime, probe, &quot;identity&quot;, backend),</span>
+<span id="L1600">              rt::Status::ok);</span>
+<span id="L1601">    rt::DeviceBufferHandle buffer;</span>
+<span id="L1602">    EXPECT_EQ(runtime.register_device_buffer(</span>
+<span id="L1603">                  {&quot;memory&quot;,</span>
+<span id="L1604">                   backend,</span>
+<span id="L1605">                   domain_at(runtime, backend, domain_index),</span>
+<span id="L1606">                   {},</span>
+<span id="L1607">                   opaque_handle(handle_value),</span>
+<span id="L1608">                   bytes,</span>
+<span id="L1609">                   ownership,</span>
+<span id="L1610">                   access,</span>
+<span id="L1611">                   rt::HalV2MemoryCoherency::device_only,</span>
+<span id="L1612">                   0},</span>
+<span id="L1613">                  buffer),</span>
+<span id="L1614">              rt::Status::ok);</span>
+<span id="L1615">    EXPECT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1616">    return graph_id(runtime);</span>
+<span id="L1617">  };</span>
+<span id="L1618">  const auto baseline =</span>
+<span id="L1619">      opaque_id(3, 64, rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1620">                RTFW_DEVICE_BUFFER_DEVICE_READ, std::byte{0x44});</span>
+<span id="L1621">  EXPECT_NE(baseline,</span>
+<span id="L1622">            opaque_id(3, 128, rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1623">                      RTFW_DEVICE_BUFFER_DEVICE_READ, std::byte{0x44}));</span>
+<span id="L1624">  EXPECT_NE(baseline,</span>
+<span id="L1625">            opaque_id(3, 64, rt::HalV2MemoryOwnership::backend,</span>
+<span id="L1626">                      RTFW_DEVICE_BUFFER_DEVICE_READ, std::byte{0x44}));</span>
+<span id="L1627">  EXPECT_NE(baseline,</span>
+<span id="L1628">            opaque_id(3, 64, rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1629">                      RTFW_DEVICE_BUFFER_DEVICE_WRITE, std::byte{0x44}));</span>
+<span id="L1630">  EXPECT_NE(baseline,</span>
+<span id="L1631">            opaque_id(4, 64, rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1632">                      RTFW_DEVICE_BUFFER_DEVICE_READ, std::byte{0x44}));</span>
+<span id="L1633">  EXPECT_NE(baseline,</span>
+<span id="L1634">            opaque_id(3, 64, rt::HalV2MemoryOwnership::borrowed_opaque,</span>
+<span id="L1635">                      RTFW_DEVICE_BUFFER_DEVICE_READ, std::byte{0x45}));</span>
+<span id="L1636"></span>
+<span id="L1637">  const auto host_id = [](std::span&lt;std::byte&gt; storage) {</span>
+<span id="L1638">    MemoryBackend probe;</span>
+<span id="L1639">    rt::Runtime runtime;</span>
+<span id="L1640">    EXPECT_EQ(runtime.configure(memory_config()), rt::Status::ok);</span>
+<span id="L1641">    rt::DeviceBackendHandle backend;</span>
+<span id="L1642">    EXPECT_EQ(register_memory_backend(runtime, probe, &quot;identity&quot;, backend),</span>
+<span id="L1643">              rt::Status::ok);</span>
+<span id="L1644">    rt::DeviceBufferHandle buffer;</span>
+<span id="L1645">    EXPECT_EQ(</span>
+<span id="L1646">        runtime.register_device_buffer(</span>
+<span id="L1647">            {&quot;memory&quot;,</span>
+<span id="L1648">             backend,</span>
+<span id="L1649">             domain_at(runtime, backend, 0),</span>
+<span id="L1650">             storage,</span>
+<span id="L1651">             {},</span>
+<span id="L1652">             storage.size(),</span>
+<span id="L1653">             rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L1654">             RTFW_DEVICE_BUFFER_HOST_READ | RTFW_DEVICE_BUFFER_DEVICE_READ,</span>
+<span id="L1655">             rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L1656">             0},</span>
+<span id="L1657">            buffer),</span>
+<span id="L1658">        rt::Status::ok);</span>
+<span id="L1659">    EXPECT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1660">    return graph_id(runtime);</span>
+<span id="L1661">  };</span>
+<span id="L1662">  alignas(64) std::array&lt;std::byte, 64&gt; first{};</span>
+<span id="L1663">  alignas(64) std::array&lt;std::byte, 64&gt; second{};</span>
+<span id="L1664">  EXPECT_EQ(host_id(first), host_id(second));</span>
+<span id="L1665">  EXPECT_EQ(rt::checkpoint_schema_version, 1u);</span>
+<span id="L1666">  EXPECT_EQ(rt::input_log_schema_version, 1u);</span>
+<span id="L1667">}</span></pre></html>

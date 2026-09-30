@@ -50,7 +50,7 @@ resource and latency evidence. It makes no RT1, RT2, worst-case, or portable
 XDMA claim.
 
 The machine-readable boundary is
-[the XDMA support matrix](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/xdma_support_matrix.json).
+[the XDMA support matrix](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/xdma_support_matrix.json).
 
 ## Targets and package surface
 

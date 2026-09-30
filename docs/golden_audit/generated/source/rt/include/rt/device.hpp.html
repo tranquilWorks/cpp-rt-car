@@ -1,0 +1,712 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>rt/include/rt/device.hpp</title><h1>rt/include/rt/device.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;array&gt;</span>
+<span id="L4">#include &lt;cstddef&gt;</span>
+<span id="L5">#include &lt;cstdint&gt;</span>
+<span id="L6">#include &lt;limits&gt;</span>
+<span id="L7">#include &lt;span&gt;</span>
+<span id="L8">#include &lt;string_view&gt;</span>
+<span id="L9"></span>
+<span id="L10">#include &lt;rt/device_abi.h&gt;</span>
+<span id="L11"></span>
+<span id="L12">namespace rt {</span>
+<span id="L13"></span>
+<span id="L14">inline constexpr std::uint64_t invalid_device_handle =</span>
+<span id="L15">    std::numeric_limits&lt;std::uint64_t&gt;::max();</span>
+<span id="L16">inline constexpr std::uint32_t device_buffer_kind_bit =</span>
+<span id="L17">    std::uint32_t{1} &lt;&lt; 31u;</span>
+<span id="L18">inline constexpr std::uint32_t device_handle_index_mask =</span>
+<span id="L19">    device_buffer_kind_bit - 1u;</span>
+<span id="L20"></span>
+<span id="L21">inline constexpr std::uint32_t hal_v2_api_version = 2u;</span>
+<span id="L22">inline constexpr std::size_t hal_v2_identifier_capacity =</span>
+<span id="L23">    RTFW_DEVICE_IDENTIFIER_CAPACITY;</span>
+<span id="L24">inline constexpr std::size_t hal_v2_inline_payload_capacity =</span>
+<span id="L25">    RTFW_DEVICE_INLINE_PAYLOAD_CAPACITY;</span>
+<span id="L26">inline constexpr std::size_t hal_v2_buffer_ref_capacity =</span>
+<span id="L27">    RTFW_DEVICE_BUFFER_REF_CAPACITY;</span>
+<span id="L28">inline constexpr std::uint32_t hal_v2_memory_topology_extension_version = 1u;</span>
+<span id="L29">inline constexpr std::size_t hal_v2_memory_domain_capacity = 16u;</span>
+<span id="L30">inline constexpr std::size_t hal_v2_topology_node_capacity = 32u;</span>
+<span id="L31">inline constexpr std::size_t hal_v2_topology_link_capacity = 64u;</span>
+<span id="L32">inline constexpr std::size_t hal_v2_timestamp_domain_capacity = 8u;</span>
+<span id="L33">inline constexpr std::size_t hal_v2_opaque_handle_capacity = 64u;</span>
+<span id="L34">inline constexpr std::uint32_t hal_v2_command_timeline_extension_version = 1u;</span>
+<span id="L35">inline constexpr std::size_t hal_v2_command_capacity = 16u;</span>
+<span id="L36">inline constexpr std::size_t hal_v2_timeline_wait_capacity = 8u;</span>
+<span id="L37">inline constexpr std::size_t hal_v2_timeline_signal_capacity = 8u;</span>
+<span id="L38">inline constexpr std::size_t hal_v2_timeline_capacity = 16u;</span>
+<span id="L39"></span>
+<span id="L40">enum class HalV2Status : std::int32_t {</span>
+<span id="L41">    ok = 0,</span>
+<span id="L42">    invalid_argument = -1,</span>
+<span id="L43">    invalid_state = -2,</span>
+<span id="L44">    queue_full = -3,</span>
+<span id="L45">    timeout = -4,</span>
+<span id="L46">    error = -5,</span>
+<span id="L47">    lost = -6,</span>
+<span id="L48">    canceled = -7,</span>
+<span id="L49">    unsupported = -8,</span>
+<span id="L50">    resource_exhausted = -9,</span>
+<span id="L51">    internal_error = -10,</span>
+<span id="L52">    reset_required = -11,</span>
+<span id="L53">};</span>
+<span id="L54"></span>
+<span id="L55">enum class HalV2HealthState : std::uint32_t {</span>
+<span id="L56">    shutdown = 0,</span>
+<span id="L57">    healthy = 1,</span>
+<span id="L58">    degraded = 2,</span>
+<span id="L59">    reset_required = 3,</span>
+<span id="L60">    lost = 4,</span>
+<span id="L61">};</span>
+<span id="L62"></span>
+<span id="L63">struct HalV2Capabilities {</span>
+<span id="L64">    std::uint32_t struct_size = sizeof(HalV2Capabilities);</span>
+<span id="L65">    std::uint32_t api_version = hal_v2_api_version;</span>
+<span id="L66">    std::uint64_t max_in_flight = 0;</span>
+<span id="L67">    std::uint64_t max_registered_buffers = 0;</span>
+<span id="L68">    std::uint64_t max_buffer_bytes = 0;</span>
+<span id="L69">    std::uint32_t inline_payload_capacity =</span>
+<span id="L70">        hal_v2_inline_payload_capacity;</span>
+<span id="L71">    std::uint32_t buffer_ref_capacity =</span>
+<span id="L72">        hal_v2_buffer_ref_capacity;</span>
+<span id="L73">    std::uint8_t supports_cancel = 0;</span>
+<span id="L74">    std::uint8_t supports_reset = 0;</span>
+<span id="L75">    std::uint8_t deterministic_mock = 0;</span>
+<span id="L76">    std::uint8_t reserved0 = 0;</span>
+<span id="L77">    std::array&lt;char, hal_v2_identifier_capacity&gt; backend_id{};</span>
+<span id="L78">    std::uint64_t control_storage_bytes = 0;</span>
+<span id="L79">    std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L80">};</span>
+<span id="L81"></span>
+<span id="L82">struct HalV2InitializeConfig {</span>
+<span id="L83">    std::uint32_t struct_size = sizeof(HalV2InitializeConfig);</span>
+<span id="L84">    std::uint32_t api_version = hal_v2_api_version;</span>
+<span id="L85">    std::uint64_t requested_in_flight = 0;</span>
+<span id="L86">    std::uint64_t requested_registered_buffers = 0;</span>
+<span id="L87">    std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L88">};</span>
+<span id="L89"></span>
+<span id="L90">struct HalV2BufferRegistration {</span>
+<span id="L91">    std::uint32_t struct_size = sizeof(HalV2BufferRegistration);</span>
+<span id="L92">    std::uint32_t flags = 0;</span>
+<span id="L93">    void* data = nullptr;</span>
+<span id="L94">    std::uint64_t bytes = 0;</span>
+<span id="L95">    std::array&lt;char, hal_v2_identifier_capacity&gt; name{};</span>
+<span id="L96">    std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L97">};</span>
+<span id="L98"></span>
+<span id="L99">struct HalV2BufferReference {</span>
+<span id="L100">    std::uint64_t buffer_token = 0;</span>
+<span id="L101">    std::uint32_t access = 0;</span>
+<span id="L102">    std::uint32_t reserved0 = 0;</span>
+<span id="L103">    std::uint64_t offset = 0;</span>
+<span id="L104">    std::uint64_t bytes = 0;</span>
+<span id="L105">};</span>
+<span id="L106"></span>
+<span id="L107">struct HalV2Submission {</span>
+<span id="L108">    std::uint32_t struct_size = sizeof(HalV2Submission);</span>
+<span id="L109">    std::uint32_t api_version = hal_v2_api_version;</span>
+<span id="L110">    std::uint64_t submission_id = 0;</span>
+<span id="L111">    std::uint64_t frame_index = 0;</span>
+<span id="L112">    std::uint64_t timeout_ns = 0;</span>
+<span id="L113">    std::uint32_t opcode = 0;</span>
+<span id="L114">    std::uint32_t flags = 0;</span>
+<span id="L115">    std::uint32_t payload_size = 0;</span>
+<span id="L116">    std::uint32_t buffer_count = 0;</span>
+<span id="L117">    std::array&lt;std::uint8_t, hal_v2_inline_payload_capacity&gt; payload{};</span>
+<span id="L118">    std::array&lt;HalV2BufferReference, hal_v2_buffer_ref_capacity&gt; buffers{};</span>
+<span id="L119">    std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L120">};</span>
+<span id="L121"></span>
+<span id="L122">struct HalV2Completion {</span>
+<span id="L123">    std::uint32_t struct_size = sizeof(HalV2Completion);</span>
+<span id="L124">    std::int32_t status = static_cast&lt;std::int32_t&gt;(HalV2Status::ok);</span>
+<span id="L125">    std::uint64_t submission_id = 0;</span>
+<span id="L126">    std::uint64_t device_timestamp_ns = 0;</span>
+<span id="L127">    std::uint64_t value = 0;</span>
+<span id="L128">    std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L129">};</span>
+<span id="L130"></span>
+<span id="L131">struct HalV2Health {</span>
+<span id="L132">    std::uint32_t struct_size = sizeof(HalV2Health);</span>
+<span id="L133">    std::uint32_t state =</span>
+<span id="L134">        static_cast&lt;std::uint32_t&gt;(HalV2HealthState::shutdown);</span>
+<span id="L135">    std::int32_t last_status = static_cast&lt;std::int32_t&gt;(HalV2Status::ok);</span>
+<span id="L136">    std::uint32_t reserved0 = 0;</span>
+<span id="L137">    std::uint64_t generation = 0;</span>
+<span id="L138">    std::uint64_t submissions = 0;</span>
+<span id="L139">    std::uint64_t completions = 0;</span>
+<span id="L140">    std::uint64_t queue_rejections = 0;</span>
+<span id="L141">    std::uint64_t timeouts = 0;</span>
+<span id="L142">    std::uint64_t errors = 0;</span>
+<span id="L143">    std::uint64_t losses = 0;</span>
+<span id="L144">    std::uint64_t cancellations = 0;</span>
+<span id="L145">    std::uint64_t resets = 0;</span>
+<span id="L146">    std::uint64_t outstanding = 0;</span>
+<span id="L147">    std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L148">};</span>
+<span id="L149"></span>
+<span id="L150">using HalV2GetCapabilitiesFn = HalV2Status (*)(</span>
+<span id="L151">    void*, HalV2Capabilities*);</span>
+<span id="L152">using HalV2InitializeFn = HalV2Status (*)(</span>
+<span id="L153">    void*, const HalV2InitializeConfig*);</span>
+<span id="L154">using HalV2RegisterBufferFn = HalV2Status (*)(</span>
+<span id="L155">    void*, const HalV2BufferRegistration*, std::uint64_t*);</span>
+<span id="L156">using HalV2UnregisterBufferFn = HalV2Status (*)(void*, std::uint64_t);</span>
+<span id="L157">using HalV2SubmitFn = HalV2Status (*)(void*, const HalV2Submission*);</span>
+<span id="L158">using HalV2PollFn = HalV2Status (*)(</span>
+<span id="L159">    void*, HalV2Completion*, std::uint64_t, std::uint64_t*);</span>
+<span id="L160">using HalV2CancelFn = HalV2Status (*)(void*, std::uint64_t);</span>
+<span id="L161">using HalV2GetHealthFn = HalV2Status (*)(void*, HalV2Health*);</span>
+<span id="L162">using HalV2ResetFn = HalV2Status (*)(void*);</span>
+<span id="L163">using HalV2ShutdownFn = HalV2Status (*)(void*);</span>
+<span id="L164"></span>
+<span id="L165">/*</span>
+<span id="L166"> * The table is copied by Runtime. Its non-null instance remains borrowed</span>
+<span id="L167"> * until checked stop succeeds. Operations must not throw. Submission and poll</span>
+<span id="L168"> * are bounded and nonblocking, and poll must not invoke host callbacks.</span>
+<span id="L169"> */</span>
+<span id="L170">struct HalV2BackendApi {</span>
+<span id="L171">    std::uint32_t struct_size = sizeof(HalV2BackendApi);</span>
+<span id="L172">    std::uint32_t api_version = hal_v2_api_version;</span>
+<span id="L173">    void* instance = nullptr;</span>
+<span id="L174">    HalV2GetCapabilitiesFn get_capabilities = nullptr;</span>
+<span id="L175">    HalV2InitializeFn initialize = nullptr;</span>
+<span id="L176">    HalV2RegisterBufferFn register_buffer = nullptr;</span>
+<span id="L177">    HalV2UnregisterBufferFn unregister_buffer = nullptr;</span>
+<span id="L178">    HalV2SubmitFn submit = nullptr;</span>
+<span id="L179">    HalV2PollFn poll = nullptr;</span>
+<span id="L180">    HalV2CancelFn cancel = nullptr;</span>
+<span id="L181">    HalV2GetHealthFn get_health = nullptr;</span>
+<span id="L182">    HalV2ResetFn reset = nullptr;</span>
+<span id="L183">    HalV2ShutdownFn shutdown = nullptr;</span>
+<span id="L184">    std::array&lt;std::uint64_t, 8&gt; reserved{};</span>
+<span id="L185">};</span>
+<span id="L186"></span>
+<span id="L187">enum class HalV2MemoryDomainKind : std::uint32_t {</span>
+<span id="L188">  host = 1,</span>
+<span id="L189">  pinned_host = 2,</span>
+<span id="L190">  cuda_device = 3,</span>
+<span id="L191">  imported = 4,</span>
+<span id="L192">  dma_mapped = 5,</span>
+<span id="L193">  peer = 6,</span>
+<span id="L194">};</span>
+<span id="L195"></span>
+<span id="L196">enum class HalV2MemoryOwnership : std::uint32_t {</span>
+<span id="L197">  borrowed_host = 1,</span>
+<span id="L198">  borrowed_opaque = 2,</span>
+<span id="L199">  backend = 3,</span>
+<span id="L200">};</span>
+<span id="L201"></span>
+<span id="L202">inline constexpr std::uint32_t hal_v2_memory_ownership_borrowed_host =</span>
+<span id="L203">    std::uint32_t{1} &lt;&lt; 0u;</span>
+<span id="L204">inline constexpr std::uint32_t hal_v2_memory_ownership_borrowed_opaque =</span>
+<span id="L205">    std::uint32_t{1} &lt;&lt; 1u;</span>
+<span id="L206">inline constexpr std::uint32_t hal_v2_memory_ownership_backend =</span>
+<span id="L207">    std::uint32_t{1} &lt;&lt; 2u;</span>
+<span id="L208"></span>
+<span id="L209">enum class HalV2MemoryCoherency : std::uint32_t {</span>
+<span id="L210">  host_coherent = 1,</span>
+<span id="L211">  explicit_flush_invalidate = 2,</span>
+<span id="L212">  staged_copy = 3,</span>
+<span id="L213">  device_only = 4,</span>
+<span id="L214">};</span>
+<span id="L215"></span>
+<span id="L216">inline constexpr std::uint32_t hal_v2_memory_sync_none = 0;</span>
+<span id="L217">inline constexpr std::uint32_t hal_v2_memory_sync_flush = std::uint32_t{1}</span>
+<span id="L218">                                                          &lt;&lt; 0u;</span>
+<span id="L219">inline constexpr std::uint32_t hal_v2_memory_sync_invalidate = std::uint32_t{1}</span>
+<span id="L220">                                                               &lt;&lt; 1u;</span>
+<span id="L221">inline constexpr std::uint32_t hal_v2_memory_sync_copy_to_device =</span>
+<span id="L222">    std::uint32_t{1} &lt;&lt; 2u;</span>
+<span id="L223">inline constexpr std::uint32_t hal_v2_memory_sync_copy_from_device =</span>
+<span id="L224">    std::uint32_t{1} &lt;&lt; 3u;</span>
+<span id="L225">inline constexpr std::uint32_t hal_v2_memory_sync_timeline = std::uint32_t{1}</span>
+<span id="L226">                                                             &lt;&lt; 4u;</span>
+<span id="L227"></span>
+<span id="L228">enum class HalV2TopologyNodeKind : std::uint32_t {</span>
+<span id="L229">  host = 1,</span>
+<span id="L230">  numa = 2,</span>
+<span id="L231">  device = 3,</span>
+<span id="L232">  dma_endpoint = 4,</span>
+<span id="L233">  peer_endpoint = 5,</span>
+<span id="L234">};</span>
+<span id="L235"></span>
+<span id="L236">enum class HalV2TopologyLinkKind : std::uint32_t {</span>
+<span id="L237">  local = 1,</span>
+<span id="L238">  host_access = 2,</span>
+<span id="L239">  device_access = 3,</span>
+<span id="L240">  dma = 4,</span>
+<span id="L241">  peer = 5,</span>
+<span id="L242">};</span>
+<span id="L243"></span>
+<span id="L244">enum class HalV2TimestampDomainKind : std::uint32_t {</span>
+<span id="L245">  runtime_monotonic = 1,</span>
+<span id="L246">  backend_device = 2,</span>
+<span id="L247">  external = 3,</span>
+<span id="L248">};</span>
+<span id="L249"></span>
+<span id="L250">struct HalV2OpaqueHandle {</span>
+<span id="L251">  std::uint32_t struct_size = sizeof(HalV2OpaqueHandle);</span>
+<span id="L252">  std::uint32_t size = 0;</span>
+<span id="L253">  std::array&lt;std::byte, hal_v2_opaque_handle_capacity&gt; bytes{};</span>
+<span id="L254">  std::array&lt;std::uint64_t, 2&gt; reserved{};</span>
+<span id="L255">};</span>
+<span id="L256"></span>
+<span id="L257">struct HalV2MemoryDomain {</span>
+<span id="L258">  std::uint32_t struct_size = sizeof(HalV2MemoryDomain);</span>
+<span id="L259">  std::uint32_t extension_version = hal_v2_memory_topology_extension_version;</span>
+<span id="L260">  std::uint64_t identity = 0;</span>
+<span id="L261">  std::uint32_t kind = 0;</span>
+<span id="L262">  std::uint32_t ownership_modes = 0;</span>
+<span id="L263">  std::uint64_t maximum_bytes = 0;</span>
+<span id="L264">  std::uint64_t byte_granularity = 0;</span>
+<span id="L265">  std::uint64_t alignment = 0;</span>
+<span id="L266">  std::uint64_t offset_granularity = 0;</span>
+<span id="L267">  std::uint32_t access = 0;</span>
+<span id="L268">  std::uint32_t coherency = 0;</span>
+<span id="L269">  std::uint32_t required_synchronization = 0;</span>
+<span id="L270">  std::uint32_t reserved0 = 0;</span>
+<span id="L271">  std::uint64_t topology_node_identity = 0;</span>
+<span id="L272">  std::uint64_t timestamp_domain_identity = 0;</span>
+<span id="L273">  std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L274">};</span>
+<span id="L275"></span>
+<span id="L276">struct HalV2TopologyNode {</span>
+<span id="L277">  std::uint32_t struct_size = sizeof(HalV2TopologyNode);</span>
+<span id="L278">  std::uint32_t extension_version = hal_v2_memory_topology_extension_version;</span>
+<span id="L279">  std::uint64_t identity = 0;</span>
+<span id="L280">  std::uint32_t kind = 0;</span>
+<span id="L281">  std::uint32_t reserved0 = 0;</span>
+<span id="L282">  std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L283">};</span>
+<span id="L284"></span>
+<span id="L285">struct HalV2TopologyLink {</span>
+<span id="L286">  std::uint32_t struct_size = sizeof(HalV2TopologyLink);</span>
+<span id="L287">  std::uint32_t extension_version = hal_v2_memory_topology_extension_version;</span>
+<span id="L288">  std::uint64_t identity = 0;</span>
+<span id="L289">  std::uint64_t source_node_identity = 0;</span>
+<span id="L290">  std::uint64_t destination_node_identity = 0;</span>
+<span id="L291">  std::uint32_t kind = 0;</span>
+<span id="L292">  std::uint32_t reserved0 = 0;</span>
+<span id="L293">  std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L294">};</span>
+<span id="L295"></span>
+<span id="L296">struct HalV2TimestampDomain {</span>
+<span id="L297">  std::uint32_t struct_size = sizeof(HalV2TimestampDomain);</span>
+<span id="L298">  std::uint32_t extension_version = hal_v2_memory_topology_extension_version;</span>
+<span id="L299">  std::uint64_t identity = 0;</span>
+<span id="L300">  std::uint32_t kind = 0;</span>
+<span id="L301">  std::uint32_t reserved0 = 0;</span>
+<span id="L302">  std::uint64_t tick_numerator_ns = 0;</span>
+<span id="L303">  std::uint64_t tick_denominator = 0;</span>
+<span id="L304">  std::uint64_t wrap_ticks = 0;</span>
+<span id="L305">  std::uint64_t correlation_destination_identity = 0;</span>
+<span id="L306">  std::uint8_t monotonic = 0;</span>
+<span id="L307">  std::uint8_t resets_on_backend_reset = 0;</span>
+<span id="L308">  std::uint8_t supports_correlation = 0;</span>
+<span id="L309">  std::uint8_t reserved1 = 0;</span>
+<span id="L310">  std::uint32_t reserved2 = 0;</span>
+<span id="L311">  std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L312">};</span>
+<span id="L313"></span>
+<span id="L314">struct HalV2MemoryTopologySnapshot {</span>
+<span id="L315">  std::uint32_t struct_size = sizeof(HalV2MemoryTopologySnapshot);</span>
+<span id="L316">  std::uint32_t extension_version = hal_v2_memory_topology_extension_version;</span>
+<span id="L317">  std::uint32_t memory_domain_count = 0;</span>
+<span id="L318">  std::uint32_t topology_node_count = 0;</span>
+<span id="L319">  std::uint32_t topology_link_count = 0;</span>
+<span id="L320">  std::uint32_t timestamp_domain_count = 0;</span>
+<span id="L321">  std::uint64_t completion_timestamp_domain_identity = 0;</span>
+<span id="L322">  std::array&lt;HalV2MemoryDomain, hal_v2_memory_domain_capacity&gt; memory_domains{};</span>
+<span id="L323">  std::array&lt;HalV2TopologyNode, hal_v2_topology_node_capacity&gt; topology_nodes{};</span>
+<span id="L324">  std::array&lt;HalV2TopologyLink, hal_v2_topology_link_capacity&gt; topology_links{};</span>
+<span id="L325">  std::array&lt;HalV2TimestampDomain, hal_v2_timestamp_domain_capacity&gt;</span>
+<span id="L326">      timestamp_domains{};</span>
+<span id="L327">  std::array&lt;std::uint64_t, 8&gt; reserved{};</span>
+<span id="L328">};</span>
+<span id="L329"></span>
+<span id="L330">struct HalV2MemoryRegistration {</span>
+<span id="L331">  std::uint32_t struct_size = sizeof(HalV2MemoryRegistration);</span>
+<span id="L332">  std::uint32_t extension_version = hal_v2_memory_topology_extension_version;</span>
+<span id="L333">  std::uint64_t domain_identity = 0;</span>
+<span id="L334">  std::uint64_t bytes = 0;</span>
+<span id="L335">  std::uint32_t ownership = 0;</span>
+<span id="L336">  std::uint32_t access = 0;</span>
+<span id="L337">  std::uint32_t coherency = 0;</span>
+<span id="L338">  std::uint32_t synchronization = 0;</span>
+<span id="L339">  void *host_data = nullptr;</span>
+<span id="L340">  HalV2OpaqueHandle opaque_handle{};</span>
+<span id="L341">  std::array&lt;char, hal_v2_identifier_capacity&gt; name{};</span>
+<span id="L342">  std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L343">};</span>
+<span id="L344"></span>
+<span id="L345">struct HalV2MemoryToken {</span>
+<span id="L346">  std::uint32_t struct_size = sizeof(HalV2MemoryToken);</span>
+<span id="L347">  std::uint32_t extension_version = hal_v2_memory_topology_extension_version;</span>
+<span id="L348">  std::uint64_t submission_token = 0;</span>
+<span id="L349">  HalV2OpaqueHandle native_token{};</span>
+<span id="L350">  std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L351">};</span>
+<span id="L352"></span>
+<span id="L353">struct HalV2TimestampCorrelationQuery {</span>
+<span id="L354">  std::uint32_t struct_size = sizeof(HalV2TimestampCorrelationQuery);</span>
+<span id="L355">  std::uint32_t extension_version = hal_v2_memory_topology_extension_version;</span>
+<span id="L356">  std::uint64_t source_domain_identity = 0;</span>
+<span id="L357">  std::uint64_t destination_domain_identity = 0;</span>
+<span id="L358">  std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L359">};</span>
+<span id="L360"></span>
+<span id="L361">struct HalV2TimestampCorrelation {</span>
+<span id="L362">  std::uint32_t struct_size = sizeof(HalV2TimestampCorrelation);</span>
+<span id="L363">  std::uint32_t extension_version = hal_v2_memory_topology_extension_version;</span>
+<span id="L364">  std::uint64_t source_domain_identity = 0;</span>
+<span id="L365">  std::uint64_t destination_domain_identity = 0;</span>
+<span id="L366">  std::uint64_t generation = 0;</span>
+<span id="L367">  std::uint64_t source_value = 0;</span>
+<span id="L368">  std::uint64_t destination_value = 0;</span>
+<span id="L369">  std::uint64_t uncertainty_ns = 0;</span>
+<span id="L370">  std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L371">};</span>
+<span id="L372"></span>
+<span id="L373">using HalV2DiscoverMemoryTopologyFn =</span>
+<span id="L374">    HalV2Status (*)(void *, HalV2MemoryTopologySnapshot *);</span>
+<span id="L375">using HalV2RegisterMemoryFn = HalV2Status (*)(void *,</span>
+<span id="L376">                                              const HalV2MemoryRegistration *,</span>
+<span id="L377">                                              HalV2MemoryToken *);</span>
+<span id="L378">using HalV2UnregisterMemoryFn = HalV2Status (*)(void *,</span>
+<span id="L379">                                                const HalV2MemoryRegistration *,</span>
+<span id="L380">                                                const HalV2MemoryToken *);</span>
+<span id="L381">using HalV2QueryTimestampCorrelationFn =</span>
+<span id="L382">    HalV2Status (*)(void *, const HalV2TimestampCorrelationQuery *,</span>
+<span id="L383">                    HalV2TimestampCorrelation *);</span>
+<span id="L384"></span>
+<span id="L385">struct HalV2MemoryTopologyExtension {</span>
+<span id="L386">  std::uint32_t struct_size = sizeof(HalV2MemoryTopologyExtension);</span>
+<span id="L387">  std::uint32_t extension_version = hal_v2_memory_topology_extension_version;</span>
+<span id="L388">  void *instance = nullptr;</span>
+<span id="L389">  HalV2DiscoverMemoryTopologyFn discover = nullptr;</span>
+<span id="L390">  HalV2RegisterMemoryFn register_memory = nullptr;</span>
+<span id="L391">  HalV2UnregisterMemoryFn unregister_memory = nullptr;</span>
+<span id="L392">  HalV2QueryTimestampCorrelationFn query_timestamp_correlation = nullptr;</span>
+<span id="L393">  std::array&lt;std::uint64_t, 8&gt; reserved{};</span>
+<span id="L394">};</span>
+<span id="L395"></span>
+<span id="L396">enum class HalV2CommandKind : std::uint32_t {</span>
+<span id="L397">  invalid = 0,</span>
+<span id="L398">  dispatch = 1,</span>
+<span id="L399">  copy = 2,</span>
+<span id="L400">  memory_synchronization = 3,</span>
+<span id="L401">};</span>
+<span id="L402"></span>
+<span id="L403">enum class HalV2MemoryOperation : std::uint32_t {</span>
+<span id="L404">  invalid = 0,</span>
+<span id="L405">  copy_to_device = 1,</span>
+<span id="L406">  copy_from_device = 2,</span>
+<span id="L407">  flush = 3,</span>
+<span id="L408">  invalidate = 4,</span>
+<span id="L409">};</span>
+<span id="L410"></span>
+<span id="L411">struct DeviceTimelineHandle {</span>
+<span id="L412">  std::uint64_t value = invalid_device_handle;</span>
+<span id="L413"></span>
+<span id="L414">  constexpr DeviceTimelineHandle() noexcept = default;</span>
+<span id="L415">  explicit constexpr DeviceTimelineHandle(std::uint64_t encoded) noexcept</span>
+<span id="L416">      : value(encoded) {}</span>
+<span id="L417">  constexpr DeviceTimelineHandle(std::uint32_t owner,</span>
+<span id="L418">                                 std::uint32_t index) noexcept</span>
+<span id="L419">      : value((static_cast&lt;std::uint64_t&gt;(owner) &lt;&lt; 32u) |</span>
+<span id="L420">              static_cast&lt;std::uint64_t&gt;(index)) {}</span>
+<span id="L421"></span>
+<span id="L422">  [[nodiscard]] constexpr bool valid() const noexcept {</span>
+<span id="L423">    return value != invalid_device_handle;</span>
+<span id="L424">  }</span>
+<span id="L425">  [[nodiscard]] constexpr std::uint32_t owner() const noexcept {</span>
+<span id="L426">    return static_cast&lt;std::uint32_t&gt;(value &gt;&gt; 32u);</span>
+<span id="L427">  }</span>
+<span id="L428">  [[nodiscard]] constexpr std::uint32_t index() const noexcept {</span>
+<span id="L429">    return static_cast&lt;std::uint32_t&gt;(value);</span>
+<span id="L430">  }</span>
+<span id="L431">  friend constexpr bool operator==(DeviceTimelineHandle,</span>
+<span id="L432">                                   DeviceTimelineHandle) noexcept = default;</span>
+<span id="L433">};</span>
+<span id="L434"></span>
+<span id="L435">struct HalV2TimelinePoint {</span>
+<span id="L436">  std::uint32_t struct_size = sizeof(HalV2TimelinePoint);</span>
+<span id="L437">  std::uint32_t extension_version =</span>
+<span id="L438">      hal_v2_command_timeline_extension_version;</span>
+<span id="L439">  std::uint64_t timeline_handle = invalid_device_handle;</span>
+<span id="L440">  std::uint64_t value = 0;</span>
+<span id="L441">  std::array&lt;std::uint64_t, 3&gt; reserved{};</span>
+<span id="L442">};</span>
+<span id="L443"></span>
+<span id="L444">struct DeviceCommand {</span>
+<span id="L445">  std::uint32_t struct_size = sizeof(DeviceCommand);</span>
+<span id="L446">  std::uint32_t extension_version =</span>
+<span id="L447">      hal_v2_command_timeline_extension_version;</span>
+<span id="L448">  std::uint32_t kind = static_cast&lt;std::uint32_t&gt;(HalV2CommandKind::invalid);</span>
+<span id="L449">  std::uint32_t operation =</span>
+<span id="L450">      static_cast&lt;std::uint32_t&gt;(HalV2MemoryOperation::invalid);</span>
+<span id="L451">  std::uint32_t opcode = 0;</span>
+<span id="L452">  std::uint32_t flags = 0;</span>
+<span id="L453">  std::uint32_t payload_size = 0;</span>
+<span id="L454">  std::uint32_t buffer_count = 0;</span>
+<span id="L455">  std::array&lt;std::uint8_t, hal_v2_inline_payload_capacity&gt; payload{};</span>
+<span id="L456">  std::array&lt;HalV2BufferReference, hal_v2_buffer_ref_capacity&gt; buffers{};</span>
+<span id="L457">  HalV2BufferReference source{};</span>
+<span id="L458">  HalV2BufferReference destination{};</span>
+<span id="L459">  HalV2BufferReference target{};</span>
+<span id="L460">  std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L461">};</span>
+<span id="L462"></span>
+<span id="L463">struct DeviceCommandBatch {</span>
+<span id="L464">  std::uint32_t struct_size = sizeof(DeviceCommandBatch);</span>
+<span id="L465">  std::uint32_t extension_version =</span>
+<span id="L466">      hal_v2_command_timeline_extension_version;</span>
+<span id="L467">  std::uint64_t batch_id = 0;</span>
+<span id="L468">  std::uint64_t frame_index = 0;</span>
+<span id="L469">  std::uint64_t timeout_ns = 0;</span>
+<span id="L470">  std::uint32_t command_count = 0;</span>
+<span id="L471">  std::uint32_t wait_count = 0;</span>
+<span id="L472">  std::uint32_t signal_count = 0;</span>
+<span id="L473">  std::uint32_t reserved0 = 0;</span>
+<span id="L474">  std::array&lt;DeviceCommand, hal_v2_command_capacity&gt; commands{};</span>
+<span id="L475">  std::array&lt;HalV2TimelinePoint, hal_v2_timeline_wait_capacity&gt; waits{};</span>
+<span id="L476">  std::array&lt;HalV2TimelinePoint, hal_v2_timeline_signal_capacity&gt; signals{};</span>
+<span id="L477">  std::array&lt;std::uint64_t, 8&gt; reserved{};</span>
+<span id="L478">};</span>
+<span id="L479"></span>
+<span id="L480">struct HalV2BatchCompletion {</span>
+<span id="L481">  std::uint32_t struct_size = sizeof(HalV2BatchCompletion);</span>
+<span id="L482">  std::uint32_t extension_version =</span>
+<span id="L483">      hal_v2_command_timeline_extension_version;</span>
+<span id="L484">  std::int32_t status = static_cast&lt;std::int32_t&gt;(HalV2Status::ok);</span>
+<span id="L485">  std::uint32_t signal_count = 0;</span>
+<span id="L486">  std::uint64_t batch_id = 0;</span>
+<span id="L487">  std::uint64_t device_timestamp = 0;</span>
+<span id="L488">  std::uint64_t timestamp_domain_identity = 0;</span>
+<span id="L489">  std::array&lt;HalV2TimelinePoint, hal_v2_timeline_signal_capacity&gt; signals{};</span>
+<span id="L490">  std::array&lt;std::uint64_t, 8&gt; reserved{};</span>
+<span id="L491">};</span>
+<span id="L492"></span>
+<span id="L493">struct HalV2CommandTimelineCapabilities {</span>
+<span id="L494">  std::uint32_t struct_size = sizeof(HalV2CommandTimelineCapabilities);</span>
+<span id="L495">  std::uint32_t extension_version =</span>
+<span id="L496">      hal_v2_command_timeline_extension_version;</span>
+<span id="L497">  std::uint32_t max_in_flight_batches = 0;</span>
+<span id="L498">  std::uint32_t max_commands_per_batch = 0;</span>
+<span id="L499">  std::uint32_t max_wait_points = 0;</span>
+<span id="L500">  std::uint32_t max_signal_points = 0;</span>
+<span id="L501">  std::uint32_t max_timelines = 0;</span>
+<span id="L502">  std::uint32_t completion_batch_capacity = 0;</span>
+<span id="L503">  std::uint64_t backend_control_storage_bytes = 0;</span>
+<span id="L504">  std::array&lt;std::uint64_t, 8&gt; reserved{};</span>
+<span id="L505">};</span>
+<span id="L506"></span>
+<span id="L507">using HalV2GetCommandTimelineCapabilitiesFn = HalV2Status (*)(</span>
+<span id="L508">    void *, HalV2CommandTimelineCapabilities *);</span>
+<span id="L509">using HalV2SubmitCommandBatchFn = HalV2Status (*)(</span>
+<span id="L510">    void *, const DeviceCommandBatch *);</span>
+<span id="L511">using HalV2PollBatchCompletionsFn = HalV2Status (*)(</span>
+<span id="L512">    void *, HalV2BatchCompletion *, std::uint64_t, std::uint64_t *);</span>
+<span id="L513">using HalV2CancelCommandBatchFn = HalV2Status (*)(void *, std::uint64_t);</span>
+<span id="L514">using HalV2RequestCommandStopFn = HalV2Status (*)(void *);</span>
+<span id="L515"></span>
+<span id="L516">struct HalV2CommandTimelineExtension {</span>
+<span id="L517">  std::uint32_t struct_size = sizeof(HalV2CommandTimelineExtension);</span>
+<span id="L518">  std::uint32_t extension_version =</span>
+<span id="L519">      hal_v2_command_timeline_extension_version;</span>
+<span id="L520">  void *instance = nullptr;</span>
+<span id="L521">  HalV2GetCommandTimelineCapabilitiesFn get_capabilities = nullptr;</span>
+<span id="L522">  HalV2SubmitCommandBatchFn submit = nullptr;</span>
+<span id="L523">  HalV2PollBatchCompletionsFn poll = nullptr;</span>
+<span id="L524">  HalV2CancelCommandBatchFn cancel = nullptr;</span>
+<span id="L525">  HalV2RequestCommandStopFn request_stop = nullptr;</span>
+<span id="L526">  std::array&lt;std::uint64_t, 8&gt; reserved{};</span>
+<span id="L527">};</span>
+<span id="L528"></span>
+<span id="L529">struct HalV2BackendRegistration {</span>
+<span id="L530">    std::string_view name;</span>
+<span id="L531">    HalV2BackendApi api{};</span>
+<span id="L532">    // Optional and borrowed only for this call. Runtime copies the table and</span>
+<span id="L533">    // its complete validated discovery snapshot before publishing a handle.</span>
+<span id="L534">    const HalV2MemoryTopologyExtension *memory_topology = nullptr;</span>
+<span id="L535">    // Optional and borrowed only for this call. Runtime copies the complete</span>
+<span id="L536">    // validated table and capabilities before publishing a backend handle.</span>
+<span id="L537">    const HalV2CommandTimelineExtension *command_timeline = nullptr;</span>
+<span id="L538">};</span>
+<span id="L539"></span>
+<span id="L540">struct DeviceBackendHandle {</span>
+<span id="L541">    std::uint64_t value = invalid_device_handle;</span>
+<span id="L542"></span>
+<span id="L543">    constexpr DeviceBackendHandle() noexcept = default;</span>
+<span id="L544">    explicit constexpr DeviceBackendHandle(</span>
+<span id="L545">        std::uint64_t encoded) noexcept</span>
+<span id="L546">        : value(encoded) {}</span>
+<span id="L547">    constexpr DeviceBackendHandle(</span>
+<span id="L548">        std::uint32_t owner,</span>
+<span id="L549">        std::uint32_t index) noexcept</span>
+<span id="L550">        : value(</span>
+<span id="L551">              (static_cast&lt;std::uint64_t&gt;(owner) &lt;&lt; 32u) |</span>
+<span id="L552">              static_cast&lt;std::uint64_t&gt;(index)) {}</span>
+<span id="L553"></span>
+<span id="L554">    [[nodiscard]] constexpr bool valid() const noexcept {</span>
+<span id="L555">        return value != invalid_device_handle &amp;&amp;</span>
+<span id="L556">               (static_cast&lt;std::uint32_t&gt;(value) &amp;</span>
+<span id="L557">                device_buffer_kind_bit) == 0;</span>
+<span id="L558">    }</span>
+<span id="L559">    [[nodiscard]] constexpr std::uint32_t owner() const noexcept {</span>
+<span id="L560">        return static_cast&lt;std::uint32_t&gt;(value &gt;&gt; 32u);</span>
+<span id="L561">    }</span>
+<span id="L562">    [[nodiscard]] constexpr std::uint32_t index() const noexcept {</span>
+<span id="L563">        return static_cast&lt;std::uint32_t&gt;(value) &amp;</span>
+<span id="L564">               device_handle_index_mask;</span>
+<span id="L565">    }</span>
+<span id="L566"></span>
+<span id="L567">    friend constexpr bool operator==(</span>
+<span id="L568">        DeviceBackendHandle,</span>
+<span id="L569">        DeviceBackendHandle) noexcept = default;</span>
+<span id="L570">};</span>
+<span id="L571"></span>
+<span id="L572">struct DeviceBufferHandle {</span>
+<span id="L573">    std::uint64_t value = invalid_device_handle;</span>
+<span id="L574"></span>
+<span id="L575">    constexpr DeviceBufferHandle() noexcept = default;</span>
+<span id="L576">    explicit constexpr DeviceBufferHandle(</span>
+<span id="L577">        std::uint64_t encoded) noexcept</span>
+<span id="L578">        : value(encoded) {}</span>
+<span id="L579">    constexpr DeviceBufferHandle(</span>
+<span id="L580">        std::uint32_t owner,</span>
+<span id="L581">        std::uint32_t index) noexcept</span>
+<span id="L582">        : value(</span>
+<span id="L583">              (static_cast&lt;std::uint64_t&gt;(owner) &lt;&lt; 32u) |</span>
+<span id="L584">              device_buffer_kind_bit |</span>
+<span id="L585">              static_cast&lt;std::uint64_t&gt;(index)) {}</span>
+<span id="L586"></span>
+<span id="L587">    [[nodiscard]] constexpr bool valid() const noexcept {</span>
+<span id="L588">        return value != invalid_device_handle &amp;&amp;</span>
+<span id="L589">               (static_cast&lt;std::uint32_t&gt;(value) &amp;</span>
+<span id="L590">                device_buffer_kind_bit) != 0;</span>
+<span id="L591">    }</span>
+<span id="L592">    [[nodiscard]] constexpr std::uint32_t owner() const noexcept {</span>
+<span id="L593">        return static_cast&lt;std::uint32_t&gt;(value &gt;&gt; 32u);</span>
+<span id="L594">    }</span>
+<span id="L595">    [[nodiscard]] constexpr std::uint32_t index() const noexcept {</span>
+<span id="L596">        return static_cast&lt;std::uint32_t&gt;(value) &amp;</span>
+<span id="L597">               device_handle_index_mask;</span>
+<span id="L598">    }</span>
+<span id="L599"></span>
+<span id="L600">    friend constexpr bool operator==(</span>
+<span id="L601">        DeviceBufferHandle,</span>
+<span id="L602">        DeviceBufferHandle) noexcept = default;</span>
+<span id="L603">};</span>
+<span id="L604"></span>
+<span id="L605">struct DeviceBackendRegistration {</span>
+<span id="L606">    std::string_view name;</span>
+<span id="L607">    rtfw_device_backend_api api{};</span>
+<span id="L608">};</span>
+<span id="L609"></span>
+<span id="L610">struct DeviceBufferRegistration {</span>
+<span id="L611">    std::string_view name;</span>
+<span id="L612">    DeviceBackendHandle backend{};</span>
+<span id="L613">    std::span&lt;std::byte&gt; storage{};</span>
+<span id="L614">    rtfw_device_buffer_flags flags =</span>
+<span id="L615">        RTFW_DEVICE_BUFFER_HOST_READ |</span>
+<span id="L616">        RTFW_DEVICE_BUFFER_HOST_WRITE |</span>
+<span id="L617">        RTFW_DEVICE_BUFFER_DEVICE_READ |</span>
+<span id="L618">        RTFW_DEVICE_BUFFER_DEVICE_WRITE;</span>
+<span id="L619">};</span>
+<span id="L620"></span>
+<span id="L621">struct DeviceMemoryDomainHandle {</span>
+<span id="L622">  DeviceBackendHandle backend{};</span>
+<span id="L623">  std::uint64_t identity = 0;</span>
+<span id="L624"></span>
+<span id="L625">  [[nodiscard]] constexpr bool valid() const noexcept {</span>
+<span id="L626">    return backend.valid() &amp;&amp; identity != 0;</span>
+<span id="L627">  }</span>
+<span id="L628">  friend constexpr bool operator==(DeviceMemoryDomainHandle,</span>
+<span id="L629">                                   DeviceMemoryDomainHandle) noexcept = default;</span>
+<span id="L630">};</span>
+<span id="L631"></span>
+<span id="L632">struct DeviceTopologyNodeHandle {</span>
+<span id="L633">  DeviceBackendHandle backend{};</span>
+<span id="L634">  std::uint64_t identity = 0;</span>
+<span id="L635"></span>
+<span id="L636">  [[nodiscard]] constexpr bool valid() const noexcept {</span>
+<span id="L637">    return backend.valid() &amp;&amp; identity != 0;</span>
+<span id="L638">  }</span>
+<span id="L639">  friend constexpr bool operator==(DeviceTopologyNodeHandle,</span>
+<span id="L640">                                   DeviceTopologyNodeHandle) noexcept = default;</span>
+<span id="L641">};</span>
+<span id="L642"></span>
+<span id="L643">struct DeviceTopologyLinkHandle {</span>
+<span id="L644">  DeviceBackendHandle backend{};</span>
+<span id="L645">  std::uint64_t identity = 0;</span>
+<span id="L646"></span>
+<span id="L647">  [[nodiscard]] constexpr bool valid() const noexcept {</span>
+<span id="L648">    return backend.valid() &amp;&amp; identity != 0;</span>
+<span id="L649">  }</span>
+<span id="L650">  friend constexpr bool operator==(DeviceTopologyLinkHandle,</span>
+<span id="L651">                                   DeviceTopologyLinkHandle) noexcept = default;</span>
+<span id="L652">};</span>
+<span id="L653"></span>
+<span id="L654">struct DeviceTimestampDomainHandle {</span>
+<span id="L655">  DeviceBackendHandle backend{};</span>
+<span id="L656">  std::uint64_t identity = 0;</span>
+<span id="L657"></span>
+<span id="L658">  [[nodiscard]] constexpr bool valid() const noexcept {</span>
+<span id="L659">    return backend.valid() &amp;&amp; identity != 0;</span>
+<span id="L660">  }</span>
+<span id="L661">  friend constexpr bool</span>
+<span id="L662">  operator==(DeviceTimestampDomainHandle,</span>
+<span id="L663">             DeviceTimestampDomainHandle) noexcept = default;</span>
+<span id="L664">};</span>
+<span id="L665"></span>
+<span id="L666">struct HeterogeneousDeviceBufferRegistration {</span>
+<span id="L667">  std::string_view name;</span>
+<span id="L668">  DeviceBackendHandle backend{};</span>
+<span id="L669">  DeviceMemoryDomainHandle domain{};</span>
+<span id="L670">  std::span&lt;std::byte&gt; host_storage{};</span>
+<span id="L671">  HalV2OpaqueHandle opaque_handle{};</span>
+<span id="L672">  std::uint64_t bytes = 0;</span>
+<span id="L673">  HalV2MemoryOwnership ownership = HalV2MemoryOwnership::borrowed_host;</span>
+<span id="L674">  std::uint32_t access = 0;</span>
+<span id="L675">  HalV2MemoryCoherency coherency = HalV2MemoryCoherency::host_coherent;</span>
+<span id="L676">  std::uint32_t synchronization = hal_v2_memory_sync_none;</span>
+<span id="L677">};</span>
+<span id="L678"></span>
+<span id="L679">struct DeviceMemoryObjectInfo {</span>
+<span id="L680">  DeviceBufferHandle buffer{};</span>
+<span id="L681">  DeviceBackendHandle backend{};</span>
+<span id="L682">  DeviceMemoryDomainHandle domain{};</span>
+<span id="L683">  std::uint64_t bytes = 0;</span>
+<span id="L684">  std::uint32_t ownership = 0;</span>
+<span id="L685">  std::uint32_t access = 0;</span>
+<span id="L686">  std::uint32_t coherency = 0;</span>
+<span id="L687">  std::uint32_t synchronization = 0;</span>
+<span id="L688">  std::uint8_t heterogeneous = 0;</span>
+<span id="L689">  std::uint8_t host_addressable = 0;</span>
+<span id="L690">  std::uint16_t reserved0 = 0;</span>
+<span id="L691">  std::uint32_t opaque_handle_size = 0;</span>
+<span id="L692">  std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L693">};</span>
+<span id="L694"></span>
+<span id="L695">using DeviceSubmission = rtfw_device_submission;</span>
+<span id="L696">using DeviceCapabilities = rtfw_device_capabilities;</span>
+<span id="L697">using DeviceHealth = rtfw_device_health;</span>
+<span id="L698"></span>
+<span id="L699">[[nodiscard]] inline DeviceSubmission make_device_submission() noexcept {</span>
+<span id="L700">    DeviceSubmission submission{};</span>
+<span id="L701">    submission.struct_size = sizeof(submission);</span>
+<span id="L702">    submission.abi_version = RTFW_DEVICE_ABI_VERSION;</span>
+<span id="L703">    return submission;</span>
+<span id="L704">}</span>
+<span id="L705"></span>
+<span id="L706">[[nodiscard]] inline DeviceHealth make_device_health() noexcept {</span>
+<span id="L707">    DeviceHealth health{};</span>
+<span id="L708">    health.struct_size = sizeof(health);</span>
+<span id="L709">    return health;</span>
+<span id="L710">}</span>
+<span id="L711"></span>
+<span id="L712">} // namespace rt</span></pre></html>

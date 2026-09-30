@@ -1,0 +1,607 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/golden_xdma/test_xdma.cpp</title><h1>tests/golden_xdma/test_xdma.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;../../samples/golden_cuda/owner.hpp&quot;</span>
+<span id="L2">#include &quot;../../samples/golden_system/oracle.hpp&quot;</span>
+<span id="L3">#include &quot;../../samples/golden_xdma/oracle.hpp&quot;</span>
+<span id="L4">#include &quot;../../samples/golden_xdma/owner.hpp&quot;</span>
+<span id="L5">#include &quot;../../samples/golden_xdma/replay.hpp&quot;</span>
+<span id="L6">#include &quot;../../samples/golden_xdma/telemetry.hpp&quot;</span>
+<span id="L7">#include &quot;../golden_cuda/allocation.hpp&quot;</span>
+<span id="L8">#include &lt;charconv&gt;</span>
+<span id="L9">#include &lt;filesystem&gt;</span>
+<span id="L10">#include &lt;fstream&gt;</span>
+<span id="L11">#include &lt;future&gt;</span>
+<span id="L12">#include &lt;iostream&gt;</span>
+<span id="L13">#include &lt;vector&gt;</span>
+<span id="L14">#define CHECK(x)                                                               \</span>
+<span id="L15">  do {                                                                         \</span>
+<span id="L16">    if (!(x)) {                                                                \</span>
+<span id="L17">      std::cerr &lt;&lt; __func__ &lt;&lt; &#x27;:&#x27; &lt;&lt; __LINE__ &lt;&lt; &quot; failed: &quot; #x &lt;&lt; &#x27;\n&#x27;;      \</span>
+<span id="L18">      return false;                                                            \</span>
+<span id="L19">    }                                                                          \</span>
+<span id="L20">  } while (false)</span>
+<span id="L21">using namespace golden;</span>
+<span id="L22">namespace gx = golden::xdma;</span>
+<span id="L23">namespace allocation = rtfw_physics_allocation;</span>
+<span id="L24">using rt::Status;</span>
+<span id="L25">bool same(const StateBytes &amp;a, const StateBytes &amp;b) {</span>
+<span id="L26">  for (std::size_t i = 0; i &lt; a.size(); ++i) {</span>
+<span id="L27">    if ((i &gt;= 64 &amp;&amp; i &lt; 72) || (i &gt;= 480 &amp;&amp; i &lt; 488))</span>
+<span id="L28">      continue;</span>
+<span id="L29">    if (a[i] != b[i]) {</span>
+<span id="L30">      std::cerr &lt;&lt; &quot;state differs at &quot; &lt;&lt; i &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L31">      return false;</span>
+<span id="L32">    }</span>
+<span id="L33">  }</span>
+<span id="L34">  auto first = a, second = b;</span>
+<span id="L35">  put(first, 480, 0, 8);</span>
+<span id="L36">  put(second, 480, 0, 8);</span>
+<span id="L37">  return digest(first) == get(a, 480, 8) &amp;&amp; digest(second) == get(b, 480, 8) &amp;&amp;</span>
+<span id="L38">         bool(get(a, 64, 8)) == bool(get(b, 64, 8));</span>
+<span id="L39">}</span>
+<span id="L40">bool counts(gx::Owner &amp;owner, std::uint64_t sensor, std::uint64_t actuator,</span>
+<span id="L41">            std::uint64_t safe) {</span>
+<span id="L42">  const auto native = owner.io-&gt;native_capabilities();</span>
+<span id="L43">  CHECK(native.deterministic_mock == 0 &amp;&amp; native.max_in_flight == 2);</span>
+<span id="L44">  for (std::size_t i = 0; i &lt; (owner.physics ? 3u : 2u); ++i) {</span>
+<span id="L45">    rt::CompiledDeviceRatePhase phase;</span>
+<span id="L46">    CHECK(owner.session-&gt;runtime-&gt;compiled_device_rate_phase_at(i, phase));</span>
+<span id="L47">    CHECK(phase.maximum_in_flight == 1 &amp;&amp; phase.simulation &amp;&amp;</span>
+<span id="L48">          phase.simulation-&gt;host_watchdog_ns == 5&#x27;000&#x27;000&#x27;000ull);</span>
+<span id="L49">    CHECK(phase.completion_budget_ns == (owner.physics &amp;&amp; i == 0</span>
+<span id="L50">                                             ? golden::cuda::completion_ns</span>
+<span id="L51">                                             : gx::completion_ns));</span>
+<span id="L52">  }</span>
+<span id="L53">  for (std::size_t lane = 0; lane &lt; 2; ++lane) {</span>
+<span id="L54">    const auto expected = lane ? actuator : sensor;</span>
+<span id="L55">    rt::DeviceTimelineInfo t;</span>
+<span id="L56">    CHECK(owner.io-&gt;timeline(lane, t));</span>
+<span id="L57">    // Startup safety uses these public timelines too.</span>
+<span id="L58">    CHECK(t.completed_value == expected + 1 &amp;&amp;</span>
+<span id="L59">          t.last_accepted_value == expected + 1);</span>
+<span id="L60">    CHECK(owner.io-&gt;providers[lane] == expected &amp;&amp;</span>
+<span id="L61">          owner.io-&gt;publications[lane] == expected);</span>
+<span id="L62">  }</span>
+<span id="L63">  const auto transfers = sensor + actuator + safe;</span>
+<span id="L64">  CHECK(owner.driver-&gt;uploads == 2 * transfers &amp;&amp;</span>
+<span id="L65">        owner.driver-&gt;downloads == transfers);</span>
+<span id="L66">  CHECK(owner.driver-&gt;controls == transfers &amp;&amp;</span>
+<span id="L67">        owner.driver-&gt;events == transfers);</span>
+<span id="L68">  CHECK(owner.driver-&gt;safe_acks == safe &amp;&amp; owner.driver-&gt;faults == 0);</span>
+<span id="L69">  return true;</span>
+<span id="L70">}</span>
+<span id="L71">bool parity(Options o, int selected_dispatch = -1,</span>
+<span id="L72">            const std::filesystem::path &amp;path = {}) {</span>
+<span id="L73">  std::vector&lt;StateBytes&gt; reference(o.ticks);</span>
+<span id="L74">  if (selected_dispatch &gt;= 0) {</span>
+<span id="L75">    std::ifstream stream(path.string() + &quot;.states&quot;,</span>
+<span id="L76">                         std::ios::binary | std::ios::ate);</span>
+<span id="L77">    CHECK(stream &amp;&amp;</span>
+<span id="L78">          stream.tellg() == static_cast&lt;std::streamoff&gt;(reference.size() *</span>
+<span id="L79">                                                        sizeof(StateBytes)));</span>
+<span id="L80">    stream.seekg(0);</span>
+<span id="L81">    stream.read(</span>
+<span id="L82">        reinterpret_cast&lt;char *&gt;(reference.data()),</span>
+<span id="L83">        static_cast&lt;std::streamsize&gt;(reference.size() * sizeof(StateBytes)));</span>
+<span id="L84">    CHECK(bool(stream));</span>
+<span id="L85">  } else {</span>
+<span id="L86">    auto memory = std::make_unique&lt;Memory&gt;();</span>
+<span id="L87">    auto jobs = std::make_unique&lt;Jobs&gt;();</span>
+<span id="L88">    if (o.host)</span>
+<span id="L89">      CHECK(jobs-&gt;start(o.workers) == Status::ok);</span>
+<span id="L90">    auto s = std::make_unique&lt;golden::Session&gt;(o, o.host ? jobs.get() : nullptr,</span>
+<span id="L91">                                               *memory);</span>
+<span id="L92">    auto policy = Memory::policy();</span>
+<span id="L93">    policy.thread_policy_count = 1;</span>
+<span id="L94">    policy.thread_policies[0].role = rt::thread_role_executor_worker;</span>
+<span id="L95">    policy.thread_policies[0].policy.wait_strategy = rt::WaitStrategy::park;</span>
+<span id="L96">    CHECK(s-&gt;prepare(fixed::action_capacity, &amp;policy) == Status::ok &amp;&amp;</span>
+<span id="L97">          s-&gt;controls());</span>
+<span id="L98">    Oracle oracle(o);</span>
+<span id="L99">    for (std::size_t t = 0; t &lt; o.ticks; ++t) {</span>
+<span id="L100">      CHECK(s-&gt;step(t) == Status::ok &amp;&amp; oracle.step(t, s-&gt;world));</span>
+<span id="L101">      reference[t] = s-&gt;world.canonical;</span>
+<span id="L102">    }</span>
+<span id="L103">    CHECK(s-&gt;close() == Status::ok);</span>
+<span id="L104">    s.reset();</span>
+<span id="L105">    if (o.host)</span>
+<span id="L106">      CHECK(jobs-&gt;close() == Status::ok);</span>
+<span id="L107">  }</span>
+<span id="L108">  if (selected_dispatch == -2) {</span>
+<span id="L109">    std::ofstream stream(path.string() + &quot;.states&quot;, std::ios::binary);</span>
+<span id="L110">    stream.write(</span>
+<span id="L111">        reinterpret_cast&lt;const char *&gt;(reference.data()),</span>
+<span id="L112">        static_cast&lt;std::streamsize&gt;(reference.size() * sizeof(StateBytes)));</span>
+<span id="L113">    stream.close();</span>
+<span id="L114">    CHECK(!stream.fail());</span>
+<span id="L115">    return true;</span>
+<span id="L116">  }</span>
+<span id="L117">  for (auto dispatch :</span>
+<span id="L118">       {gx::Dispatch::cpu, gx::Dispatch::kernel, gx::Dispatch::graph}) {</span>
+<span id="L119">    if (selected_dispatch &gt;= 0 &amp;&amp; int(dispatch) != selected_dispatch)</span>
+<span id="L120">      continue;</span>
+<span id="L121">    std::cout &lt;&lt; &quot;parity dispatch=&quot; &lt;&lt; int(dispatch) &lt;&lt; &quot; host=&quot; &lt;&lt; o.host</span>
+<span id="L122">              &lt;&lt; &quot; count=&quot; &lt;&lt; o.count &lt;&lt; &quot; ticks=&quot; &lt;&lt; o.ticks &lt;&lt; std::endl;</span>
+<span id="L123">    auto owner = std::make_unique&lt;gx::Owner&gt;(o, dispatch);</span>
+<span id="L124">    auto status = owner-&gt;prepare();</span>
+<span id="L125">    if (status != Status::ok)</span>
+<span id="L126">      std::cerr &lt;&lt; &quot;prepare=&quot; &lt;&lt; int(status) &lt;&lt; &#x27; &#x27;</span>
+<span id="L127">                &lt;&lt; owner-&gt;session-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L128">    CHECK(status == Status::ok);</span>
+<span id="L129">    auto &amp;s = *owner-&gt;session;</span>
+<span id="L130">    gx::Replay replay(o.ticks);</span>
+<span id="L131">    CHECK(replay.begin(s) &amp;&amp; s.controls());</span>
+<span id="L132">    Oracle oracle(o);</span>
+<span id="L133">    for (std::size_t t = 0; t &lt; o.ticks; ++t) {</span>
+<span id="L134">      replay.record(s, t);</span>
+<span id="L135">      allocation::begin();</span>
+<span id="L136">      status = s.step(t);</span>
+<span id="L137">      auto allocations = allocation::end();</span>
+<span id="L138">      if (status != Status::ok)</span>
+<span id="L139">        std::cerr &lt;&lt; &quot;tick=&quot; &lt;&lt; t &lt;&lt; &quot; status=&quot; &lt;&lt; int(status) &lt;&lt; &#x27; &#x27;</span>
+<span id="L140">                  &lt;&lt; s.runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L141">      CHECK(status == Status::ok &amp;&amp; allocations == 0);</span>
+<span id="L142">      CHECK(oracle.step(t, s.world) &amp;&amp; same(reference[t], s.world.canonical));</span>
+<span id="L143">    }</span>
+<span id="L144">    rt::LiveControlCommitInfo commit;</span>
+<span id="L145">    CHECK(s.runtime-&gt;live_control_commit_info(commit));</span>
+<span id="L146">    CHECK(get(s.world.canonical, 64, 8) == commit.generation_identity);</span>
+<span id="L147">    CHECK(get(s.world.canonical, 392, 8) == commit.committed);</span>
+<span id="L148">    CHECK(replay.seal(s));</span>
+<span id="L149">    allocation::begin();</span>
+<span id="L150">    const auto replayed = replay.verify(s);</span>
+<span id="L151">    auto allocations = allocation::end();</span>
+<span id="L152">    if (!replayed)</span>
+<span id="L153">      std::cerr &lt;&lt; &quot;replay=&quot; &lt;&lt; int(replay.result.mismatch_status) &lt;&lt; &#x27; &#x27;</span>
+<span id="L154">                &lt;&lt; s.runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L155">    CHECK(replayed &amp;&amp; allocations == 0);</span>
+<span id="L156">    CHECK(counts(*owner, 2 * ((o.ticks - 1) / 2 + 1),</span>
+<span id="L157">                 2 * ((o.ticks - 1) / 3 + 1), 2));</span>
+<span id="L158">    auto malformed = replay.trusted;</span>
+<span id="L159">    malformed.back() ^= std::byte{1};</span>
+<span id="L160">    const auto before = s.world.canonical;</span>
+<span id="L161">    const auto uploads = owner-&gt;driver-&gt;uploads.load();</span>
+<span id="L162">    CHECK(gx::Replay::apply(s, malformed) != Status::ok);</span>
+<span id="L163">    CHECK(s.world.canonical == before &amp;&amp; owner-&gt;driver-&gt;uploads == uploads);</span>
+<span id="L164">    CHECK(owner-&gt;close() == Status::ok);</span>
+<span id="L165">    CHECK(owner-&gt;driver-&gt;safe_acks == 4);</span>
+<span id="L166">    CHECK(owner-&gt;memory-&gt;acquisitions == owner-&gt;memory-&gt;releases);</span>
+<span id="L167">    CHECK(owner-&gt;driver-&gt;initializes == 1 &amp;&amp; owner-&gt;driver-&gt;shutdowns == 1);</span>
+<span id="L168">  }</span>
+<span id="L169">  return true;</span>
+<span id="L170">}</span>
+<span id="L171">bool allocation_control() {</span>
+<span id="L172">  allocation::begin();</span>
+<span id="L173">  auto *ordinary = ::operator new(17);</span>
+<span id="L174">  *static_cast&lt;volatile unsigned char *&gt;(ordinary) = 17;</span>
+<span id="L175">  const auto ordinary_count = allocation::end();</span>
+<span id="L176">  ::operator delete(ordinary);</span>
+<span id="L177">  CHECK(ordinary_count == 1);</span>
+<span id="L178">  allocation::begin();</span>
+<span id="L179">  auto *aligned = ::operator new (64, std::align_val_t{64});</span>
+<span id="L180">  *static_cast&lt;volatile unsigned char *&gt;(aligned) = 64;</span>
+<span id="L181">  const auto aligned_count = allocation::end();</span>
+<span id="L182">  ::operator delete (aligned, std::align_val_t{64});</span>
+<span id="L183">  CHECK(aligned_count == 1);</span>
+<span id="L184">  std::cout</span>
+<span id="L185">      &lt;&lt; &quot;allocation controls ordinary=&quot; &lt;&lt; ordinary_count</span>
+<span id="L186">      &lt;&lt; &quot; aligned=&quot; &lt;&lt; aligned_count</span>
+<span id="L187">      &lt;&lt; &quot;; steady/replay assertions require zero including native workers\n&quot;;</span>
+<span id="L188">  return true;</span>
+<span id="L189">}</span>
+<span id="L190"></span>
+<span id="L191">bool contracts();</span>
+<span id="L192">bool transport_faults();</span>
+<span id="L193">bool native_queue();</span>
+<span id="L194">bool additional_replay();</span>
+<span id="L195">int main(int argc, char **argv) {</span>
+<span id="L196">  std::cout &lt;&lt; std::unitbuf;</span>
+<span id="L197">  // Distinguish sanitizer loader failures from every entered test attempt.</span>
+<span id="L198">  std::cerr &lt;&lt; &quot;golden XDMA fixture entered&quot; &lt;&lt; std::endl;</span>
+<span id="L199">  int selected = -1, selected_dispatch = -1;</span>
+<span id="L200">  std::filesystem::path reference;</span>
+<span id="L201">  if (argc != 1) {</span>
+<span id="L202">    if ((argc != 3 &amp;&amp; argc != 7) || std::string_view(argv[1]) != &quot;--case&quot;)</span>
+<span id="L203">      return 64;</span>
+<span id="L204">    const std::string_view value = argv[2];</span>
+<span id="L205">    const auto parsed =</span>
+<span id="L206">        std::from_chars(value.data(), value.data() + value.size(), selected);</span>
+<span id="L207">    if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() ||</span>
+<span id="L208">        selected &lt; 0 || selected &gt; 18)</span>
+<span id="L209">      return 64;</span>
+<span id="L210">  }</span>
+<span id="L211">  if (argc == 7) {</span>
+<span id="L212">    if ((selected != 9 &amp;&amp; selected != 18) ||</span>
+<span id="L213">        std::string_view(argv[3]) != &quot;--dispatch&quot; ||</span>
+<span id="L214">        std::string_view(argv[5]) != &quot;--reference&quot;)</span>
+<span id="L215">      return 64;</span>
+<span id="L216">    const std::string_view dispatch = argv[4];</span>
+<span id="L217">    selected_dispatch = dispatch == &quot;reference&quot; ? -2</span>
+<span id="L218">                        : dispatch == &quot;cpu&quot;     ? 0</span>
+<span id="L219">                        : dispatch == &quot;kernel&quot;  ? 1</span>
+<span id="L220">                        : dispatch == &quot;graph&quot;   ? 2</span>
+<span id="L221">                                                : -1;</span>
+<span id="L222">    if (selected_dispatch == -1 || !*argv[6])</span>
+<span id="L223">      return 64;</span>
+<span id="L224">    reference = argv[6];</span>
+<span id="L225">  }</span>
+<span id="L226">  if (selected &lt;= 0) {</span>
+<span id="L227">    if (!allocation_control() || !contracts() || !transport_faults() ||</span>
+<span id="L228">        !native_queue() || !additional_replay())</span>
+<span id="L229">      return 1;</span>
+<span id="L230">  }</span>
+<span id="L231">  int case_number = 0;</span>
+<span id="L232">  const auto run_case = [&amp;](Options o) {</span>
+<span id="L233">    ++case_number;</span>
+<span id="L234">    return selected &gt;= 0 &amp;&amp; selected != case_number</span>
+<span id="L235">               ? true</span>
+<span id="L236">               : parity(o, selected_dispatch, reference);</span>
+<span id="L237">  };</span>
+<span id="L238">  for (bool host : {false, true}) {</span>
+<span id="L239">    for (std::size_t i = 0; i &lt; 4; ++i) {</span>
+<span id="L240">      Options o;</span>
+<span id="L241">      o.host = host;</span>
+<span id="L242">      o.count = std::array&lt;std::size_t, 4&gt;{1, 17, 16, 256}[i];</span>
+<span id="L243">      o.workers = static_cast&lt;std::uint32_t&gt;(i % 3 + 1);</span>
+<span id="L244">      o.grain = std::array&lt;std::size_t, 4&gt;{1, 4, 16, 64}[i];</span>
+<span id="L245">      if (!run_case(o))</span>
+<span id="L246">        return 1;</span>
+<span id="L247">    }</span>
+<span id="L248">    for (auto campaign :</span>
+<span id="L249">         {Campaign::control_rejected, Campaign::control_replaced,</span>
+<span id="L250">          Campaign::stale_input, Campaign::peer_missing}) {</span>
+<span id="L251">      Options o;</span>
+<span id="L252">      o.host = host;</span>
+<span id="L253">      o.campaign = campaign;</span>
+<span id="L254">      if (!run_case(o))</span>
+<span id="L255">        return 1;</span>
+<span id="L256">    }</span>
+<span id="L257">    Options max;</span>
+<span id="L258">    max.host = host;</span>
+<span id="L259">    max.count = 256;</span>
+<span id="L260">    max.ticks = 1024;</span>
+<span id="L261">    max.workers = 3;</span>
+<span id="L262">    max.grain = 64;</span>
+<span id="L263">    if (!run_case(max))</span>
+<span id="L264">      return 1;</span>
+<span id="L265">  }</span>
+<span id="L266">  std::cout &lt;&lt; &quot;PASS requested golden XDMA test cases\n&quot;;</span>
+<span id="L267">}</span>
+<span id="L268"></span>
+<span id="L269">bool contracts() {</span>
+<span id="L270">  { // The typed owned driver can explicitly exercise unchanged native policy.</span>
+<span id="L271">    auto memory = std::make_unique&lt;Memory&gt;();</span>
+<span id="L272">    gx::SimulatedDriver driver(16);</span>
+<span id="L273">    gx::Io native(driver, false);</span>
+<span id="L274">    gx::Session s(Options{}, nullptr, *memory, native);</span>
+<span id="L275">    const auto status = s.prepare();</span>
+<span id="L276">    std::cout &lt;&lt; &quot;native rejection=&quot; &lt;&lt; int(status) &lt;&lt; &#x27; &#x27;</span>
+<span id="L277">              &lt;&lt; s.runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L278">    CHECK(status == Status::invalid_config &amp;&amp; driver.uploads == 0);</span>
+<span id="L279">    CHECK(native.native_capabilities().deterministic_mock == 0);</span>
+<span id="L280">    CHECK(s.close() == Status::ok &amp;&amp; !driver.live);</span>
+<span id="L281">  }</span>
+<span id="L282">  { // Failure before initialization, then retryable native teardown failure.</span>
+<span id="L283">    gx::Owner failed(Options{});</span>
+<span id="L284">    failed.driver-&gt;fail_initialize = true;</span>
+<span id="L285">    CHECK(failed.prepare() != Status::ok &amp;&amp; failed.driver-&gt;uploads == 0);</span>
+<span id="L286">    CHECK(failed.close() == Status::ok &amp;&amp; !failed.driver-&gt;live);</span>
+<span id="L287">    gx::Owner retry(Options{}, gx::Dispatch::graph);</span>
+<span id="L288">    CHECK(retry.prepare() == Status::ok &amp;&amp;</span>
+<span id="L289">          retry.session-&gt;step(0) == Status::ok);</span>
+<span id="L290">    retry.driver-&gt;fail_shutdown = true;</span>
+<span id="L291">    CHECK(retry.close() != Status::ok &amp;&amp; retry.session &amp;&amp; retry.io &amp;&amp;</span>
+<span id="L292">          retry.driver-&gt;live);</span>
+<span id="L293">    CHECK(retry.memory-&gt;live_count() == 3);</span>
+<span id="L294">    const auto ack = retry.driver-&gt;safe_acks.load();</span>
+<span id="L295">    CHECK(retry.close() == Status::ok &amp;&amp; retry.driver-&gt;safe_acks == ack);</span>
+<span id="L296">  }</span>
+<span id="L297">  { // Acquire then fail initialize; failed rollback retains ownership for</span>
+<span id="L298">    // retry.</span>
+<span id="L299">    gx::SimulatedDriver driver(16);</span>
+<span id="L300">    rt::XdmaBackendConfig config;</span>
+<span id="L301">    config.queue_capacity = 2;</span>
+<span id="L302">    config.buffer_capacity = 6;</span>
+<span id="L303">    rt::XdmaDeviceBackend backend(driver.api(), config);</span>
+<span id="L304">    const auto registration = backend.hal_v2_registration(&quot;partial.xdma&quot;);</span>
+<span id="L305">    const auto api = registration.api;</span>
+<span id="L306">    driver.fail_after_acquire = true;</span>
+<span id="L307">    driver.fail_shutdown = true;</span>
+<span id="L308">    rt::HalV2InitializeConfig request;</span>
+<span id="L309">    request.requested_in_flight = 2;</span>
+<span id="L310">    request.requested_registered_buffers = 6;</span>
+<span id="L311">    CHECK(api.initialize(api.instance, &amp;request) != rt::HalV2Status::ok &amp;&amp;</span>
+<span id="L312">          driver.live);</span>
+<span id="L313">    CHECK(api.shutdown(api.instance) == rt::HalV2Status::ok &amp;&amp; !driver.live);</span>
+<span id="L314">    CHECK(driver.initializes == 1 &amp;&amp; driver.shutdowns == 1);</span>
+<span id="L315">  }</span>
+<span id="L316">  { // Lossless artifacts belong to the originating owner and configuration.</span>
+<span id="L317">    gx::Owner first(Options{}), foreign(Options{}),</span>
+<span id="L318">        variant(Options{}, gx::Dispatch::graph);</span>
+<span id="L319">    CHECK(first.prepare() == Status::ok &amp;&amp; foreign.prepare() == Status::ok &amp;&amp;</span>
+<span id="L320">          variant.prepare() == Status::ok);</span>
+<span id="L321">    gx::Replay replay(24);</span>
+<span id="L322">    CHECK(replay.begin(*first.session) &amp;&amp; first.session-&gt;controls());</span>
+<span id="L323">    for (std::size_t t = 0; t &lt; 24; ++t) {</span>
+<span id="L324">      replay.record(*first.session, t);</span>
+<span id="L325">      CHECK(first.session-&gt;step(t) == Status::ok);</span>
+<span id="L326">    }</span>
+<span id="L327">    CHECK(replay.seal(*first.session));</span>
+<span id="L328">    for (auto *owner : {&amp;foreign, &amp;variant}) {</span>
+<span id="L329">      const auto state = owner-&gt;session-&gt;world.canonical;</span>
+<span id="L330">      const auto uploads = owner-&gt;driver-&gt;uploads.load();</span>
+<span id="L331">      CHECK(gx::Replay::apply(*owner-&gt;session, replay.trusted) ==</span>
+<span id="L332">            Status::incompatible_artifact);</span>
+<span id="L333">      CHECK(owner-&gt;session-&gt;world.canonical == state &amp;&amp;</span>
+<span id="L334">            owner-&gt;driver-&gt;uploads == uploads);</span>
+<span id="L335">    }</span>
+<span id="L336">    const auto uploads = variant.driver-&gt;uploads.load();</span>
+<span id="L337">    CHECK(variant.session-&gt;runtime-&gt;restore_checkpoint(replay.initial) ==</span>
+<span id="L338">          Status::incompatible_artifact);</span>
+<span id="L339">    CHECK(variant.driver-&gt;uploads == uploads);</span>
+<span id="L340">    CHECK(first.close() == Status::ok &amp;&amp; foreign.close() == Status::ok &amp;&amp;</span>
+<span id="L341">          variant.close() == Status::ok);</span>
+<span id="L342">  }</span>
+<span id="L343">  { // Concurrent native workers are owned independently; setup is off lane.</span>
+<span id="L344">    Options o;</span>
+<span id="L345">    o.workers = 2;</span>
+<span id="L346">    gx::Owner first(o, gx::Dispatch::kernel), second(o, gx::Dispatch::graph);</span>
+<span id="L347">    CHECK(first.prepare() == Status::ok &amp;&amp; second.prepare() == Status::ok);</span>
+<span id="L348">    CHECK(first.session-&gt;controls() &amp;&amp; second.session-&gt;controls());</span>
+<span id="L349">    auto run = [&amp;](gx::Owner &amp;owner) {</span>
+<span id="L350">      Oracle oracle(o);</span>
+<span id="L351">      for (std::size_t t = 0; t &lt; o.ticks; ++t) {</span>
+<span id="L352">        if (owner.session-&gt;step(t) != Status::ok ||</span>
+<span id="L353">            !oracle.step(t, owner.session-&gt;world))</span>
+<span id="L354">          return false;</span>
+<span id="L355">      }</span>
+<span id="L356">      return true;</span>
+<span id="L357">    };</span>
+<span id="L358">    auto a = std::async(std::launch::async, [&amp;] { return run(first); });</span>
+<span id="L359">    auto b = std::async(std::launch::async, [&amp;] { return run(second); });</span>
+<span id="L360">    CHECK(a.get() &amp;&amp; b.get());</span>
+<span id="L361">    CHECK(counts(first, 12, 8, 2) &amp;&amp; counts(second, 12, 8, 2));</span>
+<span id="L362">    CHECK(</span>
+<span id="L363">        same(first.session-&gt;world.canonical, second.session-&gt;world.canonical));</span>
+<span id="L364">    CHECK(first.close() == Status::ok &amp;&amp; second.close() == Status::ok);</span>
+<span id="L365">  }</span>
+<span id="L366">  { // Small retention cannot silently manufacture a complete replay.</span>
+<span id="L367">    gx::Owner owner(Options{});</span>
+<span id="L368">    CHECK(owner.session-&gt;prepare(8) == Status::ok);</span>
+<span id="L369">    gx::Replay replay(24);</span>
+<span id="L370">    gx::Telemetry telemetry;</span>
+<span id="L371">    CHECK(replay.begin(*owner.session) &amp;&amp; owner.session-&gt;controls());</span>
+<span id="L372">    for (std::size_t t = 0; t &lt; 24; ++t) {</span>
+<span id="L373">      replay.record(*owner.session, t);</span>
+<span id="L374">      CHECK(owner.session-&gt;step(t) == Status::ok);</span>
+<span id="L375">    }</span>
+<span id="L376">    CHECK(telemetry.drain(*owner.session-&gt;runtime) ==</span>
+<span id="L377">              Status::resource_exhausted &amp;&amp;</span>
+<span id="L378">          telemetry.action_gaps &gt; 0);</span>
+<span id="L379">    CHECK(!replay.seal(*owner.session));</span>
+<span id="L380">    CHECK(owner.close() == Status::ok);</span>
+<span id="L381">  }</span>
+<span id="L382">  return true;</span>
+<span id="L383">}</span>
+<span id="L384"></span>
+<span id="L385">bool transport_faults() {</span>
+<span id="L386">  using F = gx::SimulatedDriver::Fault;</span>
+<span id="L387">  for (auto dispatch :</span>
+<span id="L388">       {gx::Dispatch::cpu, gx::Dispatch::kernel, gx::Dispatch::graph}) {</span>
+<span id="L389">    for (auto fault : {F::short_transfer, F::transfer_timeout, F::device_loss,</span>
+<span id="L390">                       F::reset_required, F::stale_sequence, F::stale_timestamp,</span>
+<span id="L391">                       F::payload_corrupt, F::header_corrupt, F::delayed}) {</span>
+<span id="L392">      gx::Owner owner(Options{}, dispatch);</span>
+<span id="L393">      CHECK(owner.prepare() == Status::ok);</span>
+<span id="L394">      owner.driver-&gt;fault_lane = 0;</span>
+<span id="L395">      owner.driver-&gt;fault = fault;</span>
+<span id="L396">      const auto before = owner.session-&gt;world.sensor;</span>
+<span id="L397">      const auto result = owner.session-&gt;step(0);</span>
+<span id="L398">      std::cout &lt;&lt; &quot;transport dispatch=&quot; &lt;&lt; int(dispatch)</span>
+<span id="L399">                &lt;&lt; &quot; fault=&quot; &lt;&lt; int(fault) &lt;&lt; &quot; status=&quot; &lt;&lt; int(result) &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L400">      if (fault == F::delayed) {</span>
+<span id="L401">        CHECK(result == Status::ok &amp;&amp; owner.driver-&gt;delayed_events == 1);</span>
+<span id="L402">        CHECK(counts(owner, 1, 1, 2));</span>
+<span id="L403">      } else {</span>
+<span id="L404">        const auto expected =</span>
+<span id="L405">            fault == F::transfer_timeout ? Status::device_timeout</span>
+<span id="L406">            : fault == F::device_loss    ? Status::device_lost</span>
+<span id="L407">            : fault == F::reset_required ? Status::device_reset_required</span>
+<span id="L408">                                         : Status::device_error;</span>
+<span id="L409">        CHECK(result == expected &amp;&amp; owner.driver-&gt;faults == 1);</span>
+<span id="L410">        CHECK(owner.session-&gt;world.sensor.position == before.position &amp;&amp;</span>
+<span id="L411">              owner.session-&gt;world.sensor.velocity == before.velocity);</span>
+<span id="L412">        CHECK(owner.io-&gt;publications[0] == 0 &amp;&amp;</span>
+<span id="L413">              owner.session-&gt;world.calls[4] == 0);</span>
+<span id="L414">        if (fault == F::reset_required) {</span>
+<span id="L415">          owner.driver-&gt;fail_reset = true;</span>
+<span id="L416">          CHECK(owner.io-&gt;reset() != Status::ok &amp;&amp; owner.driver-&gt;live &amp;&amp;</span>
+<span id="L417">                owner.memory-&gt;live_count() == 3);</span>
+<span id="L418">          CHECK(owner.io-&gt;reset() == Status::ok);</span>
+<span id="L419">        }</span>
+<span id="L420">      }</span>
+<span id="L421">      CHECK(owner.close() == Status::ok);</span>
+<span id="L422">      CHECK(!owner.driver-&gt;live &amp;&amp;</span>
+<span id="L423">            owner.memory-&gt;acquisitions == owner.memory-&gt;releases);</span>
+<span id="L424">    }</span>
+<span id="L425">  }</span>
+<span id="L426">  return true;</span>
+<span id="L427">}</span>
+<span id="L428"></span>
+<span id="L429">bool native_queue() {</span>
+<span id="L430">  // Independent public native-protocol fixture: two slots and one worker make</span>
+<span id="L431">  // queued cancellation observable. This is not the scenario&#x27;s physical graph.</span>
+<span id="L432">  gx::SimulatedDriver driver(16);</span>
+<span id="L433">  Frame input{}, output{};</span>
+<span id="L434">  std::array&lt;std::byte, 4&gt; ack{};</span>
+<span id="L435">  gx::sampled_header(input, 0, 1, 0, 0, rt::SampledIoFrameStatus::initial);</span>
+<span id="L436">  gx::sampled_header(output, 1, 2, 1, gx::clock_origin,</span>
+<span id="L437">                     rt::SampledIoFrameStatus::produced);</span>
+<span id="L438">  rt::XdmaBackendConfig config;</span>
+<span id="L439">  config.queue_capacity = 2;</span>
+<span id="L440">  config.buffer_capacity = 3;</span>
+<span id="L441">  config.worker_count = 1;</span>
+<span id="L442">  config.max_transfer_bytes = config.max_buffer_bytes = maximum_frame_bytes;</span>
+<span id="L443">  config.control_aperture_bytes = 8;</span>
+<span id="L444">  config.user_event_count = 2;</span>
+<span id="L445">  rt::XdmaDeviceBackend backend(driver.api(), config);</span>
+<span id="L446">  auto registration = backend.hal_v2_registration(&quot;bounded.native.xdma&quot;);</span>
+<span id="L447">  auto api = registration.api;</span>
+<span id="L448">  auto command = *registration.command_timeline;</span>
+<span id="L449">  rt::HalV2InitializeConfig request;</span>
+<span id="L450">  request.requested_in_flight = 2;</span>
+<span id="L451">  request.requested_registered_buffers = 3;</span>
+<span id="L452">  CHECK(api.initialize(api.instance, &amp;request) == rt::HalV2Status::ok);</span>
+<span id="L453">  const std::array&lt;std::span&lt;std::byte&gt;, 3&gt; storage{frame_span(input, 0),</span>
+<span id="L454">                                                    frame_span(output, 1), ack};</span>
+<span id="L455">  std::array&lt;std::uint64_t, 3&gt; tokens{};</span>
+<span id="L456">  for (std::size_t i = 0; i &lt; 3; ++i) {</span>
+<span id="L457">    rt::HalV2BufferRegistration buffer;</span>
+<span id="L458">    buffer.data = storage[i].data();</span>
+<span id="L459">    buffer.bytes = storage[i].size();</span>
+<span id="L460">    buffer.name[0] = static_cast&lt;char&gt;(&#x27;a&#x27; + i);</span>
+<span id="L461">    buffer.flags =</span>
+<span id="L462">        RTFW_DEVICE_BUFFER_HOST_READ | RTFW_DEVICE_BUFFER_HOST_WRITE |</span>
+<span id="L463">        RTFW_DEVICE_BUFFER_DEVICE_READ | RTFW_DEVICE_BUFFER_DEVICE_WRITE;</span>
+<span id="L464">    CHECK(api.register_buffer(api.instance, &amp;buffer, &amp;tokens[i]) ==</span>
+<span id="L465">          rt::HalV2Status::ok);</span>
+<span id="L466">  }</span>
+<span id="L467">  rt::DeviceCommandBatch batch;</span>
+<span id="L468">  batch.batch_id = 1;</span>
+<span id="L469">  batch.timeout_ns = 8&#x27;000&#x27;000;</span>
+<span id="L470">  batch.command_count = 5;</span>
+<span id="L471">  batch.signal_count = 1;</span>
+<span id="L472">  batch.signals[0].timeline_handle = 1;</span>
+<span id="L473">  batch.signals[0].value = 1;</span>
+<span id="L474">  const auto transfer = [&amp;](std::size_t at, std::size_t buffer, bool down) {</span>
+<span id="L475">    auto &amp;c = batch.commands[at];</span>
+<span id="L476">    c.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::dispatch);</span>
+<span id="L477">    c.opcode = down ? rt::xdma_device_opcode_card_to_host</span>
+<span id="L478">                    : rt::xdma_device_opcode_host_to_card;</span>
+<span id="L479">    c.buffer_count = 1;</span>
+<span id="L480">    c.buffers[0].buffer_token = tokens[buffer];</span>
+<span id="L481">    c.buffers[0].bytes = storage[buffer].size();</span>
+<span id="L482">    c.buffers[0].access =</span>
+<span id="L483">        down ? RTFW_DEVICE_ACCESS_WRITE : RTFW_DEVICE_ACCESS_READ;</span>
+<span id="L484">    rt::XdmaTransfer t;</span>
+<span id="L485">    t.device_offset = buffer ? 8192 : 0;</span>
+<span id="L486">    c.payload_size = sizeof(t);</span>
+<span id="L487">    std::memcpy(c.payload.data(), &amp;t, sizeof(t));</span>
+<span id="L488">  };</span>
+<span id="L489">  transfer(0, 0, false);</span>
+<span id="L490">  transfer(1, 1, false);</span>
+<span id="L491">  transfer(4, 1, true);</span>
+<span id="L492">  CHECK(rt::set_xdma_control_write(batch.commands[2], 0, 0));</span>
+<span id="L493">  rt::HalV2BufferReference reference;</span>
+<span id="L494">  reference.buffer_token = tokens[2];</span>
+<span id="L495">  reference.bytes = 4;</span>
+<span id="L496">  reference.access = RTFW_DEVICE_ACCESS_WRITE;</span>
+<span id="L497">  CHECK(rt::set_xdma_user_event_wait(batch.commands[3], 0, reference));</span>
+<span id="L498">  driver.hold_event = true;</span>
+<span id="L499">  CHECK(command.submit(command.instance, &amp;batch) == rt::HalV2Status::ok);</span>
+<span id="L500">  const auto deadline =</span>
+<span id="L501">      std::chrono::steady_clock::now() + std::chrono::seconds(2);</span>
+<span id="L502">  while (!driver.event_waiting &amp;&amp; std::chrono::steady_clock::now() &lt; deadline)</span>
+<span id="L503">    std::this_thread::yield();</span>
+<span id="L504">  CHECK(driver.event_waiting);</span>
+<span id="L505">  rt::HalV2BatchCompletion completion;</span>
+<span id="L506">  std::uint64_t n = 0;</span>
+<span id="L507">  CHECK(command.poll(command.instance, &amp;completion, 1, &amp;n) ==</span>
+<span id="L508">            rt::HalV2Status::ok &amp;&amp;</span>
+<span id="L509">        n == 0);</span>
+<span id="L510">  batch.batch_id = 2;</span>
+<span id="L511">  batch.signals[0].value = 2;</span>
+<span id="L512">  CHECK(command.submit(command.instance, &amp;batch) == rt::HalV2Status::ok);</span>
+<span id="L513">  batch.batch_id = 3;</span>
+<span id="L514">  batch.signals[0].value = 3;</span>
+<span id="L515">  CHECK(command.submit(command.instance, &amp;batch) ==</span>
+<span id="L516">        rt::HalV2Status::queue_full);</span>
+<span id="L517">  CHECK(command.cancel(command.instance, 2) == rt::HalV2Status::ok &amp;&amp;</span>
+<span id="L518">        driver.stop_requests == 0);</span>
+<span id="L519">  CHECK(command.poll(command.instance, &amp;completion, 1, &amp;n) ==</span>
+<span id="L520">            rt::HalV2Status::ok &amp;&amp;</span>
+<span id="L521">        n == 1);</span>
+<span id="L522">  CHECK(completion.batch_id == 2 &amp;&amp;</span>
+<span id="L523">        completion.status ==</span>
+<span id="L524">            static_cast&lt;std::int32_t&gt;(rt::HalV2Status::canceled));</span>
+<span id="L525">  driver.hold_event = false;</span>
+<span id="L526">  const auto finish =</span>
+<span id="L527">      std::chrono::steady_clock::now() + std::chrono::seconds(2);</span>
+<span id="L528">  n = 0;</span>
+<span id="L529">  while (!n &amp;&amp; std::chrono::steady_clock::now() &lt; finish) {</span>
+<span id="L530">    CHECK(command.poll(command.instance, &amp;completion, 1, &amp;n) ==</span>
+<span id="L531">          rt::HalV2Status::ok);</span>
+<span id="L532">    std::this_thread::yield();</span>
+<span id="L533">  }</span>
+<span id="L534">  CHECK(n == 1 &amp;&amp; completion.batch_id == 1 &amp;&amp;</span>
+<span id="L535">        completion.status == static_cast&lt;std::int32_t&gt;(rt::HalV2Status::ok));</span>
+<span id="L536">  rt::HalV2Health health;</span>
+<span id="L537">  CHECK(api.get_health(api.instance, &amp;health) == rt::HalV2Status::ok);</span>
+<span id="L538">  CHECK(health.submissions == 2 &amp;&amp; health.completions == 2 &amp;&amp;</span>
+<span id="L539">        health.cancellations == 1 &amp;&amp; health.outstanding == 0);</span>
+<span id="L540">  CHECK(driver.uploads == 2 &amp;&amp; driver.downloads == 1 &amp;&amp; driver.events == 1 &amp;&amp;</span>
+<span id="L541">        driver.controls == 1);</span>
+<span id="L542">  for (auto token : tokens)</span>
+<span id="L543">    CHECK(api.unregister_buffer(api.instance, token) == rt::HalV2Status::ok);</span>
+<span id="L544">  CHECK(api.shutdown(api.instance) == rt::HalV2Status::ok &amp;&amp; !driver.live);</span>
+<span id="L545">  return true;</span>
+<span id="L546">}</span>
+<span id="L547"></span>
+<span id="L548">bool additional_replay() {</span>
+<span id="L549">  for (auto dispatch :</span>
+<span id="L550">       {gx::Dispatch::cpu, gx::Dispatch::kernel, gx::Dispatch::graph}) {</span>
+<span id="L551">    Options options;</span>
+<span id="L552">    gx::Owner owner(options, dispatch);</span>
+<span id="L553">    CHECK(owner.prepare() == Status::ok);</span>
+<span id="L554">    auto &amp;s = *owner.session;</span>
+<span id="L555">    gx::Replay replay(options.ticks);</span>
+<span id="L556">    gx::Oracle oracle(options, true);</span>
+<span id="L557">    CHECK(replay.begin(s) &amp;&amp; s.controls() &amp;&amp; s.stage&lt;4&gt;(6, 3));</span>
+<span id="L558">    for (std::size_t t = 0; t &lt; options.ticks; ++t) {</span>
+<span id="L559">      replay.record(s, t);</span>
+<span id="L560">      allocation::begin();</span>
+<span id="L561">      const auto result = s.step(t);</span>
+<span id="L562">      const auto allocations = allocation::end();</span>
+<span id="L563">      CHECK(result == Status::ok &amp;&amp; allocations == 0 &amp;&amp;</span>
+<span id="L564">            oracle.step(t, s.world));</span>
+<span id="L565">      if (t == 6 || t == 9) {</span>
+<span id="L566">        rt::SampledIoChannelStatus status;</span>
+<span id="L567">        CHECK(</span>
+<span id="L568">            s.runtime-&gt;sampled_io_channel_status(s.world.channels[2], status));</span>
+<span id="L569">        CHECK(status.underruns == (t == 6 ? 1u : 2u) &amp;&amp;</span>
+<span id="L570">              status.substituted_frames == status.underruns);</span>
+<span id="L571">        CHECK(owner.driver-&gt;safe_acks == (t == 6 ? 3u : 4u));</span>
+<span id="L572">        CHECK(owner.io-&gt;publications[1] == t / 3 + 1);</span>
+<span id="L573">      }</span>
+<span id="L574">    }</span>
+<span id="L575">    CHECK(replay.seal(s));</span>
+<span id="L576">    allocation::begin();</span>
+<span id="L577">    const auto result = replay.verify(s);</span>
+<span id="L578">    const auto allocations = allocation::end();</span>
+<span id="L579">    CHECK(result &amp;&amp; allocations == 0);</span>
+<span id="L580">    CHECK(owner.close() == Status::ok &amp;&amp; owner.driver-&gt;safe_acks == 8);</span>
+<span id="L581">  }</span>
+<span id="L582">  // CPU-only and CUDA-only snapshots cannot restore a sampled graph.</span>
+<span id="L583">  gx::Owner sampled(Options{}, gx::Dispatch::graph);</span>
+<span id="L584">  CHECK(sampled.prepare() == Status::ok);</span>
+<span id="L585">  for (auto dispatch :</span>
+<span id="L586">       {golden::cuda::Dispatch::cpu, golden::cuda::Dispatch::kernel}) {</span>
+<span id="L587">    golden::cuda::Owner source(Options{}, dispatch);</span>
+<span id="L588">    CHECK(source.prepare() == Status::ok);</span>
+<span id="L589">    auto cp = source.session-&gt;checkpoint(0);</span>
+<span id="L590">    const auto state = sampled.session-&gt;world.canonical;</span>
+<span id="L591">    const auto uploads = sampled.driver-&gt;uploads.load();</span>
+<span id="L592">    CHECK(sampled.session-&gt;runtime-&gt;restore_checkpoint(cp) ==</span>
+<span id="L593">          Status::incompatible_artifact);</span>
+<span id="L594">    CHECK(sampled.session-&gt;world.canonical == state &amp;&amp;</span>
+<span id="L595">          sampled.driver-&gt;uploads == uploads);</span>
+<span id="L596">    CHECK(source.close() == Status::ok);</span>
+<span id="L597">  }</span>
+<span id="L598">  gx::Owner kernel(Options{}, gx::Dispatch::kernel);</span>
+<span id="L599">  CHECK(kernel.prepare() == Status::ok);</span>
+<span id="L600">  auto checkpoint = kernel.session-&gt;checkpoint(0);</span>
+<span id="L601">  const auto uploads = sampled.driver-&gt;uploads.load();</span>
+<span id="L602">  CHECK(sampled.session-&gt;runtime-&gt;restore_checkpoint(checkpoint) ==</span>
+<span id="L603">        Status::incompatible_artifact);</span>
+<span id="L604">  CHECK(sampled.driver-&gt;uploads == uploads);</span>
+<span id="L605">  CHECK(kernel.close() == Status::ok &amp;&amp; sampled.close() == Status::ok);</span>
+<span id="L606">  return true;</span>
+<span id="L607">}</span></pre></html>

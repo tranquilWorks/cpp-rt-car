@@ -1,0 +1,181 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/golden_system/test_system.cpp</title><h1>tests/golden_system/test_system.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;../../samples/golden_system/oracle.hpp&quot;</span>
+<span id="L2">#include &quot;../../samples/golden_system/replay.hpp&quot;</span>
+<span id="L3">#include &quot;../cuda_physics/allocation_guard.hpp&quot;</span>
+<span id="L4">#include &lt;iostream&gt;</span>
+<span id="L5">#include &lt;memory&gt;</span>
+<span id="L6">#define CHECK(x)                                                               \</span>
+<span id="L7">  do {                                                                         \</span>
+<span id="L8">    if (!(x)) {                                                                \</span>
+<span id="L9">      std::cerr &lt;&lt; __func__ &lt;&lt; &#x27;:&#x27; &lt;&lt; __LINE__ &lt;&lt; &quot; failed: &quot; #x &lt;&lt; &#x27;\n&#x27;;      \</span>
+<span id="L10">      return false;                                                            \</span>
+<span id="L11">    }                                                                          \</span>
+<span id="L12">  } while (false)</span>
+<span id="L13">using namespace golden;</span>
+<span id="L14">using rt::Status;</span>
+<span id="L15">namespace allocation = rtfw_physics_allocation;</span>
+<span id="L16">bool run(Options o) {</span>
+<span id="L17">  auto memory = std::make_unique&lt;Memory&gt;();</span>
+<span id="L18">  auto jobs = std::make_unique&lt;Jobs&gt;();</span>
+<span id="L19">  if (o.host)</span>
+<span id="L20">    CHECK(jobs-&gt;start(o.workers) == Status::ok);</span>
+<span id="L21">  auto s = std::make_unique&lt;Session&gt;(o, o.host ? jobs.get() : nullptr, *memory);</span>
+<span id="L22">  CHECK(s-&gt;prepare() == Status::ok);</span>
+<span id="L23">  CHECK(s-&gt;plan.phase_count == 8 &amp;&amp;</span>
+<span id="L24">        s-&gt;plan.registered_state_bytes == state_bytes);</span>
+<span id="L25">  Replay replay(o.ticks);</span>
+<span id="L26">  CHECK(replay.begin(*s));</span>
+<span id="L27">  CHECK(s-&gt;controls());</span>
+<span id="L28">  Oracle oracle(o);</span>
+<span id="L29">  for (std::size_t t = 0; t &lt; o.ticks; ++t) {</span>
+<span id="L30">    replay.record(*s, t);</span>
+<span id="L31">    allocation::begin();</span>
+<span id="L32">    auto status = s-&gt;step(t);</span>
+<span id="L33">    auto count = allocation::end();</span>
+<span id="L34">    CHECK(status == Status::ok &amp;&amp; count == 0);</span>
+<span id="L35">    CHECK(oracle.step(t, s-&gt;world));</span>
+<span id="L36">  }</span>
+<span id="L37">  rt::LiveControlMailboxInfo mailbox;</span>
+<span id="L38">  rt::LiveControlCommitInfo commit;</span>
+<span id="L39">  CHECK(s-&gt;runtime-&gt;live_control_mailbox_info(2601, mailbox) &amp;&amp;</span>
+<span id="L40">        s-&gt;runtime-&gt;live_control_commit_info(commit));</span>
+<span id="L41">  CHECK(mailbox.occupancy == 0 &amp;&amp;</span>
+<span id="L42">        mailbox.invalid ==</span>
+<span id="L43">            (o.campaign == Campaign::control_rejected ? 1u : 0u));</span>
+<span id="L44">  CHECK(commit.replaced ==</span>
+<span id="L45">        (o.campaign == Campaign::control_replaced ? 1u : 0u));</span>
+<span id="L46">  CHECK(replay.seal(*s));</span>
+<span id="L47">  allocation::begin();</span>
+<span id="L48">  bool matched = replay.verify(*s);</span>
+<span id="L49">  auto count = allocation::end();</span>
+<span id="L50">  if (!matched)</span>
+<span id="L51">    std::cerr &lt;&lt; s-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L52">  CHECK(matched &amp;&amp; count == 0);</span>
+<span id="L53">  auto corrupted = replay.trusted;</span>
+<span id="L54">  corrupted.back() ^= std::byte{1};</span>
+<span id="L55">  auto before = s-&gt;world.canonical;</span>
+<span id="L56">  CHECK(s-&gt;runtime-&gt;replay_live_control(corrupted, Replay::input, s.get()) !=</span>
+<span id="L57">            Status::ok &amp;&amp;</span>
+<span id="L58">        s-&gt;world.canonical == before);</span>
+<span id="L59">  // Active artifacts bind the originating instance; a fresh instance must</span>
+<span id="L60">  // reject.</span>
+<span id="L61">  auto memory2 = std::make_unique&lt;Memory&gt;();</span>
+<span id="L62">  auto other =</span>
+<span id="L63">      std::make_unique&lt;Session&gt;(o, o.host ? jobs.get() : nullptr, *memory2);</span>
+<span id="L64">  CHECK(other-&gt;prepare() == Status::ok);</span>
+<span id="L65">  CHECK(other-&gt;runtime-&gt;replay_active(replay.active, Replay::input,</span>
+<span id="L66">                                      other.get()) != Status::ok);</span>
+<span id="L67">  CHECK(other-&gt;world.next_tick == 0);</span>
+<span id="L68">  auto cp = s-&gt;checkpoint(o.ticks - 1);</span>
+<span id="L69">  CHECK(!cp.empty());</span>
+<span id="L70">  CHECK(other-&gt;runtime-&gt;restore_checkpoint(cp) == Status::ok &amp;&amp;</span>
+<span id="L71">        other-&gt;world.decode() &amp;&amp; other-&gt;world.canonical == s-&gt;world.canonical);</span>
+<span id="L72">  CHECK(other-&gt;close() == Status::ok);</span>
+<span id="L73">  other.reset();</span>
+<span id="L74">  CHECK(s-&gt;close() == Status::ok);</span>
+<span id="L75">  s.reset();</span>
+<span id="L76">  CHECK(memory-&gt;acquisitions == memory-&gt;releases &amp;&amp;</span>
+<span id="L77">        memory2-&gt;acquisitions == memory2-&gt;releases);</span>
+<span id="L78">  if (o.host) {</span>
+<span id="L79">    CHECK(jobs-&gt;accepted.load() &gt; 0 &amp;&amp;</span>
+<span id="L80">          jobs-&gt;accepted.load() == jobs-&gt;completed.load());</span>
+<span id="L81">    CHECK(jobs-&gt;close() == Status::ok);</span>
+<span id="L82">  }</span>
+<span id="L83">  return true;</span>
+<span id="L84">}</span>
+<span id="L85">bool recovery(bool host) {</span>
+<span id="L86">  Options o;</span>
+<span id="L87">  o.host = host;</span>
+<span id="L88">  o.campaign = Campaign::overload;</span>
+<span id="L89">  auto memory = std::make_unique&lt;Memory&gt;();</span>
+<span id="L90">  auto jobs = std::make_unique&lt;Jobs&gt;();</span>
+<span id="L91">  if (host)</span>
+<span id="L92">    CHECK(jobs-&gt;start() == Status::ok);</span>
+<span id="L93">  auto s = std::make_unique&lt;Session&gt;(o, host ? jobs.get() : nullptr, *memory);</span>
+<span id="L94">  CHECK(s-&gt;prepare() == Status::ok &amp;&amp; s-&gt;controls());</span>
+<span id="L95">  Oracle oracle(o);</span>
+<span id="L96">  for (std::size_t t = 0; t &lt; 6; ++t) {</span>
+<span id="L97">    CHECK(s-&gt;step(t) == Status::ok);</span>
+<span id="L98">    CHECK(oracle.step(t, s-&gt;world));</span>
+<span id="L99">  }</span>
+<span id="L100">  auto checkpoint = s-&gt;checkpoint(5);</span>
+<span id="L101">  CHECK(!checkpoint.empty());</span>
+<span id="L102">  const auto old_handle = s-&gt;producer;</span>
+<span id="L103">  CHECK(s-&gt;step(6, true) != Status::ok);</span>
+<span id="L104">  CHECK(s-&gt;world.calls[0] == 6);</span>
+<span id="L105">  CHECK(s-&gt;close() == Status::ok);</span>
+<span id="L106">  s.reset();</span>
+<span id="L107">  s = std::make_unique&lt;Session&gt;(o, host ? jobs.get() : nullptr, *memory);</span>
+<span id="L108">  CHECK(s-&gt;prepare() == Status::ok);</span>
+<span id="L109">  CHECK(s-&gt;runtime-&gt;restore_checkpoint(checkpoint) == Status::ok &amp;&amp;</span>
+<span id="L110">        s-&gt;world.decode());</span>
+<span id="L111">  rt::LiveControlTypedPayload&lt;Control&lt;1&gt;&gt; payload;</span>
+<span id="L112">  rt::LiveControlUpdateRecord record;</span>
+<span id="L113">  CHECK(rt::make_live_control_host_update(old_handle, 99, 7, Control&lt;1&gt;{16},</span>
+<span id="L114">                                          payload, record) ==</span>
+<span id="L115">        rt::LiveControlTypedStatus::ok);</span>
+<span id="L116">  rt::LiveControlAdmissionResult admission;</span>
+<span id="L117">  CHECK(s-&gt;runtime-&gt;stage_live_control_update(old_handle, record, payload,</span>
+<span id="L118">                                              admission) == Status::ok &amp;&amp;</span>
+<span id="L119">        admission == rt::LiveControlAdmissionResult::stale);</span>
+<span id="L120">  for (std::size_t t = 6; t &lt; o.ticks; ++t) {</span>
+<span id="L121">    CHECK(s-&gt;step(t) == Status::ok);</span>
+<span id="L122">    CHECK(oracle.step(t, s-&gt;world));</span>
+<span id="L123">  }</span>
+<span id="L124">  CHECK(s-&gt;close() == Status::ok);</span>
+<span id="L125">  s.reset();</span>
+<span id="L126">  if (host)</span>
+<span id="L127">    CHECK(jobs-&gt;close() == Status::ok);</span>
+<span id="L128">  return true;</span>
+<span id="L129">}</span>
+<span id="L130">bool gap_rejection() {</span>
+<span id="L131">  Options o;</span>
+<span id="L132">  o.ticks = 128;</span>
+<span id="L133">  auto memory = std::make_unique&lt;Memory&gt;();</span>
+<span id="L134">  auto s = std::make_unique&lt;Session&gt;(o, nullptr, *memory);</span>
+<span id="L135">  CHECK(s-&gt;prepare(128) == Status::ok);</span>
+<span id="L136">  Replay replay(o.ticks);</span>
+<span id="L137">  CHECK(replay.begin(*s) &amp;&amp; s-&gt;controls());</span>
+<span id="L138">  Oracle oracle(o);</span>
+<span id="L139">  for (std::size_t tick = 0; tick &lt; o.ticks; ++tick) {</span>
+<span id="L140">    replay.record(*s, tick);</span>
+<span id="L141">    CHECK(s-&gt;step(tick) == Status::ok &amp;&amp; oracle.step(tick, s-&gt;world));</span>
+<span id="L142">  }</span>
+<span id="L143">  rt::MixedRateActionMetadata metadata;</span>
+<span id="L144">  CHECK(s-&gt;runtime-&gt;mixed_rate_action_metadata(metadata) == Status::ok &amp;&amp;</span>
+<span id="L145">        metadata.records_dropped + metadata.records_overwritten &gt; 0 &amp;&amp;</span>
+<span id="L146">        !metadata.replay_eligible);</span>
+<span id="L147">  auto before = s-&gt;world.canonical;</span>
+<span id="L148">  CHECK(!replay.seal(*s) &amp;&amp; s-&gt;world.canonical == before);</span>
+<span id="L149">  CHECK(s-&gt;close() == Status::ok);</span>
+<span id="L150">  return true;</span>
+<span id="L151">}</span>
+<span id="L152">#include &quot;protocol_checks.hpp&quot;</span>
+<span id="L153">int main() {</span>
+<span id="L154">  if (!gap_rejection())</span>
+<span id="L155">    return 1;</span>
+<span id="L156">  if (!protocol_checks() || !concurrent_owners() || !queue_checks())</span>
+<span id="L157">    return 1;</span>
+<span id="L158">  for (bool host : {false, true}) {</span>
+<span id="L159">    for (std::size_t workers : {1u, 2u, 3u})</span>
+<span id="L160">      for (std::size_t grain : {1u, 4u, 16u, 64u}) {</span>
+<span id="L161">        Options o;</span>
+<span id="L162">        o.host = host;</span>
+<span id="L163">        o.workers = workers;</span>
+<span id="L164">        o.grain = grain;</span>
+<span id="L165">        o.count = workers == 3 ? 256 : 16;</span>
+<span id="L166">        if (!run(o))</span>
+<span id="L167">          return 1;</span>
+<span id="L168">      }</span>
+<span id="L169">    for (auto campaign : {Campaign::stale_input, Campaign::control_rejected,</span>
+<span id="L170">                          Campaign::control_replaced, Campaign::peer_missing}) {</span>
+<span id="L171">      Options o;</span>
+<span id="L172">      o.host = host;</span>
+<span id="L173">      o.campaign = campaign;</span>
+<span id="L174">      if (!run(o))</span>
+<span id="L175">        return 1;</span>
+<span id="L176">    }</span>
+<span id="L177">    if (!recovery(host))</span>
+<span id="L178">      return 1;</span>
+<span id="L179">  }</span>
+<span id="L180">  std::cout &lt;&lt; &quot;golden state, controls, replay, recovery, allocation: PASS\n&quot;;</span>
+<span id="L181">}</span></pre></html>

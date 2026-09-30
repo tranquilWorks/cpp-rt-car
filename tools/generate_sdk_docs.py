@@ -55,6 +55,12 @@ def recipe_files(root, data):
 def shipped_files(root, data):
     """Virtual data-directory inventory, also used to verify a real installation."""
     result = recipe_files(root, data)
+    # M26-06: default-installed offline composition/audit manual. This adds no
+    # header, compiled target or documentation-generator dependency for users.
+    audit = root / 'docs/golden_audit/generated'
+    for path in audit.rglob('*'):
+        if path.is_file():
+            result['golden_audit/' + path.relative_to(audit).as_posix()] = path
     for kit in data['kits']:
         folder = root / 'samples' / kit
         for path in folder.rglob('*'):
@@ -109,6 +115,7 @@ def render(root=ROOT):
     mapping = {h['source']: 'manual/' + page_name(h['include']) for h in data['headers']}
     mapping.update({s: 'manual/' + guide_name(s) for s in data['guides']})
     mapping.update({p.relative_to(root).as_posix(): dst for dst, p in shipped_files(root, data).items()})
+    mapping['docs/golden_audit/requirements.yaml'] = 'golden_audit/requirements.yaml'
     mapping['docs/sdk/recipes.md'] = 'manual/recipes.md'
     mapping['docs/sdk/generated/README.md'] = 'manual/README.md'
     outputs, header_records = {}, []
@@ -165,9 +172,10 @@ require a connection. The runtime version and exact input hashes are recorded in
 [the inventory](inventory.json). Generated content is reproducible and checked
 against source during development and against archive bytes during package tests.
 
-M25 software completion does not establish an independent novice walkthrough,
-M26 composition/audit, physical CUDA/XDMA/HIL, RT1/RT2, controlled performance,
-Unreal, signing or release approval.
+The [golden system and capability audit](../golden_audit/index.html) maps the
+portable composition to exact source and retained evidence. M25/M26 software
+delivery does not establish an independent novice walkthrough, physical
+CUDA/XDMA/HIL, RT1/RT2, controlled performance, Unreal, signing or release approval.
 
 ## Guides
 

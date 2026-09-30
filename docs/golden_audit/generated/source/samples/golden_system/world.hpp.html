@@ -1,0 +1,358 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_system/world.hpp</title><h1>samples/golden_system/world.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;controls.hpp&quot;</span>
+<span id="L3">#include &lt;atomic&gt;</span>
+<span id="L4">#include &lt;limits&gt;</span>
+<span id="L5"></span>
+<span id="L6">namespace golden {</span>
+<span id="L7">inline constexpr std::size_t state_header_bytes = 512,</span>
+<span id="L8">                             state_bytes =</span>
+<span id="L9">                                 state_header_bytes + 9216 + 3072 + 6144;</span>
+<span id="L10">using StateBytes = std::array&lt;std::byte, state_bytes&gt;;</span>
+<span id="L11">struct World {</span>
+<span id="L12">  Options options;</span>
+<span id="L13">  // Explicit storage gaps preserve required 64-byte SoA alignment on MSVC.</span>
+<span id="L14">  // They are never part of the canonical state or channel bytes.</span>
+<span id="L15">  std::array&lt;std::byte, 64 - sizeof(Options)&gt; options_padding{};</span>
+<span id="L16">  Plant plant{};</span>
+<span id="L17">  alignas(64) Vector command{};</span>
+<span id="L18">  Sensor sensor{};</span>
+<span id="L19">  Configuration configuration{};</span>
+<span id="L20">  std::array&lt;std::int64_t, 6&gt; sums{};</span>
+<span id="L21">  std::array&lt;std::uint64_t, 8&gt; calls{};</span>
+<span id="L22">  std::array&lt;std::uint64_t, 5&gt; publications{}, selections{}, ages{},</span>
+<span id="L23">      generations{}, producer_releases{}, timestamps{};</span>
+<span id="L24">  std::uint64_t next_tick = 0, stale = 0, missing = 0;</span>
+<span id="L25">  std::array&lt;Frame, 5&gt; buffers{};</span>
+<span id="L26">  std::array&lt;rt::CrossRateChannelHandle, 5&gt; channels{};</span>
+<span id="L27">  StateBytes canonical{};</span>
+<span id="L28">  // One validated host snapshot per external controller release. I/O and waits</span>
+<span id="L29">  // belong to host control; callback copies these fixed arrays once.</span>
+<span id="L30">  Vector external_command{};</span>
+<span id="L31">  bool external_ready = false;</span>
+<span id="L32">  std::array&lt;std::byte, 39&gt; storage_padding{};</span>
+<span id="L33">  explicit World(Options value)</span>
+<span id="L34">      : options(value), plant(initial(value.count)),</span>
+<span id="L35">        command(plant.acceleration) {</span>
+<span id="L36">    encode();</span>
+<span id="L37">  }</span>
+<span id="L38">  void encode() noexcept {</span>
+<span id="L39">    canonical.fill(std::byte{});</span>
+<span id="L40">    put(canonical, 0, 0x5336324d, 4);</span>
+<span id="L41">    put(canonical, 4, 1, 4);</span>
+<span id="L42">    put(canonical, 8, options.count, 4);</span>
+<span id="L43">    put(canonical, 12, options.ticks, 4);</span>
+<span id="L44">    put(canonical, 16, options.workers, 4);</span>
+<span id="L45">    put(canonical, 20, options.grain, 4);</span>
+<span id="L46">    put(canonical, 24, options.host, 4);</span>
+<span id="L47">    put(canonical, 28, options.external, 4);</span>
+<span id="L48">    put(canonical, 32, static_cast&lt;unsigned&gt;(options.campaign), 4);</span>
+<span id="L49">    put32(canonical, 40, configuration.target);</span>
+<span id="L50">    put32(canonical, 44, configuration.gain);</span>
+<span id="L51">    put32(canonical, 48, configuration.calibration);</span>
+<span id="L52">    put32(canonical, 52, configuration.fault);</span>
+<span id="L53">    put(canonical, 56, next_tick, 8);</span>
+<span id="L54">    put(canonical, 64, configuration.generation, 8);</span>
+<span id="L55">    const auto write_counts = [&amp;](const auto &amp;values, std::size_t offset) {</span>
+<span id="L56">      for (auto value : values) {</span>
+<span id="L57">        put(canonical, offset, value, 8);</span>
+<span id="L58">        offset += 8;</span>
+<span id="L59">      }</span>
+<span id="L60">    };</span>
+<span id="L61">    write_counts(calls, 72);</span>
+<span id="L62">    write_counts(publications, 136);</span>
+<span id="L63">    write_counts(selections, 176);</span>
+<span id="L64">    write_counts(ages, 216);</span>
+<span id="L65">    write_counts(generations, 256);</span>
+<span id="L66">    write_counts(producer_releases, 296);</span>
+<span id="L67">    write_counts(timestamps, 336);</span>
+<span id="L68">    put(canonical, 376, stale, 8);</span>
+<span id="L69">    put(canonical, 384, missing, 8);</span>
+<span id="L70">    put(canonical, 392, configuration.applications, 8);</span>
+<span id="L71">    for (std::size_t i = 0; i &lt; 6; ++i)</span>
+<span id="L72">      put(canonical, 400 + 8 * i, std::bit_cast&lt;std::uint64_t&gt;(sums[i]), 8);</span>
+<span id="L73">    const auto hex = [](char c) {</span>
+<span id="L74">      return static_cast&lt;unsigned&gt;(c &gt;= &#x27;0&#x27; &amp;&amp; c &lt;= &#x27;9&#x27; ? c - &#x27;0&#x27;</span>
+<span id="L75">                                                        : c - &#x27;a&#x27; + 10);</span>
+<span id="L76">    };</span>
+<span id="L77">    for (std::size_t i = 0; i &lt; 32; ++i)</span>
+<span id="L78">      canonical[448 + i] = std::byte((hex(fixed::contract_sha256[2 * i]) &lt;&lt; 4) |</span>
+<span id="L79">                                     hex(fixed::contract_sha256[2 * i + 1]));</span>
+<span id="L80">    std::size_t offset = state_header_bytes;</span>
+<span id="L81">    for (const auto *vector :</span>
+<span id="L82">         {&amp;plant.position, &amp;plant.velocity, &amp;plant.acceleration, &amp;command,</span>
+<span id="L83">          &amp;sensor.position, &amp;sensor.velocity})</span>
+<span id="L84">      for (const auto &amp;axis : *vector)</span>
+<span id="L85">        for (auto value : axis) {</span>
+<span id="L86">          put32(canonical, offset, value);</span>
+<span id="L87">          offset += 4;</span>
+<span id="L88">        }</span>
+<span id="L89">    put(canonical, 480, digest(canonical), 8);</span>
+<span id="L90">  }</span>
+<span id="L91">  bool decode() noexcept {</span>
+<span id="L92">    auto checked = canonical;</span>
+<span id="L93">    const auto checksum = get(checked, 480, 8);</span>
+<span id="L94">    put(checked, 480, 0, 8);</span>
+<span id="L95">    if (digest(checked) != checksum)</span>
+<span id="L96">      return false;</span>
+<span id="L97">    const auto hex = [](char c) {</span>
+<span id="L98">      return static_cast&lt;unsigned&gt;(c &gt;= &#x27;0&#x27; &amp;&amp; c &lt;= &#x27;9&#x27; ? c - &#x27;0&#x27;</span>
+<span id="L99">                                                        : c - &#x27;a&#x27; + 10);</span>
+<span id="L100">    };</span>
+<span id="L101">    for (std::size_t i = 0; i &lt; 32; ++i)</span>
+<span id="L102">      if (canonical[448 + i] !=</span>
+<span id="L103">          std::byte((hex(fixed::contract_sha256[2 * i]) &lt;&lt; 4) |</span>
+<span id="L104">                    hex(fixed::contract_sha256[2 * i + 1])))</span>
+<span id="L105">        return false;</span>
+<span id="L106">    for (std::size_t i = 488; i &lt; 512; ++i)</span>
+<span id="L107">      if (canonical[i] != std::byte{})</span>
+<span id="L108">        return false;</span>
+<span id="L109">    if (get(canonical, 36, 4) || get32(canonical, 40) &lt; -64 ||</span>
+<span id="L110">        get32(canonical, 40) &gt; 64 || get32(canonical, 44) &lt; 0 ||</span>
+<span id="L111">        get32(canonical, 44) &gt; 4 || get32(canonical, 48) &lt; -16 ||</span>
+<span id="L112">        get32(canonical, 48) &gt; 16 || get32(canonical, 52) &lt; 0 ||</span>
+<span id="L113">        get32(canonical, 52) &gt; 11)</span>
+<span id="L114">      return false;</span>
+<span id="L115">    constexpr std::array&lt;std::int32_t, 6&gt; bounds{2165760, 4160,    4,</span>
+<span id="L116">                                                 4,       2165776, 4176};</span>
+<span id="L117">    for (std::size_t f = 0; f &lt; 6; ++f)</span>
+<span id="L118">      for (std::size_t a = 0; a &lt; 3; ++a)</span>
+<span id="L119">        for (std::size_t i = 0; i &lt; fixed::capacity; ++i) {</span>
+<span id="L120">          const auto v =</span>
+<span id="L121">              get32(canonical, 512 + 4 * ((f * 3 + a) * fixed::capacity + i));</span>
+<span id="L122">          if (v &lt; -bounds[f] || v &gt; bounds[f] || (i &gt;= options.count &amp;&amp; v))</span>
+<span id="L123">            return false;</span>
+<span id="L124">        }</span>
+<span id="L125">    if (get(canonical, 0, 4) != 0x5336324d || get(canonical, 4, 4) != 1 ||</span>
+<span id="L126">        get(canonical, 8, 4) != options.count ||</span>
+<span id="L127">        get(canonical, 12, 4) != options.ticks ||</span>
+<span id="L128">        get(canonical, 16, 4) != options.workers ||</span>
+<span id="L129">        get(canonical, 20, 4) != options.grain ||</span>
+<span id="L130">        get(canonical, 24, 4) != static_cast&lt;std::uint64_t&gt;(options.host) ||</span>
+<span id="L131">        get(canonical, 28, 4) != static_cast&lt;std::uint64_t&gt;(options.external) ||</span>
+<span id="L132">        get(canonical, 32, 4) != static_cast&lt;unsigned&gt;(options.campaign) ||</span>
+<span id="L133">        get(canonical, 56, 8) &gt; options.ticks)</span>
+<span id="L134">      return false;</span>
+<span id="L135">    configuration.target = get32(canonical, 40);</span>
+<span id="L136">    configuration.gain = get32(canonical, 44);</span>
+<span id="L137">    configuration.calibration = get32(canonical, 48);</span>
+<span id="L138">    configuration.fault = get32(canonical, 52);</span>
+<span id="L139">    configuration.generation = get(canonical, 64, 8);</span>
+<span id="L140">    configuration.applications = get(canonical, 392, 8);</span>
+<span id="L141">    next_tick = get(canonical, 56, 8);</span>
+<span id="L142">    const auto read_counts = [&amp;](auto &amp;values, std::size_t offset) {</span>
+<span id="L143">      for (auto &amp;value : values) {</span>
+<span id="L144">        value = get(canonical, offset, 8);</span>
+<span id="L145">        offset += 8;</span>
+<span id="L146">      }</span>
+<span id="L147">    };</span>
+<span id="L148">    read_counts(calls, 72);</span>
+<span id="L149">    read_counts(publications, 136);</span>
+<span id="L150">    read_counts(selections, 176);</span>
+<span id="L151">    read_counts(ages, 216);</span>
+<span id="L152">    read_counts(generations, 256);</span>
+<span id="L153">    read_counts(producer_releases, 296);</span>
+<span id="L154">    read_counts(timestamps, 336);</span>
+<span id="L155">    stale = get(canonical, 376, 8);</span>
+<span id="L156">    missing = get(canonical, 384, 8);</span>
+<span id="L157">    for (std::size_t i = 0; i &lt; 6; ++i)</span>
+<span id="L158">      sums[i] = std::bit_cast&lt;std::int64_t&gt;(get(canonical, 400 + 8 * i, 8));</span>
+<span id="L159">    std::size_t offset = state_header_bytes;</span>
+<span id="L160">    for (auto *vector : {&amp;plant.position, &amp;plant.velocity, &amp;plant.acceleration,</span>
+<span id="L161">                         &amp;command, &amp;sensor.position, &amp;sensor.velocity})</span>
+<span id="L162">      for (auto &amp;axis : *vector)</span>
+<span id="L163">        for (auto &amp;value : axis) {</span>
+<span id="L164">          value = get32(canonical, offset);</span>
+<span id="L165">          offset += 4;</span>
+<span id="L166">        }</span>
+<span id="L167">    return true;</span>
+<span id="L168">  }</span>
+<span id="L169">  bool read(const rt::RateReleaseView &amp;release, std::size_t channel,</span>
+<span id="L170">            std::uint64_t tick) noexcept {</span>
+<span id="L171">    auto &amp;f = buffers[channel];</span>
+<span id="L172">    f.fill(std::byte{});</span>
+<span id="L173">    rt::CrossRateReadResult result;</span>
+<span id="L174">    if (release.copy(channels[channel], frame_span(f, channel), result) !=</span>
+<span id="L175">            rt::CrossRateReadStatus::ok ||</span>
+<span id="L176">        !valid_frame(f, channel, options.count))</span>
+<span id="L177">      return false;</span>
+<span id="L178">    ++selections[channel];</span>
+<span id="L179">    ages[channel] = result.age_ns;</span>
+<span id="L180">    generations[channel] = result.generation;</span>
+<span id="L181">    producer_releases[channel] = result.producer_release_sequence;</span>
+<span id="L182">    timestamps[channel] = get(f, 48, 8);</span>
+<span id="L183">    if (result.age_ns &gt; fixed::channel_age[channel] * fixed::tick_ns ||</span>
+<span id="L184">        result.producer_completion_status != rt::Status::ok)</span>
+<span id="L185">      return false;</span>
+<span id="L186">    if (get(f, 48, 8) &gt; tick * fixed::tick_ns)</span>
+<span id="L187">      return false;</span>
+<span id="L188">    return true;</span>
+<span id="L189">  }</span>
+<span id="L190">  bool publish(const rt::RateReleaseView &amp;release, std::size_t channel,</span>
+<span id="L191">               std::uint64_t tick) noexcept {</span>
+<span id="L192">    seal(buffers[channel], channel, tick, ++publications[channel]);</span>
+<span id="L193">    return release.publish(channels[channel],</span>
+<span id="L194">                           frame_span(buffers[channel], channel)) ==</span>
+<span id="L195">           rt::Status::ok;</span>
+<span id="L196">  }</span>
+<span id="L197">  struct AxisWork {</span>
+<span id="L198">    World *world;</span>
+<span id="L199">    std::size_t axis;</span>
+<span id="L200">  };</span>
+<span id="L201">  static rt::TaskResult entities(void *opaque, const rt::TaskContext &amp;ctx,</span>
+<span id="L202">                                 const rt::TaskRange &amp;range) noexcept {</span>
+<span id="L203">    auto &amp;work = *static_cast&lt;AxisWork *&gt;(opaque);</span>
+<span id="L204">    auto &amp;w = *work.world;</span>
+<span id="L205">    if (ctx.scratch().size() != fixed::scratch_bytes)</span>
+<span id="L206">      return rt::TaskResult::error;</span>
+<span id="L207">    std::fill(ctx.scratch().begin(), ctx.scratch().end(), std::byte{0x2a});</span>
+<span id="L208">    for (auto i = range.begin; i &lt; range.end; ++i) {</span>
+<span id="L209">      const auto a = work.axis;</span>
+<span id="L210">      const auto effort = w.command[a][i];</span>
+<span id="L211">      const auto v = std::int64_t(w.plant.velocity[a][i]) + effort;</span>
+<span id="L212">      const auto x = std::int64_t(w.plant.position[a][i]) + v;</span>
+<span id="L213">      if (effort &lt; -4 || effort &gt; 4 || v &lt; -4160 || v &gt; 4160 || x &lt; -2165760 ||</span>
+<span id="L214">          x &gt; 2165760)</span>
+<span id="L215">        return rt::TaskResult::error;</span>
+<span id="L216">      w.plant.acceleration[a][i] = effort;</span>
+<span id="L217">      w.plant.velocity[a][i] = static_cast&lt;std::int32_t&gt;(v);</span>
+<span id="L218">      w.plant.position[a][i] = static_cast&lt;std::int32_t&gt;(x);</span>
+<span id="L219">    }</span>
+<span id="L220">    return rt::TaskResult::ok;</span>
+<span id="L221">  }</span>
+<span id="L222">  static rt::TaskResult axes(void *opaque, const rt::TaskContext &amp;ctx,</span>
+<span id="L223">                             const rt::TaskRange &amp;range) noexcept {</span>
+<span id="L224">    auto &amp;w = *static_cast&lt;World *&gt;(opaque);</span>
+<span id="L225">    if (ctx.scratch().size() != fixed::scratch_bytes)</span>
+<span id="L226">      return rt::TaskResult::error;</span>
+<span id="L227">    std::fill(ctx.scratch().begin(), ctx.scratch().end(), std::byte{0x51});</span>
+<span id="L228">    for (auto a = range.begin; a &lt; range.end; ++a) {</span>
+<span id="L229">      AxisWork work{&amp;w, a};</span>
+<span id="L230">      if (ctx.parallel_for(w.options.count, w.options.grain, &amp;entities,</span>
+<span id="L231">                           &amp;work) != rt::Status::ok)</span>
+<span id="L232">        return rt::TaskResult::error;</span>
+<span id="L233">    }</span>
+<span id="L234">    return std::all_of(ctx.scratch().begin(), ctx.scratch().end(),</span>
+<span id="L235">                       [](auto b) { return b == std::byte{0x51}; })</span>
+<span id="L236">               ? rt::TaskResult::ok</span>
+<span id="L237">               : rt::TaskResult::error;</span>
+<span id="L238">  }</span>
+<span id="L239">  bool phase(std::size_t index, const rt::CallbackContext &amp;ctx) noexcept {</span>
+<span id="L240">    if (!ctx.rate_release || ctx.rate_release-&gt;phase.index() != index ||</span>
+<span id="L241">        ctx.rate_release-&gt;logical_release_ns % fixed::tick_ns ||</span>
+<span id="L242">        !configuration.consume(ctx.live_control))</span>
+<span id="L243">      return false;</span>
+<span id="L244">    const auto tick = ctx.rate_release-&gt;logical_release_ns / fixed::tick_ns;</span>
+<span id="L245">    const auto &amp;release = *ctx.rate_release;</span>
+<span id="L246">    if (tick &gt;= options.ticks ||</span>
+<span id="L247">        tick % fixed::periods[fixed::phase_rates[index]])</span>
+<span id="L248">      return false;</span>
+<span id="L249">    ++calls[index];</span>
+<span id="L250">    switch (index) {</span>
+<span id="L251">    case 0:</span>
+<span id="L252">      if (!read(release, 3, tick))</span>
+<span id="L253">        return false;</span>
+<span id="L254">      unpack_vector(buffers[3], command);</span>
+<span id="L255">      next_tick = tick + 1;</span>
+<span id="L256">      break;</span>
+<span id="L257">    case 1:</span>
+<span id="L258">      if (ctx.tasks.parallel_for(3, 1, &amp;axes, this) != rt::Status::ok)</span>
+<span id="L259">        return false;</span>
+<span id="L260">      break;</span>
+<span id="L261">    case 2:</span>
+<span id="L262">      for (auto c : {std::size_t{0}, std::size_t{4}}) {</span>
+<span id="L263">        buffers[c].fill(std::byte{});</span>
+<span id="L264">        pack_vector(buffers[c], plant.position);</span>
+<span id="L265">        pack_vector(buffers[c], plant.velocity, 3);</span>
+<span id="L266">        if (!publish(release, c, tick))</span>
+<span id="L267">          return false;</span>
+<span id="L268">      }</span>
+<span id="L269">      break;</span>
+<span id="L270">    case 3:</span>
+<span id="L271">      if (!read(release, 0, tick))</span>
+<span id="L272">        return false;</span>
+<span id="L273">      unpack_vector(buffers[0], sensor.position);</span>
+<span id="L274">      unpack_vector(buffers[0], sensor.velocity, 3);</span>
+<span id="L275">      for (std::size_t a = 0; a &lt; 3; ++a)</span>
+<span id="L276">        for (std::size_t i = 0; i &lt; options.count; ++i) {</span>
+<span id="L277">          sensor.position[a][i] += configuration.calibration;</span>
+<span id="L278">          sensor.velocity[a][i] += configuration.calibration;</span>
+<span id="L279">        }</span>
+<span id="L280">      buffers[1].fill(std::byte{});</span>
+<span id="L281">      pack_vector(buffers[1], sensor.position);</span>
+<span id="L282">      pack_vector(buffers[1], sensor.velocity, 3);</span>
+<span id="L283">      if (!publish(release, 1,</span>
+<span id="L284">                   (configuration.fault == 2 &amp;&amp; tick == 6) ? 2 : tick))</span>
+<span id="L285">        return false;</span>
+<span id="L286">      break;</span>
+<span id="L287">    case 4: {</span>
+<span id="L288">      if (!read(release, 1, tick))</span>
+<span id="L289">        return false;</span>
+<span id="L290">      const bool expired = tick * fixed::tick_ns - get(buffers[1], 48, 8) &gt;</span>
+<span id="L291">                           fixed::channel_age[1] * fixed::tick_ns;</span>
+<span id="L292">      if (expired)</span>
+<span id="L293">        ++stale;</span>
+<span id="L294">      const bool absent =</span>
+<span id="L295">          (options.external &amp;&amp; !external_ready) || configuration.fault == 10;</span>
+<span id="L296">      if (absent)</span>
+<span id="L297">        ++missing;</span>
+<span id="L298">      buffers[2].fill(std::byte{});</span>
+<span id="L299">      for (std::size_t a = 0; a &lt; 3; ++a)</span>
+<span id="L300">        for (std::size_t i = 0; i &lt; options.count; ++i) {</span>
+<span id="L301">          const auto velocity =</span>
+<span id="L302">              expired</span>
+<span id="L303">                  ? 0</span>
+<span id="L304">                  : get32(buffers[1],</span>
+<span id="L305">                          header_bytes + 4 * ((3 + a) * fixed::capacity + i));</span>
+<span id="L306">          const auto value =</span>
+<span id="L307">              absent</span>
+<span id="L308">                  ? 0</span>
+<span id="L309">                  : (options.external ? external_command[a][i]</span>
+<span id="L310">                                      : effort(velocity, configuration.target,</span>
+<span id="L311">                                               configuration.gain));</span>
+<span id="L312">          if (value &lt; -4 || value &gt; 4)</span>
+<span id="L313">            return false;</span>
+<span id="L314">          put32(buffers[2], header_bytes + 4 * (a * fixed::capacity + i),</span>
+<span id="L315">                value);</span>
+<span id="L316">        }</span>
+<span id="L317">      if (!publish(release, 2, tick))</span>
+<span id="L318">        return false;</span>
+<span id="L319">      break;</span>
+<span id="L320">    }</span>
+<span id="L321">    case 5:</span>
+<span id="L322">      if (!read(release, 2, tick))</span>
+<span id="L323">        return false;</span>
+<span id="L324">      buffers[3] = buffers[2];</span>
+<span id="L325">      if (!publish(release, 3, tick))</span>
+<span id="L326">        return false;</span>
+<span id="L327">      break;</span>
+<span id="L328">    case 6:</span>
+<span id="L329">      if (!read(release, 4, tick))</span>
+<span id="L330">        return false;</span>
+<span id="L331">      sums.fill(0);</span>
+<span id="L332">      for (std::size_t a = 0; a &lt; 6; ++a)</span>
+<span id="L333">        for (std::size_t i = 0; i &lt; options.count; ++i)</span>
+<span id="L334">          sums[a] +=</span>
+<span id="L335">              get32(buffers[4], header_bytes + 4 * (a * fixed::capacity + i));</span>
+<span id="L336">      break;</span>
+<span id="L337">    case 7:</span>
+<span id="L338">      break;</span>
+<span id="L339">    default:</span>
+<span id="L340">      return false;</span>
+<span id="L341">    }</span>
+<span id="L342">    encode();</span>
+<span id="L343">    return true;</span>
+<span id="L344">  }</span>
+<span id="L345">};</span>
+<span id="L346">static_assert(offsetof(World, plant) == 64);</span>
+<span id="L347">static_assert(offsetof(World, external_ready) + 1 + 39 == sizeof(World));</span>
+<span id="L348">struct Binding {</span>
+<span id="L349">  World *world;</span>
+<span id="L350">  std::size_t phase;</span>
+<span id="L351">};</span>
+<span id="L352">inline rt::CallbackResult invoke(void *opaque,</span>
+<span id="L353">                                 const rt::CallbackContext &amp;ctx) noexcept {</span>
+<span id="L354">  auto &amp;b = *static_cast&lt;Binding *&gt;(opaque);</span>
+<span id="L355">  return b.world-&gt;phase(b.phase, ctx) ? rt::CallbackResult::ok</span>
+<span id="L356">                                      : rt::CallbackResult::error;</span>
+<span id="L357">}</span>
+<span id="L358">} // namespace golden</span></pre></html>

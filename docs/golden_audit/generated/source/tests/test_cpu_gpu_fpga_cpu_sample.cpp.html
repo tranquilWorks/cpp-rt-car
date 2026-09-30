@@ -1,0 +1,296 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_cpu_gpu_fpga_cpu_sample.cpp</title><h1>tests/test_cpu_gpu_fpga_cpu_sample.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#define RTFW_COMBINED_SAMPLE_NO_MAIN 1</span>
+<span id="L2">#include &quot;../samples/cpu_gpu_fpga_cpu.cpp&quot;</span>
+<span id="L3"></span>
+<span id="L4">#include &lt;iostream&gt;</span>
+<span id="L5"></span>
+<span id="L6">namespace {</span>
+<span id="L7"></span>
+<span id="L8">int failures = 0;</span>
+<span id="L9"></span>
+<span id="L10">#define CHECK_TRUE(expression)                                                \</span>
+<span id="L11">    do {                                                                      \</span>
+<span id="L12">        if (!(expression)) {                                                  \</span>
+<span id="L13">            std::cerr &lt;&lt; __func__ &lt;&lt; &#x27;:&#x27; &lt;&lt; __LINE__                         \</span>
+<span id="L14">                      &lt;&lt; &quot; check failed: &quot; #expression &lt;&lt; &#x27;\n&#x27;;             \</span>
+<span id="L15">            ++failures;                                                       \</span>
+<span id="L16">            return false;                                                     \</span>
+<span id="L17">        }                                                                     \</span>
+<span id="L18">    } while (false)</span>
+<span id="L19"></span>
+<span id="L20">using rtfw_combined_sample::FailureMode;</span>
+<span id="L21">using rtfw_combined_sample::Scenario;</span>
+<span id="L22"></span>
+<span id="L23">bool configure_and_start(Scenario&amp; scenario) {</span>
+<span id="L24">    CHECK_TRUE(scenario.configure() == rt::Status::ok);</span>
+<span id="L25">    CHECK_TRUE(scenario.runtime.state() == rt::RuntimeState::configuring);</span>
+<span id="L26">    CHECK_TRUE(scenario.finalize() == rt::Status::ok);</span>
+<span id="L27">    CHECK_TRUE(scenario.runtime.state() == rt::RuntimeState::finalized);</span>
+<span id="L28">    CHECK_TRUE(scenario.start() == rt::Status::ok);</span>
+<span id="L29">    CHECK_TRUE(scenario.runtime.state() == rt::RuntimeState::running);</span>
+<span id="L30">    return true;</span>
+<span id="L31">}</span>
+<span id="L32"></span>
+<span id="L33">bool wait_for_flag(const std::atomic&lt;bool&gt;&amp; flag) {</span>
+<span id="L34">    const auto deadline = std::chrono::steady_clock::now() +</span>
+<span id="L35">        std::chrono::seconds(2);</span>
+<span id="L36">    while (!flag.load(std::memory_order_acquire) &amp;&amp;</span>
+<span id="L37">           std::chrono::steady_clock::now() &lt; deadline) {</span>
+<span id="L38">        std::this_thread::yield();</span>
+<span id="L39">    }</span>
+<span id="L40">    return flag.load(std::memory_order_acquire);</span>
+<span id="L41">}</span>
+<span id="L42"></span>
+<span id="L43">bool success_and_fixed_resources() {</span>
+<span id="L44">    Scenario scenario;</span>
+<span id="L45">    CHECK_TRUE(configure_and_start(scenario));</span>
+<span id="L46">    CHECK_TRUE(scenario.run(rtfw_combined_sample::frame_count) ==</span>
+<span id="L47">               rt::Status::ok);</span>
+<span id="L48">    CHECK_TRUE(scenario.success_contract());</span>
+<span id="L49">    CHECK_TRUE(scenario.measured_allocations == 0);</span>
+<span id="L50">    CHECK_TRUE(scenario.cuda_driver.host_registrations.load() == 1);</span>
+<span id="L51">    CHECK_TRUE(scenario.cuda_driver.host_unregistrations.load() == 0);</span>
+<span id="L52">    CHECK_TRUE(scenario.cuda_driver.frees.load() == 0);</span>
+<span id="L53">    CHECK_TRUE(scenario.stop() == rt::Status::ok);</span>
+<span id="L54">    CHECK_TRUE(scenario.runtime.state() == rt::RuntimeState::stopped);</span>
+<span id="L55">    CHECK_TRUE(scenario.cuda_driver.host_unregistrations.load() == 1);</span>
+<span id="L56">    CHECK_TRUE(scenario.cuda_driver.frees.load() == 1);</span>
+<span id="L57">    CHECK_TRUE(scenario.xdma_driver.shutdown_calls.load() == 1);</span>
+<span id="L58">    return true;</span>
+<span id="L59">}</span>
+<span id="L60"></span>
+<span id="L61">bool cuda_failure_suppresses_every_downstream_stage_and_recovers() {</span>
+<span id="L62">    {</span>
+<span id="L63">        Scenario failed(FailureMode::cuda_graph, 2);</span>
+<span id="L64">        CHECK_TRUE(configure_and_start(failed));</span>
+<span id="L65">        CHECK_TRUE(failed.run(1) == rt::Status::device_reset_required);</span>
+<span id="L66">        CHECK_TRUE(failed.measured_allocations == 0);</span>
+<span id="L67">        CHECK_TRUE(failed.completed_frames == 0);</span>
+<span id="L68">        CHECK_TRUE(failed.prepare_calls.load() == 1);</span>
+<span id="L69">        CHECK_TRUE(failed.cuda_provider_calls.load() == 1);</span>
+<span id="L70">        CHECK_TRUE(failed.cuda_driver.uploads.load() == 1);</span>
+<span id="L71">        CHECK_TRUE(failed.cuda_driver.graph_launches.load() == 1);</span>
+<span id="L72">        CHECK_TRUE(failed.cuda_driver.downloads.load() == 0);</span>
+<span id="L73">        CHECK_TRUE(failed.cuda_driver.event_records.load() == 0);</span>
+<span id="L74">        CHECK_TRUE(failed.bridge_calls.load() == 0);</span>
+<span id="L75">        CHECK_TRUE(failed.xdma_provider_calls.load() == 0);</span>
+<span id="L76">        CHECK_TRUE(failed.xdma_driver.h2c_calls.load() == 0);</span>
+<span id="L77">        CHECK_TRUE(failed.xdma_driver.control_writes.load() == 0);</span>
+<span id="L78">        CHECK_TRUE(failed.xdma_driver.event_waits.load() == 0);</span>
+<span id="L79">        CHECK_TRUE(failed.xdma_driver.c2h_calls.load() == 0);</span>
+<span id="L80">        CHECK_TRUE(failed.validate_calls.load() == 0);</span>
+<span id="L81">        CHECK_TRUE(failed.timeline_observations[0].cuda_accepted == 1);</span>
+<span id="L82">        CHECK_TRUE(failed.timeline_observations[0].cuda_completed == 0);</span>
+<span id="L83">        CHECK_TRUE(failed.timeline_observations[0].xdma_accepted == 0);</span>
+<span id="L84">        CHECK_TRUE(failed.timeline_observations[0].xdma_completed == 0);</span>
+<span id="L85">        constexpr std::array expected{&#x27;P&#x27;, &#x27;U&#x27;, &#x27;H&#x27;, &#x27;G&#x27;};</span>
+<span id="L86">        CHECK_TRUE(failed.operations.matches(expected));</span>
+<span id="L87">        CHECK_TRUE(failed.runtime.reset_device(failed.cuda_backend_handle) ==</span>
+<span id="L88">                   rt::Status::ok);</span>
+<span id="L89">        CHECK_TRUE(failed.cuda_driver.stream_synchronizations.load() == 1);</span>
+<span id="L90">        CHECK_TRUE(failed.stop() == rt::Status::ok);</span>
+<span id="L91">        CHECK_TRUE(failed.cuda_driver.stream_synchronizations.load() == 1);</span>
+<span id="L92">        CHECK_TRUE(failed.cuda_driver.host_unregistrations.load() == 1);</span>
+<span id="L93">        CHECK_TRUE(failed.cuda_driver.frees.load() == 1);</span>
+<span id="L94">    }</span>
+<span id="L95">    Scenario recovered(FailureMode::none, 3);</span>
+<span id="L96">    CHECK_TRUE(configure_and_start(recovered));</span>
+<span id="L97">    CHECK_TRUE(recovered.run(rtfw_combined_sample::frame_count) ==</span>
+<span id="L98">               rt::Status::ok);</span>
+<span id="L99">    CHECK_TRUE(recovered.success_contract());</span>
+<span id="L100">    CHECK_TRUE(recovered.stop() == rt::Status::ok);</span>
+<span id="L101">    return true;</span>
+<span id="L102">}</span>
+<span id="L103"></span>
+<span id="L104">bool isolated_event_timeout_has_no_xdma_completion_and_other_fixture_runs() {</span>
+<span id="L105">    Scenario failed(FailureMode::xdma_event_timeout, 4);</span>
+<span id="L106">    Scenario independent(FailureMode::none, 5);</span>
+<span id="L107">    CHECK_TRUE(failed.configure() == rt::Status::ok);</span>
+<span id="L108">    CHECK_TRUE(independent.configure() == rt::Status::ok);</span>
+<span id="L109">    CHECK_TRUE(failed.cuda_backend_handle != independent.cuda_backend_handle);</span>
+<span id="L110">    CHECK_TRUE(failed.xdma_backend_handle != independent.xdma_backend_handle);</span>
+<span id="L111">    CHECK_TRUE(failed.cuda_timeline != independent.cuda_timeline);</span>
+<span id="L112">    CHECK_TRUE(failed.cuda_driver.graph != independent.cuda_driver.graph);</span>
+<span id="L113">    static_assert(rtfw_combined_sample::graph_id == 7);</span>
+<span id="L114">    CHECK_TRUE(failed.cuda_stage.data() != independent.cuda_stage.data());</span>
+<span id="L115">    CHECK_TRUE(failed.xdma_stage.data() != independent.xdma_stage.data());</span>
+<span id="L116">    rt::DeviceTimelineHandle foreign_timeline;</span>
+<span id="L117">    CHECK_TRUE(failed.runtime.register_device_timeline(</span>
+<span id="L118">                   {&quot;combined.foreign.timeline&quot;,</span>
+<span id="L119">                    independent.cuda_backend_handle, 0},</span>
+<span id="L120">                   foreign_timeline) == rt::Status::invalid_handle);</span>
+<span id="L121">    CHECK_TRUE(!foreign_timeline.valid());</span>
+<span id="L122">    rt::DeviceTimelineInfo foreign_info;</span>
+<span id="L123">    CHECK_TRUE(!failed.runtime.device_timeline_at(</span>
+<span id="L124">        independent.cuda_backend_handle, 0, foreign_info));</span>
+<span id="L125"></span>
+<span id="L126">    CHECK_TRUE(failed.finalize() == rt::Status::ok);</span>
+<span id="L127">    CHECK_TRUE(failed.start() == rt::Status::ok);</span>
+<span id="L128">    CHECK_TRUE(failed.run(1) == rt::Status::device_timeout);</span>
+<span id="L129">    CHECK_TRUE(failed.measured_allocations == 0);</span>
+<span id="L130">    CHECK_TRUE(failed.completed_frames == 0);</span>
+<span id="L131">    CHECK_TRUE(failed.prepare_calls.load() == 1);</span>
+<span id="L132">    CHECK_TRUE(failed.cuda_provider_calls.load() == 1);</span>
+<span id="L133">    CHECK_TRUE(failed.cuda_driver.uploads.load() == 1);</span>
+<span id="L134">    CHECK_TRUE(failed.cuda_driver.graph_launches.load() == 1);</span>
+<span id="L135">    CHECK_TRUE(failed.cuda_driver.downloads.load() == 1);</span>
+<span id="L136">    CHECK_TRUE(failed.cuda_driver.event_records.load() == 1);</span>
+<span id="L137">    CHECK_TRUE(failed.bridge_calls.load() == 1);</span>
+<span id="L138">    CHECK_TRUE(failed.xdma_provider_calls.load() == 1);</span>
+<span id="L139">    CHECK_TRUE(failed.xdma_driver.h2c_calls.load() == 1);</span>
+<span id="L140">    CHECK_TRUE(failed.xdma_driver.control_writes.load() == 1);</span>
+<span id="L141">    CHECK_TRUE(failed.xdma_driver.event_waits.load() == 1);</span>
+<span id="L142">    CHECK_TRUE(failed.xdma_driver.event_entered.load());</span>
+<span id="L143">    CHECK_TRUE(failed.xdma_driver.stop_requests.load() &gt;= 1);</span>
+<span id="L144">    CHECK_TRUE(wait_for_flag(failed.xdma_driver.event_exited));</span>
+<span id="L145">    CHECK_TRUE(failed.xdma_driver.c2h_calls.load() == 0);</span>
+<span id="L146">    CHECK_TRUE(failed.validate_calls.load() == 0);</span>
+<span id="L147">    CHECK_TRUE(failed.timeline_observations[0].cuda_accepted == 1);</span>
+<span id="L148">    CHECK_TRUE(failed.timeline_observations[0].cuda_completed == 1);</span>
+<span id="L149">    CHECK_TRUE(failed.timeline_observations[0].xdma_accepted == 1);</span>
+<span id="L150">    CHECK_TRUE(failed.timeline_observations[0].xdma_completed == 0);</span>
+<span id="L151">    constexpr std::array expected{</span>
+<span id="L152">        &#x27;P&#x27;, &#x27;U&#x27;, &#x27;H&#x27;, &#x27;G&#x27;, &#x27;D&#x27;, &#x27;E&#x27;, &#x27;B&#x27;, &#x27;X&#x27;, &#x27;h&#x27;, &#x27;w&#x27;, &#x27;e&#x27;};</span>
+<span id="L153">    CHECK_TRUE(failed.operations.matches(expected));</span>
+<span id="L154"></span>
+<span id="L155">    CHECK_TRUE(independent.prepare_calls.load() == 0);</span>
+<span id="L156">    CHECK_TRUE(independent.cuda_driver.uploads.load() == 0);</span>
+<span id="L157">    CHECK_TRUE(independent.xdma_driver.h2c_calls.load() == 0);</span>
+<span id="L158">    CHECK_TRUE(independent.operations.count.load() == 0);</span>
+<span id="L159">    rt::DeviceTimelineInfo independent_cuda;</span>
+<span id="L160">    rt::DeviceTimelineInfo independent_xdma;</span>
+<span id="L161">    CHECK_TRUE(independent.runtime.device_timeline_at(</span>
+<span id="L162">        independent.cuda_backend_handle, 0, independent_cuda));</span>
+<span id="L163">    CHECK_TRUE(independent.runtime.device_timeline_at(</span>
+<span id="L164">        independent.xdma_backend_handle, 0, independent_xdma));</span>
+<span id="L165">    CHECK_TRUE(independent_cuda.last_accepted_value == 0);</span>
+<span id="L166">    CHECK_TRUE(independent_cuda.completed_value == 0);</span>
+<span id="L167">    CHECK_TRUE(independent_xdma.last_accepted_value == 0);</span>
+<span id="L168">    CHECK_TRUE(independent_xdma.completed_value == 0);</span>
+<span id="L169">    failed.failure = FailureMode::bridge_recovery;</span>
+<span id="L170">    rt::DeviceHealth xdma_health;</span>
+<span id="L171">    std::uint64_t recovery_frame = 2;</span>
+<span id="L172">    bool stale_completion_reaped = false;</span>
+<span id="L173">    for (std::size_t attempt = 0; attempt &lt; 16; ++attempt) {</span>
+<span id="L174">        CHECK_TRUE(failed.run_from(recovery_frame, 1) ==</span>
+<span id="L175">                   rt::Status::callback_failed);</span>
+<span id="L176">        CHECK_TRUE(failed.runtime.device_health(</span>
+<span id="L177">                       failed.xdma_backend_handle, xdma_health) ==</span>
+<span id="L178">                   rt::Status::ok);</span>
+<span id="L179">        rt::DeviceTimelineInfo failed_xdma;</span>
+<span id="L180">        CHECK_TRUE(failed.runtime.device_timeline_at(</span>
+<span id="L181">            failed.xdma_backend_handle, 0, failed_xdma));</span>
+<span id="L182">        CHECK_TRUE(failed_xdma.last_accepted_value == 1);</span>
+<span id="L183">        CHECK_TRUE(failed_xdma.completed_value == 0);</span>
+<span id="L184">        ++recovery_frame;</span>
+<span id="L185">        if (xdma_health.outstanding == 0) {</span>
+<span id="L186">            stale_completion_reaped = true;</span>
+<span id="L187">            break;</span>
+<span id="L188">        }</span>
+<span id="L189">    }</span>
+<span id="L190">    CHECK_TRUE(stale_completion_reaped);</span>
+<span id="L191">    CHECK_TRUE(failed.xdma_driver.h2c_calls.load() == 1);</span>
+<span id="L192">    CHECK_TRUE(failed.xdma_driver.control_writes.load() == 1);</span>
+<span id="L193">    CHECK_TRUE(failed.xdma_driver.event_waits.load() == 1);</span>
+<span id="L194">    CHECK_TRUE(failed.xdma_driver.c2h_calls.load() == 0);</span>
+<span id="L195">    rt::DeviceTimelineInfo failed_xdma_before_reuse;</span>
+<span id="L196">    CHECK_TRUE(failed.runtime.device_timeline_at(</span>
+<span id="L197">        failed.xdma_backend_handle, 0, failed_xdma_before_reuse));</span>
+<span id="L198">    CHECK_TRUE(failed_xdma_before_reuse.last_accepted_value == 1);</span>
+<span id="L199">    CHECK_TRUE(failed_xdma_before_reuse.completed_value == 0);</span>
+<span id="L200"></span>
+<span id="L201">    failed.failure = FailureMode::none;</span>
+<span id="L202">    failed.xdma_driver.stop_requests.store(0, std::memory_order_release);</span>
+<span id="L203">    failed.xdma_driver.event_entered.store(false, std::memory_order_release);</span>
+<span id="L204">    failed.xdma_driver.event_exited.store(false, std::memory_order_release);</span>
+<span id="L205">    CHECK_TRUE(failed.run_from(recovery_frame, 1) == rt::Status::ok);</span>
+<span id="L206">    CHECK_TRUE(failed.measured_allocations == 0);</span>
+<span id="L207">    CHECK_TRUE(failed.timeline_observations[1].cuda_accepted ==</span>
+<span id="L208">               recovery_frame);</span>
+<span id="L209">    CHECK_TRUE(failed.timeline_observations[1].cuda_completed ==</span>
+<span id="L210">               recovery_frame);</span>
+<span id="L211">    CHECK_TRUE(failed.timeline_observations[1].xdma_accepted ==</span>
+<span id="L212">               recovery_frame);</span>
+<span id="L213">    CHECK_TRUE(failed.timeline_observations[1].xdma_completed ==</span>
+<span id="L214">               recovery_frame);</span>
+<span id="L215">    CHECK_TRUE(failed.stop() == rt::Status::ok);</span>
+<span id="L216">    CHECK_TRUE(independent.xdma_driver.stop_requests.load() == 0);</span>
+<span id="L217">    CHECK_TRUE(independent.xdma_driver.shutdown_calls.load() == 0);</span>
+<span id="L218"></span>
+<span id="L219">    CHECK_TRUE(independent.finalize() == rt::Status::ok);</span>
+<span id="L220">    CHECK_TRUE(independent.start() == rt::Status::ok);</span>
+<span id="L221">    CHECK_TRUE(independent.run(rtfw_combined_sample::frame_count) ==</span>
+<span id="L222">               rt::Status::ok);</span>
+<span id="L223">    CHECK_TRUE(independent.success_contract());</span>
+<span id="L224">    CHECK_TRUE(independent.stop() == rt::Status::ok);</span>
+<span id="L225">    return true;</span>
+<span id="L226">}</span>
+<span id="L227"></span>
+<span id="L228">bool malformed_provider_outputs_fail_before_native_driver_calls() {</span>
+<span id="L229">    for (const auto mode : {FailureMode::malformed_cuda_signal,</span>
+<span id="L230">                            FailureMode::malformed_cuda_timeout}) {</span>
+<span id="L231">        Scenario scenario(mode, mode == FailureMode::malformed_cuda_signal</span>
+<span id="L232">                                    ? 6u</span>
+<span id="L233">                                    : 7u);</span>
+<span id="L234">        CHECK_TRUE(configure_and_start(scenario));</span>
+<span id="L235">        CHECK_TRUE(scenario.run(1) == rt::Status::invalid_argument);</span>
+<span id="L236">        CHECK_TRUE(scenario.measured_allocations == 0);</span>
+<span id="L237">        CHECK_TRUE(scenario.prepare_calls.load() == 1);</span>
+<span id="L238">        CHECK_TRUE(scenario.cuda_provider_calls.load() == 1);</span>
+<span id="L239">        CHECK_TRUE(scenario.cuda_driver.uploads.load() == 0);</span>
+<span id="L240">        CHECK_TRUE(scenario.cuda_driver.graph_launches.load() == 0);</span>
+<span id="L241">        CHECK_TRUE(scenario.bridge_calls.load() == 0);</span>
+<span id="L242">        CHECK_TRUE(scenario.xdma_provider_calls.load() == 0);</span>
+<span id="L243">        CHECK_TRUE(scenario.validate_calls.load() == 0);</span>
+<span id="L244">        CHECK_TRUE(scenario.timeline_observations[0].cuda_accepted == 0);</span>
+<span id="L245">        CHECK_TRUE(scenario.timeline_observations[0].cuda_completed == 0);</span>
+<span id="L246">        CHECK_TRUE(scenario.timeline_observations[0].xdma_accepted == 0);</span>
+<span id="L247">        CHECK_TRUE(scenario.timeline_observations[0].xdma_completed == 0);</span>
+<span id="L248">        constexpr std::array expected{&#x27;P&#x27;, &#x27;U&#x27;};</span>
+<span id="L249">        CHECK_TRUE(scenario.operations.matches(expected));</span>
+<span id="L250">        CHECK_TRUE(scenario.stop() == rt::Status::ok);</span>
+<span id="L251">    }</span>
+<span id="L252">    return true;</span>
+<span id="L253">}</span>
+<span id="L254"></span>
+<span id="L255">bool checked_stop_retries_only_unresolved_cleanup() {</span>
+<span id="L256">    Scenario scenario(FailureMode::none, 8);</span>
+<span id="L257">    CHECK_TRUE(configure_and_start(scenario));</span>
+<span id="L258">    CHECK_TRUE(scenario.run(1) == rt::Status::ok);</span>
+<span id="L259">    CHECK_TRUE(scenario.measured_allocations == 0);</span>
+<span id="L260">    scenario.xdma_driver.fail_shutdown_once.store(true,</span>
+<span id="L261">                                                  std::memory_order_release);</span>
+<span id="L262">    CHECK_TRUE(scenario.stop() == rt::Status::device_reset_required);</span>
+<span id="L263">    CHECK_TRUE(scenario.runtime.state() == rt::RuntimeState::running);</span>
+<span id="L264">    CHECK_TRUE(scenario.xdma_driver.shutdown_calls.load() == 1);</span>
+<span id="L265">    const auto cuda_unregistrations =</span>
+<span id="L266">        scenario.cuda_driver.host_unregistrations.load();</span>
+<span id="L267">    const auto cuda_frees = scenario.cuda_driver.frees.load();</span>
+<span id="L268">    CHECK_TRUE(cuda_unregistrations == 1);</span>
+<span id="L269">    CHECK_TRUE(cuda_frees == 1);</span>
+<span id="L270">    CHECK_TRUE(scenario.stop() == rt::Status::ok);</span>
+<span id="L271">    CHECK_TRUE(scenario.runtime.state() == rt::RuntimeState::stopped);</span>
+<span id="L272">    CHECK_TRUE(scenario.xdma_driver.shutdown_calls.load() == 2);</span>
+<span id="L273">    CHECK_TRUE(scenario.cuda_driver.host_unregistrations.load() ==</span>
+<span id="L274">               cuda_unregistrations);</span>
+<span id="L275">    CHECK_TRUE(scenario.cuda_driver.frees.load() == cuda_frees);</span>
+<span id="L276">    return true;</span>
+<span id="L277">}</span>
+<span id="L278"></span>
+<span id="L279">} // namespace</span>
+<span id="L280"></span>
+<span id="L281">int main() {</span>
+<span id="L282">    (void)success_and_fixed_resources();</span>
+<span id="L283">    (void)cuda_failure_suppresses_every_downstream_stage_and_recovers();</span>
+<span id="L284">    (void)isolated_event_timeout_has_no_xdma_completion_and_other_fixture_runs();</span>
+<span id="L285">    (void)malformed_provider_outputs_fail_before_native_driver_calls();</span>
+<span id="L286">    (void)checked_stop_retries_only_unresolved_cleanup();</span>
+<span id="L287">    if (failures != 0) {</span>
+<span id="L288">        std::cerr &lt;&lt; &quot;m17_cpu_gpu_fpga_cpu_sample failures=&quot; &lt;&lt; failures</span>
+<span id="L289">                  &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L290">        return 1;</span>
+<span id="L291">    }</span>
+<span id="L292">    std::cout &lt;&lt; &quot;m17_cpu_gpu_fpga_cpu_sample passed&quot;</span>
+<span id="L293">                 &quot; evidence=simulated_protocol physical_hardware=false&quot;</span>
+<span id="L294">                 &quot; direct_peer_dma=false\n&quot;;</span>
+<span id="L295">    return 0;</span>
+<span id="L296">}</span></pre></html>

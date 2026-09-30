@@ -1,0 +1,209 @@
+# M18-01 qualification schema and promotion-tool evidence
+
+Date: 2026-08-12
+
+Status: implementation and deterministic local verification pass; mandatory
+hosted CI and human reviews remain external merge gates
+
+## Baseline, ancestry, and initial state
+
+- Repository: `kpbianco/cpp-rt-car`
+- Branch: `agent/m18-01`
+- Exact HEAD and approved baseline:
+  `e5f10cc572fa9ba3d4dd488781c310dafb34dfd2`
+- `bdc97d0122effbad07dbf6d4981e1bf0de729437` (merged M17-04) is an ancestor.
+- Every named retained M15, M16, and M17 evidence file was present.
+- Initial worktree changes were only the allowed control-plane synchronization
+  of `contracts/active-batch.yaml` and `contracts/repo-profile.yaml`. The active
+  batch matched canonical `products/cpp-rt-car/batches/M18-01.yaml` except for
+  the expected injected control revision
+  `a729f1460f56f24f904b45faf4f37157494f847b`.
+- The baseline contains no M17-05 combined sample or behavioral test.
+  `docs/evidence/M17-05-2026-08-12.md` truthfully records the native
+  command-capability discovery mismatch, failed prototype removal, and blocked
+  M17/CAP-M17 state. M18-01 did not repair or work around that defect.
+- No CODEOWNERS file exists. Existing verification wiring already runs the
+  release-tool suite under the documentation contract; no CMake, test-CMake,
+  workflow, support-matrix, sample, runtime, ABI, or package edit was needed.
+
+## Acceptance mapping
+
+| Acceptance area | Implementation and evidence | Status |
+| --- | --- | --- |
+| Four independent schemas | Draft 2020-12 plan, record, review, and proposal schemas have distinct IDs, `schema_version: 1`, exact document types, closed top-level/security-sensitive objects, bounded values, lowercase SHA-256/full-commit patterns, and all five scopes. | Pass |
+| Complete pre-run plan | Plan schema/tool require campaign/tuple/source/build/version, complete host/kernel/compiler/topology/policy/workload/input identity, measurement bounds, applicable accelerator facts, all seven trial categories, and unique complete threshold definitions. | Pass |
+| Scope fail-closed rules | NVIDIA, XDMA, combined, RT1, and RT2 identities/policies are checked independently. Combined requires both devices plus host staging and forbids peer DMA. RT2 requires PREEMPT_RT/isolation/IRQ/scheduling/locking facts. | Pass |
+| Immutable record and raw retention | Exact plan bytes, observed identity, UTC run window, canonical manifest digest, all 15 raw populations, stable resource/thermal trends, health, recovery, trials, thresholds, and overall result are checked. | Pass |
+| M12 evidence boundary | Existing `tools/check_hardware_evidence.py` and `tools/release_manifest.py` are byte unchanged. Raw `evidence_only` JSON may be a referenced regular artifact but fails as an M18 plan/record/review document. | Pass |
+| Review semantics | Review binds exact plan, record, embedded manifest, scope, and tuple; requires an explicit pass, no exception, human pre-run provenance confirmation, and `attribution_only`. It makes no authentication/signature claim. | Pass |
+| Bounded safe validator | Strict UTF-8/no-BOM, duplicate-key, non-finite, trailing-data, type, unknown-field, depth, count, string, numeric, path, symlink, file, inventory, byte, and digest validation uses Python 3.11 standard library only. Streaming tree enumeration stops at the file/tree-entry ceiling, and hashing stops at the first actual per-file or aggregate-byte violation. Diagnostics do not expose artifact contents. | Pass |
+| Deterministic proposal | Complete validation precedes output. A same-directory flushed temporary file is atomically hard-linked to a new explicit path; collision, alias, artifact-root output, failure, and cancellation cleanly reject. Canonical output is byte-repeatable and exact-byte verified. | Pass |
+| Threshold integrity and chronology limit | Threshold identities/definitions and trial identities must exactly match the retained plan; results are recomputed. Exact plan/review hashes prevent substitution. Human external evidence, not timestamps or validator success, must establish pre-run retention. | Pass |
+| Synthetic fixture matrix | Valid NVIDIA, XDMA, combined, RT1, and RT2 sets and generated proposals pass. Negative tests cover required groups, scope facts, direct-peer rejection, PREEMPT_RT, bounds, drift, missing/duplicate/failed trials, malformed recovery, failed thresholds/allowances, asserted and numeric resource instability, inconsistent extrema, thermal range, unhealthy/lost device, digest/identity substitution, failed review/exceptions, malformed JSON, unsafe/symlinked/unlisted/mismatched artifacts, bounded tree enumeration and aggregate hashing, output collision/cancellation, noncanonical proposal, recovery, and isolation. | Pass |
+| M17-05 combined boundary | Only `synthetic_fixture` combined proposal exercises schema composition and is marked support-matrix-ineligible. Every non-synthetic combined set fails with the explicit M17-05 prerequisite error. | Pass |
+| Documentation and governance | `docs/qualification.md` defines field/scope/trial/bound/canonicalization/evolution/review/rollback rules and claim states. Current state, handoff, product, architecture, roadmap, release, readiness, testing, security, threat, README, and deterministic checkers are reconciled. | Pass |
+| Compatibility preservation | C ABI v8 remains 70 exports/fingerprint `0xd0e7a5a14bf35f97`, SONAME 8, device ABI v1, HAL extensions, Runtime statuses, existing schemas/IDs, package inventory, version 1.2.1, all three matrices/workflows/samples, and Apache-2.0 are unchanged. | Pass |
+| Completion gates | Focused, contract, quick, full, explicit library ABI, and SONAME checks pass. Hosted CI and human schema/security/promotion/compatibility/claim review were not performed. | Local pass; external pending |
+
+## Independent system-risk review and repairs
+
+The uncommitted batch received an independent full-diff system-risk review on
+2026-08-12. Two material findings were reproduced and repaired inside the
+approved M18-01 paths:
+
+1. **High — self-contradictory trends could produce a passing proposal.** The
+   validator trusted `stable: true` without checking the numeric endpoints and
+   checked only the thermal maximum range. A record with resource growth, a
+   maximum below its endpoints, or out-of-range thermal start/end values could
+   pass and feed a support-matrix-eligible proposal. Validation now requires
+   every maximum to cover start/end, stable resource end not to exceed start,
+   and all thermal values to remain in `[-100, 300]`.
+2. **Medium — artifact validation could exceed its declared resource bounds.**
+   File count was rejected only after `os.walk()` had enumerated the complete
+   tree, directory entries had no aggregate ceiling, and actual aggregate bytes
+   were rejected only after all individually bounded files were hashed. The
+   validator now streams at most 2,304 tree entries, stops after the 257th file
+   entry, checks open-file size against the remaining 512 MiB budget before
+   reading, and stops hashing on the first actual size violation.
+
+New behavioral tests reproduce the trend contradictions, bounded tree scan,
+and aggregate-byte early stop. The permanent documentation and release
+contract checks now retain the tree-entry ceiling token. No runtime, ABI,
+package, support matrix, workflow, hardware evidence, or claim boundary was
+changed by these repairs.
+
+## Version-1 bounds and applicability
+
+| Input | Bound |
+| --- | ---: |
+| JSON document | 1 MiB |
+| JSON nesting / generic collection / global string | 32 / 4,096 / 4,096 characters |
+| Reported errors | 128 plus one omission notice |
+| Trials / thresholds / review exceptions | 64 / 128 / 32 |
+| Warm-up or sample count / duration | 10,000,000 / 31,536,000 seconds |
+| Artifact count / tree entries / depth | 256 / 2,304 / 8 components |
+| One artifact / aggregate | 64 MiB / 512 MiB |
+
+| Scope | Accelerator identity | Device loss/reset | Latency/deadline | Extra requirement |
+| --- | --- | --- | --- | --- |
+| NVIDIA | exact NVIDIA/PCIe/CUDA/firmware/power/clocks | mandatory | plan-defined | none |
+| XDMA | exact FPGA/BDF/link/driver/module/bitstream/IP/map | mandatory | plan-defined | none |
+| combined | both identities | mandatory | plan-defined | bounded host staging, no peer DMA; real proposal blocked on M17-05 |
+| RT1 | none in version-1 CPU fixture | explicit not applicable | both required | named measured host policy |
+| RT2 | none in version-1 CPU fixture | explicit not applicable | both required | RT1 plus PREEMPT_RT/config/boot/isolation/IRQ/scheduling/locking |
+
+Functional, endurance, thermal, saturation, and shutdown remain mandatory in
+all scopes. An applicable trial cannot use `unsupported` or `not_applicable`.
+
+## Schema and synthetic digest evidence
+
+| Schema | SHA-256 |
+| --- | --- |
+| campaign plan | `69e06d15f3acdaf976c88e5e2b5ced320c12d71dc73038ff85fb164b777f9f69` |
+| qualification record | `9a9f5adb2e07356493a10a8a51e95b7ed24d828d9688c60d6b8573cf184be00e` |
+| promotion review | `e7d700c5abaa731c83275456e29a59b4192ea5c7e878a7969a3e856352b8c5e9` |
+| promotion proposal | `aaeec5f6a2b845c7299eb619496de0319e7cb1690aa1698fc869ace7d6e03786` |
+
+The sole retained synthetic raw artifact is `raw.json`, 58 bytes, SHA-256
+`5a50e1af873d23adc726db0da8a1a93942a4a5a586d8db9b5809a9dda91f12a2`.
+Its domain-separated canonical embedded-manifest digest is
+`1dbed12b0734b1a0ad58f0c3d38b512bde5647be9857b77b606b3923da7efdd5`.
+
+| Scope | Plan | Record | Review | Proposal |
+| --- | --- | --- | --- | --- |
+| NVIDIA | `b6fbf139ef733a486302dd5c69ffe8b74d51bc17e446ee187bcebb8568d61a1e` | `68da564962e4b1a375b282a9249c35b5e788064334fb5792e191a53961d45c41` | `9c0e230c81c1040db00fe9b62b10cb14cc5e3959a12c98e19c365f2049a60451` | `d694bf245ed96de5aca5612f8c4bae2aa7e19773ea852e65bffcf64434f3f97b` |
+| XDMA | `484ec4c1204dff592e42afae027dfc7d994044f6aef19c7648749ee0d7dfddba` | `b1b0eea50127eedc3d071fe01b7de00fb2df5a7930b8125c7bf79107f7da1dca` | `c6d106ce6adbdc45d0a10707ffd45bc51f9b0da3dabe2036f1c1ac705a9a6966` | `66a6bd05b20b9476d1fc8a404e7eb1362e6949132c86515ed088544c8438054f` |
+| combined | `bf15f11547aba3953edd2841e3120eee9fac5cfa2b077ca867eda4853c074c2a` | `8373ebd41b8b19c513e73713f23447d9692d3cfbee6d57d48693e5447d2c2a42` | `9877831fb15c69d2b8174d14d7b786fe696cd73d66a2f6706f6155ee828d70b1` | `0f631fa28d51d90691b9230476e10ef830f65782a39d1eb11d25a1302029cf16` |
+| RT1 | `71eb9a1e118c91d818e7614eaccf0eafa7743ad320c88e8a01168d0640a29b8c` | `4c064eca92e49da2e569c535abd6221c8c79e030e6768cb02bf1304a32933fde` | `2ff1273f31384d4ee08299e7e32c3fa16e7f89e21b29c5e78932302b520c1904` | `374acd8b4bb06926a8b4ebf2a0e5c3c0bc32e896a640424f10310f7a2295e939` |
+| RT2 | `d1592d2b898e9639a407bd5846bf6cf5dddb257a9f2d9f4aaa7ec8719c414a5f` | `c846e76deeaf1a2283f6a3ee3251069844880f12ed34f0ac26479dc6c346c978` | `3085c67a7c217d713ec4107ba04325356910bfcdc7769aa21470ebc7e51f6f17` | `7a2be8b95d1e564904e349641f06b3c313818c38a0d48f98507388ce56bf69fd` |
+
+Two independently created proposal outputs per scope compared byte-identical.
+The canonical NVIDIA proposal was 1,149 bytes with exactly one trailing newline.
+
+## Exact commands and results
+
+| Command | Exit/result |
+| --- | --- |
+| Baseline `git` status/HEAD/log/worktree/ancestry and evidence inspection | 0; exact baseline, M17-04 ancestor, only two initial control-sync changes |
+| Canonical batch/control artifact comparison and complete contract/document/workflow/tool/test inspection | 0; only injected control revision differs |
+| `python3 tests/test_release_tools.py -k QualificationToolTests` | 0; 11/11 focused qualification tests passed |
+| `python3 tests/test_release_tools.py` | 0; 25/25 release-tool tests passed, including unchanged M12 cases |
+| Exact active-batch `qualification.py validate` command | 0; NVIDIA synthetic set accepted |
+| Exact active-batch `qualification.py propose` plus `verify-proposal` command | 0; canonical `proposal_only` accepted; 1,149 bytes; SHA-256 `d694bf...f97b` |
+| Five-scope validate/propose/repeat/compare loop | 0; all five valid synthetic sets passed and repeated proposals were byte-identical |
+| `python3 tools/check_release_contract.py --write-hashes` | 0; reviewed source-tree digest ledger refreshed and validated |
+| `./scripts/agent-verify.sh contract` | 0; docs/release contracts passed, 25 tests passed, frozen C ABI passed; log `docs/evidence/local/verify-contract-20260812T050753Z.log` |
+| `./scripts/agent-verify.sh quick` | 0; contract plus build/demo and 23/23 CTest processes passed; log `docs/evidence/local/verify-quick-20260812T050812Z.log` |
+| `./scripts/agent-verify.sh full` | 0; final post-hardening contract/quick plus strict experimental build and 27/27 CTest processes passed; log `docs/evidence/local/verify-full-20260812T051229Z.log` |
+| `python3 tools/check_c_abi.py --library build/agent-full/librtfw.so` | 0; C ABI v8, 70 symbols, fingerprint `0xd0e7a5a14bf35f97` |
+| `readelf -d build/agent-full/librtfw.so \| rg 'SONAME.*librtfw.so.8'` | 0; SONAME `librtfw.so.8` |
+| Protected-path `git diff --quiet HEAD -- ...` over all matrices, hardware workflows/samples/tools, ABI files, version, license, and CMake files | 0; byte unchanged |
+| Final post-review `git diff --check`, allowlist/protected-path audit, EOF-newline audit, and contract rerun | 0; all 42 changed paths allowed, forbidden/product paths byte unchanged, no whitespace/EOF defect, and 28/28 release-tool tests passed; log `docs/evidence/local/verify-contract-20260812T052634Z.log` |
+| Independent review reproduction: numeric resource growth with `stable: true`, impossible maximum, and out-of-range thermal endpoints | Before repair: accepted with no validation error; after repair: rejected by exact numeric consistency/range diagnostics |
+| `python3 tests/test_release_tools.py -k QualificationToolTests` after review repair | 0; 14/14 focused qualification tests passed |
+| `python3 tests/test_release_tools.py` after review repair | 0; 28/28 release-tool tests passed, including unchanged M12 cases |
+| `./scripts/agent-verify.sh full` after review repair | 0; contract and quick checks, 23/23 portable CTest processes, and 27/27 strict experimental CTest processes passed; log `docs/evidence/local/verify-full-20260812T052459Z.log` |
+| Explicit post-review ABI and SONAME checks | 0; C ABI v8, 70 symbols, fingerprint `0xd0e7a5a14bf35f97`, and SONAME `librtfw.so.8` |
+
+## Changed and preserved invariants
+
+Changed:
+
+- Added four independent qualification schema-version-1 domains.
+- Added one bounded offline validator/proposal/verification CLI.
+- Added five-scope synthetic fixtures and permanent positive/adversarial tests.
+- Added qualification governance, security, review, rollback, and deterministic
+  release/docs contract integration.
+
+Preserved:
+
+- Stable C ABI v8, exact 70-export allowlist/fingerprint, and SONAME 8.
+- Device ABI v1, HAL core v2, memory/topology v1, command/timeline v1, Runtime
+  statuses, runtime-profile schema 7/25 keys, observability schema/IDs,
+  checkpoint/input-log/rate-action schemas, installed targets/headers/aliases,
+  release 1.2.1, and Apache-2.0.
+- All portable, CUDA, and XDMA support matrices and their claims.
+- Existing CUDA/XDMA qualification workflows, samples, raw-evidence validator,
+  release-manifest tool, and all prior retained evidence.
+- M17/CAP-M17 remain incomplete. M18/CAP-M18 remain incomplete.
+- No runtime lane, allocation, thread, file-I/O, mutex, wait, spill, or
+  cross-instance behavior changed.
+
+## Rollback and residual risk
+
+Rollback is one coherent revert of the four schemas, tool, fixtures/tests,
+documentation/checker/digest integration, governance synchronization, and this
+evidence file. There is no runtime state, data migration, support entry,
+hardware mutation, release, or deployment to reverse. If an external
+version-1 record exists, retain a reader or archive it explicitly as
+non-promotable; never rewrite its raw artifacts.
+
+Residual risks:
+
+- SHA-256 detects byte substitution only relative to the reviewed digest; it is
+  not authentication, signing, or trusted provenance.
+- A reviewer string and UTC timestamp are untrusted. Human inspection of
+  externally retained pre-run plan provenance remains mandatory.
+- Schema/tool completeness cannot prove that tuple statements, raw artifacts,
+  or reviewer assertions are operationally true.
+- The fixed bounds and strict version-1 field/applicability model require human
+  schema and security review before merge and versioning review before change.
+- M17-05 still prevents a real combined campaign/proposal from relying on the
+  intended native composition path.
+
+## Unperformed validation and claim boundary
+
+Mandatory GitHub Linux GCC 11/Clang 14, Windows MSVC v143, ASan, UBSan, TSan,
+determinism exchange, package/archive/relocation, embedding, fuzz, dependency,
+SBOM, autotune, scaling, CUDA-toolkit compile, and XDMA node-free jobs were not
+run in this uncommitted local worktree. Human schema, security, qualification,
+promotion, compatibility, and claim-boundary reviews were not performed. No CI
+run/check identifiers or human approval are claimed.
+
+No external pre-run plan chronology, reviewer authentication, signature,
+physical NVIDIA, FPGA/XDMA, combined, direct-peer, MMIO, interrupt, DMA,
+thermal, endurance, saturation, device-loss/rebind, HIL, field, latency,
+controlled timing, RT1, RT2, Unreal, signing, release, staging, deployment,
+production, or support-promotion validation was performed. Synthetic fixtures,
+portable local tests, old `evidence_only` files, documents, hashes, timestamps,
+reviewer strings, and proposal generation establish none of those claims.

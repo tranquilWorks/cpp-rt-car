@@ -1,0 +1,39 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/golden_showcase/process_suite.py</title><h1>tests/golden_showcase/process_suite.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">&quot;&quot;&quot;CLI boundary matrix plus full independently validated artifact mutation suite.&quot;&quot;&quot;</span>
+<span id="L2">import argparse</span>
+<span id="L3">from pathlib import Path</span>
+<span id="L4">import subprocess</span>
+<span id="L5">import sys</span>
+<span id="L6">import tempfile</span>
+<span id="L7">ROOT=Path(__file__).resolve().parents[2]</span>
+<span id="L8">sys.path.insert(0,str(ROOT/&#x27;samples/golden_showcase&#x27;))</span>
+<span id="L9">import artifacts as a</span>
+<span id="L10">import run</span>
+<span id="L11">p=argparse.ArgumentParser();p.add_argument(&#x27;--build&#x27;,type=Path,required=True);p.add_argument(&#x27;--provenance&#x27;,type=Path,required=True);p.add_argument(&#x27;--config&#x27;);args=p.parse_args()</span>
+<span id="L12"># Model the actual Windows multi-config layout before launching real binaries.</span>
+<span id="L13">with tempfile.TemporaryDirectory(prefix=&#x27;showcase config &#x27;) as temporary:</span>
+<span id="L14">    root=Path(temporary)</span>
+<span id="L15">    for folder,name in [(&#x27;Debug&#x27;,&#x27;golden_showcase&#x27;),(&#x27;bench/Debug&#x27;,&#x27;sample_golden_showcase&#x27;),(&#x27;samples/RelWithDebInfo&#x27;,&#x27;sample_golden_controller&#x27;)]:</span>
+<span id="L16">        path=root/folder/(name+&#x27;.exe&#x27;);path.parent.mkdir(parents=True,exist_ok=True);path.touch()</span>
+<span id="L17">        logical=&#x27;golden_controller&#x27; if &#x27;controller&#x27; in name else &#x27;golden_showcase&#x27;</span>
+<span id="L18">        a.require(run.executable(root,logical)==path.resolve(),&#x27;multi-config executable discovery&#x27;)</span>
+<span id="L19">        path.unlink()</span>
+<span id="L20">    debug=root/&#x27;bench/Debug/sample_golden_showcase.exe&#x27;;debug.touch()</span>
+<span id="L21">    release=root/&#x27;bench/Release/sample_golden_showcase.exe&#x27;;release.parent.mkdir();release.touch()</span>
+<span id="L22">    a.require(run.executable(root,&#x27;golden_showcase&#x27;,&#x27;Debug&#x27;)==debug.resolve(),&#x27;explicit build configuration&#x27;)</span>
+<span id="L23">    for selected in (None,&#x27;RelWithDebInfo&#x27;,&#x27;../Debug&#x27;):</span>
+<span id="L24">        try:run.executable(root,&#x27;golden_showcase&#x27;,selected)</span>
+<span id="L25">        except ValueError:pass</span>
+<span id="L26">        else:raise AssertionError(&#x27;ambiguous/missing/invalid configuration accepted&#x27;)</span>
+<span id="L27">parent=Path(tempfile.mkdtemp(prefix=&#x27;showcase acceptance &#x27;,dir=args.build));exe=run.executable(args.build,&#x27;golden_showcase&#x27;,args.config)</span>
+<span id="L28">for i,options in enumerate(([&#x27;--grain&#x27;,&#x27;2&#x27;],[&#x27;--workers&#x27;,&#x27;0&#x27;],[&#x27;--count&#x27;,&#x27;257&#x27;],[&#x27;--variant&#x27;,&#x27;sim_cuda&#x27;,&#x27;--dispatch&#x27;,&#x27;cpu&#x27;],[&#x27;--rate_multiplier&#x27;,&#x27;4&#x27;],[&#x27;--case&#x27;,&#x27;golden-input&#x27;,&#x27;--mode&#x27;,&#x27;host&#x27;],[&#x27;--case&#x27;,&#x27;foreign&#x27;])):</span>
+<span id="L29">    path=parent/f&#x27;negative-{i}&#x27;</span>
+<span id="L30">    result=subprocess.run([str(exe),&#x27;--case&#x27;,&#x27;golden-loop&#x27;,&#x27;--output&#x27;,str(path),*options],capture_output=True,text=True,timeout=20)</span>
+<span id="L31">    a.require(result.returncode!=0 and not path.exists(),&#x27;invalid full-loop configuration had effects&#x27;)</span>
+<span id="L32">for count,ticks in ((1,1),(17,7),(256,24)):</span>
+<span id="L33">    path=parent/f&#x27;boundary-{count}-{ticks}&#x27;</span>
+<span id="L34">    run.command([exe,&#x27;--case&#x27;,&#x27;golden-loop&#x27;,&#x27;--count&#x27;,count,&#x27;--ticks&#x27;,ticks,&#x27;--clock&#x27;,&#x27;fake&#x27;,&#x27;--output&#x27;,path])</span>
+<span id="L35">    a.benchmark(path)</span>
+<span id="L36">output=parent/&#x27;complete&#x27;</span>
+<span id="L37">run.execute(args.build.resolve(),output,args.provenance.resolve(),&#x27;fake&#x27;,args.config)</span>
+<span id="L38">run.command([sys.executable,ROOT/&#x27;tests/golden_showcase/negative_artifacts.py&#x27;,&#x27;--evidence&#x27;,output,&#x27;--provenance&#x27;,args.provenance,&#x27;--build&#x27;,args.build]+([&#x27;--config&#x27;,args.config] if args.config else []),timeout=180)</span>
+<span id="L39">print(&#x27;PASS CLI boundaries, complete execution, and independent evidence rejection&#x27;)</span></pre></html>

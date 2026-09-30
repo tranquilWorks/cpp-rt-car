@@ -1,0 +1,514 @@
+# M16-04 retained evidence — 2026-08-05
+
+## Scope and provenance
+
+- Batch: `M16-04`, Add shedding recovery and versioned telemetry.
+- Branch: `agent/m16-04`.
+- Required baseline: `9c350ab5b66e37e90aef7e96939c71df04101b27`.
+- CI repair 1 worktree `HEAD` before the repair:
+  `b792f6c04b477e1606bf3738d783b59e95bbb2f5`.
+- CI repair 2 worktree `HEAD` before the repair:
+  `c6d45467a3a094ba54677b6a6f09fc8d4ba0e028`.
+- Canonical control revision:
+  `92abc5d737b95133a4dd9e68170f29cf55d26371`.
+- Canonical batch:
+  `/home/kbianco/.local/share/portfolio-control/worktrees/control/cpp-rt-car/products/cpp-rt-car/batches/M16-04.yaml`.
+- Repository active-batch and repo-profile changes were present from the
+  control-plane synchronization before implementation and were preserved.
+- No commit, push, PR, release, deployment, secret, setting, support-matrix,
+  version, license, or qualification change was performed.
+
+Three bounded read-only audits independently reviewed dispatch/checkpoint,
+telemetry/concurrency, and compatibility/CI surfaces. The principal agent
+owned integration, implementation, validation, and this evidence.
+
+## Changed files
+
+Governance and build integration:
+
+- `.github/workflows/ci.yml`
+- `AGENTS.md`
+- `CMakeLists.txt`
+- `contracts/active-batch.yaml`
+- `contracts/repo-profile.yaml`
+- `release/rtfw-release-contract.json`
+- `tools/check_docs_contract.py`
+- `tools/check_release_contract.py`
+
+Runtime and public C++ surface:
+
+- `rt/include/rt/runtime.hpp`
+- `rt/src/host_runtime.cpp`
+- `rt/src/rate_dispatch.cpp`
+- `rt/src/rate_dispatch.hpp`
+- `rt/src/rate_telemetry.cpp`
+- `rt/src/rate_telemetry.hpp`
+
+Tests and package consumers:
+
+- `tests/CMakeLists.txt`
+- `tests/package_consumer/compat_consumer.cpp`
+- `tests/package_consumer/cpp_consumer.cpp`
+- `tests/test_rate_dispatch.cpp`
+- `tests/test_rate_telemetry.cpp`
+- `tests/test_trace_noalloc.cpp`
+
+Product and component contracts:
+
+- `README.md`
+- `docs/CURRENT_STATE.md`
+- `docs/HANDOFF.md`
+- `docs/architecture.md`
+- `docs/compiled_graph.md`
+- `docs/determinism_replay.md`
+- `docs/executor.md`
+- `docs/host_runtime.md`
+- `docs/memory_plan.md`
+- `docs/observability.md`
+- `docs/product_contract.md`
+- `docs/rate_telemetry.md`
+- `docs/real_time_readiness_checklist.md`
+- `docs/roadmap.md`
+- `docs/testing_ci.md`
+- `docs/time_platform.md`
+- `docs/evidence/M16-04-2026-08-05.md`
+
+Every changed path is permitted by `contracts/active-batch.yaml`. No forbidden
+path was modified.
+
+## Acceptance mapping
+
+| Acceptance area | Implementation and evidence |
+| --- | --- |
+| Append-only policy/default compatibility | `RateExecutionPolicy` appends host policy version, positive late/on-time thresholds, and telemetry capacity with source-compatible defaults. Reference-only behavior is untouched; mandatory-only active identity and canonical bytes exclude the optional tail. Preferred and compatibility installed consumers compile and run. |
+| Optional validation and mandatory-only admission | Active compilation accepts bounded D0 CPU optional domains, rejects device/invalid inputs, ordinary cross-domain dependencies, and optional channel endpoints, and simulates only mandatory groups during admission. Existing independent mandatory admission tests remain green. |
+| Stable shed/recovery order | `optional_shed_order` is criticality ascending and registration descending; recovery traverses it in reverse. `RateShedding.OptionalOrderIsCriticalityThenReverseRegistration` proves both directions. |
+| Hysteresis and transition precedence | Only settled mandatory releases update streaks. Tests prove exact thresholds, alternating reset, immediate same-order effect, optional-lateness isolation, one transition per trigger, and terminal-fail suppression. |
+| Optional dispositions | Active optional records retain their configured bounded late action. Shed releases consume without callback, transfer, backlog, or degradation and use distinct `optional_shed` records and summary counters. |
+| Bounded aggregate windows | Checked aggregate logic reduces a 10,000-release optional/mandatory late window to four telemetry ranges after the bounded transition work. Independent review additionally found and repaired active optional skip/hold prefixes that had scaled with every omitted release before the shed threshold; the permanent regression reduces 10,000 optional releases to one singleton plus one exact 9,999-release range while preserving the mandatory ordering barrier. |
+| Step and periodic summaries | Append-only summaries include optional due/executed, shed releases, shed/recovery transitions, current shed count, and policy version. Focused host and periodic tests verify exact values and preserved earlier meanings. |
+| Versioned record tables | Schema 1 has fixed 160-byte records, actions 0–6, transitions 0–2, reasons 0–7, and counters 0–19 with gauges 16–17. `RateTelemetry.NumericSchemaAndCounterTablesAreExact` and documentation contract gates freeze those facts. |
+| Nonblocking stream and cursors | Finalization owns a fixed atomic ring and counters. Publication makes one slot attempt and records overwrite/contention/zero-capacity loss. Tests cover concurrent producers/readers, exact first-window gaps, malformed and foreign cursor transactionality, runtime isolation, and active-step/periodic inspection rejection. |
+| Identity, checkpoint, and replay boundary | Optional policy version, thresholds, and order enter active graph/replay identity; telemetry capacity does not. The existing generic state conditionally retains streak/order/shed state. Round trip and valid-checksum semantic order corruption are tested transactionally. Checkpoint/input-log schema 1 remains unchanged; active input-log/action replay remains rejected. |
+| Memory and allocation bounds | Optional policy state, checkpoint tail, telemetry object/slots, and counter bank reconcile once inside `rate_plan_bytes`, runtime control, and the six-row equation. Zero-capacity owns no slots. Allocation instrumentation covers execute, shed, recover, inspection, loss, and checked stop after start. |
+| Concurrency and isolation | The fixed stream uses atomic slot words, release/acquire publication, one writer claim, and instance-owned state. Synthetic producer/reader and two-runtime gates pass. The TSan binary built, but this host could not execute its runtime; mandatory CI remains required. |
+| Stable compatibility boundaries | C ABI v8 remains exactly 70 exports with fingerprint `0xd0e7a5a14bf35f97`; SONAME 8, device ABI v1, runtime-profile schema 7/25 keys, global observability schema 2 IDs, installed SDK inventory, release 1.2.1, support matrices, and Apache-2.0 are unchanged. |
+| Governance and claim boundary | Current state, handoff, roadmap, component contracts, permanent documentation checks, CI filter, and release digest ledger describe portable RT0 functional evidence only. M16/CAP-M16 are not marked complete because mandatory CI and human gates have not run. |
+
+## Independent system-risk review repair
+
+The independent review found one material medium-severity bounded-execution
+failure in `Runtime::Impl::run_active_step()`. Range aggregation was enabled
+for late skip/hold work only after every optional domain had already shed. If
+optional work remained active but its own late action omitted it, a large
+window performed one loop and one telemetry publication attempt per optional
+release, contrary to the batch bound against work proportional to omitted
+supercycles.
+
+The repair makes already-shed optional releases and active optional late
+skip/hold releases independently eligible for aggregation up to the next
+mandatory or executable total-order barrier. Mandatory late omissions remain
+unaggregated while a transition can still affect optional work, preserving
+threshold and same-time ordering semantics. The new permanent test
+`RateShedding.LargeOptionalLatePrefixAggregatesBeforeShedThreshold` retains a
+mandatory domain, holds the shedding streak below threshold, and verifies
+10,000 late optional releases as one singleton plus one exact 9,999-release
+range with no callback, transition, loss, or shed disposition.
+
+## Exact commands and results
+
+All commands ran from the repository root on 2026-08-05 UTC.
+
+### CI repair 1: Clang 14 signedness diagnostics
+
+The supplied failure capture reported only that pull-request CI run
+`30996083762` was still in progress and that logs were not yet available. A
+read-only inspection of the now-completed job `92273367479`,
+`build-linux (clang, RelWithDebInfo, ON)`, identified the first causal failure:
+Clang 14 stopped the build under `-Werror,-Wsign-conversion` at three M16-04
+assignments in `rt/src/host_runtime.cpp`. `std::popcount(std::uint64_t)` returns
+`int`, while the rate counter, step summary, and due-work summary store
+`std::uint64_t`. Later skipped tests and the other Clang build failures were
+downstream instances of this compile failure.
+
+The repair adds explicit value-preserving `std::uint64_t` conversions at those
+three assignments and a typed zero for the conditional expression. No test,
+policy behavior, public declaration, ABI surface, schema, codec, or
+qualification claim changed. The governed release digest for
+`rt/src/host_runtime.cpp` was refreshed in
+`release/rtfw-release-contract.json`.
+
+```bash
+cmake -S . -B build/repair-clang14 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=ON -DENABLE_RAPIDCHECK=ON -DSIM_SANITIZERS= -DSIM_ENABLE_AVX2=ON -DSIM_WERROR=ON -DCMAKE_C_COMPILER=clang-14 -DCMAKE_CXX_COMPILER=clang++-14
+cmake --build build/repair-clang14 --parallel 2
+```
+
+Result: exit 0. Debian Clang 14.0.6 built every configured target to 100%
+under the same compiler major, warnings-as-errors policy, AVX2 setting, build
+type, tests, experimental surface, and RapidCheck options as the failed CI job.
+The original `host_runtime.cpp` diagnostics did not recur.
+
+```bash
+python3 tools/check_release_contract.py --write-hashes
+git diff --check
+./scripts/agent-verify.sh full
+```
+
+Result: exit 0. The refreshed release contract reported `OK`, diff hygiene
+passed, contract verification retained C ABI v8 with exactly 70 symbols and
+fingerprint `0xd0e7a5a14bf35f97`, quick verification passed 18/18 entries, and
+full verification passed 22/22 entries. Retained full log:
+`docs/evidence/local/verify-full-20260805T101427Z.log`.
+
+This local repair does not relabel pull-request run `30996083762` as passing:
+that run checked commit `b792f6c04b477e1606bf3738d783b59e95bbb2f5`, before the uncommitted repair.
+Mandatory supported-tuple CI and human review remain external gates. No
+hardware, HIL, physical recovery, latency, RT1, RT2, engine, signing, release,
+deployment, or production evidence was produced.
+
+### CI repair 2: MSVC deliberate-alignment diagnostics
+
+The complete supplied failure capture for pull-request CI run `30996083762`
+also exposed an independent Windows cause after the Clang diagnostics above:
+MSVC v143 stopped under `/W4 /WX` with C4324 at
+`rt/src/rate_telemetry.hpp`. The compiler reported the intentional padding
+created by the 64-byte-aligned ring slot and four cache-line-separated
+counters. Repeated Windows Debug, RelWithDebInfo, and relocated-package build
+failures were downstream instances of that same header diagnostic.
+
+The repair wraps only `RateTelemetryRing` in an MSVC warning push/disable/pop
+for C4324, matching the existing, reviewed treatment around the global
+`TelemetryRing` with the same intentional cache-line isolation. The scope is
+restored immediately after the class. Object layout, alignment, storage
+accounting, publication ordering, behavior tests, public declarations, C ABI,
+schemas, codecs, and qualification claims are unchanged. The governed release
+digest for `rt/src/rate_telemetry.hpp` was refreshed.
+
+The exact Windows MSVC v143 check cannot run on this Linux worktree. A native
+Windows-target `clang-cl-14` probe exited 1 before project compilation because
+the host has no Windows C++ standard-library headers:
+
+```bash
+clang-cl-14 /W4 /WX /EHsc /Irt/include /Irt/src /Icore/include /Iinclude /clang:-std=c++20 /c rt/src/rate_telemetry.cpp /Fo/tmp/rtfw-rate-telemetry-windows-probe.obj
+```
+
+The diagnostic was `fatal error: 'cstddef' file not found`; this is retained
+as an environment limitation, not as validation of the repair. A Linux-target
+compiler proxy then exercised the `_MSC_VER` conditional branch and compiled
+the implementation under `/W4 /WX`; unknown numeric pragmas were disabled
+because Clang does not implement MSVC C4324 handling for a Linux target:
+
+```bash
+clang-cl-14 --target=x86_64-pc-linux-gnu /D_MSC_VER=1930 /W4 /WX /EHsc /Irt/include /Irt/src /Icore/include /Iinclude /clang:-std=c++20 /clang:-Wno-unknown-pragmas /c rt/src/rate_telemetry.cpp /Fo/tmp/rtfw-rate-telemetry-msvc-branch-probe.o
+```
+
+Result: exit 0. This is syntax coverage of the conditional branch only; it is
+not relabeled as MSVC evidence.
+
+```bash
+cmake --build build/agent-full --target simcore_tests --parallel 2
+./build/agent-full/tests/simcore_tests --gtest_filter='RateTelemetry.*:RateShedding.*:PeriodicRuntime.RateTelemetry*:MemoryPlan.*RateTelemetry*:TraceNoAlloc.*RateTelemetry*'
+```
+
+Result: exit 0. The strict test target rebuilt and all 16 permanent rate
+telemetry, shedding, periodic, memory-accounting, and post-start allocation
+tests passed without weakening a test or changing its filter.
+
+```bash
+python3 tools/check_release_contract.py --write-hashes
+git diff --check
+./scripts/agent-verify.sh full
+```
+
+Result: exit 0. The release contract and diff hygiene passed. Full repository
+verification retained C ABI v8 with exactly 70 symbols and fingerprint
+`0xd0e7a5a14bf35f97`; quick verification passed 18/18 entries and full
+verification passed 22/22 entries. Retained full log:
+`docs/evidence/local/verify-full-20260805T102207Z.log`.
+
+Mandatory Windows Server 2022 MSVC v143 CI remains required to execute the
+original `/W4 /WX` build. No hardware, HIL, physical recovery, latency, RT1,
+RT2, engine, signing, release, deployment, or production evidence was
+produced.
+
+### CI failure capture 3: retained repair verification
+
+The supplied capture
+`/home/kbianco/.local/state/portfolio-control/logs/cpp-rt-car/20260805T034841Z/M16-04-ci-failure-3.log`
+records pull-request run `30996821177`, started after the Clang repair commit
+`c6d45467a3a094ba54677b6a6f09fc8d4ba0e028`. The first causal failure is the
+same independent MSVC v143 C4324 warning described above: Windows Debug and
+the relocated Windows package build both stop at the intentionally aligned
+`RateTelemetryRing` declaration in `rt/src/rate_telemetry.hpp`. Later build and
+test omissions are downstream. Current branch head
+`0fd78a46a5d762001e7bf6526a6662555c106ea3` contains the scoped warning
+push/disable/pop repair and its release-contract digest; no additional runtime,
+public API, ABI, schema, codec, test, or qualification change was required.
+
+The native Windows MSVC command remains unavailable on this Linux host. The
+same bounded conditional-branch syntax probe used for the repair, followed by
+the exact active-batch focused filter and permanent M16 gates, passed:
+
+```bash
+clang-cl-14 --target=x86_64-pc-linux-gnu /D_MSC_VER=1930 /W4 /WX /EHsc /Irt/include /Irt/src /Icore/include /Iinclude /clang:-std=c++20 /clang:-Wno-unknown-pragmas /c rt/src/rate_telemetry.cpp /Fo/tmp/rtfw-m16-04-ci-failure-3-probe.o
+cmake --build build/agent-full --target simcore_tests --parallel 2
+./build/agent-full/tests/simcore_tests --gtest_filter='RateShedding.*:RateTelemetry.*:RateDispatch.*Optional*:RateDispatch.*Shedding*:RateTimeline.*Optional*:HostRuntime.*RateTelemetry*:PeriodicRuntime.*RateTelemetry*:MemoryPlan.*RateTelemetry*:DeterminismReplay.*RateTelemetry*:Observability.*Rate*:TraceNoAlloc.*RateTelemetry*'
+ctest --test-dir build/agent-full --output-on-failure -R 'm16_shedding_telemetry|m16_rate_dispatch|m16_rate_timeline|m16_cross_rate_data'
+```
+
+Result: exit 0. The proxy compiled the `_MSC_VER` branch under `/W4 /WX`; this
+is syntax coverage, not native MSVC evidence. The exact focused filter passed
+16/16 tests and the four permanent M16 CTest entries passed 4/4.
+
+```bash
+./scripts/agent-verify.sh full
+```
+
+Result: exit 0. Contract checks retained C ABI v8 with exactly 70 exports and
+fingerprint `0xd0e7a5a14bf35f97`; quick verification passed 18/18 entries and
+full verification passed 22/22 entries. Retained log:
+`docs/evidence/local/verify-full-20260805T103219Z.log`. The original supported
+Windows tuple remains an external CI gate, and this repair verification does
+not relabel the failed run or any missing hardware, HIL, field, engine,
+latency, RT1, RT2, signing, release, deployment, or production evidence.
+
+A post-evidence duplicate `./scripts/agent-verify.sh full` run encountered one
+unrelated local timeout: CTest stopped the unchanged
+`CrossMatrixDeterminism/SimCoreDeterminism.HashSameAcrossThreadCounts/4ThreadsFmaOff`
+case at 180 seconds after the prior full run had passed it. The interrupted
+wrapper exited 130. The exact case then passed alone in 3.1 seconds:
+
+```bash
+timeout 60s ./build/agent-full/tests/simcore_tests --gtest_filter='CrossMatrixDeterminism/SimCoreDeterminism.HashSameAcrossThreadCounts/4ThreadsFmaOff'
+```
+
+Result: exit 0; 1/1 test passed. A fresh complete verification process then
+passed the final evidence-bearing diff:
+
+```bash
+./scripts/agent-verify.sh full
+```
+
+Result: exit 0; quick verification passed 18/18 entries and full verification
+passed 22/22 entries, including `simcore_all`, every permanent M16 gate, C ABI,
+package/runtime-profile, thread-violation-build, and XDMA portable tests. Final
+retained log: `docs/evidence/local/verify-full-20260805T102738Z.log`.
+
+### Focused iteration
+
+```bash
+cmake --build build/m16-work --parallel 2
+./build/m16-work/tests/simcore_tests --gtest_filter='RateShedding.*:RateTelemetry.*:PeriodicRuntime.RateTelemetry*:MemoryPlan.*RateTelemetry*:TraceNoAlloc.*RateTelemetry*'
+```
+
+Result: exit 0; build succeeded; 15 tests from five suites passed.
+
+```bash
+python3 tools/check_release_contract.py --write-hashes
+python3 tools/check_docs_contract.py
+git diff --check
+```
+
+Result: exit 0; release and documentation contracts reported `OK`; no diff
+whitespace error.
+
+### Repository verification contract
+
+```bash
+./scripts/agent-verify.sh contract
+./scripts/agent-verify.sh quick
+```
+
+Result: exit 0. Contract verification passed documentation, release tools,
+release contract, and frozen C ABI checks. Quick verification built the target,
+passed 18/18 CTest entries, and passed the runtime-profile demo/version/unknown
+option checks. Retained logs:
+
+- `docs/evidence/local/verify-contract-20260805T094154Z.log`
+- `docs/evidence/local/verify-quick-20260805T094155Z.log`
+
+### Required Werror build and focused batch commands
+
+```bash
+cmake -S . -B build/agent-full -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=ON -DENABLE_RAPIDCHECK=ON -DSIM_SANITIZERS= -DSIM_WERROR=ON
+cmake --build build/agent-full --parallel 2
+./build/agent-full/tests/simcore_tests --gtest_filter='RateShedding.*:RateTelemetry.*:RateDispatch.*Optional*:RateDispatch.*Shedding*:RateTimeline.*Optional*:HostRuntime.*RateTelemetry*:PeriodicRuntime.*RateTelemetry*:MemoryPlan.*RateTelemetry*:DeterminismReplay.*RateTelemetry*:Observability.*Rate*:TraceNoAlloc.*RateTelemetry*'
+ctest --test-dir build/agent-full --output-on-failure -R 'm16_shedding_telemetry|m16_rate_dispatch|m16_rate_timeline|m16_cross_rate_data'
+```
+
+Result: exit 0. Werror build succeeded; the exact focused filter passed 15/15
+tests; the four permanent M16 CTest entries passed 4/4.
+
+### Full repository verification
+
+```bash
+./scripts/agent-verify.sh full
+```
+
+Result: exit 0; 22/22 full CTest entries passed, including the complete
+RapidCheck-enabled `simcore_all`, permanent M15 lifecycle/accounting/rollback,
+all M16 gates, C ABI, host adapter, runtime profile, thread-violation build, and
+XDMA portable backend tests. Retained log:
+`docs/evidence/local/verify-full-20260805T094706Z.log`.
+
+### Independent review repair verification
+
+```bash
+cmake --build build/agent-full --target simcore_tests --parallel 2
+./build/agent-full/tests/simcore_tests --gtest_filter='RateShedding.LargeOptionalLatePrefixAggregatesBeforeShedThreshold:RateShedding.LargeLateWindowAggregatesAfterBoundedTransitions:RateShedding.ThresholdTransitionIsImmediateAndRecoveryIsReverse'
+```
+
+Result: exit 0; the three boundedness/order regressions passed.
+
+```bash
+python3 tools/check_release_contract.py --write-hashes
+python3 tools/check_docs_contract.py
+git diff --check
+./scripts/agent-verify.sh contract
+./scripts/agent-verify.sh quick
+```
+
+Result: exit 0. The release/documentation contracts and diff hygiene passed;
+contract verification retained C ABI v8 with 70 symbols and fingerprint
+`0xd0e7a5a14bf35f97`; quick verification passed 18/18 CTest entries. New logs:
+
+- `docs/evidence/local/verify-contract-20260805T100124Z.log`
+- `docs/evidence/local/verify-quick-20260805T100125Z.log`
+
+```bash
+cmake -S . -B build/agent-full -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=ON -DENABLE_RAPIDCHECK=ON -DSIM_SANITIZERS= -DSIM_WERROR=ON
+cmake --build build/agent-full --parallel 2
+./build/agent-full/tests/simcore_tests --gtest_filter='RateShedding.*:RateTelemetry.*:RateDispatch.*Optional*:RateDispatch.*Shedding*:RateTimeline.*Optional*:HostRuntime.*RateTelemetry*:PeriodicRuntime.*RateTelemetry*:MemoryPlan.*RateTelemetry*:DeterminismReplay.*RateTelemetry*:Observability.*Rate*:TraceNoAlloc.*RateTelemetry*'
+ctest --test-dir build/agent-full --output-on-failure -R 'm16_shedding_telemetry|m16_rate_dispatch|m16_rate_timeline|m16_cross_rate_data'
+./scripts/agent-verify.sh full
+python3 tools/check_c_abi.py --library build/agent-full/librtfw.so
+readelf -d build/agent-full/librtfw.so | rg 'SONAME.*librtfw.so.8'
+```
+
+Result: exit 0. The strict build passed; the updated focused filter passed
+16/16 tests; all four permanent M16 CTest gates passed; full verification
+passed 22/22 entries; the built shared library retained exactly 70 C exports,
+the frozen fingerprint, and SONAME `librtfw.so.8`. New full log:
+`docs/evidence/local/verify-full-20260805T100203Z.log`.
+
+```bash
+review_prefix=$(mktemp -d /tmp/rtfw-m16-04-review.XXXXXX)
+cmake -S . -B build/m16-package -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF -DRTFW_BUILD_EXPERIMENTAL=OFF -DRTFW_BUILD_EXAMPLES=OFF -DRTFW_BUILD_RUNTIME_DEMO=OFF -DSIM_WERROR=ON
+cmake --build build/m16-package --parallel 2
+cmake --install build/m16-package --prefix "$review_prefix"
+cmake -S tests/package_consumer -B build/m16-package-consumer-review -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$review_prefix"
+cmake --build build/m16-package-consumer-review --parallel 2
+ctest --test-dir build/m16-package-consumer-review --output-on-failure
+```
+
+Result: exit 0; the clean tests-off package installed to
+`/tmp/rtfw-m16-04-review.CO4oqE`, the exact default header inventory and
+preferred/compatibility targets configured, and all 11 relocated external
+consumer tests passed.
+
+### Installed package and source compatibility
+
+```bash
+cmake -S . -B build/m16-package -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF -DRTFW_BUILD_EXPERIMENTAL=OFF -DRTFW_BUILD_EXAMPLES=OFF -DRTFW_BUILD_RUNTIME_DEMO=OFF -DSIM_WERROR=ON
+cmake --build build/m16-package --parallel 2
+cmake --install build/m16-package --prefix /tmp/rtfw-m16-04-package.9HbGqq
+cmake -S tests/package_consumer -B build/m16-package-consumer-clean -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/tmp/rtfw-m16-04-package.9HbGqq
+cmake --build build/m16-package-consumer-clean --parallel 2
+ctest --test-dir build/m16-package-consumer-clean --output-on-failure
+```
+
+Result: exit 0; clean tests-off package build/install succeeded, the exact
+default header inventory passed, and all 11 external C, C++, compatibility,
+profile, adapter, warning-isolation, and pure-C consumer tests passed.
+
+```bash
+python3 tools/check_c_abi.py --library build/m16-package/librtfw.so
+readelf -d build/m16-package/librtfw.so | rg 'SONAME.*librtfw.so.8'
+```
+
+Result: exit 0; the built shared library has exactly 70 allowed C exports,
+fingerprint `0xd0e7a5a14bf35f97`, and SONAME `librtfw.so.8`.
+
+An earlier diagnostic installed the RapidCheck/test-enabled `agent-full` tree
+into `/tmp/rtfw-m16-04-install.OJ5J0b`. Its external-consumer configure
+correctly rejected the extra GTest/RapidCheck headers. That was not the release
+package configuration; the clean tests-off command above was then used and
+passed. No repository file was changed by either temporary install.
+
+### ThreadSanitizer
+
+```bash
+cmake -S . -B build/m16-tsan -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=ON -DENABLE_RAPIDCHECK=OFF -DSIM_SANITIZERS=thread -DSIM_WERROR=ON
+cmake --build build/m16-tsan --target simcore_tests --parallel 2
+TSAN_OPTIONS=halt_on_error=1 ./build/m16-tsan/tests/simcore_tests --gtest_filter='RateShedding.*:RateTelemetry.*:PeriodicRuntime.RateTelemetry*:MemoryPlan.*RateTelemetry*:TraceNoAlloc.*RateTelemetry*'
+```
+
+Result: configure/build exit 0. Execution exit 66 before test startup with
+`FATAL: ThreadSanitizer: unexpected memory mapping`. Existing independently
+built TSan binaries fail identically on this host, so no local dynamic TSan
+result is claimed. The GCC 11 mandatory CI TSan job retains the complete
+`RateShedding.*` and `RateTelemetry.*` filters and remains an external gate.
+
+## Changed and preserved invariants
+
+Changed intentionally:
+
+- active D0 CPU plans may include bounded optional domains;
+- copied shedding/recovery policy and append-only summaries are public C++
+  source API;
+- live optional policy state is conditionally checkpointed inside the existing
+  active generic record;
+- a separate C++ rate-action schema-1 ring, cursor API, metadata, and counter
+  bank are available;
+- finalization memory accounting includes those bounded objects;
+- permanent documentation/release gates and the unified TSan filter include
+  M16-04.
+
+Preserved:
+
+- reference-only dispatch and identity;
+- mandatory-only admission and exact M16-03 active checkpoint bytes/identity;
+- mandatory releases are never shed;
+- optional domains cannot produce or consume cross-rate channels;
+- stable C ABI v8, 70 exports/fingerprint, SONAME 8, and device ABI v1;
+- runtime-profile schema 7 and 25 keys;
+- global observability schema 2, trace IDs 1–14, and metric IDs 0–31;
+- checkpoint/input-log schema 1 and generic codecs;
+- installed header/target inventory and 1.x compatibility aliases;
+- six-row MemoryPlan and three-region provider boundary;
+- no hidden thread, heap fallback, blocking wait, retry backlog, spill lane,
+  file/network I/O, or host callback from rate telemetry;
+- runtime instance isolation, release 1.2.1, support matrices, and Apache-2.0.
+
+## Rollback
+
+Revert the M16-04 append-only public tails, optional compilation/state machine,
+conditional checkpoint tail, rate telemetry component/APIs/accounting, tests,
+CI filter, contracts, digest ledger, and this evidence as one bounded batch.
+Before discarding a live integration, call checked `stop()` and retain any
+unresolved device/lane/stack/memory owner until existing retryable cleanup
+succeeds. The exact M16-03 mandatory-only active path and M16-01/M16-02
+reference path are the fallback. No migration, persisted host setting, release,
+or deployment rollback is required.
+
+## Residual risks and unperformed validation
+
+- Mandatory GitHub GCC 11/Clang 14/MSVC v143 matrices, ASan/UBSan, FMA
+  determinism exchange, package/archive relocation, and executable GCC 11 TSan
+  have not run for this worktree.
+- Required human public-API, arithmetic/order, checkpoint, concurrency,
+  lifecycle, compatibility, safety, and claim-boundary review has not occurred.
+- Local TSan execution was unavailable because the host loader mapping is
+  incompatible; only the instrumented build succeeded.
+- One duplicate local full run timed out in the unchanged four-thread
+  cross-matrix determinism case; the exact case and a fresh complete full run
+  both passed immediately afterward. The unexplained one-run scheduling hang
+  remains local residual uncertainty outside the repaired telemetry header.
+- Fake-clock budgets and deadlines remain declared inputs rather than WCET or
+  latency measurements. Telemetry is lossy evidence, not authenticated action
+  replay.
+- No privileged native-policy, controlled performance, physical overload
+  recovery, hardware/HIL, field, Unreal, CUDA, FPGA/XDMA, DMA, thermal,
+  endurance, worst-case latency, RT1, RT2, signing, release, staging,
+  deployment, or production validation was performed or claimed.
+- M16 and CAP-M16 remain incomplete until mandatory CI and human gates pass.

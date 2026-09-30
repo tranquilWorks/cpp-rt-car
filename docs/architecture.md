@@ -1,5 +1,12 @@
 # Architecture
 
+The [M26-06 golden-system audit](golden_audit.md) is the current source-linked
+composition and capability index. M26-01 through M26-05 are merged. Its manual
+separates portable implementation from M18 physical/RT, M19 Unreal, M20 release
+engineering, M25 independent human review and retained fixture/replay findings.
+The phased descriptions below retain their original per-batch scope; they do
+not reopen merged batches or promote unperformed qualification.
+
 M25-06 adds the [installed SDK manual](sdk/generated/README.md), reproducible
 source-linked public-header reference and executable public-package recipes in
 CPack archives. Generation is a developer check; no default SDK tool dependency,

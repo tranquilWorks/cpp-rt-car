@@ -1,0 +1,397 @@
+# M15-04 retained evidence — 2026-08-05
+
+## Scope and provenance
+
+- Batch: `M15-04`, Close accounting rollback and compatibility.
+- Target branch: `agent/m15-04`.
+- Baseline and current `HEAD`: `6d28d6d5eed7cd2c64cf2a0d362d36f59aceeeab`.
+- `origin/main` at inspection: `6d28d6d5eed7cd2c64cf2a0d362d36f59aceeeab`.
+- Canonical control revision: `6d7945e8b905cc7b6bb38ad0f8b997afba981626`.
+- `contracts/active-batch.yaml` and `contracts/repo-profile.yaml` were already
+  modified by the control-plane synchronization when implementation began;
+  those operator-owned changes were preserved.
+- Validation class: static contract, deterministic unit/integration,
+  injected-provider/failure, installed-package, portable RT0, and named-host
+  Linux functional stack observation only.
+
+## Independent system-risk review repairs
+
+The uncommitted batch received an independent system-risk review against the
+active batch, public/package compatibility boundary, affected lifecycle and
+safety contracts, tests, and claim language. The review made these bounded
+repairs before final verification:
+
+- kept the reserved `memory.host-provider` row zero/not-applicable and rejected
+  declarations for it, preventing selected provider storage from being counted
+  a second time in excluded and closed totals;
+- rejected per-role and aggregate declarations that contradict already-known
+  caller or host-adapter cardinality;
+- retained a persistent marker for available runtime-stack results so a
+  checked cleanup retry after failed startup republishes success and clears the
+  prior cleanup error before entering `stopped`;
+- treated unavailable native stack metadata as `unknown` in best effort rather
+  than failing startup or publishing a zero-byte logical total as exact.
+
+Behavioral regressions cover provider no-double-counting and declaration
+rejection, unavailable best-effort stack facts, and failed-start owning-lane
+cleanup retry with public-report recovery.
+
+## Deterministic CI repair
+
+Mandatory CI run `30966886465` reached the Windows Debug warnings-as-errors
+build and failed before tests. The first causal diagnostic in the retained
+failure log was MSVC C4324 at `tests/test_device_runtime.cpp:64`, promoted to
+C2220 by `/WX`: appending a `MemoryRegionId` to the test fixture's 64-byte-
+aligned 128 KiB storage slot forced tail padding. The final process exit was a
+cascade from that compile failure.
+
+The bounded repair keeps the provider allocation slot at its original exact
+aligned size and moves the rollback/release region metadata into a separate
+stable provider token. No warning was suppressed, no test was weakened, and no
+runtime, public header, C ABI, device ABI, package, schema, provider boundary,
+or qualification claim changed. The repair changed only
+`tests/test_device_runtime.cpp` and this retained evidence file.
+
+The available Linux host has no MSVC or Windows cross-toolchain, so the exact
+Windows Server 2022 v143 `/W4 /WX` command was not rerun locally. Its affected
+warnings-as-errors target rebuilt with the available compiler, the three
+fixture-dependent rollback tests passed, and the complete repository-local
+verification passed. A mandatory CI rerun remains required before merge.
+
+Mandatory CI rerun `30967606263` passed every build and test surface except
+the Windows runtime-policy tests. Windows RelWithDebInfo returned
+`Status::invalid_config` from three assertions that expected Linux-only strict
+native stack observation: closed accounting cannot become exact when live
+runtime stacks are unobservable, and strict stack residency cannot reach the
+injected startup/cleanup transaction when that native capability is rejected
+during finalization. Windows Debug was then cancelled by fail-fast.
+
+The repair makes the platform contract explicit without changing production
+behavior. Linux still must close live stack accounting and exercise injected
+strict-residency mismatch, rollback, recovery, and owning-lane cleanup retry.
+Non-Linux must retain an incomplete/unknown live stack report, reject strict
+closure or residency with `invalid_config`, preserve the correct lifecycle
+state, execute no native startup operation, and remain stoppable. No native
+capability is inferred and no unsupported Windows qualification is added.
+
+Mandatory CI run `30971707284` confirmed that both non-Linux strict-residency
+tests pass, then exposed one aggregate-exactness assertion in the accounting
+test: an `unknown` runtime-stack row combined with declared external facts is
+truthfully `partial`, not `unknown`. The follow-up repair changes only that
+aggregate expectation; runtime behavior and row-level exactness are unchanged.
+
+## Acceptance mapping
+
+| Acceptance area | Implemented evidence | Result |
+|---|---|---|
+| Stable inventory and exactness | Retained all 12 M15-01 memory identities and stable domain-qualified keys. Appended `exact`, `declared_only`, `partial`, `unknown`, and `not_applicable` row/aggregate metadata. | Pass |
+| Constructed control ledger | Finalization inventories the persistent `Runtime::Impl`, executor, and device-manager extents after construction; checked identity, address, arithmetic, non-overlap, extent count, and exact equality with the three existing `MemoryPlan` control terms before report publication. | Pass |
+| Malformed ledger rejection | Focused tests reject missing, duplicate, overlapping, address-overflowing, and construction-estimate-mismatched inventories. | Pass |
+| Memory-provider boundary | Provider acquisition remains limited to active phase-scratch, task-scratch, and trace-storage rows. Control, stack, borrowed, backend, and declaration paths do not invoke it. | Pass |
+| Bounded declarations | Added copied capacity-32 configuring-time declarations keyed only to stable external identities; validation covers capacity, zero/malformed keys, byte/count bounds, duplicates, ownership, known-cardinality and mixed aggregate/role contradictions, arithmetic, the non-declarable reserved provider row, and device-ABI-v1 `control_storage_bytes` contradictions. | Pass |
+| Strict closure | Missing external/backend facts fail during finalization before native mutation; live runtime-stack facts are checked before startup-gate commit. Best effort remains usable and visibly incomplete. | Pass |
+| Live stack facts | Executor, watchdog, and device-service lanes publish native stack, guard, residency, apply/readback, and error facts while the mapping is live. Linux uses `pthread_getattr_np` and page-by-page `mincore`; guard bytes are outside the usable range and included exactly once in commitment. Unavailable best-effort native metadata remains `unknown`. | Pass |
+| Locking truth | `mlock` success is application only. No independent lock readback, device pinning, or DMA pinning is claimed; `locked_bytes` remains zero without independent observation and strict locking cannot falsely pass. | Pass |
+| Startup barrier | Strict stack residency/locking failure or mismatch prevents callback execution and rolls back; injected success permits a subsequent retry. Best-effort failure remains report-visible. | Pass |
+| Owning-lane cleanup | Stack cleanup is status-bearing and executes on the quiescent owning lane. Failure preserves the joinable lane, blocks selected-region rollback/release, records the error, and retries only unresolved cleanup. Destruction with permanently unresolved cleanup terminates fail-closed. | Pass |
+| Cross-category rollback | Cleanup runs device service/body quiescence, M14.1 backend cleanup, device stack/join, reverse executor stack/join, watchdog stack/join, then trace/task/phase rollback and release. Independent cleanup continues while the first status is retained. | Pass |
+| Recovery and idempotence | Device and executor cleanup failures, partial memory rollback, startup rollback failure, and M14.1 cleanup-pending cases recover through checked retry; a successful failed-start cleanup retry clears the retained public stack error before `stopped`, no premature `stopped` trace or token clearing occurs, and repeated successful stop is idempotent. | Pass |
+| C++ compatibility and isolation | New public fields are append-only. Pre-M15-04 positional aggregates compile in unit, preferred installed, and compatibility installed consumers. Declarations/reports and stack totals remain isolated across two runtimes. | Pass |
+| Lifecycle and allocation | Default, declared, host-adapter, nested work, watchdog, device, trace, deterministic replay, and failed-start/stop paths pass. Three complete-frame no-allocation tests pass after successful start. | Pass |
+| Frozen release boundary | C ABI v8 has exactly 70 exports and fingerprint `0xd0e7a5a14bf35f97`; SONAME 8, device ABI v1, runtime schema 7/25 keys, package inventory/aliases, version 1.2.1, support matrices, and Apache-2.0 are unchanged. | Pass |
+| Completion gates | All required local commands pass. Mandatory CI runs `30966886465`, `30967606263`, and `30971707284` exposed repaired Windows compile and platform-expectation failures; a passing CI rerun and the required human accounting/API/lifetime/concurrency/native-call/rollback/compatibility review remain pending, so M15 and CAP-M15 remain in progress. | External gates pending |
+
+## Named-host accounting example
+
+The following example came from the installed C++ API with two executor
+workers, one watchdog, no device backend, 4 KiB pages, and default stack
+sizes. Exactness enum values in the raw helper output were translated to
+their public names here.
+
+| Stable row | Key | Count | Accounted | Committed | Resident | Locked | Pinned | Guard before/after | Exactness |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| runtime control | 8589934593 | 1 | 127864 | 0 | 0 | 0 | 0 | 0/0 | exact |
+| executor control | 8589934594 | 1 | 9752 | 0 | 0 | 0 | 0 | 0/0 | exact |
+| device control | 8589934595 | 0 | 0 | 0 | 0 | 0 | 0 | 0/0 | exact |
+| phase scratch | 8589934596 | 0 | 0 | 0 | 0 | 0 | 0 | 0/0 | exact |
+| task scratch | 8589934597 | 8 | 32768 | 32768 | 0 | 0 | 0 | 0/0 | exact |
+| trace storage | 8589934598 | 1024 | 65536 | 65536 | 0 | 0 | 0 | 0/0 | exact |
+| registered state | 8589934599 | 0 | 0 | 0 | 0 | 0 | 0 | 0/0 | exact |
+| backend control | 8589934600 | 0 | 0 | 0 | 0 | 0 | 0 | 0/0 | not applicable |
+| registered device buffer | 8589934601 | 0 | 0 | 0 | 0 | 0 | 0 | 0/0 | exact |
+| runtime thread stack | 8589934602 | 3 | 25165824 | 25165824 | 24576 | 0 | 0 | 12288/0 | exact |
+| external thread stack | 8589934603 | 1 | 0 | 0 | 0 | 0 | 0 | 0/0 | unknown |
+| host provider | 8589934604 | 0 | 0 | 0 | 0 | 0 | 0 | 0/0 | not applicable |
+
+The six planned rows totaled exactly 235920 bytes. The excluded total was
+25165824 bytes and was `partial` because the caller-frame stack was unknown;
+the closed total was 25401744 bytes and `accounting_complete` was false. The
+runtime-stack commitment was three exact 8 MiB NPTL stack extents, each with a
+4 KiB guard subspan included within—not added to—that extent. The 24576
+resident bytes are a one-host live `mincore` sample, not a durability, latency,
+RT, or physical-memory qualification claim.
+
+The fully declared host-adapter test supplied declared-only caller-frame and
+two-worker stack totals of 8 MiB and 16 MiB. It produced a 3-region, 24 MiB
+external-stack row, an exact zero-cardinality runtime-stack row, a
+`declared_only` closed total, and `accounting_complete=true`. Those numbers
+remain trusted caller metadata, not native observation.
+
+Control-row commitment/residency fields remain zero because the exact logical
+extent ledger does not infer allocator page commitment or physical residency.
+The mock-device configuration separately checks nonzero device control and
+backend-declared bytes against constructed storage and device ABI v1.
+
+## Native host context
+
+Commands and observations:
+
+```text
+uname -a
+Linux devbox 6.14.11-5-pve #2 SMP PREEMPT_DYNAMIC PMX 6.14.11-5 (2025-12-15T08:44Z) x86_64 GNU/Linux
+
+getconf PAGESIZE
+4096
+
+bash -c 'ulimit -s; ulimit -l'
+8192
+8232132
+
+awk '/^Cap(Inh|Prm|Eff|Bnd|Amb):/ {print}' /proc/self/status
+CapInh: 0000000000000000
+CapPrm: 0000000000000000
+CapEff: 0000000000000000
+CapBnd: 0000000000000000
+CapAmb: 0000000000000000
+
+ldd --version
+ldd (Debian GLIBC 2.36-9+deb12u14) 2.36
+
+g++ --version
+g++ (Debian 12.2.0-14+deb12u1) 12.2.0
+
+cmake --version
+cmake version 3.25.1
+```
+
+No privilege or machine-wide setting was used. Strict native stack locking
+was intentionally unable to claim independent readback. No fixed CPU or NUMA
+topology was assumed.
+
+## Exact validation commands and results
+
+All commands ran from the repository root.
+
+1. `cmake -S . -B build/m15-dev -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=OFF -DSIM_WERROR=OFF`
+   and `cmake --build build/m15-dev --target simcore_tests --parallel 2`:
+   passed during iteration.
+2. Focused accounting/stack/rollback iterations: 16/16 accounting/ledger/stack
+   tests, 6/6 stack and rollback tests, and the broader 60-test policy/lifecycle
+   group passed after repairs.
+3. `python3 tools/check_docs_contract.py`: passed, `Documentation contract OK`.
+4. `python3 tools/check_release_contract.py --write-hashes` followed by
+   `python3 tools/check_release_contract.py`: passed; the reviewed digest
+   ledger was regenerated only after hashed files stabilized.
+5. `./scripts/agent-verify.sh contract`: passed. It included 14/14 release-tool
+   tests and verified C ABI v8, 70 symbols, fingerprint
+   `0xd0e7a5a14bf35f97`. Retained log:
+   `docs/evidence/local/verify-contract-20260805T010027Z.log`.
+6. The first `./scripts/agent-verify.sh quick` run found a C ABI diagnostic-
+   compatibility regression in `cabi_dlopen`. The status/retry behavior was
+   correct, but the legacy `device teardown failed` substring had changed.
+   The diagnostic was repaired without changing status or lifecycle behavior.
+7. Final `./scripts/agent-verify.sh quick`: passed all 14 CTest processes and
+   the runtime demo/version/invalid-option checks. Retained log:
+   `docs/evidence/local/verify-quick-20260805T010245Z.log`.
+8. `cmake -S . -B build/agent-full -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=ON -DENABLE_RAPIDCHECK=ON -DSIM_SANITIZERS= -DSIM_WERROR=ON`: passed.
+9. `cmake --build build/agent-full --parallel 2`: passed with project warnings
+   as errors.
+10. `./build/agent-full/tests/simcore_tests --gtest_filter='CpuMemoryPolicy.*:MemoryPolicy.*:ThreadPolicy.*:MemoryPlan.*:DeviceRuntime.*Rollback*:TraceNoAlloc.CompleteCpuFramesDoNotAllocate:TraceNoAlloc.StaticCompleteCpuFramesDoNotAllocate:TraceNoAlloc.CompleteDeviceFramesDoNotAllocate'`:
+    passed 64/64 tests.
+11. `ctest --test-dir build/agent-full --output-on-failure -R 'thread_policy_rollback|thread_policy_recovery'`:
+    passed 2/2 fresh processes.
+12. `ctest --test-dir build/agent-full --output-on-failure -R 'm15_accounting_closure|m15_stack_lifecycle|m15_cross_category_rollback'`:
+    passed 3/3 fresh processes.
+13. `./scripts/agent-verify.sh full`: passed all 18 full CTest processes,
+    including `simcore_all`, policy violation build, C ABI, host adapter,
+    runtime profile, and XDMA mock. Retained log:
+    `docs/evidence/local/verify-full-20260805T011120Z.log`.
+14. A clean Release install into
+    `/tmp/rtfw-m15-04-install.0OjdeA`, followed by configuring/building
+    `tests/package_consumer` against only that prefix and
+    `ctest --test-dir build/m15-package-consumer --output-on-failure`:
+    passed 11/11 installed consumer tests, including preferred/compat C++, C
+    shared/static aliases, SDK header self-containment, policy isolation, and
+    a clean pure-C project.
+15. `g++ -std=c++20 -O2 -I/tmp/rtfw-m15-04-install.0OjdeA/include /tmp/m15_report.cpp /tmp/rtfw-m15-04-install.0OjdeA/lib/librtfw_runtime.a -pthread -o /tmp/m15_report && /tmp/m15_report`:
+    passed and produced the named-host accounting example above.
+16. Independent-review focused build and regression command,
+    `cmake --build build/agent-full --parallel 2 && ./build/agent-full/tests/simcore_tests --gtest_filter='ThreadPolicy.BestEffortRuntimeStackFailureIsReportedWithoutCommitBlock:ThreadPolicy.FailedStartCleanupRetryClearsRetainedStackError:MemoryPolicy.StrictClosureDoesNotDoubleCountProviderStorage:CpuMemoryPolicy.RejectsDuplicateOwnedAndContradictoryDeclarations'`:
+    exit 0, 4/4 tests passed.
+17. Independent-review broad focused command,
+    `./build/agent-full/tests/simcore_tests --gtest_filter='CpuMemoryPolicy.*:MemoryPolicy.*:ThreadPolicy.*:MemoryPlan.*:DeviceRuntime.*Rollback*:DeviceRuntime.DeviceStackCleanupFailureDefersRollbackAndRetriesOnOwner:TraceNoAlloc.CompleteCpuFramesDoNotAllocate:TraceNoAlloc.StaticCompleteCpuFramesDoNotAllocate:TraceNoAlloc.CompleteDeviceFramesDoNotAllocate'`:
+    exit 0, 66/66 tests passed. The subsequent
+    `ctest --test-dir build/agent-full --output-on-failure -R 'thread_policy_rollback|thread_policy_recovery'`
+    exited 0 with 2/2 fresh processes passed.
+18. Post-review `python3 tools/check_release_contract.py --write-hashes && python3 tools/check_release_contract.py && ./scripts/agent-verify.sh contract`:
+    exit 0. It verified the documentation and release contracts, 14/14
+    release-tool tests, C ABI v8, 70 exports, and fingerprint
+    `0xd0e7a5a14bf35f97`. Retained log:
+    `docs/evidence/local/verify-contract-20260805T013340Z.log`.
+19. Post-review `./scripts/agent-verify.sh full`: exit 0; 18/18 full CTest
+    processes passed after the included contract and quick profiles. Retained
+    log: `docs/evidence/local/verify-full-20260805T013344Z.log`.
+20. The first independent-review install check used the test-enabled
+    `build/agent-quick` producer and exited 1 as designed because its installed
+    GoogleTest headers violate the production SDK inventory. The corrected
+    exact production-package sequence was:
+
+    ```text
+    cmake -S . -B build/m15-package-review-producer -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF -DRTFW_BUILD_EXPERIMENTAL=OFF -DSIM_WERROR=ON
+    cmake --build build/m15-package-review-producer --parallel 2
+    cmake --install build/m15-package-review-producer --prefix <fresh-temporary-prefix>
+    cmake -S tests/package_consumer -B build/m15-package-review-clean -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=<fresh-temporary-prefix> -DRTFW_PREFIX=<fresh-temporary-prefix>
+    cmake --build build/m15-package-review-clean --parallel 2
+    ctest --test-dir build/m15-package-review-clean --output-on-failure
+    ```
+
+    The corrected sequence exited 0 and passed 11/11 installed consumers,
+    including preferred/compatibility C++, C shared/static aliases, exact SDK
+    inventory and header self-containment, policy isolation, optional portable
+    backend consumers, and the pure-C project.
+21. CI repair focused command,
+    `git diff --check && cmake --build build/agent-full --target simcore_tests --parallel 2 && ./build/agent-full/tests/simcore_tests --gtest_filter='DeviceRuntime.FailedRegistrationRollbackRemainsRecoverable:DeviceRuntime.DeviceServicePolicyFailureRollsBackMemoryAfterJoinAndRetries:DeviceRuntime.DeviceStackCleanupFailureDefersRollbackAndRetriesOnOwner'`:
+    exit 0; the affected target rebuilt with warnings as errors and 3/3
+    fixture-dependent rollback tests passed. The exact MSVC v143 `/W4 /WX`
+    build was unavailable on this Linux host and remains a mandatory CI rerun.
+22. CI repair `./scripts/agent-verify.sh full`: exit 0; the contract profile
+    verified documentation, the release contract, 14/14 release-tool tests,
+    C ABI v8 with 70 exports and fingerprint `0xd0e7a5a14bf35f97`; quick passed
+    14/14 CTest processes; full passed 18/18 CTest processes. Retained log:
+    `docs/evidence/local/verify-full-20260805T014712Z.log`.
+23. Windows-platform repair focused command,
+    `git diff --check && cmake --build build/agent-full --target simcore_tests --parallel 2 && ./build/agent-full/tests/simcore_tests --gtest_filter='CpuMemoryPolicy.BoundedDeclarationsCloseExternalFactsWithoutQualification:ThreadPolicy.StrictRuntimeStackMismatchRollsBackAndRecovers:ThreadPolicy.FailedStartCleanupRetryClearsRetainedStackError'`:
+    exit 0; the Linux capability branch rebuilt with warnings as errors and
+    3/3 strict live-stack closure, rollback, and cleanup tests passed. The
+    non-Linux branch retains explicit unsupported expectations and requires
+    the mandatory Windows CI rerun.
+24. Windows-platform repair `./scripts/agent-verify.sh full`: exit 0; contract
+    verified documentation, the release digest, 14/14 release-tool tests, C
+    ABI v8 with 70 exports and fingerprint `0xd0e7a5a14bf35f97`; quick passed
+    14/14 CTest processes and full passed 18/18 CTest processes. Retained log:
+    `docs/evidence/local/verify-full-20260805T031218Z.log`.
+25. CI run `30971707284`: 20 jobs passed, including both non-Linux strict
+    residency tests, the MSVC package consumer, all Linux compiler/sanitizer
+    jobs, determinism exchange, embedding, and package gates. Windows Debug
+    exposed the repaired `partial` aggregate assertion; Windows RelWithDebInfo
+    was cancelled by fail-fast before completing. A passing rerun is required.
+
+## Changed files
+
+```text
+.github/workflows/ci.yml
+README.md
+contracts/active-batch.yaml
+contracts/repo-profile.yaml
+docs/CURRENT_STATE.md
+docs/HANDOFF.md
+docs/architecture.md
+docs/cpu_memory_policy.md
+docs/device_backend.md
+docs/evidence/M15-04-2026-08-05.md
+docs/executor.md
+docs/host_runtime.md
+docs/memory_plan.md
+docs/product_contract.md
+docs/real_time_readiness_checklist.md
+docs/roadmap.md
+docs/time_platform.md
+release/rtfw-release-contract.json
+rt/include/rt/config.hpp
+rt/include/rt/runtime.hpp
+rt/src/device_manager.cpp
+rt/src/device_manager.hpp
+rt/src/executor.cpp
+rt/src/executor.hpp
+rt/src/host_runtime.cpp
+rt/src/resource_policy.cpp
+rt/src/resource_policy.hpp
+rt/src/thread_policy.cpp
+rt/src/thread_policy.hpp
+rt/src/watchdog_monitor.cpp
+rt/src/watchdog_monitor.hpp
+tests/CMakeLists.txt
+tests/package_consumer/compat_consumer.cpp
+tests/package_consumer/cpp_consumer.cpp
+tests/test_cpu_memory_policy.cpp
+tests/test_device_runtime.cpp
+tests/test_memory_plan.cpp
+tests/test_memory_policy.cpp
+tests/test_thread_policy.cpp
+tools/check_docs_contract.py
+```
+
+No forbidden path changed. No commit, push, PR, merge, release, deployment,
+secret, or repository-setting action was performed.
+
+## Changed and preserved invariants
+
+Changed:
+
+- The additive C++ policy/report API now exposes bounded accounting
+  declarations, stable keys, exactness, aggregate totals, and completeness.
+- Finalization validates actual fragmented control extents against the frozen
+  `MemoryPlan` terms.
+- Runtime-owned stacks are observed live and cleaned on their owning lanes.
+- Stop/startup rollback coordinates device, lane, stack, and selected-region
+  ownership with explicit pending state and checked retry.
+
+Preserved:
+
+- Stable C ABI v8, 70-export allowlist/fingerprint, SONAME 8, and device ABI v1.
+- Runtime schema 7 and all 25 keys; observability and artifact schemas.
+- Six-row `MemoryPlan::planned_bytes` equation and the provider's three-region
+  acquisition boundary.
+- No ordinary heap allocation on declared RT lanes after successful start; no
+  hidden thread creation, file I/O, blocking mutex, unbounded wait, or spill.
+- Multiple runtime isolation, deterministic behavior, package targets/headers
+  and 1.x aliases, version 1.2.1, support/qualification matrices, and
+  Apache-2.0.
+
+## Rollback
+
+Revert the M15-04 public closure metadata/declarations, exact control ledger,
+stack lifecycle transaction, cross-category coordination, tests/CI,
+documentation, evidence, and digest ledger as one coherent batch. Before
+discarding a live integration, use checked `stop()` until all device, backend,
+lane, stack, memory-policy, and provider-token ownership is resolved. Never
+detach, cancel, force-unmap, clear, or relabel unresolved ownership. There is
+no data migration, persistent host setting, support promotion, release, or
+deployment action to reverse.
+
+## Residual risks and unperformed validation
+
+- Declarations can be syntactically complete while operationally false; they
+  remain trusted metadata.
+- The logical control ledger proves bounded exact non-overlap against the
+  constructed C++ storage model, not allocator page commitment or physical
+  residency. Future container/capacity changes must keep estimator and actual
+  extent inventory synchronized.
+- Linux stack residency is a transient one-host `mincore` sample. Stack layout,
+  guard behavior, libc behavior, `RLIMIT_MEMLOCK`, and capabilities vary by
+  target host. `mlock` has no independent lock readback here.
+- Mandatory GitHub CI runs `30966886465`, `30967606263`, and `30971707284`
+  exposed the repaired Windows MSVC padding and platform-expectation failures.
+  The local focused gates pass, but a passing rerun of the required GCC
+  11/Clang 14 ASan/UBSan matrix, MSVC v143 matrix, GCC 11 TSan fresh-process
+  job, determinism exchange, relocated archive matrix, and hosted package gates
+  remains pending.
+- Required human accounting, public-API, lifetime/concurrency, native-call,
+  rollback, compatibility, and ABI review was not performed.
+- No privileged native validation, controlled timing, physical CUDA,
+  FPGA/XDMA, combined accelerator, direct peer DMA, HIL, Unreal, field,
+  latency, worst-case execution, thermal, endurance, RT1, RT2, signing,
+  release, staging, deployment, or production validation was performed.
+- Consequently this evidence does not mark M15 or CAP-M15 complete and makes
+  no hardware, HIL, field, latency, RT1/RT2, signing, release, deployment, or
+  production-readiness claim.

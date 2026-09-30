@@ -1,0 +1,43 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/host_adapter/main.cpp</title><h1>samples/host_adapter/main.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;host.hpp&quot;</span>
+<span id="L2">#include &lt;iostream&gt;</span>
+<span id="L3">#include &lt;memory&gt;</span>
+<span id="L4">#include &lt;string_view&gt;</span>
+<span id="L5"></span>
+<span id="L6">int main(int argc, char** argv) {</span>
+<span id="L7">    if (argc != 2 || (std::string_view(argv[1]) != &quot;native&quot; &amp;&amp; std::string_view(argv[1]) != &quot;host&quot;)) {</span>
+<span id="L8">        std::cerr &lt;&lt; &quot;usage: host_adapter native|host\n&quot;; return 2;</span>
+<span id="L9">    }</span>
+<span id="L10">    const bool adapted = std::string_view(argv[1]) == &quot;host&quot;;</span>
+<span id="L11">    auto host = std::make_unique&lt;host_example::Host&gt;(); // Fixed arenas allocated on the control thread.</span>
+<span id="L12">    auto status = adapted ? host-&gt;jobs.start() : rt::Status::ok;</span>
+<span id="L13">    host_example::Session first(host-&gt;clock, adapted ? &amp;host-&gt;jobs : nullptr, host-&gt;memory[0], 1);</span>
+<span id="L14">    host_example::Session second(host-&gt;clock, adapted ? &amp;host-&gt;jobs : nullptr, host-&gt;memory[1], 3);</span>
+<span id="L15">    if (status == rt::Status::ok) status = first.prepare();</span>
+<span id="L16">    if (status == rt::Status::ok) status = second.prepare();</span>
+<span id="L17">    for (unsigned frame = 0; frame &lt; 16 &amp;&amp; status == rt::Status::ok; ++frame) {</span>
+<span id="L18">        status = first.step();</span>
+<span id="L19">        if (status == rt::Status::ok) status = second.step();</span>
+<span id="L20">    }</span>
+<span id="L21">    if (status == rt::Status::ok &amp;&amp;</span>
+<span id="L22">        (!first.telemetry.metrics(*first.runtime, 16) || !second.telemetry.metrics(*second.runtime, 16) ||</span>
+<span id="L23">         first.telemetry.runtime_id == second.telemetry.runtime_id ||</span>
+<span id="L24">         first.telemetry.begins != 16 || first.telemetry.ends != 16 || first.telemetry.callbacks != 32 ||</span>
+<span id="L25">         second.telemetry.begins != 16 || second.telemetry.ends != 16 || second.telemetry.callbacks != 32)) status = rt::Status::internal_error;</span>
+<span id="L26">    const auto a = first.close(), b = second.close();</span>
+<span id="L27">    if (a != rt::Status::ok || b != rt::Status::ok) {</span>
+<span id="L28">        std::cerr &lt;&lt; &quot;checked stop failed; host ownership retained\n&quot;;</span>
+<span id="L29">        // One explicit retry; unresolved cleanup fails closed in the destructor.</span>
+<span id="L30">        if (first.close() != rt::Status::ok || second.close() != rt::Status::ok) std::terminate();</span>
+<span id="L31">        status = rt::Status::internal_error;</span>
+<span id="L32">    }</span>
+<span id="L33">    if (host-&gt;jobs.close() != rt::Status::ok) std::terminate();</span>
+<span id="L34">    if (host-&gt;jobs.accepted.load() != host-&gt;jobs.completed.load() || host-&gt;jobs.pending.load() ||</span>
+<span id="L35">        (adapted &amp;&amp; !host-&gt;jobs.accepted.load()) || (!adapted &amp;&amp; host-&gt;jobs.accepted.load()) ||</span>
+<span id="L36">        host-&gt;memory[0].acquisitions != host-&gt;memory[0].releases || host-&gt;memory[1].acquisitions != host-&gt;memory[1].releases)</span>
+<span id="L37">        status = rt::Status::internal_error;</span>
+<span id="L38">    if (status != rt::Status::ok) { std::cerr &lt;&lt; &quot;host failed: &quot; &lt;&lt; rt::status_message(status) &lt;&lt; &#x27;\n&#x27;; return 1; }</span>
+<span id="L39">    std::cout &lt;&lt; &quot;host_adapter: mode=&quot; &lt;&lt; argv[1] &lt;&lt; &quot; frames=16 instances=2 checksums=&quot;</span>
+<span id="L40">              &lt;&lt; first.world.checksum &lt;&lt; &#x27;,&#x27; &lt;&lt; second.world.checksum</span>
+<span id="L41">              &lt;&lt; &quot; telemetry=32/32 lost=&quot; &lt;&lt; first.telemetry.lost + second.telemetry.lost</span>
+<span id="L42">              &lt;&lt; &quot; jobs=balanced memory=6/6 stopped=ok\n&quot;;</span>
+<span id="L43">}</span></pre></html>

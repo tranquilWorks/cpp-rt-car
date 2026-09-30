@@ -1,0 +1,206 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_showcase/provider.cpp</title><h1>samples/golden_showcase/provider.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;provider.hpp&quot;</span>
+<span id="L2">#include &quot;variants.hpp&quot;</span>
+<span id="L3">#include &quot;probes.hpp&quot;</span>
+<span id="L4">#include &quot;../golden_system/oracle.hpp&quot;</span>
+<span id="L5">#include &quot;../golden_system/peer.hpp&quot;</span>
+<span id="L6">#include &quot;../golden_system/replay.hpp&quot;</span>
+<span id="L7">#include &quot;../golden_system/telemetry.hpp&quot;</span>
+<span id="L8">#include &lt;fstream&gt;</span>
+<span id="L9">#include &lt;memory&gt;</span>
+<span id="L10">#include &lt;stdexcept&gt;</span>
+<span id="L11">namespace golden::showcase {</span>
+<span id="L12">namespace b = rtfw::benchmark;</span>
+<span id="L13">namespace fs = std::filesystem;</span>
+<span id="L14">namespace {</span>
+<span id="L15">bool bytes(const fs::path &amp;p, std::span&lt;const std::byte&gt; data) {</span>
+<span id="L16">  std::ofstream f(p, std::ios::binary);</span>
+<span id="L17">  f.write(reinterpret_cast&lt;const char *&gt;(data.data()), static_cast&lt;std::streamsize&gt;(data.size()));</span>
+<span id="L18">  f.close(); return !f.fail();</span>
+<span id="L19">}</span>
+<span id="L20">}</span>
+<span id="L21">Provider::Provider(Options o, fs::path output, std::string peer_prefix, std::string variant, std::string dispatch)</span>
+<span id="L22">    : options_(o), output_(std::move(output)), peer_prefix_(std::move(peer_prefix)), variant_(std::move(variant)), dispatch_(std::move(dispatch)) {</span>
+<span id="L23">  if (!((variant_ == &quot;cpu&quot; &amp;&amp; dispatch_ == &quot;cpu&quot;) ||</span>
+<span id="L24">        (variant_ == &quot;sim_xdma&quot; &amp;&amp; dispatch_ == &quot;cpu&quot;) ||</span>
+<span id="L25">        ((variant_ == &quot;sim_cuda&quot; || variant_ == &quot;sim_combined&quot;) &amp;&amp; (dispatch_ == &quot;kernel&quot; || dispatch_ == &quot;graph&quot;))))</span>
+<span id="L26">    throw std::invalid_argument(&quot;incompatible variant and dispatch&quot;);</span>
+<span id="L27">  if (!o.valid() || o.external || o.campaign != Campaign::nominal ||</span>
+<span id="L28">      (!peer_prefix_.empty() &amp;&amp; !cil::valid_key(peer_prefix_ + &quot;_6&quot;)))</span>
+<span id="L29">    throw std::invalid_argument(&quot;invalid showcase configuration&quot;);</span>
+<span id="L30">}</span>
+<span id="L31">b::ProviderV1 Provider::table() noexcept {</span>
+<span id="L32">  b::ProviderV1 p; p.id = &quot;rtfw.golden&quot;; p.user = this;</span>
+<span id="L33">  p.case_count = case_ids.size(); p.describe = describe; p.invoke = invoke;</span>
+<span id="L34">  return p;</span>
+<span id="L35">}</span>
+<span id="L36">b::Status Provider::describe(void *opaque, std::size_t i, b::Descriptor &amp;d) {</span>
+<span id="L37">  if (!opaque || i &gt;= case_ids.size()) return b::Status::invalid;</span>
+<span id="L38">  const auto &amp;p = *static_cast&lt;Provider *&gt;(opaque);</span>
+<span id="L39">  d = {}; d.case_id = case_ids[i]; d.subsystem = subsystems[i];</span>
+<span id="L40">  d.implementation = &quot;golden-public-sdk-v1&quot;;</span>
+<span id="L41">  d.configuration = i &lt; 7 ? &quot;bounded-cpu-phase-experiment&quot; : &quot;frozen-golden-cpu-scenario&quot;;</span>
+<span id="L42">  if (i == 14) d.configuration = p.variant_ + &quot;-&quot; + p.dispatch_;</span>
+<span id="L43">  // Every sample includes owner setup, Runtime dispatch, the declared work,</span>
+<span id="L44">  // full oracle, telemetry when selected, checked stop and evidence writes.</span>
+<span id="L45">  // No kernel-only or isolated callback latency is asserted.</span>
+<span id="L46">  constexpr std::array&lt;std::string_view,15&gt; work{</span>
+<span id="L47">    &quot;seed-and-command&quot;, &quot;integer-task-integrator&quot;, &quot;host-frame-staging&quot;,</span>
+<span id="L48">    &quot;sample-decode-calibration&quot;, &quot;saturating-controller&quot;, &quot;actuator-frame-encoding&quot;,</span>
+<span id="L49">    &quot;six-field-aggregation&quot;, &quot;loop-and-all-telemetry-drains&quot;, &quot;independent-host-loop&quot;,</span>
+<span id="L50">    &quot;memory-plan-acquire-observe-release&quot;, &quot;reference-schedule-and-loop&quot;,</span>
+<span id="L51">    &quot;replacement-control-loop&quot;, &quot;loop-capture-and-origin-owner-replay&quot;,</span>
+<span id="L52">    &quot;external-process-cil-loop&quot;, &quot;full-loop-telemetry-and-replay&quot;};</span>
+<span id="L53">  d.workload_kind = std::string(work[i]) + &quot;.lifecycle-oracle-io&quot;;</span>
+<span id="L54">  d.workload_sha256 = b::sha256(std::string(fixed::contract_sha256) + &quot;:&quot; + d.workload_kind);</span>
+<span id="L55">  d.parameters = {{&quot;entities&quot;,p.options_.count,1,256}, {&quot;ticks&quot;,p.options_.ticks,1,1024},</span>
+<span id="L56">                  {&quot;workers&quot;,p.options_.workers,1,3}, {&quot;grain&quot;,p.options_.grain,1,64},</span>
+<span id="L57">                  {&quot;host&quot;,i == 8 || p.options_.host ? 1u : 0u,0,1}};</span>
+<span id="L58">  for (const char *name : {&quot;operations&quot;, &quot;phase_calls&quot;, &quot;entity_checks&quot;, &quot;faults&quot;, &quot;gaps&quot;, &quot;cleanup_failures&quot;})</span>
+<span id="L59">    d.counters.push_back({name,&quot;count&quot;,0,b::max_integer});</span>
+<span id="L60">  return b::Status::ok;</span>
+<span id="L61">}</span>
+<span id="L62">b::Status Provider::invoke(void *opaque, std::string_view id, std::uint64_t ordinal, b::Observation &amp;o) {</span>
+<span id="L63">  if (!opaque) return b::Status::invalid;</span>
+<span id="L64">  auto &amp;p = *static_cast&lt;Provider *&gt;(opaque);</span>
+<span id="L65">  const auto it = std::find(case_ids.begin(), case_ids.end(), id);</span>
+<span id="L66">  if (it == case_ids.end()) return b::Status::not_found;</span>
+<span id="L67">  const auto i = static_cast&lt;std::size_t&gt;(it - case_ids.begin());</span>
+<span id="L68">  if (ordinal != p.next_[i] || ordinal &gt;= 7) return b::Status::invalid;</span>
+<span id="L69">  if ((p.variant_ != &quot;cpu&quot; &amp;&amp; i != 14) || (p.options_.host &amp;&amp; i &lt; 7) ||</span>
+<span id="L70">      (!p.peer_prefix_.empty() &amp;&amp; i != 13)) return b::Status::invalid;</span>
+<span id="L71">  if (i == 13 &amp;&amp; p.peer_prefix_.empty()) return b::Status::not_run;</span>
+<span id="L72">  Invocation v; v.ordinal = ordinal;</span>
+<span id="L73">  try { v.correct = p.perform(i, v); }</span>
+<span id="L74">  catch (...) { v.correct = false; }</span>
+<span id="L75">  const bool saved = p.persist(i, v);</span>
+<span id="L76">  o.correct = v.correct &amp;&amp; saved;</span>
+<span id="L77">  o.checksum = v.checksum &amp; b::max_integer;</span>
+<span id="L78">  o.counters = {v.operations,v.phase_calls,v.entity_checks,v.faults,v.gaps,v.cleanup_failures};</span>
+<span id="L79">  ++p.next_[i];</span>
+<span id="L80">  return o.correct ? b::Status::ok : b::Status::invariant_failed;</span>
+<span id="L81">}</span>
+<span id="L82">bool Provider::perform(std::size_t i, Invocation &amp;v) {</span>
+<span id="L83">  const auto destination = output_.empty() ? fs::path{} : output_ / std::string(case_ids[i]) / std::to_string(v.ordinal);</span>
+<span id="L84">  if (!destination.empty() &amp;&amp; !fs::create_directories(destination)) return false;</span>
+<span id="L85">  if (variant_ != &quot;cpu&quot;) return i == 14 &amp;&amp; variant_run(variant_,dispatch_,options_,destination,v);</span>
+<span id="L86">  if (i &lt; 7) {</span>
+<span id="L87">    auto probe = std::make_unique&lt;Probe&gt;(options_,i);</span>
+<span id="L88">    rt::Runtime r;</span>
+<span id="L89">    rt::RuntimeConfig config;</span>
+<span id="L90">    config.callback_capacity = 1; config.worker_count = options_.workers;</span>
+<span id="L91">    config.executor_queue_capacity = fixed::queue_slots;</span>
+<span id="L92">    config.scratch_bytes = config.task_scratch_bytes = fixed::scratch_bytes;</span>
+<span id="L93">    config.task_scratch_slots = fixed::task_slots; config.trace_capacity = 0;</span>
+<span id="L94">    rt::PhaseHandle phase;</span>
+<span id="L95">    if (r.configure(config) != rt::Status::ok ||</span>
+<span id="L96">        r.register_callback({case_ids[i],Probe::invoke,probe.get()},phase) != rt::Status::ok ||</span>
+<span id="L97">        r.finalize() != rt::Status::ok) return false;</span>
+<span id="L98">    rt::MemoryPlan plan{};</span>
+<span id="L99">    bool ok = r.memory_plan(plan) &amp;&amp; r.start() == rt::Status::ok;</span>
+<span id="L100">    for (std::size_t t = 0; ok &amp;&amp; t &lt; options_.ticks; ++t)</span>
+<span id="L101">      ok = r.step({t,std::chrono::nanoseconds(fixed::tick_ns),std::nullopt,std::nullopt}) == rt::Status::ok &amp;&amp; probe-&gt;verify();</span>
+<span id="L102">    v.planned_bytes = plan.planned_bytes; v.operations = probe-&gt;calls;</span>
+<span id="L103">    v.phase_calls = probe-&gt;calls; v.entity_checks = probe-&gt;checks;</span>
+<span id="L104">    // Explicit encoding avoids compiler padding/endian dependent evidence.</span>
+<span id="L105">    World snapshot(options_); snapshot.plant = probe-&gt;plant;</span>
+<span id="L106">    snapshot.command = probe-&gt;command; snapshot.sensor = probe-&gt;sensor;</span>
+<span id="L107">    snapshot.sums = probe-&gt;sums; snapshot.calls[i] = probe-&gt;calls;</span>
+<span id="L108">    snapshot.next_tick = probe-&gt;calls; snapshot.encode();</span>
+<span id="L109">    v.checksum = digest(snapshot.canonical);</span>
+<span id="L110">    if (r.stop() != rt::Status::ok) { ++v.cleanup_failures; ok = false; }</span>
+<span id="L111">    if (!destination.empty()) ok = bytes(destination / &quot;state.bin&quot;, snapshot.canonical) &amp;&amp; ok;</span>
+<span id="L112">    return ok;</span>
+<span id="L113">  }</span>
+<span id="L114">  Options o = options_;</span>
+<span id="L115">  o.host = i == 8 || o.host; o.external = i == 13;</span>
+<span id="L116">  if (i == 11) o.campaign = Campaign::control_replaced;</span>
+<span id="L117">  auto memory = std::make_unique&lt;Memory&gt;();</span>
+<span id="L118">  auto jobs = std::make_unique&lt;Jobs&gt;();</span>
+<span id="L119">  if (o.host &amp;&amp; jobs-&gt;start(o.workers) != rt::Status::ok) return false;</span>
+<span id="L120">  auto s = std::make_unique&lt;Session&gt;(o,o.host ? jobs.get() : nullptr,*memory);</span>
+<span id="L121">  if (s-&gt;prepare() != rt::Status::ok) return false;</span>
+<span id="L122">  v.planned_bytes = s-&gt;plan.planned_bytes;</span>
+<span id="L123">  bool ok = true;</span>
+<span id="L124">  const bool replay_case = i == 12 || i == 14;</span>
+<span id="L125">  Replay replay(o.ticks, o.external);</span>
+<span id="L126">  Oracle oracle(o);</span>
+<span id="L127">  Telemetry telemetry;</span>
+<span id="L128">  std::unique_ptr&lt;Peer&gt; peer;</span>
+<span id="L129">  const std::string peer_key = peer_prefix_ + &quot;_&quot; + std::to_string(v.ordinal);</span>
+<span id="L130">  if (o.external) {</span>
+<span id="L131">    cil::Options peer_options;</span>
+<span id="L132">    peer_options.key = peer_key;</span>
+<span id="L133">    peer_options.generation = 26; peer_options.timeout_ms = 5000;</span>
+<span id="L134">    std::cout &lt;&lt; &quot;showcase_peer &quot; &lt;&lt; peer_options.key &lt;&lt; &#x27;\n&#x27; &lt;&lt; std::flush;</span>
+<span id="L135">    peer = std::make_unique&lt;Peer&gt;(peer_options);</span>
+<span id="L136">    ok = peer-&gt;start();</span>
+<span id="L137">  }</span>
+<span id="L138">  if (i == 10) {</span>
+<span id="L139">    std::array&lt;std::uint64_t,8&gt; counts{};</span>
+<span id="L140">    for (std::size_t n = 0; n &lt; 27; ++n) {</span>
+<span id="L141">      rt::ReferenceRelease release;</span>
+<span id="L142">      if (!s-&gt;runtime-&gt;reference_release_at(n,release) || release.phase.index() &gt;= 8 ||</span>
+<span id="L143">          release.release_time_ns % (fixed::periods[fixed::phase_rates[release.phase.index()]] * fixed::tick_ns)) ok = false;</span>
+<span id="L144">      else ++counts[release.phase.index()];</span>
+<span id="L145">    }</span>
+<span id="L146">    constexpr std::array&lt;std::uint64_t,8&gt; expected{6,6,6,3,2,2,1,1};</span>
+<span id="L147">    ok = ok &amp;&amp; counts == expected; v.operations = 27;</span>
+<span id="L148">  }</span>
+<span id="L149">  if (i != 9) {</span>
+<span id="L150">    ok = ok &amp;&amp; (!replay_case || replay.begin(*s)) &amp;&amp; s-&gt;controls();</span>
+<span id="L151">    for (std::size_t t = 0; ok &amp;&amp; t &lt; o.ticks; ++t) {</span>
+<span id="L152">      if (peer &amp;&amp; t % 3 == 0) peer-&gt;exchange(t,s-&gt;world);</span>
+<span id="L153">      if (replay_case) replay.record(*s,t);</span>
+<span id="L154">      ok = s-&gt;step(t) == rt::Status::ok &amp;&amp; oracle.step(t,s-&gt;world);</span>
+<span id="L155">      if (ok) v.entity_checks += fixed::capacity * 3;</span>
+<span id="L156">      if (i == 7 || i == 14) ok = ok &amp;&amp; telemetry.drain(*s-&gt;runtime) == rt::Status::ok;</span>
+<span id="L157">      ++v.operations;</span>
+<span id="L158">    }</span>
+<span id="L159">    v.phase_calls = std::accumulate(s-&gt;world.calls.begin(),s-&gt;world.calls.end(),std::uint64_t{});</span>
+<span id="L160">    if (i == 7 || i == 14) ok = ok &amp;&amp; telemetry.metrics(*s-&gt;runtime,o.ticks,v.phase_calls);</span>
+<span id="L161">    rt::LiveControlMailboxInfo mailbox;</span>
+<span id="L162">    rt::LiveControlCommitInfo commit;</span>
+<span id="L163">    ok = ok &amp;&amp; s-&gt;runtime-&gt;live_control_mailbox_info(2601,mailbox) &amp;&amp; s-&gt;runtime-&gt;live_control_commit_info(commit);</span>
+<span id="L164">    v.accepted = mailbox.accepted; v.replaced = commit.replaced;</span>
+<span id="L165">    if (i == 11) ok = ok &amp;&amp; v.replaced == 1 &amp;&amp; v.accepted == 7;</span>
+<span id="L166">  } else v.operations = memory-&gt;acquisitions + memory-&gt;observations;</span>
+<span id="L167">  v.checksum = digest(s-&gt;world.canonical);</span>
+<span id="L168">  if (!destination.empty()) ok = bytes(destination / &quot;state.bin&quot;,s-&gt;world.canonical) &amp;&amp; ok;</span>
+<span id="L169">  if (replay_case) {</span>
+<span id="L170">    ok = ok &amp;&amp; replay.seal(*s) &amp;&amp; replay.verify(*s);</span>
+<span id="L171">    v.replay_frames = replay.result.frames_replayed;</span>
+<span id="L172">    if (!destination.empty()) ok = bytes(destination / &quot;checkpoint.bin&quot;,replay.initial) &amp;&amp;</span>
+<span id="L173">      bytes(destination / &quot;active.bin&quot;,replay.active) &amp;&amp; bytes(destination / &quot;trusted.bin&quot;,replay.trusted) &amp;&amp; ok;</span>
+<span id="L174">  }</span>
+<span id="L175">  rt::RateTelemetryMetadata metadata;</span>
+<span id="L176">  ok = ok &amp;&amp; s-&gt;runtime-&gt;rate_telemetry_metadata(metadata) == rt::Status::ok;</span>
+<span id="L177">  v.runtime_id = metadata.runtime_id;</span>
+<span id="L178">  v.trace_events = telemetry.events; v.actions = std::accumulate(telemetry.action_records.begin(),telemetry.action_records.end(),std::uint64_t{});</span>
+<span id="L179">  v.gaps = telemetry.lost + telemetry.action_gaps;</span>
+<span id="L180">  if (s-&gt;close() != rt::Status::ok) { ++v.cleanup_failures; ok = false; }</span>
+<span id="L181">  if (o.host &amp;&amp; jobs-&gt;close() != rt::Status::ok) { ++v.cleanup_failures; ok = false; }</span>
+<span id="L182">  v.jobs = jobs-&gt;accepted; v.memory_acquired = memory-&gt;acquisitions; v.memory_released = memory-&gt;releases;</span>
+<span id="L183">  ok = ok &amp;&amp; !memory-&gt;live_count() &amp;&amp; !memory-&gt;violations &amp;&amp; v.memory_acquired == v.memory_released &amp;&amp; jobs-&gt;accepted == jobs-&gt;completed;</span>
+<span id="L184">  if (peer) {</span>
+<span id="L185">    ok = peer-&gt;close() &amp;&amp; ok &amp;&amp; peer-&gt;result == cil::Code::ok &amp;&amp; peer-&gt;cleanup == cil::Code::ok &amp;&amp; peer-&gt;responses == (o.ticks + 2) / 3;</span>
+<span id="L186">    v.operations += peer-&gt;responses;</span>
+<span id="L187">  }</span>
+<span id="L188">  return ok;</span>
+<span id="L189">}</span>
+<span id="L190">bool Provider::persist(std::size_t i, const Invocation &amp;v) {</span>
+<span id="L191">  if (output_.empty()) return true;</span>
+<span id="L192">  const auto destination = output_ / std::string(case_ids[i]) / std::to_string(v.ordinal);</span>
+<span id="L193">  if (!fs::is_directory(destination)) return false;</span>
+<span id="L194">  std::ofstream f(destination / &quot;invocation.json&quot;);</span>
+<span id="L195">  f &lt;&lt; &quot;{\&quot;schema\&quot;:1,\&quot;case_id\&quot;:\&quot;&quot; &lt;&lt; case_ids[i] &lt;&lt; &quot;\&quot;,\&quot;contract_sha256\&quot;:\&quot;&quot; &lt;&lt; fixed::contract_sha256 &lt;&lt; &#x27;&quot;&#x27;;</span>
+<span id="L196">#define FIELD(name) f &lt;&lt; &quot;,\&quot;&quot; #name &quot;\&quot;:&quot; &lt;&lt; v.name</span>
+<span id="L197">  FIELD(ordinal); FIELD(operations); FIELD(phase_calls); FIELD(entity_checks);</span>
+<span id="L198">  FIELD(faults); FIELD(gaps); FIELD(cleanup_failures); FIELD(checksum);</span>
+<span id="L199">  FIELD(runtime_id); FIELD(planned_bytes); FIELD(trace_events); FIELD(actions);</span>
+<span id="L200">  FIELD(replay_frames); FIELD(accepted); FIELD(replaced); FIELD(jobs);</span>
+<span id="L201">  FIELD(memory_acquired); FIELD(memory_released);</span>
+<span id="L202">#undef FIELD</span>
+<span id="L203">  f &lt;&lt; &quot;,\&quot;correct\&quot;:&quot; &lt;&lt; (v.correct ? &quot;true&quot; : &quot;false&quot;) &lt;&lt; &quot;}\n&quot;;</span>
+<span id="L204">  f.close(); return !f.fail();</span>
+<span id="L205">}</span>
+<span id="L206">} // namespace golden::showcase</span></pre></html>

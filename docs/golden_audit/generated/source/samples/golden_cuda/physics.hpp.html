@@ -1,0 +1,320 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_cuda/physics.hpp</title><h1>samples/golden_cuda/physics.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;../golden_system/memory.hpp&quot;</span>
+<span id="L3">#include &quot;simulated_driver.hpp&quot;</span>
+<span id="L4">namespace golden::cuda {</span>
+<span id="L5">// The adapter is an explicit simulator contract around an actual CUDA backend.</span>
+<span id="L6">// Its factory accepts only this kit&#x27;s owned deterministic driver. Native</span>
+<span id="L7">// resource construction never opts into mock capabilities or trusted replay.</span>
+<span id="L8">class CudaPhysics final : public golden::Physics {</span>
+<span id="L9">  Resources resources_;</span>
+<span id="L10">  SimulatedDriver *simulation_ = nullptr;</span>
+<span id="L11">  bool graph_;</span>
+<span id="L12">  std::unique_ptr&lt;Storage&gt; staging_ = std::make_unique&lt;Storage&gt;();</span>
+<span id="L13">  std::unique_ptr&lt;rt::CudaDeviceBackend&gt; backend_;</span>
+<span id="L14">  rt::HalV2BackendApi original_{};</span>
+<span id="L15">  rt::Runtime *runtime_ = nullptr;</span>
+<span id="L16">  World *world_ = nullptr;</span>
+<span id="L17">  rt::DeviceCommandBatch batch_{};</span>
+<span id="L18">  rt::DeviceTimelineHandle timeline_{};</span>
+<span id="L19">  rt::DeviceBackendHandle handle_{};</span>
+<span id="L20">  std::uint64_t expected_signal_ = 0;</span>
+<span id="L21">  rt::HalV2BackendRegistration</span>
+<span id="L22">  simulated(rt::HalV2BackendRegistration r) noexcept {</span>
+<span id="L23">    original_ = r.api;</span>
+<span id="L24">    r.name = &quot;golden.simulated.cuda&quot;;</span>
+<span id="L25">    r.api.instance = this;</span>
+<span id="L26">    r.api.get_capabilities = [](void *p, rt::HalV2Capabilities *c) {</span>
+<span id="L27">      auto &amp;s = *static_cast&lt;CudaPhysics *&gt;(p);</span>
+<span id="L28">      const auto status = s.original_.get_capabilities(s.original_.instance, c);</span>
+<span id="L29">      if (status == rt::HalV2Status::ok) {</span>
+<span id="L30">        if (!s.simulation_)</span>
+<span id="L31">          return rt::HalV2Status::invalid_argument;</span>
+<span id="L32">        c-&gt;deterministic_mock = 1;</span>
+<span id="L33">        c-&gt;backend_id.fill(0);</span>
+<span id="L34">        constexpr char name[] = &quot;golden.sim.cuda.v1&quot;;</span>
+<span id="L35">        std::copy_n(name, sizeof(name), c-&gt;backend_id.begin());</span>
+<span id="L36">        c-&gt;control_storage_bytes += sizeof(rt::HalV2BackendApi);</span>
+<span id="L37">      }</span>
+<span id="L38">      return status;</span>
+<span id="L39">    };</span>
+<span id="L40">    r.api.initialize = [](void *p, const rt::HalV2InitializeConfig *v) {</span>
+<span id="L41">      auto &amp;s = *static_cast&lt;CudaPhysics *&gt;(p);</span>
+<span id="L42">      return s.original_.initialize(s.original_.instance, v);</span>
+<span id="L43">    };</span>
+<span id="L44">    r.api.register_buffer = [](void *p, const rt::HalV2BufferRegistration *v,</span>
+<span id="L45">                               std::uint64_t *out) {</span>
+<span id="L46">      auto &amp;s = *static_cast&lt;CudaPhysics *&gt;(p);</span>
+<span id="L47">      return s.original_.register_buffer(s.original_.instance, v, out);</span>
+<span id="L48">    };</span>
+<span id="L49">    r.api.unregister_buffer = [](void *p, std::uint64_t v) {</span>
+<span id="L50">      auto &amp;s = *static_cast&lt;CudaPhysics *&gt;(p);</span>
+<span id="L51">      return s.original_.unregister_buffer(s.original_.instance, v);</span>
+<span id="L52">    };</span>
+<span id="L53">    r.api.submit = [](void *p, const rt::HalV2Submission *v) {</span>
+<span id="L54">      auto &amp;s = *static_cast&lt;CudaPhysics *&gt;(p);</span>
+<span id="L55">      return s.original_.submit(s.original_.instance, v);</span>
+<span id="L56">    };</span>
+<span id="L57">    r.api.poll = [](void *p, rt::HalV2Completion *v, std::uint64_t n,</span>
+<span id="L58">                    std::uint64_t *out) {</span>
+<span id="L59">      auto &amp;s = *static_cast&lt;CudaPhysics *&gt;(p);</span>
+<span id="L60">      return s.original_.poll(s.original_.instance, v, n, out);</span>
+<span id="L61">    };</span>
+<span id="L62">    r.api.cancel = [](void *p, std::uint64_t v) {</span>
+<span id="L63">      auto &amp;s = *static_cast&lt;CudaPhysics *&gt;(p);</span>
+<span id="L64">      return s.original_.cancel(s.original_.instance, v);</span>
+<span id="L65">    };</span>
+<span id="L66">    r.api.get_health = [](void *p, rt::HalV2Health *v) {</span>
+<span id="L67">      auto &amp;s = *static_cast&lt;CudaPhysics *&gt;(p);</span>
+<span id="L68">      return s.original_.get_health(s.original_.instance, v);</span>
+<span id="L69">    };</span>
+<span id="L70">    r.api.reset = [](void *p) {</span>
+<span id="L71">      auto &amp;s = *static_cast&lt;CudaPhysics *&gt;(p);</span>
+<span id="L72">      return s.original_.reset(s.original_.instance);</span>
+<span id="L73">    };</span>
+<span id="L74">    r.api.shutdown = [](void *p) {</span>
+<span id="L75">      auto &amp;s = *static_cast&lt;CudaPhysics *&gt;(p);</span>
+<span id="L76">      return s.original_.shutdown(s.original_.instance);</span>
+<span id="L77">    };</span>
+<span id="L78">    // Memory and command extensions retain their original backend instances.</span>
+<span id="L79">    return r;</span>
+<span id="L80">  }</span>
+<span id="L81">  static rt::CallbackResult provide(void *p, const rt::DeviceCallbackContext &amp;c,</span>
+<span id="L82">                                    rt::DeviceCommandBatch &amp;b) noexcept {</span>
+<span id="L83">    auto &amp;s = *static_cast&lt;CudaPhysics *&gt;(p);</span>
+<span id="L84">    if (!c.rate_release || c.rate_release-&gt;phase.index() != 1 ||</span>
+<span id="L85">        c.rate_release-&gt;logical_release_ns !=</span>
+<span id="L86">            c.frame.frame_index * fixed::tick_ns ||</span>
+<span id="L87">        !s.world_-&gt;configuration.consume(c.live_control))</span>
+<span id="L88">      return rt::CallbackResult::error;</span>
+<span id="L89">    rt::DeviceTimelineInfo info;</span>
+<span id="L90">    if (!s.runtime_-&gt;device_timeline_at(s.handle_, 0, info) ||</span>
+<span id="L91">        info.last_accepted_value == UINT64_MAX)</span>
+<span id="L92">      return rt::CallbackResult::error;</span>
+<span id="L93">    b = s.batch_;</span>
+<span id="L94">    b.timeout_ns = completion_ns;</span>
+<span id="L95">    s.expected_signal_ = info.last_accepted_value + 1;</span>
+<span id="L96">    b.signals[0].value = s.expected_signal_;</span>
+<span id="L97">    ++s.providers;</span>
+<span id="L98">    return rt::CallbackResult::ok;</span>
+<span id="L99">  }</span>
+<span id="L100"></span>
+<span id="L101">public:</span>
+<span id="L102">  std::uint64_t providers = 0, publications = 0;</span>
+<span id="L103">  CudaPhysics(Resources resources, bool graph)</span>
+<span id="L104">      : resources_(resources), graph_(graph) {}</span>
+<span id="L105">  CudaPhysics(SimulatedDriver &amp;driver, bool graph)</span>
+<span id="L106">      : resources_(driver.resources()), simulation_(&amp;driver), graph_(graph) {}</span>
+<span id="L107">  bool replay_enabled() const noexcept override {</span>
+<span id="L108">    return simulation_ != nullptr;</span>
+<span id="L109">  }</span>
+<span id="L110">  void limits(rt::RuntimeConfig &amp;c) const noexcept override {</span>
+<span id="L111">    c.device_backend_capacity = 1;</span>
+<span id="L112">    c.device_buffer_capacity = 2;</span>
+<span id="L113">    c.device_outstanding_capacity = 1;</span>
+<span id="L114">    c.device_completion_batch = 1;</span>
+<span id="L115">  }</span>
+<span id="L116">  rt::Status configure(rt::Runtime &amp;r, World &amp;w) noexcept override {</span>
+<span id="L117">    runtime_ = &amp;r;</span>
+<span id="L118">    world_ = &amp;w;</span>
+<span id="L119">    // This portable device sample parks idle CPU workers while Runtime&#x27;s</span>
+<span id="L120">    // backend lane services a release. It makes no spinning/RT guarantee.</span>
+<span id="L121">    auto cpu_policy = Memory::policy();</span>
+<span id="L122">    cpu_policy.thread_policy_count = 1;</span>
+<span id="L123">    cpu_policy.thread_policies[0].role = rt::thread_role_executor_worker;</span>
+<span id="L124">    cpu_policy.thread_policies[0].policy.wait_strategy = rt::WaitStrategy::park;</span>
+<span id="L125">    const auto cpu_status = r.set_cpu_memory_policy(cpu_policy);</span>
+<span id="L126">    if (cpu_status != rt::Status::ok)</span>
+<span id="L127">      return cpu_status;</span>
+<span id="L128">    if (!resources_.context || !resources_.stream || !resources_.function ||</span>
+<span id="L129">        (graph_ &amp;&amp; !resources_.graph) || !resources_.addresses[0] ||</span>
+<span id="L130">        !resources_.addresses[1])</span>
+<span id="L131">      return rt::Status::invalid_argument;</span>
+<span id="L132">    const auto a = resources_.addresses[0], b = resources_.addresses[1];</span>
+<span id="L133">    if (a &gt; UINT64_MAX - sizeof(State) || b &gt; UINT64_MAX - sizeof(State) ||</span>
+<span id="L134">        (a &lt; b + sizeof(State) &amp;&amp; b &lt; a + sizeof(State)))</span>
+<span id="L135">      return rt::Status::invalid_argument;</span>
+<span id="L136">    rt::CudaBackendConfig c;</span>
+<span id="L137">    c.context = resources_.context;</span>
+<span id="L138">    c.streams = std::span(&amp;resources_.stream, 1);</span>
+<span id="L139">    c.queue_capacity = 1;</span>
+<span id="L140">    c.buffer_capacity = 2;</span>
+<span id="L141">    c.kernel_capacity = 1;</span>
+<span id="L142">    c.allocate_device_mirrors = false;</span>
+<span id="L143">    try {</span>
+<span id="L144">      backend_ = std::make_unique&lt;rt::CudaDeviceBackend&gt;(resources_.driver, c);</span>
+<span id="L145">    } catch (...) {</span>
+<span id="L146">      return rt::Status::resource_exhausted;</span>
+<span id="L147">    }</span>
+<span id="L148">    std::uint64_t kernel{};</span>
+<span id="L149">    if (backend_-&gt;register_kernel(resources_.function, kernel) !=</span>
+<span id="L150">        RTFW_DEVICE_STATUS_OK)</span>
+<span id="L151">      return rt::Status::invalid_argument;</span>
+<span id="L152">    for (std::size_t i = 0; i &lt; 2; ++i)</span>
+<span id="L153">      if (backend_-&gt;bind_device_buffer(buffer_names[i], resources_.addresses[i],</span>
+<span id="L154">                                       sizeof(State)) != RTFW_DEVICE_STATUS_OK)</span>
+<span id="L155">        return rt::Status::invalid_argument;</span>
+<span id="L156">    if (graph_) {</span>
+<span id="L157">      const std::array bindings{rt::CudaGraphBufferBinding{</span>
+<span id="L158">          buffer_names[1], RTFW_DEVICE_ACCESS_READ_WRITE}};</span>
+<span id="L159">      if (backend_-&gt;register_graph(2603, resources_.graph, bindings) !=</span>
+<span id="L160">          RTFW_DEVICE_STATUS_OK)</span>
+<span id="L161">        return rt::Status::invalid_argument;</span>
+<span id="L162">    }</span>
+<span id="L163">    auto registration = backend_-&gt;hal_v2_registration(&quot;golden.native.cuda&quot;);</span>
+<span id="L164">    if (simulation_)</span>
+<span id="L165">      registration = simulated(registration);</span>
+<span id="L166">    auto s = r.register_device_backend(registration, handle_);</span>
+<span id="L167">    if (s != rt::Status::ok)</span>
+<span id="L168">      return s;</span>
+<span id="L169">    rt::DeviceMemoryDomainHandle memory;</span>
+<span id="L170">    rt::HalV2MemoryDomain descriptor;</span>
+<span id="L171">    if (!r.device_memory_domain_at(handle_, 1, memory, descriptor))</span>
+<span id="L172">      return rt::Status::device_error;</span>
+<span id="L173">    std::array&lt;rt::HalV2BufferReference, 2&gt; refs{};</span>
+<span id="L174">    for (std::size_t i = 0; i &lt; 2; ++i) {</span>
+<span id="L175">      auto bytes = std::as_writable_bytes(std::span(staging_-&gt;values[i]));</span>
+<span id="L176">      rt::DeviceBufferHandle buffer;</span>
+<span id="L177">      s = r.register_device_buffer(</span>
+<span id="L178">          {buffer_names[i],</span>
+<span id="L179">           handle_,</span>
+<span id="L180">           memory,</span>
+<span id="L181">           bytes,</span>
+<span id="L182">           {},</span>
+<span id="L183">           bytes.size(),</span>
+<span id="L184">           rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L185">           RTFW_DEVICE_BUFFER_HOST_READ | RTFW_DEVICE_BUFFER_HOST_WRITE |</span>
+<span id="L186">               RTFW_DEVICE_BUFFER_DEVICE_READ | RTFW_DEVICE_BUFFER_DEVICE_WRITE,</span>
+<span id="L187">           rt::HalV2MemoryCoherency::staged_copy,</span>
+<span id="L188">           rt::hal_v2_memory_sync_copy_to_device |</span>
+<span id="L189">               rt::hal_v2_memory_sync_copy_from_device},</span>
+<span id="L190">          buffer);</span>
+<span id="L191">      if (s != rt::Status::ok)</span>
+<span id="L192">        return s;</span>
+<span id="L193">      refs[i].buffer_token = buffer.value;</span>
+<span id="L194">      refs[i].bytes = bytes.size();</span>
+<span id="L195">    }</span>
+<span id="L196">    s = r.register_device_timeline({&quot;golden.cuda.timeline&quot;, handle_, 0},</span>
+<span id="L197">                                   timeline_);</span>
+<span id="L198">    if (s != rt::Status::ok)</span>
+<span id="L199">      return s;</span>
+<span id="L200">    auto &amp;batch = batch_;</span>
+<span id="L201">    batch.command_count = 5;</span>
+<span id="L202">    batch.signal_count = 1;</span>
+<span id="L203">    batch.signals[0].timeline_handle = timeline_.value;</span>
+<span id="L204">    auto &amp;up = batch.commands[0];</span>
+<span id="L205">    up.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::copy);</span>
+<span id="L206">    up.operation =</span>
+<span id="L207">        static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryOperation::copy_to_device);</span>
+<span id="L208">    up.source = up.destination = refs[0];</span>
+<span id="L209">    up.source.access = RTFW_DEVICE_ACCESS_READ;</span>
+<span id="L210">    up.destination.access = RTFW_DEVICE_ACCESS_WRITE;</span>
+<span id="L211">    auto &amp;init = batch.commands[1];</span>
+<span id="L212">    init = up;</span>
+<span id="L213">    init.source = init.destination = refs[1];</span>
+<span id="L214">    init.source.access = RTFW_DEVICE_ACCESS_READ;</span>
+<span id="L215">    init.destination.access = RTFW_DEVICE_ACCESS_WRITE;</span>
+<span id="L216">    auto &amp;copy = batch.commands[2];</span>
+<span id="L217">    copy.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::dispatch);</span>
+<span id="L218">    copy.opcode = rt::cuda_device_opcode_copy_device_to_device;</span>
+<span id="L219">    copy.buffer_count = 2;</span>
+<span id="L220">    copy.buffers[0] = refs[0];</span>
+<span id="L221">    copy.buffers[0].access = RTFW_DEVICE_ACCESS_READ;</span>
+<span id="L222">    copy.buffers[1] = refs[1];</span>
+<span id="L223">    copy.buffers[1].access = RTFW_DEVICE_ACCESS_WRITE;</span>
+<span id="L224">    auto &amp;launch = batch.commands[3];</span>
+<span id="L225">    launch.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::dispatch);</span>
+<span id="L226">    launch.buffer_count = 1;</span>
+<span id="L227">    launch.buffers[0] = refs[1];</span>
+<span id="L228">    launch.buffers[0].access = RTFW_DEVICE_ACCESS_READ_WRITE;</span>
+<span id="L229">    if (graph_)</span>
+<span id="L230">      launch.opcode = rt::cuda_device_opcode_graph(2603);</span>
+<span id="L231">    else {</span>
+<span id="L232">      launch.opcode = rt::cuda_device_opcode_launch_kernel;</span>
+<span id="L233">      rt::CudaKernelLaunch args;</span>
+<span id="L234">      args.kernel_token = kernel;</span>
+<span id="L235">      args.block_x = 128;</span>
+<span id="L236">      args.grid_x = static_cast&lt;std::uint32_t&gt;((w.options.count + 127) / 128);</span>
+<span id="L237">      if (!rt::cuda_kernel_add_buffer_argument(args, 0) ||</span>
+<span id="L238">          !rt::cuda_kernel_add_scalar_argument(</span>
+<span id="L239">              args, static_cast&lt;std::uint32_t&gt;(w.options.count)))</span>
+<span id="L240">        return rt::Status::internal_error;</span>
+<span id="L241">      launch.payload_size = sizeof(args);</span>
+<span id="L242">      std::memcpy(launch.payload.data(), &amp;args, sizeof(args));</span>
+<span id="L243">    }</span>
+<span id="L244">    auto &amp;down = batch.commands[4];</span>
+<span id="L245">    down = init;</span>
+<span id="L246">    down.operation =</span>
+<span id="L247">        static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryOperation::copy_from_device);</span>
+<span id="L248">    return rt::Status::ok;</span>
+<span id="L249">  }</span>
+<span id="L250">  rt::Status register_phase(rt::Runtime &amp;r, rt::RateDomainHandle rate,</span>
+<span id="L251">                            rt::PhaseHandle &amp;phase) noexcept override {</span>
+<span id="L252">    auto s = r.register_device_batch_phase(</span>
+<span id="L253">        {fixed::phase_names[1], handle_, provide, this, batch_}, phase);</span>
+<span id="L254">    if (s != rt::Status::ok)</span>
+<span id="L255">      return s;</span>
+<span id="L256">    using Role = rt::DeviceRatePayloadRole;</span>
+<span id="L257">    const std::array roles{Role::input,        Role::output, Role::input,</span>
+<span id="L258">                           Role::output,       Role::input,  Role::output,</span>
+<span id="L259">                           Role::input_output, Role::input,  Role::output};</span>
+<span id="L260">    rt::DeviceRatePhaseBinding binding{phase, rate, completion_ns, 1, roles};</span>
+<span id="L261">    if (simulation_)</span>
+<span id="L262">      binding.simulation = rt::DeviceRateSimulationPolicy{5&#x27;000&#x27;000&#x27;000ull};</span>
+<span id="L263">    return r.bind_device_phase_to_rate_domain(binding);</span>
+<span id="L264">  }</span>
+<span id="L265">  bool input(const rt::CallbackContext &amp;c) noexcept override {</span>
+<span id="L266">    if (!c.rate_release || world_-&gt;next_tick != c.frame.frame_index + 1)</span>
+<span id="L267">      return false;</span>
+<span id="L268">    if (simulation_)</span>
+<span id="L269">      simulation_-&gt;time(c.rate_release-&gt;nominal_release_ns);</span>
+<span id="L270">    auto &amp;in = staging_-&gt;values[0];</span>
+<span id="L271">    for (std::size_t a = 0; a &lt; 3; ++a)</span>
+<span id="L272">      for (std::size_t i = 0; i &lt; fixed::capacity; ++i) {</span>
+<span id="L273">        in[a * fixed::capacity + i] = world_-&gt;plant.position[a][i];</span>
+<span id="L274">        in[(a + 3) * fixed::capacity + i] = world_-&gt;plant.velocity[a][i];</span>
+<span id="L275">        in[(a + 6) * fixed::capacity + i] = world_-&gt;command[a][i];</span>
+<span id="L276">      }</span>
+<span id="L277">    staging_-&gt;values[1].fill(0);</span>
+<span id="L278">    return true;</span>
+<span id="L279">  }</span>
+<span id="L280">  bool complete(const rt::CallbackContext &amp;) noexcept override {</span>
+<span id="L281">    rt::DeviceTimelineInfo info;</span>
+<span id="L282">    if (!runtime_-&gt;device_timeline_at(handle_, 0, info) || !expected_signal_ ||</span>
+<span id="L283">        info.completed_value != expected_signal_)</span>
+<span id="L284">      return false;</span>
+<span id="L285">    // Validate before touching application state or publishing a channel.</span>
+<span id="L286">    const auto &amp;out = staging_-&gt;values[1];</span>
+<span id="L287">    for (std::size_t a = 0; a &lt; 3; ++a)</span>
+<span id="L288">      for (std::size_t i = 0; i &lt; fixed::capacity; ++i) {</span>
+<span id="L289">        const auto effort = world_-&gt;command[a][i];</span>
+<span id="L290">        const auto v = std::int64_t(world_-&gt;plant.velocity[a][i]) + effort;</span>
+<span id="L291">        const auto x = std::int64_t(world_-&gt;plant.position[a][i]) + v;</span>
+<span id="L292">        if (v &lt; -4160 || v &gt; 4160 || x &lt; -2165760 || x &gt; 2165760 ||</span>
+<span id="L293">            effort &lt; -4 || effort &gt; 4 || out[a * fixed::capacity + i] != x ||</span>
+<span id="L294">            out[(a + 3) * fixed::capacity + i] != v ||</span>
+<span id="L295">            out[(a + 6) * fixed::capacity + i] != effort)</span>
+<span id="L296">          return false;</span>
+<span id="L297">      }</span>
+<span id="L298">    for (std::size_t a = 0; a &lt; 3; ++a)</span>
+<span id="L299">      for (std::size_t i = 0; i &lt; fixed::capacity; ++i) {</span>
+<span id="L300">        world_-&gt;plant.position[a][i] = out[a * fixed::capacity + i];</span>
+<span id="L301">        world_-&gt;plant.velocity[a][i] = out[(a + 3) * fixed::capacity + i];</span>
+<span id="L302">        world_-&gt;plant.acceleration[a][i] = out[(a + 6) * fixed::capacity + i];</span>
+<span id="L303">      }</span>
+<span id="L304">    ++world_-&gt;calls[1];</span>
+<span id="L305">    ++publications;</span>
+<span id="L306">    return true;</span>
+<span id="L307">  }</span>
+<span id="L308">  bool plan(const rt::MemoryPlan &amp;p) const noexcept override {</span>
+<span id="L309">    return p.device_backend_count == 1 &amp;&amp; p.device_buffer_count == 2 &amp;&amp;</span>
+<span id="L310">           p.device_timeline_count == 1;</span>
+<span id="L311">  }</span>
+<span id="L312">  rt::Status health(rt::DeviceHealth &amp;out) noexcept {</span>
+<span id="L313">    return runtime_-&gt;device_health(handle_, out);</span>
+<span id="L314">  }</span>
+<span id="L315">  rt::Status reset() noexcept { return runtime_-&gt;reset_device(handle_); }</span>
+<span id="L316">  bool timeline(rt::DeviceTimelineInfo &amp;out) noexcept {</span>
+<span id="L317">    return runtime_-&gt;device_timeline_at(handle_, 0, out);</span>
+<span id="L318">  }</span>
+<span id="L319">};</span>
+<span id="L320">} // namespace golden::cuda</span></pre></html>

@@ -1,0 +1,478 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_sampled_io_storage.cpp</title><h1>tests/test_sampled_io_storage.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;rt/src/cross_rate_data.hpp&quot;</span>
+<span id="L2">#include &quot;rt/src/sampled_io.hpp&quot;</span>
+<span id="L3">#include &quot;sampled_io_storage/fixture.hpp&quot;</span>
+<span id="L4">#include &lt;future&gt;</span>
+<span id="L5">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L6">namespace {</span>
+<span id="L7">using sampled_storage::Fixture;</span>
+<span id="L8">void ready(Fixture &amp;f, unsigned output = 4, unsigned input = 4) {</span>
+<span id="L9">  ASSERT_EQ(f.configure(output, input), rt::Status::ok);</span>
+<span id="L10">  ASSERT_EQ(f.start(), rt::Status::ok) &lt;&lt; f.runtime.last_error();</span>
+<span id="L11">}</span>
+<span id="L12">} // namespace</span>
+<span id="L13">TEST(RateDispatch, SampledStorageFourRealSlotsAndRepeatedWrap) {</span>
+<span id="L14">  for (auto slots : {2u, 4u}) {</span>
+<span id="L15">    Fixture f;</span>
+<span id="L16">    ready(f, slots, slots);</span>
+<span id="L17">    for (std::size_t c = 0; c &lt; 3; ++c) {</span>
+<span id="L18">      rt::CompiledCrossRateChannel v;</span>
+<span id="L19">      ASSERT_TRUE(f.runtime.compiled_cross_rate_channel_at(c, v));</span>
+<span id="L20">      EXPECT_EQ(v.snapshot_slot_count, c == 2 ? 2u : slots);</span>
+<span id="L21">      EXPECT_EQ(v.snapshot_bytes, c == 2 ? 16u : slots * 128u);</span>
+<span id="L22">    }</span>
+<span id="L23">    for (unsigned tick = 0; tick &lt; 80; ++tick) {</span>
+<span id="L24">      ASSERT_EQ(f.step(tick), rt::Status::ok) &lt;&lt; f.runtime.last_error();</span>
+<span id="L25">      ASSERT_TRUE(f.valid(tick)) &lt;&lt; tick;</span>
+<span id="L26">    }</span>
+<span id="L27">    EXPECT_EQ(f.backend.stats().frames_copied, 81u);</span>
+<span id="L28">    EXPECT_EQ(f.runtime.stop(), rt::Status::ok);</span>
+<span id="L29">    EXPECT_EQ(f.backend.stats().frames_copied, 82u);</span>
+<span id="L30">    EXPECT_EQ(f.backend.stats().submissions, f.backend.stats().completions);</span>
+<span id="L31">  }</span>
+<span id="L32">}</span>
+<span id="L33">TEST(MemoryPlan, SampledStorageExactPayloadAndControlDeltas) {</span>
+<span id="L34">  std::array&lt;rt::MemoryPlan, 3&gt; plans;</span>
+<span id="L35">  for (std::size_t i = 0; i &lt; 3; ++i) {</span>
+<span id="L36">    Fixture f;</span>
+<span id="L37">    ASSERT_EQ(f.configure(i ? 4u : 2u, i == 2 ? 4u : 2u), rt::Status::ok);</span>
+<span id="L38">    ASSERT_EQ(f.runtime.finalize(), rt::Status::ok);</span>
+<span id="L39">    ASSERT_TRUE(f.runtime.memory_plan(plans[i]));</span>
+<span id="L40">  }</span>
+<span id="L41">  for (std::size_t i = 1; i &lt; 3; ++i) {</span>
+<span id="L42">    const auto extra = 2 * i;</span>
+<span id="L43">    EXPECT_EQ(plans[i].cross_rate_snapshot_slot_count -</span>
+<span id="L44">                  plans[0].cross_rate_snapshot_slot_count,</span>
+<span id="L45">              extra);</span>
+<span id="L46">    EXPECT_EQ(plans[i].cross_rate_snapshot_bytes -</span>
+<span id="L47">                  plans[0].cross_rate_snapshot_bytes,</span>
+<span id="L48">              extra * 128);</span>
+<span id="L49">    EXPECT_EQ(plans[i].rate_plan_bytes - plans[0].rate_plan_bytes,</span>
+<span id="L50">              extra * (128 + sizeof(rt::detail::SnapshotSlotControl)));</span>
+<span id="L51">    EXPECT_EQ(plans[i].planned_bytes - plans[0].planned_bytes,</span>
+<span id="L52">              plans[i].runtime_control_bytes - plans[0].runtime_control_bytes);</span>
+<span id="L53">  }</span>
+<span id="L54">  Fixture rejected;</span>
+<span id="L55">  ASSERT_EQ(rejected.configure(4, 4, plans[0].planned_bytes), rt::Status::ok);</span>
+<span id="L56">  EXPECT_EQ(rejected.runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L57">  EXPECT_EQ(rejected.runtime.last_error(),</span>
+<span id="L58">            &quot;finalized memory plan exceeds memory_budget_bytes&quot;);</span>
+<span id="L59">  EXPECT_EQ(rejected.backend.stats().submissions, 0u);</span>
+<span id="L60">}</span>
+<span id="L61">TEST(RateDispatch, SampledStorageInvalidCountsCorrectBeforeStart) {</span>
+<span id="L62">  for (auto slots : {0u, 1u, 3u, 5u, UINT32_MAX}) {</span>
+<span id="L63">    Fixture f;</span>
+<span id="L64">    ASSERT_EQ(f.configure(slots, 4), rt::Status::ok);</span>
+<span id="L65">    EXPECT_EQ(f.runtime.finalize(), rt::Status::invalid_argument);</span>
+<span id="L66">    EXPECT_EQ(f.runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L67">    EXPECT_EQ(f.backend.stats().submissions, 0u);</span>
+<span id="L68">    f.output_spec.ring_capacity = 4;</span>
+<span id="L69">    ASSERT_EQ(f.runtime.replace_sampled_io_channel(f.output, f.output_spec),</span>
+<span id="L70">              rt::Status::ok);</span>
+<span id="L71">    ASSERT_EQ(f.start(), rt::Status::ok) &lt;&lt; f.runtime.last_error();</span>
+<span id="L72">    EXPECT_EQ(f.runtime.replace_sampled_io_channel(f.output, f.output_spec),</span>
+<span id="L73">              rt::Status::invalid_state);</span>
+<span id="L74">    ASSERT_EQ(f.step(0), rt::Status::ok);</span>
+<span id="L75">    EXPECT_TRUE(f.valid(0));</span>
+<span id="L76">    ASSERT_EQ(f.runtime.stop(), rt::Status::ok);</span>
+<span id="L77">  }</span>
+<span id="L78">}</span>
+<span id="L79">TEST(RateDispatch, SampledStorageDuplicateForeignAndShapeRejectBeforeEffects) {</span>
+<span id="L80">  Fixture first, second;</span>
+<span id="L81">  ASSERT_EQ(first.configure(), rt::Status::ok);</span>
+<span id="L82">  ASSERT_EQ(second.configure(), rt::Status::ok);</span>
+<span id="L83">  EXPECT_EQ(first.runtime.register_sampled_io_channel(first.output_spec),</span>
+<span id="L84">            rt::Status::invalid_argument);</span>
+<span id="L85">  EXPECT_EQ(first.runtime.replace_sampled_io_channel(second.output,</span>
+<span id="L86">                                                     first.output_spec),</span>
+<span id="L87">            rt::Status::invalid_handle);</span>
+<span id="L88">  auto bad = first.input_spec;</span>
+<span id="L89">  bad.channel_identity = 101;</span>
+<span id="L90">  EXPECT_EQ(first.runtime.replace_sampled_io_channel(first.input, bad),</span>
+<span id="L91">            rt::Status::invalid_argument);</span>
+<span id="L92">  bad = first.output_spec;</span>
+<span id="L93">  bad.element_count = 2;</span>
+<span id="L94">  ASSERT_EQ(first.runtime.replace_sampled_io_channel(first.output, bad),</span>
+<span id="L95">            rt::Status::ok);</span>
+<span id="L96">  EXPECT_EQ(first.runtime.finalize(), rt::Status::invalid_argument);</span>
+<span id="L97">  EXPECT_EQ(first.backend.stats().submissions, 0u);</span>
+<span id="L98">  bad.element_count = UINT32_MAX;</span>
+<span id="L99">  bad.samples_per_frame = UINT32_MAX;</span>
+<span id="L100">  ASSERT_EQ(first.runtime.replace_sampled_io_channel(first.output, bad),</span>
+<span id="L101">            rt::Status::ok);</span>
+<span id="L102">  EXPECT_EQ(first.runtime.finalize(), rt::Status::capacity_exceeded);</span>
+<span id="L103">  ASSERT_EQ(</span>
+<span id="L104">      first.runtime.replace_sampled_io_channel(first.output, first.output_spec),</span>
+<span id="L105">      rt::Status::ok);</span>
+<span id="L106">  ASSERT_EQ(first.start(), rt::Status::ok);</span>
+<span id="L107">  ASSERT_EQ(first.step(0), rt::Status::ok);</span>
+<span id="L108">  EXPECT_TRUE(first.valid(0));</span>
+<span id="L109">  ASSERT_EQ(first.runtime.stop(), rt::Status::ok);</span>
+<span id="L110">}</span>
+<span id="L111">TEST(RateDispatch, SampledStorageUnderrunOverrunAndSafeStopRetry) {</span>
+<span id="L112">  Fixture f;</span>
+<span id="L113">  ready(f);</span>
+<span id="L114">  rt::SampledIoChannelStatus status;</span>
+<span id="L115">  ASSERT_TRUE(f.runtime.sampled_io_channel_status(f.output, status));</span>
+<span id="L116">  EXPECT_EQ(status.safety_state,</span>
+<span id="L117">            rt::SampledIoSafetyState::startup_acknowledged);</span>
+<span id="L118">  for (unsigned t = 0; t &lt; 5; ++t)</span>
+<span id="L119">    ASSERT_EQ(f.step(t), rt::Status::ok);</span>
+<span id="L120">  f.skip = true;</span>
+<span id="L121">  ASSERT_EQ(f.step(5), rt::Status::ok);</span>
+<span id="L122">  for (std::size_t i = 120; i &lt; 128; ++i)</span>
+<span id="L123">    EXPECT_EQ(f.state[i], std::byte{});</span>
+<span id="L124">  ASSERT_TRUE(f.runtime.sampled_io_channel_status(f.output, status));</span>
+<span id="L125">  EXPECT_EQ(status.underruns, 1u);</span>
+<span id="L126">  EXPECT_EQ(status.substituted_frames, 1u);</span>
+<span id="L127">  f.skip = false;</span>
+<span id="L128">  ASSERT_EQ(f.step(6), rt::Status::ok);</span>
+<span id="L129">  EXPECT_TRUE(f.valid(6));</span>
+<span id="L130">  const auto before = f.state;</span>
+<span id="L131">  f.twice = true;</span>
+<span id="L132">  EXPECT_EQ(f.step(7), rt::Status::callback_failed);</span>
+<span id="L133">  EXPECT_EQ(f.second, rt::Status::invalid_state);</span>
+<span id="L134">  EXPECT_EQ(f.state, before);</span>
+<span id="L135">  ASSERT_TRUE(f.runtime.sampled_io_channel_status(f.output, status));</span>
+<span id="L136">  EXPECT_EQ(status.overruns, 1u);</span>
+<span id="L137">  ASSERT_EQ(f.backend.inject_next(rt::SampledIoLoopbackFault::completion_error),</span>
+<span id="L138">            rt::Status::ok);</span>
+<span id="L139">  EXPECT_EQ(f.runtime.stop(), rt::Status::device_error);</span>
+<span id="L140">  ASSERT_TRUE(f.runtime.sampled_io_channel_status(f.output, status));</span>
+<span id="L141">  EXPECT_EQ(status.safety_state, rt::SampledIoSafetyState::unknown);</span>
+<span id="L142">  rt::DeviceMemoryObjectInfo object;</span>
+<span id="L143">  EXPECT_TRUE(f.runtime.device_memory_object_at(0, object));</span>
+<span id="L144">  ASSERT_EQ(f.runtime.stop(), rt::Status::ok);</span>
+<span id="L145">  ASSERT_TRUE(f.runtime.sampled_io_channel_status(f.output, status));</span>
+<span id="L146">  EXPECT_EQ(status.safety_state,</span>
+<span id="L147">            rt::SampledIoSafetyState::shutdown_acknowledged);</span>
+<span id="L148">  EXPECT_EQ(f.backend.stats().submissions, f.backend.stats().completions);</span>
+<span id="L149">}</span>
+<span id="L150">TEST(RateDispatch, SampledStorageMalformedDeviceNeverPublishes) {</span>
+<span id="L151">  Fixture f;</span>
+<span id="L152">  ready(f);</span>
+<span id="L153">  ASSERT_EQ(f.step(0), rt::Status::ok);</span>
+<span id="L154">  const auto before = f.state;</span>
+<span id="L155">  ASSERT_EQ(</span>
+<span id="L156">      f.backend.inject_next(rt::SampledIoLoopbackFault::malformed_sequence),</span>
+<span id="L157">      rt::Status::ok);</span>
+<span id="L158">  EXPECT_NE(f.step(1), rt::Status::ok);</span>
+<span id="L159">  EXPECT_EQ(f.state, before);</span>
+<span id="L160">  rt::SampledIoChannelStatus status;</span>
+<span id="L161">  ASSERT_TRUE(f.runtime.sampled_io_channel_status(f.input, status));</span>
+<span id="L162">  EXPECT_EQ(status.accepted_frames, 2u); // Explicit initial frame plus tick0.</span>
+<span id="L163">  EXPECT_EQ(status.last_sequence, 2u);</span>
+<span id="L164">  EXPECT_EQ(f.runtime.stop(), rt::Status::ok);</span>
+<span id="L165">}</span>
+<span id="L166">TEST(MixedRateReplay, SampledStorageOriginReplayAndForeignCapacityRejection) {</span>
+<span id="L167">  Fixture f;</span>
+<span id="L168">  ready(f);</span>
+<span id="L169">  const auto initial = f.checkpoint();</span>
+<span id="L170">  ASSERT_FALSE(initial.empty());</span>
+<span id="L171">  for (unsigned t = 0; t &lt; 32; ++t)</span>
+<span id="L172">    ASSERT_EQ(f.step(t), rt::Status::ok);</span>
+<span id="L173">  const auto expected = f.state;</span>
+<span id="L174">  const auto artifact = f.artifact(initial, 32);</span>
+<span id="L175">  ASSERT_FALSE(artifact.empty());</span>
+<span id="L176">  ASSERT_EQ(f.runtime.replay_active(artifact, Fixture::apply), rt::Status::ok)</span>
+<span id="L177">      &lt;&lt; f.runtime.last_error();</span>
+<span id="L178">  EXPECT_EQ(f.state, expected);</span>
+<span id="L179">  auto corrupt = artifact;</span>
+<span id="L180">  corrupt.back() ^= std::byte{1};</span>
+<span id="L181">  const auto submits = f.backend.stats().submissions;</span>
+<span id="L182">  EXPECT_NE(f.runtime.replay_active(corrupt, Fixture::apply), rt::Status::ok);</span>
+<span id="L183">  EXPECT_EQ(f.state, expected);</span>
+<span id="L184">  EXPECT_EQ(f.backend.stats().submissions, submits);</span>
+<span id="L185">  const auto checkpoint = f.checkpoint(32);</span>
+<span id="L186">  ASSERT_FALSE(checkpoint.empty());</span>
+<span id="L187">  for (auto slots : {2u, 4u}) {</span>
+<span id="L188">    Fixture other;</span>
+<span id="L189">    ready(other, slots, slots);</span>
+<span id="L190">    const auto state = other.state;</span>
+<span id="L191">    const auto prior = other.backend.stats().submissions;</span>
+<span id="L192">    EXPECT_EQ(other.runtime.replay_active(artifact, Fixture::apply),</span>
+<span id="L193">              rt::Status::incompatible_artifact);</span>
+<span id="L194">    EXPECT_EQ(other.state, state);</span>
+<span id="L195">    EXPECT_EQ(other.backend.stats().submissions, prior);</span>
+<span id="L196">    if (slots == 2) {</span>
+<span id="L197">      EXPECT_EQ(other.runtime.restore_checkpoint(checkpoint),</span>
+<span id="L198">                rt::Status::incompatible_artifact);</span>
+<span id="L199">      EXPECT_EQ(other.state, state);</span>
+<span id="L200">      EXPECT_EQ(other.backend.stats().submissions, prior);</span>
+<span id="L201">    } else {</span>
+<span id="L202">      ASSERT_EQ(other.runtime.restore_checkpoint(checkpoint), rt::Status::ok)</span>
+<span id="L203">          &lt;&lt; other.runtime.last_error();</span>
+<span id="L204">      EXPECT_EQ(other.state, expected);</span>
+<span id="L205">      ASSERT_EQ(other.step(32), rt::Status::ok);</span>
+<span id="L206">      EXPECT_TRUE(other.valid(32));</span>
+<span id="L207">    }</span>
+<span id="L208">    ASSERT_EQ(other.runtime.stop(), rt::Status::ok);</span>
+<span id="L209">  }</span>
+<span id="L210">  EXPECT_EQ(f.runtime.stop(), rt::Status::ok);</span>
+<span id="L211">}</span>
+<span id="L212">TEST(RateDispatch, SampledStorageConcurrentOwnersRemainIsolated) {</span>
+<span id="L213">  Fixture a, b;</span>
+<span id="L214">  ready(a);</span>
+<span id="L215">  ready(b, 2, 4);</span>
+<span id="L216">  auto run = [](Fixture &amp;f) {</span>
+<span id="L217">    for (unsigned i = 0; i &lt; 64; ++i)</span>
+<span id="L218">      if (f.step(i) != rt::Status::ok || !f.valid(i))</span>
+<span id="L219">        return false;</span>
+<span id="L220">    return true;</span>
+<span id="L221">  };</span>
+<span id="L222">  auto first = std::async(std::launch::async, [&amp;] { return run(a); });</span>
+<span id="L223">  auto second = std::async(std::launch::async, [&amp;] { return run(b); });</span>
+<span id="L224">  EXPECT_TRUE(first.get());</span>
+<span id="L225">  EXPECT_TRUE(second.get());</span>
+<span id="L226">  EXPECT_EQ(a.backend.stats().submissions, 65u);</span>
+<span id="L227">  EXPECT_EQ(b.backend.stats().submissions, 65u);</span>
+<span id="L228">  ASSERT_EQ(a.runtime.stop(), rt::Status::ok);</span>
+<span id="L229">  EXPECT_EQ(b.backend.stats().submissions, 65u);</span>
+<span id="L230">  ASSERT_EQ(b.runtime.stop(), rt::Status::ok);</span>
+<span id="L231">}</span>
+<span id="L232">TEST(CrossRateData, SampledStorageSlotSelectionRejectsTransactionally) {</span>
+<span id="L233">  rt::detail::CrossRateChannelSpec cross;</span>
+<span id="L234">  cross.payload_size = 128;</span>
+<span id="L235">  const auto bytes =</span>
+<span id="L236">      sampled_storage::frame(101, 1, rt::SampledIoFrameStatus::initial);</span>
+<span id="L237">  cross.initial_sample.assign(bytes.begin(), bytes.end());</span>
+<span id="L238">  rt::detail::SampledIoChannelSpec sample;</span>
+<span id="L239">  sample.channel = {42, 0};</span>
+<span id="L240">  sample.channel_identity = 101;</span>
+<span id="L241">  sample.ring_capacity = 4;</span>
+<span id="L242">  sample.encoding = rt::SampledIoEncoding::signed_int16_le;</span>
+<span id="L243">  sample.element_count = 1;</span>
+<span id="L244">  sample.samples_per_frame = 4;</span>
+<span id="L245">  sample.initial_frame = cross.initial_sample;</span>
+<span id="L246">  std::array&lt;std::size_t, 1&gt; counts{99};</span>
+<span id="L247">  rt::detail::SampledIoCompileDiagnostic diagnostic;</span>
+<span id="L248">  auto compile = [&amp;](auto specs) {</span>
+<span id="L249">    return rt::detail::sampled_io_snapshot_slots(</span>
+<span id="L250">        42, specs, std::span(&amp;cross, 1), counts, diagnostic);</span>
+<span id="L251">  };</span>
+<span id="L252">  sample.channel = {41, 0};</span>
+<span id="L253">  EXPECT_EQ(compile(std::span(&amp;sample, 1)), rt::Status::invalid_argument);</span>
+<span id="L254">  EXPECT_EQ(counts[0], 99u);</span>
+<span id="L255">  sample.channel = {42, 0};</span>
+<span id="L256">  std::array duplicate{sample, sample};</span>
+<span id="L257">  EXPECT_EQ(compile(std::span(duplicate)), rt::Status::invalid_argument);</span>
+<span id="L258">  EXPECT_EQ(counts[0], 99u);</span>
+<span id="L259">  EXPECT_EQ(compile(std::span(&amp;sample, 1)), rt::Status::ok);</span>
+<span id="L260">  EXPECT_EQ(counts[0], 4u);</span>
+<span id="L261">}</span>
+<span id="L262"></span>
+<span id="L263">TEST(RateDispatch, SampledStorageAggregateBytesAreBoundedAndRetryable) {</span>
+<span id="L264">  constexpr std::size_t channels = 9, bytes = rt::cross_rate_payload_capacity;</span>
+<span id="L265">  sampled_storage::Clock clock;</span>
+<span id="L266">  std::vector&lt;std::byte&gt; storage(bytes * (channels + 1));</span>
+<span id="L267">  rt::SampledIoLoopbackBackend backend({16, 1, storage.size(), 1, 7});</span>
+<span id="L268">  rt::Runtime runtime(clock);</span>
+<span id="L269">  rt::RuntimeConfig cfg;</span>
+<span id="L270">  cfg.callback_capacity = channels + 1;</span>
+<span id="L271">  cfg.worker_count = 1;</span>
+<span id="L272">  cfg.executor_queue_capacity = 32;</span>
+<span id="L273">  cfg.task_scratch_slots = 32;</span>
+<span id="L274">  cfg.device_backend_capacity = 1;</span>
+<span id="L275">  cfg.device_buffer_capacity = 1;</span>
+<span id="L276">  cfg.device_outstanding_capacity = 16;</span>
+<span id="L277">  cfg.device_completion_batch = 16;</span>
+<span id="L278">  cfg.memory_budget_bytes = 64 * 1024 * 1024;</span>
+<span id="L279">  ASSERT_EQ(runtime.configure(cfg), rt::Status::ok);</span>
+<span id="L280">  ASSERT_EQ(runtime.set_rate_execution_policy({128}), rt::Status::ok);</span>
+<span id="L281">  rt::DeviceBackendHandle device;</span>
+<span id="L282">  ASSERT_EQ(</span>
+<span id="L283">      runtime.register_device_backend(backend.hal_v2_registration(), device),</span>
+<span id="L284">      rt::Status::ok);</span>
+<span id="L285">  rt::DeviceMemoryDomainHandle memory;</span>
+<span id="L286">  rt::HalV2MemoryDomain desc;</span>
+<span id="L287">  ASSERT_TRUE(runtime.device_memory_domain_at(device, 0, memory, desc));</span>
+<span id="L288">  rt::DeviceBufferHandle buffer;</span>
+<span id="L289">  ASSERT_EQ(</span>
+<span id="L290">      runtime.register_device_buffer({&quot;aggregate.buffer&quot;,</span>
+<span id="L291">                                      device,</span>
+<span id="L292">                                      memory,</span>
+<span id="L293">                                      storage,</span>
+<span id="L294">                                      {},</span>
+<span id="L295">                                      storage.size(),</span>
+<span id="L296">                                      rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L297">                                      15,</span>
+<span id="L298">                                      rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L299">                                      rt::hal_v2_memory_sync_none},</span>
+<span id="L300">                                     buffer),</span>
+<span id="L301">      rt::Status::ok);</span>
+<span id="L302">  rt::RateDomainHandle producers, consumers;</span>
+<span id="L303">  ASSERT_EQ(runtime.register_rate_domain({&quot;aggregate.producers&quot;,</span>
+<span id="L304">                                          sampled_storage::period, 1,</span>
+<span id="L305">                                          sampled_storage::period, 1&#x27;000&#x27;000},</span>
+<span id="L306">                                         producers),</span>
+<span id="L307">            rt::Status::ok);</span>
+<span id="L308">  ASSERT_EQ(runtime.register_rate_domain({&quot;aggregate.consumers&quot;,</span>
+<span id="L309">                                          sampled_storage::period, 1,</span>
+<span id="L310">                                          sampled_storage::period, 1&#x27;000&#x27;000},</span>
+<span id="L311">                                         consumers),</span>
+<span id="L312">            rt::Status::ok);</span>
+<span id="L313">  rt::PhaseHandle consumer;</span>
+<span id="L314">  ASSERT_EQ(runtime.register_callback({&quot;aggregate.consumer&quot;,</span>
+<span id="L315">                                       [](void *, const rt::CallbackContext &amp;) {</span>
+<span id="L316">                                         return rt::CallbackResult::ok;</span>
+<span id="L317">                                       },</span>
+<span id="L318">                                       nullptr},</span>
+<span id="L319">                                      consumer),</span>
+<span id="L320">            rt::Status::ok);</span>
+<span id="L321">  ASSERT_EQ(runtime.bind_phase_to_rate_domain(consumer, consumers),</span>
+<span id="L322">            rt::Status::ok);</span>
+<span id="L323">  std::array&lt;rt::SampledIoChannelRegistration, channels&gt; sampled;</span>
+<span id="L324">  std::array&lt;std::vector&lt;std::byte&gt;, channels&gt; initial;</span>
+<span id="L325">  for (std::size_t i = 0; i &lt; channels; ++i) {</span>
+<span id="L326">    rt::DeviceTimelineHandle timeline;</span>
+<span id="L327">    ASSERT_EQ(</span>
+<span id="L328">        runtime.register_device_timeline(</span>
+<span id="L329">            {&quot;aggregate.timeline.&quot; + std::to_string(i), device, 0}, timeline),</span>
+<span id="L330">        rt::Status::ok);</span>
+<span id="L331">    rt::DeviceCommandBatch declaration;</span>
+<span id="L332">    declaration.signal_count = 1;</span>
+<span id="L333">    declaration.signals[0].timeline_handle = timeline.value;</span>
+<span id="L334">    declaration.command_count = 1;</span>
+<span id="L335">    auto &amp;cmd = declaration.commands[0];</span>
+<span id="L336">    cmd.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::dispatch);</span>
+<span id="L337">    cmd.opcode = 17;</span>
+<span id="L338">    cmd.buffer_count = 2;</span>
+<span id="L339">    cmd.buffers[0] = {buffer.value, RTFW_DEVICE_ACCESS_READ, 0, 0, bytes};</span>
+<span id="L340">    cmd.buffers[1] = {buffer.value, RTFW_DEVICE_ACCESS_WRITE, 0,</span>
+<span id="L341">                      bytes * (i + 1), bytes};</span>
+<span id="L342">    rt::PhaseHandle phase;</span>
+<span id="L343">    ASSERT_EQ(</span>
+<span id="L344">        runtime.register_device_batch_phase(</span>
+<span id="L345">            {&quot;aggregate.device.&quot; + std::to_string(i), device,</span>
+<span id="L346">             [](void *, const rt::DeviceCallbackContext &amp;,</span>
+<span id="L347">                rt::DeviceCommandBatch &amp;) { return rt::CallbackResult::error; },</span>
+<span id="L348">             nullptr, declaration},</span>
+<span id="L349">            phase),</span>
+<span id="L350">        rt::Status::ok);</span>
+<span id="L351">    const std::array roles{rt::DeviceRatePayloadRole::input,</span>
+<span id="L352">                           rt::DeviceRatePayloadRole::output};</span>
+<span id="L353">    ASSERT_EQ(runtime.bind_device_phase_to_rate_domain(</span>
+<span id="L354">                  {phase, producers, 1&#x27;000&#x27;000, 1, roles}),</span>
+<span id="L355">              rt::Status::ok);</span>
+<span id="L356">    initial[i].resize(bytes);</span>
+<span id="L357">    rt::SampledIoFrameHeader h;</span>
+<span id="L358">    h.channel_identity = 101 + i;</span>
+<span id="L359">    h.sequence = h.trigger_sequence = 1;</span>
+<span id="L360">    h.sample_count = static_cast&lt;std::uint32_t&gt;((bytes - sizeof(h)) / 2);</span>
+<span id="L361">    h.encoding = 1;</span>
+<span id="L362">    h.timestamp_domain_identity = 7;</span>
+<span id="L363">    h.sample_interval_ns = 1000;</span>
+<span id="L364">    h.calibration_identity = 303;</span>
+<span id="L365">    h.trigger_identity = 404;</span>
+<span id="L366">    h.payload_checksum = rt::sampled_io_payload_checksum(</span>
+<span id="L367">        std::span(initial[i]).subspan(sizeof(h)));</span>
+<span id="L368">    std::memcpy(initial[i].data(), &amp;h, sizeof(h));</span>
+<span id="L369">    auto &amp;s = sampled[i];</span>
+<span id="L370">    ASSERT_EQ(runtime.register_cross_rate_channel(</span>
+<span id="L371">                  {&quot;aggregate.channel.&quot; + std::to_string(i),</span>
+<span id="L372">                   phase,</span>
+<span id="L373">                   consumer,</span>
+<span id="L374">                   bytes,</span>
+<span id="L375">                   initial[i],</span>
+<span id="L376">                   rt::CrossRateMode::sample_and_hold,</span>
+<span id="L377">                   sampled_storage::period,</span>
+<span id="L378">                   {1, bytes},</span>
+<span id="L379">                   {}},</span>
+<span id="L380">                  s.channel),</span>
+<span id="L381">              rt::Status::ok);</span>
+<span id="L382">    s.channel_identity = h.channel_identity;</span>
+<span id="L383">    s.element_count = 1;</span>
+<span id="L384">    s.samples_per_frame = h.sample_count;</span>
+<span id="L385">    s.units_identity = 202;</span>
+<span id="L386">    s.calibration_identity = 303;</span>
+<span id="L387">    s.sample_period_ns = 1000;</span>
+<span id="L388">    s.timestamp_domain_identity = 7;</span>
+<span id="L389">    s.clock_domain_identity = 1;</span>
+<span id="L390">    s.trigger_identity = 404;</span>
+<span id="L391">    s.ring_capacity = 4;</span>
+<span id="L392">    s.initial_sequence = 1;</span>
+<span id="L393">    s.maximum_age_ns = sampled_storage::period;</span>
+<span id="L394">    s.initial_frame = initial[i];</span>
+<span id="L395">    ASSERT_EQ(runtime.register_sampled_io_channel(s), rt::Status::ok);</span>
+<span id="L396">  }</span>
+<span id="L397">  EXPECT_EQ(runtime.finalize(), rt::Status::capacity_exceeded)</span>
+<span id="L398">      &lt;&lt; runtime.last_error();</span>
+<span id="L399">  EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L400">  EXPECT_EQ(backend.stats().submissions, 0u);</span>
+<span id="L401">  for (auto &amp;s : sampled) {</span>
+<span id="L402">    s.ring_capacity = 2;</span>
+<span id="L403">    ASSERT_EQ(runtime.replace_sampled_io_channel(s.channel, s), rt::Status::ok);</span>
+<span id="L404">  }</span>
+<span id="L405">  ASSERT_EQ(runtime.finalize(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L406">  rt::MemoryPlan plan;</span>
+<span id="L407">  ASSERT_TRUE(runtime.memory_plan(plan));</span>
+<span id="L408">  EXPECT_EQ(plan.cross_rate_snapshot_slot_count, channels * 2);</span>
+<span id="L409">  EXPECT_EQ(plan.cross_rate_snapshot_bytes, channels * 2 * bytes);</span>
+<span id="L410">  EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L411">}</span>
+<span id="L412"></span>
+<span id="L413">TEST(RateDispatch, SampledStorageDelayedDeviceInputUsesDeclaredInitial) {</span>
+<span id="L414">  Fixture f;</span>
+<span id="L415">  ASSERT_EQ(f.configure(), rt::Status::ok);</span>
+<span id="L416">  ASSERT_EQ(f.runtime.replace_rate_domain(</span>
+<span id="L417">                f.rates[1], {&quot;storage.device.rate&quot;, sampled_storage::period * 2,</span>
+<span id="L418">                             1, sampled_storage::period, 10&#x27;000&#x27;000}),</span>
+<span id="L419">            rt::Status::ok);</span>
+<span id="L420">  ASSERT_EQ(f.runtime.replace_cross_rate_channel(</span>
+<span id="L421">                f.input, {&quot;storage.input&quot;,</span>
+<span id="L422">                          f.phases[1],</span>
+<span id="L423">                          f.phases[2],</span>
+<span id="L424">                          128,</span>
+<span id="L425">                          f.initial_input,</span>
+<span id="L426">                          rt::CrossRateMode::sample_and_hold,</span>
+<span id="L427">                          0,</span>
+<span id="L428">                          {1, 128},</span>
+<span id="L429">                          {}}),</span>
+<span id="L430">            rt::Status::ok);</span>
+<span id="L431">  f.input_spec.maximum_age_ns = 0;</span>
+<span id="L432">  ASSERT_EQ(f.runtime.replace_sampled_io_channel(f.input, f.input_spec),</span>
+<span id="L433">            rt::Status::ok);</span>
+<span id="L434">  ASSERT_EQ(f.start(), rt::Status::ok) &lt;&lt; f.runtime.last_error();</span>
+<span id="L435">  ASSERT_EQ(f.step(0), rt::Status::ok);</span>
+<span id="L436">  ASSERT_TRUE(f.valid(0));</span>
+<span id="L437">  ASSERT_EQ(f.step(1), rt::Status::ok);</span>
+<span id="L438">  EXPECT_EQ(f.count(), 2u);</span>
+<span id="L439">  EXPECT_TRUE(f.read.sampled_substituted);</span>
+<span id="L440">  EXPECT_EQ(f.read.sampled_sequence, 1u);</span>
+<span id="L441">  for (std::size_t i = 120; i &lt; 128; ++i)</span>
+<span id="L442">    EXPECT_EQ(f.state[i], std::byte{});</span>
+<span id="L443">  rt::SampledIoChannelStatus status;</span>
+<span id="L444">  ASSERT_TRUE(f.runtime.sampled_io_channel_status(f.input, status));</span>
+<span id="L445">  EXPECT_EQ(status.stale_frames, 1u);</span>
+<span id="L446">  EXPECT_EQ(status.substituted_frames, 1u);</span>
+<span id="L447">  ASSERT_EQ(f.runtime.stop(), rt::Status::ok);</span>
+<span id="L448">}</span>
+<span id="L449">TEST(CrossRateData, SampledStorageFourSlotsRetainExactlyFourGenerations) {</span>
+<span id="L450">  rt::detail::SnapshotStore store;</span>
+<span id="L451">  ASSERT_EQ(rt::detail::SnapshotStore::create(8, 4, store), rt::Status::ok);</span>
+<span id="L452">  EXPECT_EQ(store.slot_count(), 4u);</span>
+<span id="L453">  EXPECT_EQ(store.payload_storage_bytes(), 32u);</span>
+<span id="L454">  std::array&lt;std::byte, 8&gt; frame{}, out{};</span>
+<span id="L455">  for (std::uint64_t generation = 1; generation &lt;= 4; ++generation) {</span>
+<span id="L456">    frame.fill(std::byte(generation));</span>
+<span id="L457">    ASSERT_EQ(store.publish(generation, frame),</span>
+<span id="L458">              rt::detail::SnapshotStoreResult::ok);</span>
+<span id="L459">  }</span>
+<span id="L460">  frame.fill(std::byte{5});</span>
+<span id="L461">  EXPECT_EQ(store.publish(5, frame),</span>
+<span id="L462">            rt::detail::SnapshotStoreResult::capacity_exceeded);</span>
+<span id="L463">  for (std::uint64_t generation = 1; generation &lt;= 4; ++generation) {</span>
+<span id="L464">    ASSERT_EQ(</span>
+<span id="L465">        store.copy(generation, out, rt::detail::SnapshotRetention::retain),</span>
+<span id="L466">        rt::detail::SnapshotStoreResult::ok);</span>
+<span id="L467">    EXPECT_TRUE(std::all_of(out.begin(), out.end(), [=](auto b) {</span>
+<span id="L468">      return b == std::byte(generation);</span>
+<span id="L469">    }));</span>
+<span id="L470">  }</span>
+<span id="L471">  ASSERT_EQ(store.retire(1), rt::detail::SnapshotStoreResult::ok);</span>
+<span id="L472">  ASSERT_EQ(store.publish(5, frame), rt::detail::SnapshotStoreResult::ok);</span>
+<span id="L473">  out.fill(std::byte{9});</span>
+<span id="L474">  EXPECT_EQ(store.copy(1, out, rt::detail::SnapshotRetention::retain),</span>
+<span id="L475">            rt::detail::SnapshotStoreResult::stale_generation);</span>
+<span id="L476">  EXPECT_TRUE(std::all_of(out.begin(), out.end(),</span>
+<span id="L477">                          [](auto b) { return b == std::byte{9}; }));</span>
+<span id="L478">}</span></pre></html>

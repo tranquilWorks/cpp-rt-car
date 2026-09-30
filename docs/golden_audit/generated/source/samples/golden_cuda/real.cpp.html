@@ -1,0 +1,218 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_cuda/real.cpp</title><h1>samples/golden_cuda/real.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;runner.hpp&quot;</span>
+<span id="L2">#include &lt;cuda.h&gt;</span>
+<span id="L3">#include &lt;rt/cuda_driver.hpp&gt;</span>
+<span id="L4">namespace g = golden::cuda;</span>
+<span id="L5">namespace {</span>
+<span id="L6">// All native resources belong to this host and outlive checked Owner teardown.</span>
+<span id="L7">class NativeResources {</span>
+<span id="L8">  CUdevice device_{};</span>
+<span id="L9">  CUcontext context_{};</span>
+<span id="L10">  CUstream stream_{};</span>
+<span id="L11">  CUmodule module_{};</span>
+<span id="L12">  CUgraph graph_{};</span>
+<span id="L13">  CUgraphExec executable_{};</span>
+<span id="L14">  std::array&lt;CUdeviceptr, 2&gt; buffers_{};</span>
+<span id="L15">  bool current_{};</span>
+<span id="L16"></span>
+<span id="L17">public:</span>
+<span id="L18">  g::Resources resources;</span>
+<span id="L19">  int open(const g::Arguments &amp;a) noexcept {</span>
+<span id="L20">    const auto initialized = cuInit(0);</span>
+<span id="L21">    if (initialized == CUDA_ERROR_NO_DEVICE ||</span>
+<span id="L22">        initialized == CUDA_ERROR_STUB_LIBRARY ||</span>
+<span id="L23">        initialized == CUDA_ERROR_SYSTEM_DRIVER_MISMATCH)</span>
+<span id="L24">      return 3;</span>
+<span id="L25">    if (initialized != CUDA_SUCCESS)</span>
+<span id="L26">      return 1;</span>
+<span id="L27">    int count{};</span>
+<span id="L28">    if (cuDeviceGetCount(&amp;count) != CUDA_SUCCESS)</span>
+<span id="L29">      return 1;</span>
+<span id="L30">    if (!count)</span>
+<span id="L31">      return 3;</span>
+<span id="L32">    if (cuDeviceGet(&amp;device_, 0) != CUDA_SUCCESS ||</span>
+<span id="L33">        cuDevicePrimaryCtxRetain(&amp;context_, device_) != CUDA_SUCCESS)</span>
+<span id="L34">      return 1;</span>
+<span id="L35">    if (cuCtxPushCurrent(context_) != CUDA_SUCCESS)</span>
+<span id="L36">      return 1;</span>
+<span id="L37">    current_ = true;</span>
+<span id="L38">    CUfunction function{};</span>
+<span id="L39">    if (cuStreamCreate(&amp;stream_, CU_STREAM_NON_BLOCKING) != CUDA_SUCCESS ||</span>
+<span id="L40">        cuModuleLoad(&amp;module_, RTFW_GOLDEN_CUDA_PTX_PATH) != CUDA_SUCCESS ||</span>
+<span id="L41">        cuModuleGetFunction(&amp;function, module_, &quot;golden_physics_step&quot;) !=</span>
+<span id="L42">            CUDA_SUCCESS)</span>
+<span id="L43">      return 1;</span>
+<span id="L44">    for (auto &amp;buffer : buffers_)</span>
+<span id="L45">      if (cuMemAlloc(&amp;buffer, sizeof(g::State)) != CUDA_SUCCESS)</span>
+<span id="L46">        return 1;</span>
+<span id="L47">    if (a.dispatch == &quot;graph&quot;) {</span>
+<span id="L48">      if (cuGraphCreate(&amp;graph_, 0) != CUDA_SUCCESS)</span>
+<span id="L49">        return 1;</span>
+<span id="L50">      auto elements = static_cast&lt;unsigned&gt;(a.scenario.count);</span>
+<span id="L51">      void *arguments[]{&amp;buffers_[1], &amp;elements};</span>
+<span id="L52">      CUDA_KERNEL_NODE_PARAMS p{};</span>
+<span id="L53">      p.func = function;</span>
+<span id="L54">      p.gridDimX = (elements + 127) / 128;</span>
+<span id="L55">      p.gridDimY = p.gridDimZ = 1;</span>
+<span id="L56">      p.blockDimX = 128;</span>
+<span id="L57">      p.blockDimY = p.blockDimZ = 1;</span>
+<span id="L58">      p.kernelParams = arguments;</span>
+<span id="L59">      CUgraphNode node{};</span>
+<span id="L60">      if (cuGraphAddKernelNode(&amp;node, graph_, nullptr, 0, &amp;p) != CUDA_SUCCESS ||</span>
+<span id="L61">          cuGraphInstantiateWithFlags(&amp;executable_, graph_, 0) != CUDA_SUCCESS)</span>
+<span id="L62">        return 1;</span>
+<span id="L63">    }</span>
+<span id="L64">    CUcontext popped{};</span>
+<span id="L65">    if (cuCtxPopCurrent(&amp;popped) != CUDA_SUCCESS || popped != context_)</span>
+<span id="L66">      return 1;</span>
+<span id="L67">    current_ = false;</span>
+<span id="L68">    resources = {rt::cuda_driver_api(),</span>
+<span id="L69">                 reinterpret_cast&lt;rt::CudaContext&gt;(context_),</span>
+<span id="L70">                 reinterpret_cast&lt;rt::CudaStream&gt;(stream_),</span>
+<span id="L71">                 reinterpret_cast&lt;rt::CudaFunction&gt;(function),</span>
+<span id="L72">                 reinterpret_cast&lt;rt::CudaGraphExec&gt;(executable_),</span>
+<span id="L73">                 {buffers_[0], buffers_[1]}};</span>
+<span id="L74">    return 0;</span>
+<span id="L75">  }</span>
+<span id="L76">  bool close() noexcept {</span>
+<span id="L77">    if (!context_)</span>
+<span id="L78">      return true;</span>
+<span id="L79">    if (!current_) {</span>
+<span id="L80">      if (cuCtxPushCurrent(context_) != CUDA_SUCCESS)</span>
+<span id="L81">        return false;</span>
+<span id="L82">      current_ = true;</span>
+<span id="L83">    }</span>
+<span id="L84">    if (executable_) {</span>
+<span id="L85">      if (cuGraphExecDestroy(executable_) != CUDA_SUCCESS)</span>
+<span id="L86">        return false;</span>
+<span id="L87">      executable_ = nullptr;</span>
+<span id="L88">    }</span>
+<span id="L89">    if (graph_) {</span>
+<span id="L90">      if (cuGraphDestroy(graph_) != CUDA_SUCCESS)</span>
+<span id="L91">        return false;</span>
+<span id="L92">      graph_ = nullptr;</span>
+<span id="L93">    }</span>
+<span id="L94">    for (auto &amp;buffer : buffers_)</span>
+<span id="L95">      if (buffer) {</span>
+<span id="L96">        if (cuMemFree(buffer) != CUDA_SUCCESS)</span>
+<span id="L97">          return false;</span>
+<span id="L98">        buffer = 0;</span>
+<span id="L99">      }</span>
+<span id="L100">    if (module_) {</span>
+<span id="L101">      if (cuModuleUnload(module_) != CUDA_SUCCESS)</span>
+<span id="L102">        return false;</span>
+<span id="L103">      module_ = nullptr;</span>
+<span id="L104">    }</span>
+<span id="L105">    if (stream_) {</span>
+<span id="L106">      if (cuStreamDestroy(stream_) != CUDA_SUCCESS)</span>
+<span id="L107">        return false;</span>
+<span id="L108">      stream_ = nullptr;</span>
+<span id="L109">    }</span>
+<span id="L110">    CUcontext popped{};</span>
+<span id="L111">    if (cuCtxPopCurrent(&amp;popped) != CUDA_SUCCESS || popped != context_)</span>
+<span id="L112">      return false;</span>
+<span id="L113">    current_ = false;</span>
+<span id="L114">    if (cuDevicePrimaryCtxRelease(device_) != CUDA_SUCCESS)</span>
+<span id="L115">      return false;</span>
+<span id="L116">    context_ = nullptr;</span>
+<span id="L117">    return true;</span>
+<span id="L118">  }</span>
+<span id="L119">  ~NativeResources() {</span>
+<span id="L120">    if (!close())</span>
+<span id="L121">      std::terminate();</span>
+<span id="L122">  }</span>
+<span id="L123">};</span>
+<span id="L124">} // namespace</span>
+<span id="L125">int main(int argc, char **argv) {</span>
+<span id="L126">  if (argc == 2 &amp;&amp; std::string_view(argv[1]) == &quot;--help&quot;) {</span>
+<span id="L127">    std::cout &lt;&lt; &quot;golden_cuda_real [--dispatch kernel|graph] [--mode &quot;</span>
+<span id="L128">                 &quot;native|host] [--count 1..256] [--ticks 1..1024] [--workers &quot;</span>
+<span id="L129">                 &quot;1..3] [--grain 1|4|16|64] [--output DIRECTORY]\nNative &quot;</span>
+<span id="L130">                 &quot;replay unsupported; absent driver/device exits3 NOT_RUN.\n&quot;;</span>
+<span id="L131">    return 0;</span>
+<span id="L132">  }</span>
+<span id="L133">  g::Arguments a;</span>
+<span id="L134">  if (!g::arguments(argc, argv, a) || a.dispatch == &quot;cpu&quot; ||</span>
+<span id="L135">      a.fault != g::Fault::none || a.scenario.external ||</span>
+<span id="L136">      a.scenario.campaign != golden::Campaign::nominal)</span>
+<span id="L137">    return 2;</span>
+<span id="L138">  try {</span>
+<span id="L139">    NativeResources native;</span>
+<span id="L140">    const auto opened = native.open(a);</span>
+<span id="L141">    if (opened) {</span>
+<span id="L142">      if (!native.close())</span>
+<span id="L143">        return 1;</span>
+<span id="L144">      if (opened == 3)</span>
+<span id="L145">        std::cout</span>
+<span id="L146">            &lt;&lt; &quot;status=NOT_RUN reason=CUDA_device_or_driver_unavailable\n&quot;;</span>
+<span id="L147">      return opened;</span>
+<span id="L148">    }</span>
+<span id="L149">    auto owner = std::make_unique&lt;g::Owner&gt;(</span>
+<span id="L150">        a.scenario,</span>
+<span id="L151">        a.dispatch == &quot;graph&quot; ? g::Dispatch::graph : g::Dispatch::kernel,</span>
+<span id="L152">        &amp;native.resources);</span>
+<span id="L153">    auto &amp;s = *owner-&gt;session;</span>
+<span id="L154">    auto status = owner-&gt;prepare();</span>
+<span id="L155">    rt::CompiledDeviceRatePhase phase;</span>
+<span id="L156">    if (status == rt::Status::ok &amp;&amp;</span>
+<span id="L157">        (!s.runtime-&gt;compiled_device_rate_phase_at(0, phase) ||</span>
+<span id="L158">         phase.simulation || owner-&gt;physics-&gt;replay_enabled()))</span>
+<span id="L159">      status = rt::Status::internal_error;</span>
+<span id="L160">    if (status == rt::Status::ok &amp;&amp; !s.controls())</span>
+<span id="L161">      status = rt::Status::internal_error;</span>
+<span id="L162">    golden::Oracle oracle(a.scenario);</span>
+<span id="L163">    g::Telemetry telemetry;</span>
+<span id="L164">    for (std::size_t t = 0; status == rt::Status::ok &amp;&amp; t &lt; a.scenario.ticks;</span>
+<span id="L165">         ++t) {</span>
+<span id="L166">      status = s.step(t);</span>
+<span id="L167">      if (status == rt::Status::ok &amp;&amp; !oracle.step(t, s.world))</span>
+<span id="L168">        status = rt::Status::internal_error;</span>
+<span id="L169">      if (status == rt::Status::ok)</span>
+<span id="L170">        status = telemetry.drain(*s.runtime);</span>
+<span id="L171">    }</span>
+<span id="L172">    rt::DeviceTimelineInfo timeline;</span>
+<span id="L173">    if (status == rt::Status::ok &amp;&amp;</span>
+<span id="L174">        (!owner-&gt;physics-&gt;timeline(timeline) ||</span>
+<span id="L175">         timeline.completed_value != a.scenario.ticks ||</span>
+<span id="L176">         owner-&gt;physics-&gt;providers != a.scenario.ticks ||</span>
+<span id="L177">         owner-&gt;physics-&gt;publications != a.scenario.ticks))</span>
+<span id="L178">      status = rt::Status::internal_error;</span>
+<span id="L179">    const auto state = s.world.canonical;</span>
+<span id="L180">    const auto providers = owner-&gt;physics ? owner-&gt;physics-&gt;providers : 0,</span>
+<span id="L181">               publications = owner-&gt;physics ? owner-&gt;physics-&gt;publications : 0;</span>
+<span id="L182">    if (status != rt::Status::ok)</span>
+<span id="L183">      std::cerr &lt;&lt; s.runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L184">    const auto stopped = owner-&gt;close();</span>
+<span id="L185">    if (stopped != rt::Status::ok &amp;&amp; owner-&gt;close() != rt::Status::ok)</span>
+<span id="L186">      std::terminate();</span>
+<span id="L187">    owner.reset();</span>
+<span id="L188">    const bool closed = native.close();</span>
+<span id="L189">    if (status != rt::Status::ok || stopped != rt::Status::ok || !closed)</span>
+<span id="L190">      return 1;</span>
+<span id="L191">    if (!a.output.empty()) {</span>
+<span id="L192">      // A fresh directory prevents stale simulator transcripts from appearing</span>
+<span id="L193">      // beside an actual native run. Physical evidence is never synthesized.</span>
+<span id="L194">      if (fs::exists(a.output) &amp;&amp; !fs::is_empty(a.output))</span>
+<span id="L195">        return 2;</span>
+<span id="L196">      fs::create_directories(a.output);</span>
+<span id="L197">      if (!g::write(a.output / &quot;state.bin&quot;, state))</span>
+<span id="L198">        return 1;</span>
+<span id="L199">      std::ofstream f(a.output / &quot;execution.json&quot;);</span>
+<span id="L200">      f &lt;&lt; &quot;{\&quot;variant\&quot;:\&quot;native_cuda\&quot;,\&quot;dispatch\&quot;:\&quot;&quot; &lt;&lt; a.dispatch</span>
+<span id="L201">        &lt;&lt; &quot;\&quot;,\&quot;replay\&quot;:\&quot;UNSUPPORTED\&quot;,\&quot;qualification\&quot;:\&quot;UNQUALIFIED\&quot;,&quot;</span>
+<span id="L202">           &quot;\&quot;ticks\&quot;:&quot;</span>
+<span id="L203">        &lt;&lt; a.scenario.ticks &lt;&lt; &quot;,\&quot;device_providers\&quot;:&quot; &lt;&lt; providers</span>
+<span id="L204">        &lt;&lt; &quot;,\&quot;device_publications\&quot;:&quot; &lt;&lt; publications</span>
+<span id="L205">        &lt;&lt; &quot;,\&quot;device_timeline\&quot;:&quot; &lt;&lt; timeline.completed_value</span>
+<span id="L206">        &lt;&lt; &quot;,\&quot;oracle\&quot;:true,\&quot;cleanup\&quot;:true}\n&quot;;</span>
+<span id="L207">      f.close();</span>
+<span id="L208">      if (f.fail())</span>
+<span id="L209">        return 1;</span>
+<span id="L210">    }</span>
+<span id="L211">    std::cout &lt;&lt; &quot;native_cuda execution=PASS replay=UNSUPPORTED &quot;</span>
+<span id="L212">                 &quot;qualification=UNQUALIFIED cleanup=PASS\n&quot;;</span>
+<span id="L213">    return 0;</span>
+<span id="L214">  } catch (const std::exception &amp;e) {</span>
+<span id="L215">    std::cerr &lt;&lt; e.what() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L216">    return 1;</span>
+<span id="L217">  }</span>
+<span id="L218">}</span></pre></html>

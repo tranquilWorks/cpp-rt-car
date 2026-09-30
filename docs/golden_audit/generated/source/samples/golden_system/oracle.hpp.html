@@ -1,0 +1,124 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_system/oracle.hpp</title><h1>samples/golden_system/oracle.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;world.hpp&quot;</span>
+<span id="L3">namespace golden {</span>
+<span id="L4">// Serial reference uses a closed-form segment for every constant acceleration.</span>
+<span id="L5">// It never calls the production integrator or controller and checks all 256</span>
+<span id="L6">// lanes.</span>
+<span id="L7">class Oracle {</span>
+<span id="L8">  Options options_;</span>
+<span id="L9">  Vector origin_x_{}, origin_v_{}, accel_{}, actuator_{}, sample_x_{},</span>
+<span id="L10">      sample_v_{};</span>
+<span id="L11">  std::array&lt;std::array&lt;std::uint64_t, fixed::capacity&gt;, 3&gt; lengths_{};</span>
+<span id="L12">  Vector x_{}, v_{};</span>
+<span id="L13">  std::array&lt;std::int64_t, 6&gt; sums_{};</span>
+<span id="L14">  std::int32_t target_ = 8, gain_ = 1, calibration_ = 0;</span>
+<span id="L15">  std::uint64_t stale_ = 0, missing_ = 0;</span>
+<span id="L16"></span>
+<span id="L17">public:</span>
+<span id="L18">  explicit Oracle(Options o) : options_(o) {</span>
+<span id="L19">    std::uint64_t seed = 1;</span>
+<span id="L20">    const auto draw = [&amp;](std::uint64_t modulus, int offset) {</span>
+<span id="L21">      seed = (seed * 1664525 + 1013904223) &amp; 0xffffffffULL;</span>
+<span id="L22">      return static_cast&lt;std::int32_t&gt;(seed % modulus) - offset;</span>
+<span id="L23">    };</span>
+<span id="L24">    for (std::size_t i = 0; i &lt; o.count; ++i)</span>
+<span id="L25">      for (std::size_t a = 0; a &lt; 3; ++a) {</span>
+<span id="L26">        x_[a][i] = draw(2049, 1024);</span>
+<span id="L27">        v_[a][i] = draw(129, 64);</span>
+<span id="L28">        accel_[a][i] = draw(9, 4);</span>
+<span id="L29">      }</span>
+<span id="L30">    origin_x_ = x_;</span>
+<span id="L31">    origin_v_ = v_;</span>
+<span id="L32">    actuator_ = accel_;</span>
+<span id="L33">  }</span>
+<span id="L34">  bool step(std::size_t tick, const World &amp;actual) noexcept {</span>
+<span id="L35">    if (tick == 1)</span>
+<span id="L36">      target_ = 16;</span>
+<span id="L37">    if (tick == 2)</span>
+<span id="L38">      calibration_ = 2;</span>
+<span id="L39">    if (tick == 3)</span>
+<span id="L40">      gain_ = 2;</span>
+<span id="L41">    if (tick == 6 &amp;&amp; options_.campaign == Campaign::control_replaced)</span>
+<span id="L42">      gain_ = 3;</span>
+<span id="L43">    const Vector old_sensor = sample_v_;</span>
+<span id="L44">    const auto command = actuator_;</span>
+<span id="L45">    for (std::size_t a = 0; a &lt; 3; ++a)</span>
+<span id="L46">      for (std::size_t i = 0; i &lt; options_.count; ++i) {</span>
+<span id="L47">        if (command[a][i] != accel_[a][i]) {</span>
+<span id="L48">          origin_x_[a][i] = x_[a][i];</span>
+<span id="L49">          origin_v_[a][i] = v_[a][i];</span>
+<span id="L50">          accel_[a][i] = command[a][i];</span>
+<span id="L51">          lengths_[a][i] = 0;</span>
+<span id="L52">        }</span>
+<span id="L53">        const auto n = static_cast&lt;std::int64_t&gt;(++lengths_[a][i]);</span>
+<span id="L54">        v_[a][i] =</span>
+<span id="L55">            static_cast&lt;std::int32_t&gt;(origin_v_[a][i] + n * accel_[a][i]);</span>
+<span id="L56">        x_[a][i] =</span>
+<span id="L57">            static_cast&lt;std::int32_t&gt;(origin_x_[a][i] + n * origin_v_[a][i] +</span>
+<span id="L58">                                      accel_[a][i] * n * (n + 1) / 2);</span>
+<span id="L59">      }</span>
+<span id="L60">    if (tick % 2 == 0)</span>
+<span id="L61">      for (std::size_t a = 0; a &lt; 3; ++a)</span>
+<span id="L62">        for (std::size_t i = 0; i &lt; options_.count; ++i) {</span>
+<span id="L63">          sample_x_[a][i] = x_[a][i] + calibration_;</span>
+<span id="L64">          sample_v_[a][i] = v_[a][i] + calibration_;</span>
+<span id="L65">        }</span>
+<span id="L66">    if (tick % 3 == 0) {</span>
+<span id="L67">      const bool stale =</span>
+<span id="L68">          options_.campaign == Campaign::stale_input &amp;&amp; tick == 6;</span>
+<span id="L69">      const bool absent = (options_.campaign == Campaign::peer_missing &amp;&amp;</span>
+<span id="L70">                           tick &gt;= 6 &amp;&amp; tick &lt; 12) ||</span>
+<span id="L71">                          (options_.external &amp;&amp; !actual.external_ready);</span>
+<span id="L72">      stale_ += stale ? 1 : 0;</span>
+<span id="L73">      missing_ += absent ? 1 : 0;</span>
+<span id="L74">      for (std::size_t a = 0; a &lt; 3; ++a)</span>
+<span id="L75">        for (std::size_t i = 0; i &lt; options_.count; ++i) {</span>
+<span id="L76">          const auto velocity =</span>
+<span id="L77">              stale ? 0</span>
+<span id="L78">                    : (options_.external ? old_sensor[a][i] : sample_v_[a][i]);</span>
+<span id="L79">          const auto demand =</span>
+<span id="L80">              static_cast&lt;std::int64_t&gt;(gain_) * (target_ - velocity);</span>
+<span id="L81">          actuator_[a][i] =</span>
+<span id="L82">              absent ? 0</span>
+<span id="L83">                     : static_cast&lt;std::int32_t&gt;(</span>
+<span id="L84">                           demand &lt; -4 ? -4 : (demand &gt; 4 ? 4 : demand));</span>
+<span id="L85">        }</span>
+<span id="L86">    }</span>
+<span id="L87">    if (tick % 6 == 0) {</span>
+<span id="L88">      sums_.fill(0);</span>
+<span id="L89">      for (std::size_t a = 0; a &lt; 3; ++a)</span>
+<span id="L90">        for (std::size_t i = 0; i &lt; options_.count; ++i) {</span>
+<span id="L91">          sums_[a] += x_[a][i];</span>
+<span id="L92">          sums_[a + 3] += v_[a][i];</span>
+<span id="L93">        }</span>
+<span id="L94">    }</span>
+<span id="L95">    if (actual.plant.position != x_ || actual.plant.velocity != v_ ||</span>
+<span id="L96">        actual.plant.acceleration != accel_ || actual.command != command ||</span>
+<span id="L97">        actual.sensor.position != sample_x_ ||</span>
+<span id="L98">        actual.sensor.velocity != sample_v_ || actual.sums != sums_ ||</span>
+<span id="L99">        actual.stale != stale_ || actual.missing != missing_)</span>
+<span id="L100">      return false;</span>
+<span id="L101">    if (actual.configuration.target != target_ ||</span>
+<span id="L102">        actual.configuration.gain != gain_ ||</span>
+<span id="L103">        actual.configuration.calibration != calibration_)</span>
+<span id="L104">      return false;</span>
+<span id="L105">    constexpr std::array&lt;std::size_t, 8&gt; phase_periods{1, 1, 1, 2, 3, 3, 6, 6};</span>
+<span id="L106">    for (std::size_t i = 0; i &lt; 8; ++i)</span>
+<span id="L107">      if (actual.calls[i] != tick / phase_periods[i] + 1)</span>
+<span id="L108">        return false;</span>
+<span id="L109">    const std::array&lt;std::uint64_t, 5&gt; publications{</span>
+<span id="L110">        tick + 1, tick / 2 + 1, tick / 3 + 1, tick / 3 + 1, tick + 1};</span>
+<span id="L111">    const std::array&lt;std::uint64_t, 5&gt; selections{</span>
+<span id="L112">        tick / 2 + 1, tick / 3 + 1, tick / 3 + 1, tick + 1, tick / 6 + 1};</span>
+<span id="L113">    const std::array&lt;std::uint64_t, 5&gt; ages{</span>
+<span id="L114">        0, (tick / 3 * 3 % 2) * fixed::tick_ns, 0,</span>
+<span id="L115">        tick ? ((tick - 1) % 3 + 1) * fixed::tick_ns : 0, 0};</span>
+<span id="L116">    const std::array&lt;std::uint64_t, 5&gt; generations{</span>
+<span id="L117">        tick / 2 * 2 + 2, tick / 3 * 3 / 2 + 2, tick / 3 + 2,</span>
+<span id="L118">        tick ? (tick - 1) / 3 + 2 : 1, tick / 6 * 6 + 2};</span>
+<span id="L119">    return actual.publications == publications &amp;&amp;</span>
+<span id="L120">           actual.selections == selections &amp;&amp; actual.ages == ages &amp;&amp;</span>
+<span id="L121">           actual.generations == generations;</span>
+<span id="L122">  }</span>
+<span id="L123">};</span>
+<span id="L124">} // namespace golden</span></pre></html>

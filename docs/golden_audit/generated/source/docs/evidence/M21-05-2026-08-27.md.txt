@@ -1,0 +1,130 @@
+# M21-05 implementation evidence — 2026-08-27
+
+## Scope and provenance
+
+- Target repository: `tranquilWorks/cpp-rt-car`
+- Exact starting commit: `2821f90fb09dc86820b879bb47a39d8165ff0e0f`
+- Starting state: merged M21-04 pull request 245 with a clean worktree
+- Binding control revision:
+  `8bf0d8e7a6563fe88246925b44e2bddc77a457fe`
+- Active contract: `contracts/active-batch.yaml`, batch M21-05
+- Evidence class: portable RT0 implementation candidate
+
+This record does not claim merge, release, physical I/O, HIL, controlled
+latency, RT1, RT2, or production qualification. Hosted gates pass; M21 and
+CAP-M21 remain incomplete until the candidate passes human review and merges.
+
+## Implemented closure
+
+- `MixedRateClosurePolicy` is copied while configuring and freezes semantic
+  policy identity, fixed action capacity, bounded replay record/byte limits,
+  the closed overwrite policy, and deterministic-backend replay requirement.
+- `MixedRateActionRecord` is a fixed 256-byte schema-1 C++ record. A
+  finalization-time ring reserves monotonic sequences, reports busy drops and
+  committed overwrites, binds cursors to one Runtime, reports exact gaps, and
+  makes lossy transcript ranges replay-ineligible.
+- Runtime actions correlate rate decisions, settled device outcomes, sampled
+  publication/selection, safe-state acknowledgement, watchdog/degradation,
+  and checked stop. Records contain content identities rather than sampled
+  payload bytes, raw addresses, callbacks, vendor handles, or thread identity.
+- A closure-enabled checkpoint conditionally appends one ordinary
+  `rtfw.mixed-rate` schema-1 state record at a quiescent boundary. Existing
+  checkpoint/input-log schema constants and the disabled legacy byte path are
+  unchanged.
+- Active-replay schema 1 is a separately bounded fixed-width little-endian
+  artifact with a 384-byte header, direct-index input descriptors, fixed
+  actions, per-record checksums, and a whole-artifact checksum. Inspection and
+  replay prevalidate encoded bounds, identity, ordering, checksums, and
+  reserved fields before restore.
+- Active replay permits only frozen deterministic-mock backends, consumes
+  recorded logical decisions rather than live watchdog/completion timing,
+  re-executes provider/loopback work, and compares generated actions,
+  terminal status, sampled metadata, content identity, and final state.
+- `SampledIoLoopbackBackend` retains its HAL-v2 tables and gains only a bounded
+  instance-local logical-action inspection/reset surface; it owns no thread or
+  global mutable state.
+- A table-driven fixture built from public installed headers runs CPU plant,
+  loopback device sensor, CPU controller, loopback device actuator, and CPU
+  observer work across 100 ms, 150 ms, 225 ms, and 450 ms periods. Repository
+  tests and the package consumer share the same fixture.
+- Existing six-row `MemoryPlan` accounting exposes exact mixed-action and
+  replay-control subtotals. Caller artifacts, registered device buffers,
+  output spans, and backend-private loopback storage are excluded.
+
+## Compatibility boundary
+
+- Stable C ABI v8 remains outside the changed paths and is expected to retain
+  exactly 70 exports and fingerprint `0xd0e7a5a14bf35f97`.
+- Device ABI v1, extension ABI v1, HAL core v2 and extension-v1 tables,
+  Runtime status values, runtime-profile schema 7/25 keys, checkpoint schema 1,
+  input-log schema 1, rate-action schema 1, global observability schema 2,
+  release 1.2.1, installed inventory, support matrices, and license are not
+  changed.
+- Existing `Runtime::replay()` retains its active-plan rejection. The new
+  active path uses distinct C++ entry points and schema constants in existing
+  installed headers; no new installed header is introduced.
+
+## Local evidence completed
+
+The following checks passed in the implementation worktree:
+
+- strict GCC C++20 syntax compilation with
+  `-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Werror`
+  for the changed production translation units;
+- the same strict syntax gate for the new action, replay, conformance, and
+  package-consumer sources;
+- 9 focused tests across `MixedRateActions`, `MixedRateReplay`, and
+  `MixedRateConformance`;
+- a directly linked impacted suite: 91 tests across `CommandBatch`,
+  `CrossRateData`, `MemoryPlan`, `HostRuntime`, `DeterminismReplay`,
+  `DeviceRuntime`, `DeviceMock`, `LoopbackBackend`, `RateDispatch`, and
+  `SampledIo`;
+- direct execution of the mixed-rate package consumer;
+- integrated deterministic loopback active replay, exact action comparison,
+  final-state comparison, loopback logical-action inspection, optional-device
+  shed/recover without provider or backend ownership, terminal sampled/stop
+  actions, completion-error/timeout/loss fault replay with failure-safe output,
+  and two independent conformance instances;
+- the public package consumer and all 9 focused tests under a constrained
+  1 MiB stack, preserving fixed-capacity/no-heap fixture artifacts;
+- the documentation contract, release contract and digest ledger, release-tool
+  unit suite, dependency pins, portable provenance fixture, static-analysis
+  source manifest, and C ABI source contract;
+- C ABI v8 source verification at exactly 70 symbols and fingerprint
+  `0xd0e7a5a14bf35f97`;
+- final path-scope, retained-baseline, and whitespace reconciliation.
+
+The environment did not provide CMake, so CMake configuration/build, CTest,
+the repository `quick`/`full` commands that require it, portable assurance,
+shared-library ABI inspection, and sanitizer execution are not recorded as
+local passes here. The hosted evidence below satisfies those candidate gates.
+The release digest ledger includes every new implementation, fixture, test,
+and package-consumer source.
+
+## Hosted evidence completed
+
+Draft pull request 246 at validated implementation head
+
+`a6013b1b77faa8a9e83db2c7b968a6630e971836`
+
+passed all five workflows:
+
+- CI run 33110390319: 24/24 jobs passed, including GCC, Clang, MSVC Debug and
+  RelWithDebInfo, Windows/GCC/Clang relocated package consumers, hosted GCC
+  ThreadSanitizer, determinism and artifact exchange, CUDA/XDMA consumers,
+  C/C++ embedding, portable assurance, C ABI v8, and SONAME checks;
+- Documentation contract run 33110390170: passed;
+- Scaling smoke run 33110390324: passed;
+- Autotune Smoke run 33110390216: passed;
+- AT-MAP5 run 33110390182: passed.
+
+The first candidate run exposed intentional cache-line padding as MSVC C4324;
+the second exposed oversized test-fixture stack reservations under the Windows
+1 MiB default. Both failures were repaired narrowly, reproduced or validated
+locally, and superseded by the all-green final head above.
+
+## Pending gates
+
+- human ownership, replay transactionality, concurrency, boundedness,
+  compatibility, and claim review;
+- maintainer merge.

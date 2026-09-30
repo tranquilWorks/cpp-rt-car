@@ -1,0 +1,1352 @@
+{
+  "version": 1,
+  "scenario_id": "rtfw.golden.vehicle.v1",
+  "status": "contract_only",
+  "implementation_batch": "M26-02",
+  "state": {
+    "capacity": 256,
+    "default_entities": 16,
+    "axes": 3,
+    "layout": "SoA: field, axis, entity; unused entities zero",
+    "alignment": 64,
+    "scalar": "int32_le",
+    "owner": "one scenario instance; heap storage allocated before finalize",
+    "fields": [
+      {
+        "id": "position",
+        "arrays": 3,
+        "unit": "model_position",
+        "initial_abs": 1024,
+        "maximum_abs": 2165760,
+        "offset_bytes": 0
+      },
+      {
+        "id": "velocity",
+        "arrays": 3,
+        "unit": "model_position_per_tick",
+        "initial_abs": 64,
+        "maximum_abs": 4160,
+        "offset_bytes": 3072
+      },
+      {
+        "id": "acceleration",
+        "arrays": 3,
+        "unit": "model_position_per_tick_squared",
+        "initial_abs": 4,
+        "maximum_abs": 4,
+        "offset_bytes": 6144
+      }
+    ],
+    "plant_bytes": 9216,
+    "controller_bytes": 3072,
+    "sensor_bytes": 6144,
+    "initialization": "M24 LCG uint32 wrap: state=1664525*state+1013904223; entity then axis, x=next%2049-1024, v=next%129-64, a=next%9-4; seed=1",
+    "update": "v_next=v+a; x_next=x+v_next; widen intermediates to int64, checked narrow to int32; no float or saturation in plant",
+    "controller": "For each axis: clamp(gain*(target_velocity-sampled_velocity), -4, 4), int64 intermediate; gain default1 range0..4, target default8 range-64..64; calibrated sensor = raw+offset, offset default0 range-16..16",
+    "oracle": "M24 piecewise constant acceleration: v(n)=v0+n*a, x(n)=x0+n*v0+a*n*(n+1)/2; split at each acknowledged command change; compare every field of every entity, tolerance zero",
+    "rollback": "Runtime generation rollback does not restore sample/backend state. A failed frame is terminal for this owner; checked settle/stop, then restore a paired successful checkpoint in a fresh owner.",
+    "source": "samples/cuda_physics/model.hpp",
+    "auxiliary_layout": "Separate fixed SoA command[3][256] int32 and sensor[position,velocity][3][256] int32; each 64-byte aligned. Aggregate position/velocity axis sums use six int64 slots. Instance-local uint64 logical_tick, successful_steps, control_generation, sample_sequence[5], command_generation; checked increment with no wrap. Snapshot encodes fields individually, never native padding/pointers."
+  },
+  "clock": {
+    "base_tick_ns": 10000000,
+    "default_ticks": 24,
+    "maximum_ticks": 1024,
+    "supercycle_ticks": 6,
+    "epoch": "logical zero; half-open [0,ticks*base_tick_ns); no wall-clock correctness oracle",
+    "substeps": 1,
+    "host_step_ticks": 1
+  },
+  "rates": [
+    {
+      "id": "plant",
+      "period_ticks": 1,
+      "budget_ns": 3000000,
+      "default_releases": 24
+    },
+    {
+      "id": "sensor",
+      "period_ticks": 2,
+      "budget_ns": 1000000,
+      "default_releases": 12
+    },
+    {
+      "id": "controller",
+      "period_ticks": 3,
+      "budget_ns": 1000000,
+      "default_releases": 8
+    },
+    {
+      "id": "actuator",
+      "period_ticks": 3,
+      "budget_ns": 1000000,
+      "default_releases": 8
+    },
+    {
+      "id": "observe",
+      "period_ticks": 6,
+      "budget_ns": 1000000,
+      "default_releases": 4
+    }
+  ],
+  "phases": [
+    {
+      "id": "input",
+      "rate": "plant",
+      "kind": "cpu",
+      "reads": [],
+      "writes": [
+        "command"
+      ],
+      "default_calls": 24
+    },
+    {
+      "id": "physics",
+      "rate": "plant",
+      "kind": "cpu_or_cuda",
+      "reads": [
+        "command"
+      ],
+      "writes": [
+        "plant"
+      ],
+      "default_calls": 24
+    },
+    {
+      "id": "stage",
+      "rate": "plant",
+      "kind": "cpu",
+      "reads": [
+        "plant"
+      ],
+      "writes": [
+        "stage"
+      ],
+      "default_calls": 24
+    },
+    {
+      "id": "sensor",
+      "rate": "sensor",
+      "kind": "cpu_or_xdma",
+      "reads": [],
+      "writes": [
+        "sensor"
+      ],
+      "default_calls": 12
+    },
+    {
+      "id": "controller",
+      "rate": "controller",
+      "kind": "cpu",
+      "reads": [],
+      "writes": [
+        "controller"
+      ],
+      "default_calls": 8
+    },
+    {
+      "id": "actuator",
+      "rate": "actuator",
+      "kind": "cpu_or_xdma",
+      "reads": [],
+      "writes": [
+        "actuator"
+      ],
+      "default_calls": 8
+    },
+    {
+      "id": "aggregate",
+      "rate": "observe",
+      "kind": "cpu",
+      "reads": [],
+      "writes": [
+        "aggregate"
+      ],
+      "default_calls": 4
+    },
+    {
+      "id": "telemetry",
+      "rate": "observe",
+      "kind": "cpu",
+      "reads": [
+        "aggregate"
+      ],
+      "writes": [],
+      "default_calls": 4
+    }
+  ],
+  "resources": [
+    "command",
+    "plant",
+    "stage",
+    "sensor",
+    "controller",
+    "actuator",
+    "aggregate"
+  ],
+  "edges": [
+    [
+      "input",
+      "physics"
+    ],
+    [
+      "physics",
+      "stage"
+    ],
+    [
+      "aggregate",
+      "telemetry"
+    ]
+  ],
+  "channels": [
+    {
+      "id": "plant_sensor",
+      "identity": 26001,
+      "producer": "stage",
+      "consumer": "sensor",
+      "elements_per_entity": 6,
+      "capacity_payload_bytes": 6144,
+      "frame_header_bytes": 120,
+      "ring_slots": 4,
+      "max_age_ticks": 2,
+      "encoding": "signed_int32_le",
+      "scale": [
+        1,
+        1
+      ],
+      "offset": [
+        0,
+        1
+      ],
+      "calibration_identity": 1,
+      "trigger_identity": 1,
+      "sequence_start": 1,
+      "samples_per_frame": 1,
+      "timestamp": "Runtime logical ns on CPU; backend domain/completion ns for device frames, correlated explicitly; never compare uncorrelated clocks",
+      "initial": "zero",
+      "stale": "substitute_initial",
+      "underrun": "substitute_safe",
+      "overrun": "fail_release",
+      "safe": "zero_effort_or_zero_sensor; startup/failure/shutdown outputs require terminal acknowledgement",
+      "device_rule": "M21 sampled descriptor only with exactly one device endpoint; CPU uses cross-rate bytes/metadata, no fake HAL qualification",
+      "units_identity": 26001,
+      "payload_layout": "Fixed 256 entities; field then axis then entity, signed int32 LE; inactive tail zero; sensor field order position then velocity, command field acceleration. Initial plant/sensor frame is zero, actuator_input initial frame is seeded M24 acceleration; safe output payload always zero.",
+      "clock_domain_identity": 1,
+      "sample_interval_ns": 10000000,
+      "device_timeout_ns": 8000000
+    },
+    {
+      "id": "sensor_controller",
+      "identity": 26002,
+      "producer": "sensor",
+      "consumer": "controller",
+      "elements_per_entity": 6,
+      "capacity_payload_bytes": 6144,
+      "frame_header_bytes": 120,
+      "ring_slots": 4,
+      "max_age_ticks": 3,
+      "encoding": "signed_int32_le",
+      "scale": [
+        1,
+        1
+      ],
+      "offset": [
+        0,
+        1
+      ],
+      "calibration_identity": 1,
+      "trigger_identity": 1,
+      "sequence_start": 1,
+      "samples_per_frame": 1,
+      "timestamp": "Runtime logical ns on CPU; backend domain/completion ns for device frames, correlated explicitly; never compare uncorrelated clocks",
+      "initial": "zero",
+      "stale": "substitute_initial",
+      "underrun": "substitute_safe",
+      "overrun": "fail_release",
+      "safe": "zero_effort_or_zero_sensor; startup/failure/shutdown outputs require terminal acknowledgement",
+      "device_rule": "M21 sampled descriptor only with exactly one device endpoint; CPU uses cross-rate bytes/metadata, no fake HAL qualification",
+      "units_identity": 26001,
+      "payload_layout": "Fixed 256 entities; field then axis then entity, signed int32 LE; inactive tail zero; sensor field order position then velocity, command field acceleration. Initial plant/sensor frame is zero, actuator_input initial frame is seeded M24 acceleration; safe output payload always zero.",
+      "clock_domain_identity": 1,
+      "sample_interval_ns": 10000000,
+      "device_timeout_ns": 8000000
+    },
+    {
+      "id": "controller_actuator",
+      "identity": 26003,
+      "producer": "controller",
+      "consumer": "actuator",
+      "elements_per_entity": 3,
+      "capacity_payload_bytes": 3072,
+      "frame_header_bytes": 120,
+      "ring_slots": 4,
+      "max_age_ticks": 3,
+      "encoding": "signed_int32_le",
+      "scale": [
+        1,
+        1
+      ],
+      "offset": [
+        0,
+        1
+      ],
+      "calibration_identity": 1,
+      "trigger_identity": 1,
+      "sequence_start": 1,
+      "samples_per_frame": 1,
+      "timestamp": "Runtime logical ns on CPU; backend domain/completion ns for device frames, correlated explicitly; never compare uncorrelated clocks",
+      "initial": "zero",
+      "stale": "substitute_initial",
+      "underrun": "substitute_safe",
+      "overrun": "fail_release",
+      "safe": "zero_effort_or_zero_sensor; startup/failure/shutdown outputs require terminal acknowledgement",
+      "device_rule": "M21 sampled descriptor only with exactly one device endpoint; CPU uses cross-rate bytes/metadata, no fake HAL qualification",
+      "units_identity": 26002,
+      "payload_layout": "Fixed 256 entities; field then axis then entity, signed int32 LE; inactive tail zero; sensor field order position then velocity, command field acceleration. Initial plant/sensor frame is zero, actuator_input initial frame is seeded M24 acceleration; safe output payload always zero.",
+      "clock_domain_identity": 1,
+      "sample_interval_ns": 10000000,
+      "device_timeout_ns": 8000000
+    },
+    {
+      "id": "actuator_input",
+      "identity": 26004,
+      "producer": "actuator",
+      "consumer": "input",
+      "elements_per_entity": 3,
+      "capacity_payload_bytes": 3072,
+      "frame_header_bytes": 120,
+      "ring_slots": 4,
+      "max_age_ticks": 3,
+      "encoding": "signed_int32_le",
+      "scale": [
+        1,
+        1
+      ],
+      "offset": [
+        0,
+        1
+      ],
+      "calibration_identity": 1,
+      "trigger_identity": 1,
+      "sequence_start": 1,
+      "samples_per_frame": 1,
+      "timestamp": "Runtime logical ns on CPU; backend domain/completion ns for device frames, correlated explicitly; never compare uncorrelated clocks",
+      "initial": "initial_acceleration",
+      "stale": "substitute_initial",
+      "underrun": "substitute_safe",
+      "overrun": "fail_release",
+      "safe": "zero_effort_or_zero_sensor; startup/failure/shutdown outputs require terminal acknowledgement",
+      "device_rule": "M21 sampled descriptor only with exactly one device endpoint; CPU uses cross-rate bytes/metadata, no fake HAL qualification",
+      "units_identity": 26002,
+      "payload_layout": "Fixed 256 entities; field then axis then entity, signed int32 LE; inactive tail zero; sensor field order position then velocity, command field acceleration. Initial plant/sensor frame is zero, actuator_input initial frame is seeded M24 acceleration; safe output payload always zero.",
+      "clock_domain_identity": 1,
+      "sample_interval_ns": 10000000,
+      "device_timeout_ns": 8000000
+    },
+    {
+      "id": "plant_aggregate",
+      "identity": 26005,
+      "producer": "stage",
+      "consumer": "aggregate",
+      "elements_per_entity": 6,
+      "capacity_payload_bytes": 6144,
+      "frame_header_bytes": 120,
+      "ring_slots": 4,
+      "max_age_ticks": 6,
+      "encoding": "signed_int32_le",
+      "scale": [
+        1,
+        1
+      ],
+      "offset": [
+        0,
+        1
+      ],
+      "calibration_identity": 1,
+      "trigger_identity": 1,
+      "sequence_start": 1,
+      "samples_per_frame": 1,
+      "timestamp": "Runtime logical ns on CPU; backend domain/completion ns for device frames, correlated explicitly; never compare uncorrelated clocks",
+      "initial": "zero",
+      "stale": "substitute_initial",
+      "underrun": "substitute_safe",
+      "overrun": "fail_release",
+      "safe": "zero_effort_or_zero_sensor; startup/failure/shutdown outputs require terminal acknowledgement",
+      "device_rule": "M21 sampled descriptor only with exactly one device endpoint; CPU uses cross-rate bytes/metadata, no fake HAL qualification",
+      "units_identity": 26001,
+      "payload_layout": "Fixed 256 entities; field then axis then entity, signed int32 LE; inactive tail zero; sensor field order position then velocity, command field acceleration. Initial plant/sensor frame is zero, actuator_input initial frame is seeded M24 acceleration; safe output payload always zero.",
+      "clock_domain_identity": 1,
+      "sample_interval_ns": 10000000,
+      "device_timeout_ns": 8000000
+    }
+  ],
+  "execution": {
+    "hosts": [
+      "native",
+      "independent_host"
+    ],
+    "workers": [
+      1,
+      2,
+      3
+    ],
+    "default_workers": 2,
+    "entity_grains": [
+      1,
+      4,
+      16,
+      64
+    ],
+    "default_grain": 4,
+    "nested_depth": 2,
+    "axes_tasks": 3,
+    "task_slots": 1024,
+    "queue_slots": 1024,
+    "task_scratch_bytes": 64,
+    "default_inflight": 2,
+    "maximum_inflight": 2,
+    "runtime_budget_bytes": 134217728,
+    "sample_budget_bytes": 33554432,
+    "lifecycle_timeout_ms": 5000,
+    "cleanup_attempts": 2,
+    "policy": "Configure/finalize allocate; callbacks use fixed storage and bounded integer work only. Host control owns threads, clocks, files and drains. Keep borrowed memory/driver/host alive through acknowledged checked stop; failed cleanup retains ownership and invocation failure; no restart after stopped.",
+    "ordering": "Rates in listed registration order, then compiled phase order, substep0; ordinary edges within a domain only; channels select latest preceding producer reference, including earlier same-time domains; first missing predecessor selects explicit initial, repeating horizon wraps to previous cycle.",
+    "staging": "physics completion -> CPU stage copy -> sensor channel; no device/device channel or peer DMA; CUDA and XDMA timelines are backend-local; same scenario identities in all variants."
+  },
+  "controls": {
+    "schema": 1,
+    "envelope": "M22 RTLC v1, 32-byte canonical envelope plus 16-byte body; explicit little-endian fields, unused words zero",
+    "mailbox": 2601,
+    "producer": 2601,
+    "slots": 16,
+    "payload_stride": 64,
+    "initial_sequence": 1,
+    "rollback": "restore_step_entry_generation",
+    "schemas": [
+      {
+        "id": "scenario",
+        "type_id": 2601,
+        "kind": 1,
+        "body_bytes": 16,
+        "fields": [
+          {
+            "id": "target_velocity",
+            "minimum": -64,
+            "maximum": 64,
+            "default": 8,
+            "offset": 0
+          }
+        ]
+      },
+      {
+        "id": "controller",
+        "type_id": 2602,
+        "kind": 2,
+        "body_bytes": 16,
+        "fields": [
+          {
+            "id": "gain",
+            "minimum": 0,
+            "maximum": 4,
+            "default": 1,
+            "offset": 0
+          }
+        ]
+      },
+      {
+        "id": "calibration",
+        "type_id": 2603,
+        "kind": 3,
+        "body_bytes": 16,
+        "fields": [
+          {
+            "id": "offset",
+            "minimum": -16,
+            "maximum": 16,
+            "default": 0,
+            "offset": 0
+          }
+        ]
+      },
+      {
+        "id": "fault",
+        "type_id": 2604,
+        "kind": 4,
+        "body_bytes": 16,
+        "fields": [
+          {
+            "id": "fault_index",
+            "minimum": 0,
+            "maximum": 11,
+            "default": 0,
+            "offset": 0
+          }
+        ]
+      },
+      {
+        "id": "clear_fault",
+        "type_id": 2605,
+        "kind": 5,
+        "body_bytes": 16,
+        "fields": [
+          {
+            "id": "zero",
+            "minimum": 0,
+            "maximum": 0,
+            "default": 0,
+            "offset": 0
+          }
+        ]
+      }
+    ],
+    "boundaries": [
+      {
+        "kind": "scenario",
+        "phase": "input",
+        "tick": 1,
+        "target": "rate"
+      },
+      {
+        "kind": "controller",
+        "phase": "controller",
+        "tick": 3,
+        "target": "rate"
+      },
+      {
+        "kind": "calibration",
+        "phase": "sensor",
+        "tick": 2,
+        "target": "rate"
+      },
+      {
+        "kind": "fault",
+        "phase": "input",
+        "tick": 12,
+        "target": "host_frame"
+      },
+      {
+        "kind": "clear_fault",
+        "phase": "input",
+        "tick": 18,
+        "target": "host_frame"
+      }
+    ],
+    "ordering": "Stage on non-RT host before exact target closes; resolve tick to compiled reference index/domain/phase/release/substep in first supercycle only. Use host-frame target for later-cycle controls, latched by host before its next step; never retarget a closed rate record. Sort mailbox then sequence; later same-kind replaces earlier; copy callback-local payload before return; never retain view.",
+    "replay": "Opt-in trusted M22 v2 admission/generation payload artifact plus M21 mixed-rate actions and sample-owned checkpoint. Reject gaps, changed contract/config/source, generation mismatch, malformed bytes or untrusted payload. Pair Runtime and application snapshots only at successful quiescent step boundary; replay mock/loopback only; never real-device side effects.",
+    "checkpoint_bytes": 4194304,
+    "artifact_bytes": 16777216,
+    "application_latch": "Decode copied generation once per identity into sample-owned per-kind config; untouched kinds persist. Calibration offset changes application values only; fixed HAL calibration identity and descriptor never mutate. No Runtime payload parser or arbitrary application rollback."
+  },
+  "faults": [
+    {
+      "id": "overload",
+      "phase": "input",
+      "tick": 6,
+      "detection_releases": 1,
+      "outcome": "mandatory deadline fail; no late output claimed",
+      "recovery": "fresh_owner",
+      "batch": "M26-02",
+      "status": "planned",
+      "index": 1
+    },
+    {
+      "id": "stale_input",
+      "phase": "controller",
+      "tick": 6,
+      "detection_releases": 1,
+      "outcome": "inclusive max-age exceeded; substitute initial sensor; count stale/substitution",
+      "recovery": "clear_at_boundary",
+      "batch": "M26-02",
+      "status": "planned",
+      "index": 2
+    },
+    {
+      "id": "underflow",
+      "phase": "actuator",
+      "tick": 6,
+      "detection_releases": 1,
+      "outcome": "missing command substitutes zero effort; output safe only after ack",
+      "recovery": "clear_at_boundary",
+      "batch": "M26-04",
+      "status": "planned",
+      "index": 3
+    },
+    {
+      "id": "overrun",
+      "phase": "sensor",
+      "tick": 6,
+      "detection_releases": 1,
+      "outcome": "duplicate publication rejected; release failure; no overwrite",
+      "recovery": "fresh_owner",
+      "batch": "M26-04",
+      "status": "planned",
+      "index": 4
+    },
+    {
+      "id": "device_loss",
+      "phase": "physics",
+      "tick": 6,
+      "detection_releases": 1,
+      "outcome": "terminal device_lost; no completion payload published",
+      "recovery": "reset_then_fresh_owner",
+      "batch": "M26-03",
+      "status": "planned",
+      "index": 5
+    },
+    {
+      "id": "control_rejected",
+      "phase": "input",
+      "tick": 6,
+      "detection_releases": 1,
+      "outcome": "out-of-range typed body rejected off lane; malformed raw record invalid; no sequence advance",
+      "recovery": "restage_valid",
+      "batch": "M26-02",
+      "status": "planned",
+      "index": 6
+    },
+    {
+      "id": "control_replaced",
+      "phase": "controller",
+      "tick": 6,
+      "detection_releases": 1,
+      "outcome": "two valid same-kind records; earlier replaced, only later committed",
+      "recovery": "continue",
+      "batch": "M26-02",
+      "status": "planned",
+      "index": 7
+    },
+    {
+      "id": "reset_failure",
+      "phase": "physics",
+      "tick": 6,
+      "detection_releases": 1,
+      "outcome": "failed reset retains borrowed resources; stop non-success retained",
+      "recovery": "bounded_retry",
+      "batch": "M26-03",
+      "status": "planned",
+      "index": 8
+    },
+    {
+      "id": "stop_failure",
+      "phase": "actuator",
+      "tick": 6,
+      "detection_releases": 1,
+      "outcome": "missing safe acknowledgement leaves safety unknown, invocation failure",
+      "recovery": "bounded_retry",
+      "batch": "M26-04",
+      "status": "planned",
+      "index": 9
+    },
+    {
+      "id": "peer_missing",
+      "phase": "controller",
+      "tick": 6,
+      "detection_releases": 1,
+      "outcome": "one nonblocking read; zero effort on absent/expired peer",
+      "recovery": "fresh_mapping_and_owner",
+      "batch": "M26-02",
+      "status": "planned",
+      "index": 10
+    },
+    {
+      "id": "telemetry_loss",
+      "phase": "telemetry",
+      "tick": 6,
+      "detection_releases": 1,
+      "outcome": "forced capacity pressure exposes exact gaps; replay refused",
+      "recovery": "fresh_owner",
+      "batch": "M26-05",
+      "status": "planned",
+      "index": 11
+    }
+  ],
+  "levers": [
+    {
+      "id": "workers",
+      "values": [
+        1,
+        2,
+        3
+      ],
+      "scope": "host_startup",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    },
+    {
+      "id": "grain",
+      "values": [
+        1,
+        4,
+        16,
+        64
+      ],
+      "scope": "host_startup",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    },
+    {
+      "id": "rate_multiplier",
+      "values": [
+        1,
+        2,
+        4
+      ],
+      "scope": "new_configuration",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    },
+    {
+      "id": "budget_percent",
+      "values": [
+        25,
+        50,
+        100
+      ],
+      "scope": "new_configuration",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    },
+    {
+      "id": "queue_slots",
+      "values": [
+        4,
+        32,
+        1024
+      ],
+      "scope": "new_configuration",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    },
+    {
+      "id": "scratch_bytes",
+      "values": [
+        0,
+        64,
+        256
+      ],
+      "scope": "new_configuration",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    },
+    {
+      "id": "device_depth",
+      "values": [
+        1,
+        2
+      ],
+      "scope": "new_configuration",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    },
+    {
+      "id": "cuda_graph",
+      "values": [
+        0,
+        1
+      ],
+      "scope": "new_configuration",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    },
+    {
+      "id": "transfer_batch",
+      "values": [
+        1,
+        4,
+        16
+      ],
+      "scope": "new_configuration",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    },
+    {
+      "id": "staging_slots",
+      "values": [
+        2,
+        4
+      ],
+      "scope": "new_configuration",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    },
+    {
+      "id": "telemetry_capacity",
+      "values": [
+        0,
+        64,
+        16384
+      ],
+      "scope": "new_configuration",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    },
+    {
+      "id": "control_burst",
+      "values": [
+        1,
+        16,
+        17
+      ],
+      "scope": "off_lane_boundary",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    },
+    {
+      "id": "overload_policy",
+      "values": [
+        0,
+        1
+      ],
+      "scope": "new_configuration",
+      "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start."
+    }
+  ],
+  "benchmarks": {
+    "provider": "rtfw.golden",
+    "provider_version": 1,
+    "descriptor_schema": 1,
+    "warmup": 2,
+    "repetitions": 5,
+    "retain_raw": true,
+    "parameter_limit": 16,
+    "counter_limit": 16,
+    "claim": "portable_characterization; fake clock structural_fixture; no controlled performance or optimality claim",
+    "cases": [
+      {
+        "id": "golden-input",
+        "subsystem": "scenario",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-physics",
+        "subsystem": "physics",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-stage",
+        "subsystem": "host_staging",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-sensor",
+        "subsystem": "sampled_io",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-controller",
+        "subsystem": "controller",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-actuator",
+        "subsystem": "hal",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-aggregate",
+        "subsystem": "aggregation",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-telemetry",
+        "subsystem": "observability",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-host",
+        "subsystem": "executor",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-memory",
+        "subsystem": "memory",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-rates",
+        "subsystem": "multi_rate",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-controls",
+        "subsystem": "live_control",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-replay",
+        "subsystem": "checkpoint_replay",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-external",
+        "subsystem": "external_cil",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      },
+      {
+        "id": "golden-loop",
+        "subsystem": "whole_loop",
+        "batch": "M26-05",
+        "status": "planned",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ]
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "run",
+      "path": "run.json",
+      "fields": [
+        "contract_sha256",
+        "configuration_sha256",
+        "source_commit",
+        "source_tree",
+        "variant",
+        "host",
+        "evidence",
+        "status",
+        "release_counts",
+        "phase_calls",
+        "state_digest",
+        "oracle",
+        "cleanup"
+      ],
+      "batch": "M26-02",
+      "status": "planned",
+      "rule": "No placeholder success files; publish only after complete validation/checked cleanup. Preserve failures separately. Optional unavailable variants report NOT_RUN, never substituted success. M23 benchmark artifact schema remains unchanged."
+    },
+    {
+      "id": "state",
+      "path": "state.bin",
+      "fields": [
+        "schema",
+        "contract_sha256",
+        "count",
+        "tick",
+        "generation",
+        "all_active_fields",
+        "checksum"
+      ],
+      "batch": "M26-02",
+      "status": "planned",
+      "rule": "No placeholder success files; publish only after complete validation/checked cleanup. Preserve failures separately. Optional unavailable variants report NOT_RUN, never substituted success. M23 benchmark artifact schema remains unchanged."
+    },
+    {
+      "id": "replay",
+      "path": "replay.json",
+      "fields": [
+        "contract_sha256",
+        "configuration_sha256",
+        "sample_snapshot_digest",
+        "runtime_snapshot_digest",
+        "trusted_payload_digest",
+        "action_digest",
+        "gap_count",
+        "replay_status"
+      ],
+      "batch": "M26-02",
+      "status": "planned",
+      "rule": "No placeholder success files; publish only after complete validation/checked cleanup. Preserve failures separately. Optional unavailable variants report NOT_RUN, never substituted success. M23 benchmark artifact schema remains unchanged."
+    },
+    {
+      "id": "fault",
+      "path": "faults.json",
+      "fields": [
+        "contract_sha256",
+        "fault_id",
+        "injection_tick",
+        "observed_status",
+        "detection_release",
+        "safe_ack",
+        "reset_status",
+        "cleanup_status",
+        "recovery_status"
+      ],
+      "batch": "M26-05",
+      "status": "planned",
+      "rule": "No placeholder success files; publish only after complete validation/checked cleanup. Preserve failures separately. Optional unavailable variants report NOT_RUN, never substituted success. M23 benchmark artifact schema remains unchanged."
+    },
+    {
+      "id": "benchmark",
+      "path": "benchmark/",
+      "fields": [
+        "descriptor",
+        "raw_samples",
+        "summary",
+        "environment",
+        "correctness",
+        "cleanup"
+      ],
+      "batch": "M26-05",
+      "status": "planned",
+      "rule": "No placeholder success files; publish only after complete validation/checked cleanup. Preserve failures separately. Optional unavailable variants report NOT_RUN, never substituted success. M23 benchmark artifact schema remains unchanged."
+    },
+    {
+      "id": "coverage",
+      "path": "coverage.json",
+      "fields": [
+        "contract_sha256",
+        "capability",
+        "source",
+        "test",
+        "artifact",
+        "status",
+        "claim_boundary"
+      ],
+      "batch": "M26-06",
+      "status": "planned",
+      "rule": "No placeholder success files; publish only after complete validation/checked cleanup. Preserve failures separately. Optional unavailable variants report NOT_RUN, never substituted success. M23 benchmark artifact schema remains unchanged."
+    }
+  ],
+  "telemetry": {
+    "identity": "scenario_id + canonical contract SHA256 + source commit/tree + configuration digest + variant + host + fresh session generation",
+    "application_schema": 1,
+    "rate_schema": 1,
+    "mixed_rate_schema": 1,
+    "live_control_schema": 1,
+    "global_schema": 2,
+    "capacity_each": 16384,
+    "drain": "outside callbacks after each settled host step; snapshot before checked stop releases backing; no RT file I/O",
+    "loss": "report sequence gaps/dropped/overwritten separately; any loss invalidates deterministic replay, never silently fabricate payloads",
+    "fields": [
+      "phase_calls",
+      "release_counts",
+      "entity_checks",
+      "state_digest",
+      "command_digest",
+      "control_generation",
+      "sample_sequence",
+      "sample_age_ns",
+      "sample_status",
+      "fault_id",
+      "terminal_status",
+      "safe_ack",
+      "cleanup_status",
+      "gap_count"
+    ]
+  },
+  "variants": [
+    {
+      "id": "cpu",
+      "batch": "M26-02",
+      "status": "planned",
+      "evidence": "portable_simulation",
+      "requirements": [
+        "runtime"
+      ],
+      "device_phases": []
+    },
+    {
+      "id": "sim_cuda",
+      "batch": "M26-03",
+      "status": "planned",
+      "evidence": "simulated_driver_protocol",
+      "requirements": [
+        "runtime",
+        "injected_cuda_driver"
+      ],
+      "device_phases": [
+        "physics"
+      ]
+    },
+    {
+      "id": "sim_xdma",
+      "batch": "M26-04",
+      "status": "planned",
+      "evidence": "simulated_driver_protocol",
+      "requirements": [
+        "runtime",
+        "injected_xdma_driver"
+      ],
+      "device_phases": [
+        "sensor",
+        "actuator"
+      ]
+    },
+    {
+      "id": "sim_combined",
+      "batch": "M26-04",
+      "status": "planned",
+      "evidence": "simulated_driver_protocol",
+      "requirements": [
+        "runtime",
+        "injected_cuda_driver",
+        "injected_xdma_driver"
+      ],
+      "device_phases": [
+        "physics",
+        "sensor",
+        "actuator"
+      ]
+    },
+    {
+      "id": "external_cil",
+      "batch": "M26-02",
+      "status": "planned",
+      "evidence": "separate_process_software",
+      "requirements": [
+        "runtime",
+        "fresh_shared_memory_mapping"
+      ],
+      "device_phases": []
+    },
+    {
+      "id": "real_cuda",
+      "batch": "M18",
+      "status": "not_run",
+      "evidence": "requires_named_physical_tuple",
+      "requirements": [
+        "cuda_toolkit",
+        "owned_gpu",
+        "driver"
+      ],
+      "device_phases": [
+        "physics"
+      ]
+    },
+    {
+      "id": "real_xdma",
+      "batch": "M18",
+      "status": "not_run",
+      "evidence": "requires_named_physical_tuple",
+      "requirements": [
+        "owned_fpga",
+        "driver",
+        "bitstream",
+        "topology"
+      ],
+      "device_phases": [
+        "sensor",
+        "actuator"
+      ]
+    },
+    {
+      "id": "unreal",
+      "batch": "M19",
+      "status": "not_run",
+      "evidence": "requires_engine_lifecycle_validation",
+      "requirements": [
+        "unreal_host"
+      ],
+      "device_phases": []
+    }
+  ],
+  "external_cil": {
+    "protocol": "Sample-owned M26 vector protocol v1; reuse M25 platform publication/ownership principles, never relabel the scalar M25 wire schema. Fixed 256x3 int32 velocity/command arrays, canonical LE, count and generation, sequence, issue/expiry tick, payload digest and zero unused entries. Encode off lane into fixed SPSC slots; CPU controller phase consumes copied snapshot only. Fresh mapping/name/generation on reconnect; one writer, no overwrite; stale/missing peer gives zero effort then fresh-owner recovery. Exact byte-offset codec is M26-02 implementation acceptance, not an extension of any SDK ABI.",
+    "polls_per_boundary": 1,
+    "peer_timeout_ms": 5000,
+    "platforms": [
+      "Linux x86-64",
+      "Windows x64"
+    ]
+  },
+  "sources": [
+    {
+      "path": "rt/include/rt/runtime.hpp",
+      "tokens": [
+        "struct RateDomainRegistration",
+        "struct CrossRateChannelRegistration",
+        "struct SampledIoFrameHeader",
+        "register_sampled_io_channel"
+      ]
+    },
+    {
+      "path": "rt/include/rt/live_control.hpp",
+      "tokens": [
+        "LiveControlTypeTraits",
+        "LiveControlTypedPayload"
+      ]
+    },
+    {
+      "path": "samples/cuda_physics/model.hpp",
+      "tokens": [
+        "matches_oracle",
+        "initial_particle"
+      ]
+    },
+    {
+      "path": "samples/host_adapter/jobs.hpp",
+      "tokens": [
+        "HostExecutorJob"
+      ]
+    },
+    {
+      "path": "samples/cil_shared_memory/channel.hpp",
+      "tokens": [
+        "struct Endpoint",
+        "struct alignas(64) Region"
+      ]
+    },
+    {
+      "path": "bench/include/rtfw/benchmark.hpp",
+      "tokens": [
+        "struct Descriptor",
+        "struct ProviderV1"
+      ]
+    }
+  ],
+  "nonclaims": [
+    "production_vehicle_model",
+    "general_physics_engine",
+    "peer_dma",
+    "hardware_qualification",
+    "rt1",
+    "rt2",
+    "controlled_performance",
+    "unreal_completion",
+    "release",
+    "deployment",
+    "m25_human_acceptance",
+    "m26_completion"
+  ]
+}

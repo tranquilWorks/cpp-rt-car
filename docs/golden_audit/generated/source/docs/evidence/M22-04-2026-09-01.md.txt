@@ -1,0 +1,126 @@
+# M22-04 assurance evidence
+
+Status: local candidate evidence complete; mandatory hosted CI and human review
+remain pending on the draft pull request.
+
+## Baselines and scope
+
+- Target baseline: `0bf54966be63817969468c69c5cd183ad66ab358`
+  (merged target pull request 249).
+- Approved control file: `products/cpp-rt-car/batches/M22-04.yaml` at
+  control merge `2413cc3ab12704da0b91497ed85ec9fee550ac33`; the file pins source
+  revision `1b1c6fe0628ce57bda3be988bfbcbeb9107460f9`.
+- Initial worktree: clean `agent/m22-04-live-control-sdk-stress` at the exact
+  target baseline.
+- Retained M22-01 through M22-03 evidence is immutable and remains present.
+- Unreal, executable/shared-library hot reload, hardware, qualification,
+  release, deployment, and production surfaces are outside this batch.
+
+## Acceptance map prepared before implementation
+
+| ID | Requirement | Code ownership | Verification | Status |
+|---|---|---|---|---|
+| A01 | Exact merged M22-03 baseline and retained evidence | governance, docs | baseline assertions, contract checks, diff review | local pass |
+| A02 | Optional installed header-only C++ source API; raw API retained | `rt/live_control.hpp`, install/package contracts | standalone header and installed consumer | local pass; hosted compiler matrix pending |
+| A03 | Exact fixed little-endian envelope and unchanged Runtime/artifact schemas | SDK header, SDK tests | byte-layout and mutation tests, release contract | local pass |
+| A04 | Fixed compile-time codecs and closed identities/kind/extent | SDK header and type specializations | concept rejection and codec tests | local pass; human API review pending |
+| A05 | Exact host/rate builders with explicit handle, sequence, target, digest, and status | SDK header, sample, consumer | builder and package tests | local pass |
+| A06 | Transactional bounded decode and off-lane semantic parsing | SDK header, docs | malformed/digest/semantic/output tests | local pass; human callback review pending |
+| A07 | Four supported application types, clear fault, actions, rollback, and checked stop | `samples/live_control_typed.cpp` | sample CTest and TSan execution | local pass |
+| A08 | Exact capacity, payload, concurrency, reclamation, loss, and replay limits | stress and retained raw tests | finite operation-count tests | local pass; hosted sanitizer matrix pending |
+| A09 | Watchdog/rollback orthogonality and no application/backend rollback claim | stress tests, docs | callback failure test and claim review | local pass; human claim review pending |
+| A10 | Repeated lifecycle, stopped/stale behavior, and multiple-Runtime isolation | stress and retained tests | 24 lifecycle loops and 8 concurrent instances | local pass |
+| A11 | No allocation or hidden Runtime storage/lane/provider row | SDK header, no-allocation test, memory docs | guarded construction/decode/admission/settlement | local pass |
+| A12 | Exact installed inventory and relocated consumer behavior | CMake/package consumer/release ledger | clean non-default-prefix install and 17 consumers | local pass; hosted archive relocation pending |
+| A13 | GCC/Clang/MSVC, determinism, TSan, assurance, ABI, and governance gates | CI, tools, evidence | local strict/full/TSan/ABI plus hosted matrix | local available gates pass; hosted and Clang 14 assurance pending |
+
+## Changed and preserved invariants
+
+M22-04 adds the optional source-only `<rt/live_control.hpp>` entrypoint. It
+defines caller-owned fixed storage, a 32-byte canonical envelope, compile-time
+application traits, exact host/rate record builders, and bounded transactional
+decode. The helper never stages, retries, retargets, advances a producer
+sequence, hides an admission result, starts a thread, performs I/O, or owns
+teardown. The raw M22 API remains directly usable.
+
+The retained empty raw `clear_fault` form remains valid. The only raw-path
+repair also permits a nonempty canonical typed clear-fault payload. Numeric
+values, record layouts, storage ownership, admission semantics, actions,
+checkpoints, and replay formats are unchanged.
+
+Stable C ABI v8 remains exactly 70 exports with fingerprint
+`0xd0e7a5a14bf35f97` and SONAME 8. Device ABI v1, extension ABI v1, HAL tables,
+Runtime/profile/artifact/telemetry schemas, release 1.2.1, license, support and
+qualification matrices, and all prior evidence remain unchanged. Runtime
+rollback owns only the Runtime generation; it does not reverse application,
+backend, process, or physical effects.
+
+## Commands and results
+
+The following local checks passed with exit code 0:
+
+- Baseline assertions for exact `HEAD`, baseline ancestry, and retained
+  `docs/evidence/M22-03-2026-09-01.md`.
+- Standalone GCC 13 C++20 compilation of `<rt/live_control.hpp>` with
+  `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror`.
+- Focused execution of the SDK/stress/raw-clear-fault filter: 9 of 9 tests
+  passed.
+- `/root/.local/bin/cmake -S . -B build/agent-full
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON
+  -DRTFW_BUILD_EXPERIMENTAL=ON -DENABLE_RAPIDCHECK=ON
+  -DSIM_SANITIZERS= -DSIM_WERROR=ON` and the parallel full build.
+- The exact M22 full-build GoogleTest filter ran 34 tests from 5 suites; all
+  passed. The focused CTest expression ran the typed sample and three M22
+  tests; all 4 passed.
+- `./scripts/agent-verify.sh contract`, `quick`, and `full` passed. Quick ran
+  33 of 33 CTests; full ran 37 of 37 CTests. The pinned GoogleTest submodule
+  was initialized at `7e17b15f1547bb8dd9c2fed91043b7af3437387f` before these gates.
+- A clean `ENABLE_TESTS=OFF`, non-default-prefix install configured and built
+  `tests/package_consumer`; all 17 installed consumers passed, including the
+  exact header inventory, standalone `<rt/live_control.hpp>` compile, typed
+  consumer, raw consumer, compatibility aliases, and pure-C project.
+- A GCC 13 ThreadSanitizer build with `SIM_SANITIZERS=thread` and
+  `SIM_WERROR=ON` ran the 34 selected SDK/stress/mailbox/action/no-allocation
+  tests with `TSAN_OPTIONS=halt_on_error=1`; all passed. The typed sample also
+  passed under the same TSan build.
+- `python3 tools/check_docs_contract.py` reported
+  `Documentation contract OK`.
+- `python3 tools/check_release_contract.py --write-hashes` followed by the
+  non-writing checker reported `Release contract OK`.
+- `python3 tools/check_c_abi.py --library build/agent-full/librtfw.so`
+  reported exactly 70 C ABI v8 symbols and fingerprint
+  `0xd0e7a5a14bf35f97`; `readelf -d` reported `librtfw.so.8`.
+- `git diff --check` passed.
+
+The batch contract records the portable-assurance mode after its options, but
+the script requires the mode first. The recorded ordering returned usage with
+exit code 2. The equivalent accepted command,
+`./scripts/verify-portable-assurance.sh all --build-dir
+build/portable-assurance --source-commit <HEAD>`, verified and wrote the pinned
+dependency identity report, then stopped at the fail-closed toolchain check
+because this runner has no `clang-14`, `clang++-14`, or `clang-tidy-14`.
+Static analysis, libFuzzer, deterministic archive production, relocated archive
+consumption, SBOM/provenance generation, and artifact comparison therefore
+remain pending in the mandatory hosted Clang 14 assurance job. The local GCC
+results are not relabeled as that assurance result.
+
+## Residual risks and validation not performed
+
+Hosted GCC 11 and Clang 14 Debug/RelWithDebInfo ASan/UBSan, Windows Server 2022
+MSVC v143, exact GCC 11 TSan, FMA-on/off artifact exchange, Clang 14
+static/fuzz/artifact assurance, archive relocation, dependency review, and
+human SDK/canonical-format/callback/concurrency/compatibility/privacy/claim
+review remain pending on the draft pull request.
+
+No local result establishes physical control, vendor CUDA/XDMA/DAC/DAQ/CAN/IIO
+behavior, executable or Unreal hot reload, HIL, controlled timing, electrical
+or calibration behavior, RT1/RT2 qualification, signing, publication, release,
+deployment, or production readiness.
+
+## Claim boundary
+
+The maximum authorized claim is an optional bounded source-level C++ helper for
+canonical fixed typed data over the existing transactional live-control API,
+plus deterministic portable CPU/mock/loopback sample and stress evidence.
+Hosted portable results are not physical-device, timing, real-time, release, or
+production qualification evidence.

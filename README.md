@@ -16,8 +16,8 @@ versioned observability/replay, and asynchronous device integration.
 
 ## Start with the installed SDK
 
-You need CMake 3.20+, a C++20 compiler and its platform build tools. The SDK
-build below needs no GoogleTest checkout, Python, CUDA toolkit or experimental
+You need CMake 3.20+, Python 3 (for source-kit provenance), a C++20 compiler and
+its platform build tools. The SDK build below needs no GoogleTest checkout, CUDA toolkit or experimental
 SimCore dependencies. Run these Bash commands from the RTFW source root:
 
 <!-- ci-verified: .github/workflows/docs-contract.yml -->
@@ -544,5 +544,16 @@ archives with a generated source-linked API reference, relevant guides and
 [executable recipes](docs/sdk/generated/recipes.md). The reference covers all
 default public headers and labels optional components explicitly. Docs generation
 is a developer check; installing or building the default SDK needs no generator.
-M25 software delivery does not establish independent novice review, M26, physical/RT,
+M25 software delivery does not establish independent novice review, physical/RT,
 Unreal or release qualification.
+
+## Golden system and capability audit
+
+The [offline golden manual](docs/golden_audit/generated/index.html) maps the
+complete CPU, simulated CUDA/XDMA/combined and external-controller scenario to
+source, ownership, clocks, controls, failure/recovery, benchmarks and tuning.
+The [audit guide](docs/golden_audit.md) includes the installed one-command workflow
+and bounded regression soak. All 112 canonical capability requirements retain
+explicit implementation, engineering, manual-gate and claim-limit dispositions.
+M18 physical/RT, M19 Unreal, M20 release engineering and independent M25 human
+review remain separate; portable simulation does not close those requirements.

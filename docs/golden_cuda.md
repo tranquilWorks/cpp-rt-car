@@ -58,8 +58,10 @@ evidence into a fresh output directory after checked cleanup. It cannot emit
 simulated replay PASS. Physical execution remains NOT RUN until performed on a
 named accessible tuple.
 
-XDMA/combined execution, showcase/benchmarking, final M26 audit, independent
-human review, physical/RT/Unreal qualification and release remain separate work.
+M26-04 and M26-05 deliver XDMA/combined execution and showcase benchmarks.
+The [M26-06 audit](golden_audit.md) records the current source and remaining
+engineering/review/qualification work. Independent human review, physical/RT/
+Unreal qualification and release remain separate.
 
 The [XDMA sampled-I/O reference](golden_xdma.md) adds an installed simulated
 XDMA/combined kit using the same frozen logical scenario.

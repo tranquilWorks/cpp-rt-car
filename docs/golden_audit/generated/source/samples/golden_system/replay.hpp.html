@@ -1,0 +1,89 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_system/replay.hpp</title><h1>samples/golden_system/replay.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;session.hpp&quot;</span>
+<span id="L3">namespace golden {</span>
+<span id="L4">struct Replay {</span>
+<span id="L5">  std::vector&lt;std::byte&gt; initial, active, trusted;</span>
+<span id="L6">  std::vector&lt;rt::ReplayInputRecord&gt; inputs;</span>
+<span id="L7">  std::vector&lt;std::array&lt;std::byte, 3073&gt;&gt; external;</span>
+<span id="L8">  std::size_t first_tick = 0;</span>
+<span id="L9">  rt::LiveControlReplayResult result{};</span>
+<span id="L10">  explicit Replay(std::size_t ticks, bool peer = false, std::size_t first = 0)</span>
+<span id="L11">      : inputs(ticks - first), external(peer ? ticks - first : 0),</span>
+<span id="L12">        first_tick(first) {}</span>
+<span id="L13">  bool begin(Session &amp;s) {</span>
+<span id="L14">    initial = s.checkpoint(0);</span>
+<span id="L15">    return !initial.empty();</span>
+<span id="L16">  }</span>
+<span id="L17">  void record(const Session &amp;s, std::size_t tick) {</span>
+<span id="L18">    const auto i = tick - first_tick;</span>
+<span id="L19">    inputs[i] = {s.frame(tick), 2601, {}};</span>
+<span id="L20">    if (!external.empty()) {</span>
+<span id="L21">      auto &amp;bytes = external[i];</span>
+<span id="L22">      bytes[0] = std::byte(s.world.external_ready ? 1 : 0);</span>
+<span id="L23">      std::size_t at = 1;</span>
+<span id="L24">      for (const auto &amp;axis : s.world.external_command)</span>
+<span id="L25">        for (auto value : axis) {</span>
+<span id="L26">          put32(bytes, at, value);</span>
+<span id="L27">          at += 4;</span>
+<span id="L28">        }</span>
+<span id="L29">      inputs[i].payload = bytes;</span>
+<span id="L30">    }</span>
+<span id="L31">  }</span>
+<span id="L32">  static rt::CallbackResult input(void *opaque,</span>
+<span id="L33">                                  const rt::ReplayInputView &amp;in) noexcept {</span>
+<span id="L34">    auto &amp;s = *static_cast&lt;Session *&gt;(opaque);</span>
+<span id="L35">    if (in.input_type != 2601 || !in.frame.nominal_release_ns ||</span>
+<span id="L36">        !s.world.decode())</span>
+<span id="L37">      return rt::CallbackResult::error;</span>
+<span id="L38">    if (s.world.options.external) {</span>
+<span id="L39">      if (in.payload.size() != 3073 ||</span>
+<span id="L40">          std::to_integer&lt;unsigned&gt;(in.payload[0]) &gt; 1)</span>
+<span id="L41">        return rt::CallbackResult::error;</span>
+<span id="L42">      s.world.external_ready = in.payload[0] == std::byte{1};</span>
+<span id="L43">      std::size_t at = 1;</span>
+<span id="L44">      for (auto &amp;axis : s.world.external_command)</span>
+<span id="L45">        for (std::size_t i = 0; i &lt; fixed::capacity; ++i) {</span>
+<span id="L46">          const auto value = get32(in.payload, at);</span>
+<span id="L47">          at += 4;</span>
+<span id="L48">          if (value &lt; -4 || value &gt; 4 || (i &gt;= s.world.options.count &amp;&amp; value))</span>
+<span id="L49">            return rt::CallbackResult::error;</span>
+<span id="L50">          axis[i] = value;</span>
+<span id="L51">        }</span>
+<span id="L52">    } else if (!in.payload.empty())</span>
+<span id="L53">      return rt::CallbackResult::error;</span>
+<span id="L54">    s.clock.now.store(*in.frame.nominal_release_ns, std::memory_order_relaxed);</span>
+<span id="L55">    return rt::CallbackResult::ok;</span>
+<span id="L56">  }</span>
+<span id="L57">  bool seal(Session &amp;s) {</span>
+<span id="L58">    rt::ArtifactWriteResult write;</span>
+<span id="L59">    auto status =</span>
+<span id="L60">        s.runtime-&gt;write_active_replay_artifact(initial, inputs, {}, write);</span>
+<span id="L61">    if (status != rt::Status::capacity_exceeded || !write.required_bytes ||</span>
+<span id="L62">        write.required_bytes &gt; fixed::artifact_bytes)</span>
+<span id="L63">      return false;</span>
+<span id="L64">    active.resize(write.required_bytes);</span>
+<span id="L65">    if (s.runtime-&gt;write_active_replay_artifact(initial, inputs, active,</span>
+<span id="L66">                                                write) != rt::Status::ok)</span>
+<span id="L67">      return false;</span>
+<span id="L68">    status = s.runtime-&gt;write_live_control_replay_artifact(</span>
+<span id="L69">        initial, active, rt::LiveControlNestedArtifactKind::active_replay, {},</span>
+<span id="L70">        write);</span>
+<span id="L71">    if (status != rt::Status::capacity_exceeded || !write.required_bytes ||</span>
+<span id="L72">        write.required_bytes &gt; fixed::artifact_bytes)</span>
+<span id="L73">      return false;</span>
+<span id="L74">    trusted.resize(write.required_bytes);</span>
+<span id="L75">    return s.runtime-&gt;write_live_control_replay_artifact(</span>
+<span id="L76">               initial, active,</span>
+<span id="L77">               rt::LiveControlNestedArtifactKind::active_replay, trusted,</span>
+<span id="L78">               write) == rt::Status::ok;</span>
+<span id="L79">  }</span>
+<span id="L80">  bool verify(Session &amp;s) noexcept {</span>
+<span id="L81">    const auto expected = s.world.canonical;</span>
+<span id="L82">    auto status = s.runtime-&gt;replay_live_control(trusted, input, &amp;s, &amp;result);</span>
+<span id="L83">    return status == rt::Status::ok &amp;&amp;</span>
+<span id="L84">           result.frames_replayed == inputs.size() &amp;&amp;</span>
+<span id="L85">           result.mismatch_status == rt::Status::ok &amp;&amp;</span>
+<span id="L86">           s.world.canonical == expected &amp;&amp; s.world.decode();</span>
+<span id="L87">  }</span>
+<span id="L88">};</span>
+<span id="L89">} // namespace golden</span></pre></html>

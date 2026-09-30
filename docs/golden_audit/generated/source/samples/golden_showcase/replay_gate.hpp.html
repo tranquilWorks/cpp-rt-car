@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_showcase/replay_gate.hpp</title><h1>samples/golden_showcase/replay_gate.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;replay.hpp&quot;</span>
+<span id="L3">namespace golden::showcase {</span>
+<span id="L4">// Off-lane source-kit policy. Validate observation continuity and originating</span>
+<span id="L5">// owner before invoking Runtime; no foreign artifact identity is rewritten.</span>
+<span id="L6">inline rt::Status checked_replay(Session &amp;owner, Replay &amp;replay,</span>
+<span id="L7">                                  std::uint64_t gaps,</span>
+<span id="L8">                                  std::uint64_t &amp;runtime_calls) {</span>
+<span id="L9">  if (gaps) return rt::Status::resource_exhausted;</span>
+<span id="L10">  rt::RateTelemetryMetadata metadata;</span>
+<span id="L11">  if (replay.trusted.size() &lt; 400 ||</span>
+<span id="L12">      owner.runtime-&gt;rate_telemetry_metadata(metadata) != rt::Status::ok ||</span>
+<span id="L13">      get(replay.trusted,32,8) != metadata.runtime_id)</span>
+<span id="L14">    return rt::Status::invalid_argument;</span>
+<span id="L15">  ++runtime_calls;</span>
+<span id="L16">  return replay.verify(owner) ? rt::Status::ok : rt::Status::invalid_state;</span>
+<span id="L17">}</span>
+<span id="L18">}</span></pre></html>

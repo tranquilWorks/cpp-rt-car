@@ -1,0 +1,570 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/golden_cuda/test_cuda.cpp</title><h1>tests/golden_cuda/test_cuda.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;../../samples/golden_cuda/owner.hpp&quot;</span>
+<span id="L2">#include &quot;../../samples/golden_cuda/replay.hpp&quot;</span>
+<span id="L3">#include &quot;../../samples/golden_system/oracle.hpp&quot;</span>
+<span id="L4">#include &quot;allocation.hpp&quot;</span>
+<span id="L5">#include &lt;algorithm&gt;</span>
+<span id="L6">#include &lt;charconv&gt;</span>
+<span id="L7">#include &lt;cstddef&gt;</span>
+<span id="L8">#include &lt;filesystem&gt;</span>
+<span id="L9">#include &lt;fstream&gt;</span>
+<span id="L10">#include &lt;future&gt;</span>
+<span id="L11">#include &lt;iostream&gt;</span>
+<span id="L12"></span>
+<span id="L13">#define CHECK(x)                                                               \</span>
+<span id="L14">  do {                                                                         \</span>
+<span id="L15">    if (!(x)) {                                                                \</span>
+<span id="L16">      std::cerr &lt;&lt; __func__ &lt;&lt; &#x27;:&#x27; &lt;&lt; __LINE__ &lt;&lt; &quot; failed: &quot; #x &lt;&lt; &#x27;\n&#x27;;      \</span>
+<span id="L17">      return false;                                                            \</span>
+<span id="L18">    }                                                                          \</span>
+<span id="L19">  } while (false)</span>
+<span id="L20">using namespace golden;</span>
+<span id="L21">using namespace golden::cuda;</span>
+<span id="L22">using rt::Status;</span>
+<span id="L23">namespace allocation = rtfw_physics_allocation;</span>
+<span id="L24"></span>
+<span id="L25">bool same_semantics(const World &amp;a, const World &amp;b) {</span>
+<span id="L26">  // Each complete state retains its genuine generation and checksum. Those</span>
+<span id="L27">  // opaque owner-bound values are checked by that owner&#x27;s trusted replay.</span>
+<span id="L28">  for (std::size_t i = 0; i &lt; a.canonical.size(); ++i) {</span>
+<span id="L29">    if ((i &gt;= 64 &amp;&amp; i &lt; 72) || (i &gt;= 480 &amp;&amp; i &lt; 488))</span>
+<span id="L30">      continue;</span>
+<span id="L31">    if (a.canonical[i] != b.canonical[i])</span>
+<span id="L32">      return false;</span>
+<span id="L33">  }</span>
+<span id="L34">  return bool(a.configuration.generation) == bool(b.configuration.generation);</span>
+<span id="L35">}</span>
+<span id="L36">bool counts(Owner &amp;owner, std::uint64_t steps) {</span>
+<span id="L37">  auto &amp;d = *owner.driver;</span>
+<span id="L38">  rt::DeviceTimelineInfo t;</span>
+<span id="L39">  CHECK(owner.physics-&gt;timeline(t));</span>
+<span id="L40">  CHECK(owner.physics-&gt;providers == steps &amp;&amp;</span>
+<span id="L41">        owner.physics-&gt;publications == steps);</span>
+<span id="L42">  CHECK(t.completed_value == steps &amp;&amp; t.last_accepted_value == steps);</span>
+<span id="L43">  CHECK(d.uploads == 2 * steps &amp;&amp; d.copies == steps &amp;&amp; d.downloads == steps);</span>
+<span id="L44">  CHECK(d.kernels == (owner.dispatch == Dispatch::kernel ? steps : 0));</span>
+<span id="L45">  CHECK(d.graphs == (owner.dispatch == Dispatch::graph ? steps : 0));</span>
+<span id="L46">  CHECK(d.records == steps &amp;&amp; d.queries &gt;= steps);</span>
+<span id="L47">  CHECK(d.registrations == 2 &amp;&amp; d.backend_allocations == 0 &amp;&amp;</span>
+<span id="L48">        d.backend_frees == 0);</span>
+<span id="L49">  CHECK(d.protocol_ok &amp;&amp; d.faults == 0);</span>
+<span id="L50">  return true;</span>
+<span id="L51">}</span>
+<span id="L52">bool close(Owner &amp;owner) {</span>
+<span id="L53">  CHECK(owner.close() == Status::ok);</span>
+<span id="L54">  CHECK(owner.memory-&gt;acquisitions == owner.memory-&gt;releases);</span>
+<span id="L55">  CHECK(owner.jobs-&gt;accepted == owner.jobs-&gt;completed);</span>
+<span id="L56">  if (owner.driver) {</span>
+<span id="L57">    CHECK(owner.driver-&gt;clean() &amp;&amp; owner.driver-&gt;protocol_ok);</span>
+<span id="L58">    CHECK(owner.driver-&gt;registrations == owner.driver-&gt;unregistrations);</span>
+<span id="L59">    CHECK(owner.driver-&gt;event_creates == owner.driver-&gt;event_destroys);</span>
+<span id="L60">  }</span>
+<span id="L61">  return true;</span>
+<span id="L62">}</span>
+<span id="L63">bool parity(Options options, int selected_dispatch = -1,</span>
+<span id="L64">            const std::filesystem::path &amp;reference = {}) {</span>
+<span id="L65">  std::cout &lt;&lt; &quot;parity host=&quot; &lt;&lt; options.host &lt;&lt; &quot; count=&quot; &lt;&lt; options.count</span>
+<span id="L66">            &lt;&lt; &quot; ticks=&quot; &lt;&lt; options.ticks &lt;&lt; &quot; workers=&quot; &lt;&lt; options.workers</span>
+<span id="L67">            &lt;&lt; &quot; grain=&quot; &lt;&lt; options.grain &lt;&lt; std::endl;</span>
+<span id="L68">  // Keep exact CPU bytes from every tick, then compare both device paths.</span>
+<span id="L69">  // Only the owner under test runs workers; concurrency has a separate test.</span>
+<span id="L70">  std::vector&lt;StateBytes&gt; cpu_states(options.ticks);</span>
+<span id="L71">  std::vector&lt;std::byte&gt; cpu_checkpoint;</span>
+<span id="L72">  World expected(options);</span>
+<span id="L73">  if (selected_dispatch &gt; 0) {</span>
+<span id="L74">    std::ifstream states(reference.string() + &quot;.states&quot;,</span>
+<span id="L75">                         std::ios::binary | std::ios::ate);</span>
+<span id="L76">    CHECK(states &amp;&amp;</span>
+<span id="L77">          states.tellg() == static_cast&lt;std::streamoff&gt;(cpu_states.size() *</span>
+<span id="L78">                                                        sizeof(StateBytes)));</span>
+<span id="L79">    states.seekg(0);</span>
+<span id="L80">    states.read(</span>
+<span id="L81">        reinterpret_cast&lt;char *&gt;(cpu_states.data()),</span>
+<span id="L82">        static_cast&lt;std::streamsize&gt;(cpu_states.size() * sizeof(StateBytes)));</span>
+<span id="L83">    CHECK(bool(states));</span>
+<span id="L84">    std::ifstream checkpoint(reference.string() + &quot;.checkpoint&quot;,</span>
+<span id="L85">                             std::ios::binary | std::ios::ate);</span>
+<span id="L86">    CHECK(checkpoint &amp;&amp; checkpoint.tellg() &gt; 0 &amp;&amp;</span>
+<span id="L87">          checkpoint.tellg() &lt;=</span>
+<span id="L88">              static_cast&lt;std::streamoff&gt;(fixed::checkpoint_bytes));</span>
+<span id="L89">    cpu_checkpoint.resize(static_cast&lt;std::size_t&gt;(checkpoint.tellg()));</span>
+<span id="L90">    checkpoint.seekg(0);</span>
+<span id="L91">    checkpoint.read(reinterpret_cast&lt;char *&gt;(cpu_checkpoint.data()),</span>
+<span id="L92">                    static_cast&lt;std::streamsize&gt;(cpu_checkpoint.size()));</span>
+<span id="L93">    CHECK(bool(checkpoint));</span>
+<span id="L94">  }</span>
+<span id="L95">  for (auto dispatch : {Dispatch::cpu, Dispatch::kernel, Dispatch::graph}) {</span>
+<span id="L96">    if (selected_dispatch &gt;= 0 &amp;&amp; int(dispatch) != selected_dispatch)</span>
+<span id="L97">      continue;</span>
+<span id="L98">    std::cout &lt;&lt; &quot;dispatch=&quot; &lt;&lt; int(dispatch) &lt;&lt; &quot; begin&quot; &lt;&lt; std::endl;</span>
+<span id="L99">    Owner owner(options, dispatch);</span>
+<span id="L100">    auto policy = Memory::policy();</span>
+<span id="L101">    policy.thread_policy_count = 1;</span>
+<span id="L102">    policy.thread_policies[0].role = rt::thread_role_executor_worker;</span>
+<span id="L103">    policy.thread_policies[0].policy.wait_strategy = rt::WaitStrategy::park;</span>
+<span id="L104">    CHECK(owner.prepare(&amp;policy) == Status::ok);</span>
+<span id="L105">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L106">    CHECK(owner.session-&gt;runtime-&gt;cpu_memory_policy_report(report));</span>
+<span id="L107">    bool native_policy = false;</span>
+<span id="L108">    if (!options.host) {</span>
+<span id="L109">      for (std::size_t i = 0; i &lt; report.thread_count; ++i) {</span>
+<span id="L110">        const auto &amp;row = report.threads[i];</span>
+<span id="L111">        if (row.role != rt::thread_role_executor_worker)</span>
+<span id="L112">          continue;</span>
+<span id="L113">        native_policy = true;</span>
+<span id="L114">        CHECK(row.requested.wait_strategy == rt::WaitStrategy::park);</span>
+<span id="L115">#if defined(__linux__)</span>
+<span id="L116">        CHECK(row.resolved.wait_strategy == rt::WaitStrategy::park);</span>
+<span id="L117">#else</span>
+<span id="L118">        CHECK(row.resolution ==</span>
+<span id="L119">              rt::PolicyResolutionState::unsupported_best_effort);</span>
+<span id="L120">        CHECK(row.applied == rt::PolicyOperationState::unsupported &amp;&amp;</span>
+<span id="L121">              row.verified == rt::PolicyOperationState::unsupported);</span>
+<span id="L122">        CHECK(row.resolved.wait_strategy != rt::WaitStrategy::park);</span>
+<span id="L123">#endif</span>
+<span id="L124">      }</span>
+<span id="L125">      CHECK(native_policy);</span>
+<span id="L126">    }</span>
+<span id="L127">    auto &amp;s = *owner.session;</span>
+<span id="L128">    CHECK(s.plan.phase_count == 8 &amp;&amp;</span>
+<span id="L129">          s.plan.registered_state_bytes == state_bytes);</span>
+<span id="L130">    CHECK(s.plan.planned_bytes ==</span>
+<span id="L131">          s.plan.runtime_control_bytes + s.plan.executor_control_bytes +</span>
+<span id="L132">              s.plan.device_control_bytes + s.plan.phase_scratch_total_bytes +</span>
+<span id="L133">              s.plan.task_scratch_total_bytes + s.plan.trace_storage_bytes);</span>
+<span id="L134">    if (owner.physics) {</span>
+<span id="L135">      rt::CompiledDeviceRatePhase phase;</span>
+<span id="L136">      CHECK(s.runtime-&gt;compiled_device_rate_phase_at(0, phase));</span>
+<span id="L137">      CHECK(phase.simulation &amp;&amp;</span>
+<span id="L138">            phase.simulation-&gt;host_watchdog_ns == 5&#x27;000&#x27;000&#x27;000ull);</span>
+<span id="L139">      CHECK(phase.completion_budget_ns == completion_ns &amp;&amp;</span>
+<span id="L140">            phase.maximum_in_flight == 1);</span>
+<span id="L141">    }</span>
+<span id="L142">    OwnedReplay replay(options.ticks);</span>
+<span id="L143">    Oracle oracle(options);</span>
+<span id="L144">    CHECK(replay.begin(s) &amp;&amp; s.controls());</span>
+<span id="L145">    for (std::size_t tick = 0; tick &lt; options.ticks; ++tick) {</span>
+<span id="L146">      replay.record(s, tick);</span>
+<span id="L147">      allocation::begin();</span>
+<span id="L148">      const auto status = s.step(tick);</span>
+<span id="L149">      const auto allocations = allocation::end();</span>
+<span id="L150">      if (status != Status::ok)</span>
+<span id="L151">        std::cerr &lt;&lt; s.runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L152">      CHECK(status == Status::ok &amp;&amp; allocations == 0);</span>
+<span id="L153">      CHECK(oracle.step(tick, s.world));</span>
+<span id="L154">      if (dispatch == Dispatch::cpu)</span>
+<span id="L155">        cpu_states[tick] = s.world.canonical;</span>
+<span id="L156">      else {</span>
+<span id="L157">        expected.canonical = cpu_states[tick];</span>
+<span id="L158">        CHECK(expected.decode() &amp;&amp; same_semantics(expected, s.world));</span>
+<span id="L159">      }</span>
+<span id="L160">    }</span>
+<span id="L161">    std::cout &lt;&lt; &quot;dispatch=&quot; &lt;&lt; int(dispatch) &lt;&lt; &quot; steps complete&quot; &lt;&lt; std::endl;</span>
+<span id="L162">    CHECK(replay.seal(s));</span>
+<span id="L163">    allocation::begin();</span>
+<span id="L164">    const bool replayed = replay.verify(s);</span>
+<span id="L165">    const auto allocations = allocation::end();</span>
+<span id="L166">    if (!replayed)</span>
+<span id="L167">      std::cerr &lt;&lt; s.runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L168">    CHECK(replayed &amp;&amp; allocations == 0);</span>
+<span id="L169">    std::cout &lt;&lt; &quot;dispatch=&quot; &lt;&lt; int(dispatch) &lt;&lt; &quot; replay complete&quot;</span>
+<span id="L170">              &lt;&lt; std::endl;</span>
+<span id="L171">    if (owner.physics)</span>
+<span id="L172">      CHECK(counts(owner, 2 * options.ticks));</span>
+<span id="L173">    auto bad = replay.trusted;</span>
+<span id="L174">    bad.back() ^= std::byte{1};</span>
+<span id="L175">    const auto before = s.world.canonical;</span>
+<span id="L176">    const auto submissions = owner.driver ? owner.driver-&gt;records.load() : 0;</span>
+<span id="L177">    CHECK(OwnedReplay::apply(s, bad) != Status::ok);</span>
+<span id="L178">    CHECK(s.world.canonical == before);</span>
+<span id="L179">    CHECK(!owner.driver || owner.driver-&gt;records == submissions);</span>
+<span id="L180">    if (dispatch == Dispatch::cpu)</span>
+<span id="L181">      cpu_checkpoint = s.checkpoint(options.ticks - 1);</span>
+<span id="L182">    else {</span>
+<span id="L183">      CHECK(s.runtime-&gt;restore_checkpoint(cpu_checkpoint) ==</span>
+<span id="L184">            Status::incompatible_artifact);</span>
+<span id="L185">      CHECK(s.world.canonical == before &amp;&amp;</span>
+<span id="L186">            owner.driver-&gt;records == submissions);</span>
+<span id="L187">    }</span>
+<span id="L188">    CHECK(close(owner));</span>
+<span id="L189">  }</span>
+<span id="L190">  if (selected_dispatch == 0) {</span>
+<span id="L191">    std::ofstream states(reference.string() + &quot;.states&quot;, std::ios::binary);</span>
+<span id="L192">    states.write(</span>
+<span id="L193">        reinterpret_cast&lt;const char *&gt;(cpu_states.data()),</span>
+<span id="L194">        static_cast&lt;std::streamsize&gt;(cpu_states.size() * sizeof(StateBytes)));</span>
+<span id="L195">    states.close();</span>
+<span id="L196">    CHECK(!states.fail());</span>
+<span id="L197">    std::ofstream checkpoint(reference.string() + &quot;.checkpoint&quot;,</span>
+<span id="L198">                             std::ios::binary);</span>
+<span id="L199">    checkpoint.write(reinterpret_cast&lt;const char *&gt;(cpu_checkpoint.data()),</span>
+<span id="L200">                     static_cast&lt;std::streamsize&gt;(cpu_checkpoint.size()));</span>
+<span id="L201">    checkpoint.close();</span>
+<span id="L202">    CHECK(!checkpoint.fail());</span>
+<span id="L203">  }</span>
+<span id="L204">  return true;</span>
+<span id="L205">}</span>
+<span id="L206"></span>
+<span id="L207">bool recovery(bool host, Dispatch dispatch, bool lost) {</span>
+<span id="L208">  Options o;</span>
+<span id="L209">  o.host = host;</span>
+<span id="L210">  auto old = std::make_unique&lt;Owner&gt;(o, dispatch);</span>
+<span id="L211">  CHECK(old-&gt;prepare() == Status::ok &amp;&amp; old-&gt;session-&gt;controls());</span>
+<span id="L212">  Oracle oracle(o);</span>
+<span id="L213">  for (std::size_t tick = 0; tick &lt; 6; ++tick) {</span>
+<span id="L214">    CHECK(old-&gt;session-&gt;step(tick) == Status::ok);</span>
+<span id="L215">    CHECK(oracle.step(tick, old-&gt;session-&gt;world));</span>
+<span id="L216">  }</span>
+<span id="L217">  auto cp = old-&gt;session-&gt;checkpoint(5);</span>
+<span id="L218">  CHECK(!cp.empty());</span>
+<span id="L219">  const auto plant = old-&gt;session-&gt;world.plant;</span>
+<span id="L220">  if (lost)</span>
+<span id="L221">    old-&gt;driver-&gt;lose_query = true;</span>
+<span id="L222">  else</span>
+<span id="L223">    old-&gt;driver-&gt;fail_query = true;</span>
+<span id="L224">  const auto failure = old-&gt;session-&gt;step(6);</span>
+<span id="L225">  if (failure != (lost ? Status::device_lost : Status::device_reset_required))</span>
+<span id="L226">    std::cerr &lt;&lt; &quot;fault status=&quot; &lt;&lt; int(failure) &lt;&lt; &#x27; &#x27;</span>
+<span id="L227">              &lt;&lt; old-&gt;session-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L228">  CHECK(failure ==</span>
+<span id="L229">        (lost ? Status::device_lost : Status::device_reset_required));</span>
+<span id="L230">  CHECK(old-&gt;driver-&gt;faults == 1 &amp;&amp; old-&gt;physics-&gt;publications == 6 &amp;&amp;</span>
+<span id="L231">        old-&gt;physics-&gt;providers == 7);</span>
+<span id="L232">  CHECK(old-&gt;session-&gt;world.calls[1] == 6 &amp;&amp; old-&gt;session-&gt;world.calls[2] == 6);</span>
+<span id="L233">  CHECK(old-&gt;session-&gt;world.plant.position == plant.position &amp;&amp;</span>
+<span id="L234">        old-&gt;session-&gt;world.plant.velocity == plant.velocity &amp;&amp;</span>
+<span id="L235">        old-&gt;session-&gt;world.plant.acceleration == plant.acceleration);</span>
+<span id="L236">  rt::DeviceTimelineInfo timeline;</span>
+<span id="L237">  CHECK(old-&gt;physics-&gt;timeline(timeline) &amp;&amp; timeline.completed_value == 6);</span>
+<span id="L238">  rt::DeviceHealth before = rt::make_device_health(),</span>
+<span id="L239">                   after = rt::make_device_health();</span>
+<span id="L240">  CHECK(old-&gt;physics-&gt;health(before) == Status::ok &amp;&amp; before.outstanding == 1);</span>
+<span id="L241">  if (lost) {</span>
+<span id="L242">    CHECK(before.state == RTFW_DEVICE_HEALTH_LOST &amp;&amp; before.losses == 1);</span>
+<span id="L243">    CHECK(old-&gt;physics-&gt;reset() == Status::device_lost);</span>
+<span id="L244">  } else {</span>
+<span id="L245">    CHECK(before.state == RTFW_DEVICE_HEALTH_RESET_REQUIRED);</span>
+<span id="L246">    old-&gt;driver-&gt;fail_stream_sync = true;</span>
+<span id="L247">    CHECK(old-&gt;physics-&gt;reset() != Status::ok &amp;&amp; old-&gt;driver-&gt;faults == 2);</span>
+<span id="L248">    CHECK(!old-&gt;driver-&gt;clean() &amp;&amp; old-&gt;memory-&gt;live_count() == 3);</span>
+<span id="L249">    CHECK(old-&gt;physics-&gt;reset() == Status::ok);</span>
+<span id="L250">    CHECK(old-&gt;physics-&gt;health(after) == Status::ok &amp;&amp;</span>
+<span id="L251">          after.state == RTFW_DEVICE_HEALTH_HEALTHY);</span>
+<span id="L252">    CHECK(after.resets == before.resets + 1 &amp;&amp;</span>
+<span id="L253">          after.generation &gt; before.generation &amp;&amp; after.outstanding == 0);</span>
+<span id="L254">  }</span>
+<span id="L255">  // Reset may already have retired stream work. Fail an actual borrowed-buffer</span>
+<span id="L256">  // unregister to exercise checked teardown retention after either reset</span>
+<span id="L257">  // result.</span>
+<span id="L258">  old-&gt;driver-&gt;fail_unregister = true;</span>
+<span id="L259">  CHECK(old-&gt;close() != Status::ok &amp;&amp; old-&gt;session &amp;&amp; old-&gt;physics);</span>
+<span id="L260">  CHECK(!old-&gt;driver-&gt;clean() &amp;&amp; old-&gt;memory-&gt;live_count() == 3);</span>
+<span id="L261">  CHECK(close(*old));</span>
+<span id="L262">  old.reset();</span>
+<span id="L263">  Owner resumed(o, dispatch);</span>
+<span id="L264">  CHECK(resumed.prepare() == Status::ok);</span>
+<span id="L265">  CHECK(resumed.session-&gt;runtime-&gt;restore_checkpoint(cp) == Status::ok &amp;&amp;</span>
+<span id="L266">        resumed.session-&gt;world.decode());</span>
+<span id="L267">  OwnedReplay replay(o.ticks, false, 6);</span>
+<span id="L268">  replay.initial = resumed.session-&gt;checkpoint(5);</span>
+<span id="L269">  CHECK(!replay.initial.empty());</span>
+<span id="L270">  for (std::size_t tick = 6; tick &lt; o.ticks; ++tick) {</span>
+<span id="L271">    replay.record(*resumed.session, tick);</span>
+<span id="L272">    CHECK(resumed.session-&gt;step(tick) == Status::ok &amp;&amp;</span>
+<span id="L273">          oracle.step(tick, resumed.session-&gt;world));</span>
+<span id="L274">  }</span>
+<span id="L275">  CHECK(replay.seal(*resumed.session) &amp;&amp; replay.verify(*resumed.session));</span>
+<span id="L276">  CHECK(counts(resumed, 2 * (o.ticks - 6)));</span>
+<span id="L277">  CHECK(close(resumed));</span>
+<span id="L278">  return true;</span>
+<span id="L279">}</span>
+<span id="L280">bool negatives(Dispatch dispatch) {</span>
+<span id="L281">  for (unsigned fault = 0; fault &lt; 5; ++fault) {</span>
+<span id="L282">    Owner owner(Options{}, dispatch);</span>
+<span id="L283">    CHECK(owner.prepare() == Status::ok);</span>
+<span id="L284">    if (fault == 0)</span>
+<span id="L285">      owner.driver-&gt;delayed_queries = 8;</span>
+<span id="L286">    if (fault == 1)</span>
+<span id="L287">      owner.driver-&gt;hold = true;</span>
+<span id="L288">    if (fault == 2)</span>
+<span id="L289">      owner.driver-&gt;corrupt_output = true;</span>
+<span id="L290">    if (fault == 3)</span>
+<span id="L291">      owner.driver-&gt;fail_kernel = true;</span>
+<span id="L292">    const auto status = owner.session-&gt;step(0);</span>
+<span id="L293">    if (fault == 0 || fault == 4) {</span>
+<span id="L294">      CHECK(status == Status::ok &amp;&amp; counts(owner, 1));</span>
+<span id="L295">      if (fault == 0)</span>
+<span id="L296">        CHECK(owner.driver-&gt;not_ready == 8);</span>
+<span id="L297">      if (fault == 4) {</span>
+<span id="L298">        owner.driver-&gt;fail_unregister = true;</span>
+<span id="L299">        CHECK(owner.close() != Status::ok &amp;&amp; !owner.driver-&gt;clean());</span>
+<span id="L300">      }</span>
+<span id="L301">    } else {</span>
+<span id="L302">      const auto expected = fault == 1   ? Status::device_timeout</span>
+<span id="L303">                            : fault == 2 ? Status::callback_failed</span>
+<span id="L304">                                         : Status::device_reset_required;</span>
+<span id="L305">      if (status != expected)</span>
+<span id="L306">        std::cerr &lt;&lt; &quot;negative=&quot; &lt;&lt; fault &lt;&lt; &quot; status=&quot; &lt;&lt; int(status) &lt;&lt; &#x27; &#x27;</span>
+<span id="L307">                  &lt;&lt; owner.session-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L308">      CHECK(status == expected &amp;&amp; owner.physics-&gt;publications == 0 &amp;&amp;</span>
+<span id="L309">            owner.session-&gt;world.calls[2] == 0);</span>
+<span id="L310">      rt::DeviceTimelineInfo t;</span>
+<span id="L311">      CHECK(owner.physics-&gt;timeline(t));</span>
+<span id="L312">      CHECK(t.completed_value ==</span>
+<span id="L313">            (fault == 2 ? 1u : 0u)); // Corrupt output is rejected after genuine</span>
+<span id="L314">                                     // device success.</span>
+<span id="L315">      owner.driver-&gt;hold = false;</span>
+<span id="L316">      if (fault == 3)</span>
+<span id="L317">        CHECK(owner.physics-&gt;reset() == Status::ok);</span>
+<span id="L318">    }</span>
+<span id="L319">    CHECK(close(owner));</span>
+<span id="L320">  }</span>
+<span id="L321">  Owner cleanup(Options{}, dispatch);</span>
+<span id="L322">  CHECK(cleanup.prepare() == Status::ok &amp;&amp;</span>
+<span id="L323">        cleanup.session-&gt;step(0) == Status::ok);</span>
+<span id="L324">  cleanup.driver-&gt;fail_destroy = true;</span>
+<span id="L325">  CHECK(cleanup.close() != Status::ok &amp;&amp; !cleanup.driver-&gt;clean());</span>
+<span id="L326">  CHECK(close(cleanup));</span>
+<span id="L327">  return true;</span>
+<span id="L328">}</span>
+<span id="L329">bool independent_owners() {</span>
+<span id="L330">  Options o;</span>
+<span id="L331">  o.workers = 2;</span>
+<span id="L332">  Owner first(o, Dispatch::kernel), second(o, Dispatch::graph);</span>
+<span id="L333">  CHECK(first.prepare() == Status::ok &amp;&amp; second.prepare() == Status::ok);</span>
+<span id="L334">  CHECK(first.session-&gt;controls() &amp;&amp; second.session-&gt;controls());</span>
+<span id="L335">  auto run = [&amp;](Owner &amp;owner) {</span>
+<span id="L336">    Oracle oracle(o);</span>
+<span id="L337">    for (std::size_t tick = 0; tick &lt; o.ticks; ++tick)</span>
+<span id="L338">      if (owner.session-&gt;step(tick) != Status::ok ||</span>
+<span id="L339">          !oracle.step(tick, owner.session-&gt;world))</span>
+<span id="L340">        return false;</span>
+<span id="L341">    return true;</span>
+<span id="L342">  };</span>
+<span id="L343">  auto a = std::async(std::launch::async, [&amp;] { return run(first); });</span>
+<span id="L344">  auto b = std::async(std::launch::async, [&amp;] { return run(second); });</span>
+<span id="L345">  CHECK(a.get() &amp;&amp; b.get());</span>
+<span id="L346">  CHECK(counts(first, o.ticks) &amp;&amp; counts(second, o.ticks));</span>
+<span id="L347">  CHECK(same_semantics(first.session-&gt;world, second.session-&gt;world));</span>
+<span id="L348">  CHECK(close(first) &amp;&amp; close(second));</span>
+<span id="L349">  return true;</span>
+<span id="L350">}</span>
+<span id="L351"></span>
+<span id="L352">// Deliberately ask the unchanged native backend for a replay-enabled Session.</span>
+<span id="L353">// This test-only wrapper forwards every other operation without changing caps.</span>
+<span id="L354">struct ReplayRequest final : Physics {</span>
+<span id="L355">  CudaPhysics native;</span>
+<span id="L356">  explicit ReplayRequest(Resources resources) : native(resources, false) {}</span>
+<span id="L357">  void limits(rt::RuntimeConfig &amp;c) const noexcept override {</span>
+<span id="L358">    native.limits(c);</span>
+<span id="L359">  }</span>
+<span id="L360">  bool replay_enabled() const noexcept override { return true; }</span>
+<span id="L361">  Status configure(rt::Runtime &amp;r, World &amp;w) noexcept override {</span>
+<span id="L362">    return native.configure(r, w);</span>
+<span id="L363">  }</span>
+<span id="L364">  Status register_phase(rt::Runtime &amp;r, rt::RateDomainHandle d,</span>
+<span id="L365">                        rt::PhaseHandle &amp;p) noexcept override {</span>
+<span id="L366">    return native.register_phase(r, d, p);</span>
+<span id="L367">  }</span>
+<span id="L368">  bool input(const rt::CallbackContext &amp;c) noexcept override {</span>
+<span id="L369">    return native.input(c);</span>
+<span id="L370">  }</span>
+<span id="L371">  bool complete(const rt::CallbackContext &amp;c) noexcept override {</span>
+<span id="L372">    return native.complete(c);</span>
+<span id="L373">  }</span>
+<span id="L374">  bool plan(const rt::MemoryPlan &amp;p) const noexcept override {</span>
+<span id="L375">    return native.plan(p);</span>
+<span id="L376">  }</span>
+<span id="L377">};</span>
+<span id="L378">bool native_contract() {</span>
+<span id="L379">  {</span>
+<span id="L380">    SimulatedDriver driver(16);</span>
+<span id="L381">    const auto resources = driver.resources();</span>
+<span id="L382">    Owner native(Options{}, Dispatch::kernel, &amp;resources);</span>
+<span id="L383">    CHECK(native.prepare() == Status::ok &amp;&amp; !native.physics-&gt;replay_enabled());</span>
+<span id="L384">    rt::CompiledDeviceRatePhase p;</span>
+<span id="L385">    CHECK(native.session-&gt;runtime-&gt;compiled_device_rate_phase_at(0, p) &amp;&amp;</span>
+<span id="L386">          !p.simulation);</span>
+<span id="L387">    // This is only native capability/configuration evidence with an injected</span>
+<span id="L388">    // Driver API, never a physical CUDA execution/replay claim.</span>
+<span id="L389">    CHECK(driver.records == 0);</span>
+<span id="L390">    CHECK(close(native) &amp;&amp; driver.clean());</span>
+<span id="L391">  }</span>
+<span id="L392">  {</span>
+<span id="L393">    SimulatedDriver driver(16);</span>
+<span id="L394">    ReplayRequest physics(driver.resources());</span>
+<span id="L395">    auto memory = std::make_unique&lt;Memory&gt;();</span>
+<span id="L396">    Session session(Options{}, nullptr, *memory, &amp;physics);</span>
+<span id="L397">    const auto status = session.prepare();</span>
+<span id="L398">    std::cout &lt;&lt; &quot;native replay rejected status=&quot; &lt;&lt; int(status) &lt;&lt; &#x27; &#x27;</span>
+<span id="L399">              &lt;&lt; session.runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L400">    CHECK(status == Status::invalid_config &amp;&amp; driver.records == 0 &amp;&amp;</span>
+<span id="L401">          physics.native.providers == 0);</span>
+<span id="L402">    CHECK(session.close() == Status::ok &amp;&amp; driver.clean() &amp;&amp;</span>
+<span id="L403">          memory-&gt;acquisitions == memory-&gt;releases);</span>
+<span id="L404">  }</span>
+<span id="L405">  for (unsigned malformed = 0; malformed &lt; 4; ++malformed) {</span>
+<span id="L406">    SimulatedDriver driver(16);</span>
+<span id="L407">    auto resources = driver.resources();</span>
+<span id="L408">    if (malformed == 0)</span>
+<span id="L409">      resources.stream = 0;</span>
+<span id="L410">    if (malformed == 1)</span>
+<span id="L411">      resources.addresses[1] = resources.addresses[0];</span>
+<span id="L412">    if (malformed == 2)</span>
+<span id="L413">      resources.addresses[1] = UINT64_MAX;</span>
+<span id="L414">    if (malformed == 3)</span>
+<span id="L415">      resources.graph = 0;</span>
+<span id="L416">    Owner owner(Options{}, Dispatch::graph, &amp;resources);</span>
+<span id="L417">    CHECK(owner.prepare() == Status::invalid_argument &amp;&amp; driver.records == 0);</span>
+<span id="L418">    CHECK(close(owner) &amp;&amp; driver.clean());</span>
+<span id="L419">  }</span>
+<span id="L420">  return true;</span>
+<span id="L421">}</span>
+<span id="L422">bool foreign_artifacts() {</span>
+<span id="L423">  Options options;</span>
+<span id="L424">  Owner first(options, Dispatch::kernel), same(options, Dispatch::kernel),</span>
+<span id="L425">      other(options, Dispatch::graph);</span>
+<span id="L426">  CHECK(first.prepare() == Status::ok &amp;&amp; same.prepare() == Status::ok &amp;&amp;</span>
+<span id="L427">        other.prepare() == Status::ok);</span>
+<span id="L428">  OwnedReplay replay(options.ticks);</span>
+<span id="L429">  CHECK(replay.begin(*first.session) &amp;&amp; first.session-&gt;controls());</span>
+<span id="L430">  for (std::size_t tick = 0; tick &lt; options.ticks; ++tick) {</span>
+<span id="L431">    replay.record(*first.session, tick);</span>
+<span id="L432">    CHECK(first.session-&gt;step(tick) == Status::ok);</span>
+<span id="L433">  }</span>
+<span id="L434">  CHECK(replay.seal(*first.session));</span>
+<span id="L435">  for (auto *owner : {&amp;same, &amp;other}) {</span>
+<span id="L436">    const auto before = owner-&gt;session-&gt;world.canonical;</span>
+<span id="L437">    const auto rejected = OwnedReplay::apply(*owner-&gt;session, replay.trusted);</span>
+<span id="L438">    std::cout &lt;&lt; &quot;foreign rejected=&quot; &lt;&lt; int(rejected) &lt;&lt; &#x27; &#x27;</span>
+<span id="L439">              &lt;&lt; owner-&gt;session-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L440">    CHECK(rejected == Status::incompatible_artifact);</span>
+<span id="L441">    CHECK(owner-&gt;session-&gt;world.canonical == before &amp;&amp;</span>
+<span id="L442">          owner-&gt;driver-&gt;records == 0);</span>
+<span id="L443">  }</span>
+<span id="L444">  const auto before = other.session-&gt;world.canonical;</span>
+<span id="L445">  CHECK(other.session-&gt;runtime-&gt;restore_checkpoint(replay.initial) ==</span>
+<span id="L446">        Status::incompatible_artifact);</span>
+<span id="L447">  CHECK(other.session-&gt;world.canonical == before &amp;&amp; other.driver-&gt;records == 0);</span>
+<span id="L448">  CHECK(close(first) &amp;&amp; close(same) &amp;&amp; close(other));</span>
+<span id="L449">  return true;</span>
+<span id="L450">}</span>
+<span id="L451"></span>
+<span id="L452">bool partial_startup() {</span>
+<span id="L453">  for (unsigned failure = 0; failure &lt; 3; ++failure) {</span>
+<span id="L454">    Owner owner(Options{}, Dispatch::graph);</span>
+<span id="L455">    if (failure == 0)</span>
+<span id="L456">      owner.driver-&gt;fail_event_create = true;</span>
+<span id="L457">    else</span>
+<span id="L458">      owner.driver-&gt;fail_registration_at = failure;</span>
+<span id="L459">    const auto status = owner.prepare();</span>
+<span id="L460">    CHECK(status != Status::ok &amp;&amp; owner.driver-&gt;faults == 1 &amp;&amp;</span>
+<span id="L461">          owner.driver-&gt;records == 0);</span>
+<span id="L462">    CHECK(close(owner));</span>
+<span id="L463">  }</span>
+<span id="L464">  // A failed owner&#x27;s outstanding work does not alter another owner&#x27;s timeline.</span>
+<span id="L465">  Owner failed(Options{}, Dispatch::kernel),</span>
+<span id="L466">      healthy(Options{}, Dispatch::graph);</span>
+<span id="L467">  CHECK(failed.prepare() == Status::ok &amp;&amp; healthy.prepare() == Status::ok);</span>
+<span id="L468">  failed.driver-&gt;lose_query = true;</span>
+<span id="L469">  CHECK(failed.session-&gt;step(0) == Status::device_lost);</span>
+<span id="L470">  CHECK(healthy.session-&gt;step(0) == Status::ok &amp;&amp; counts(healthy, 1));</span>
+<span id="L471">  CHECK(close(failed) &amp;&amp; close(healthy));</span>
+<span id="L472">  return true;</span>
+<span id="L473">}</span>
+<span id="L474"></span>
+<span id="L475">bool allocation_control() {</span>
+<span id="L476">  allocation::begin();</span>
+<span id="L477">  auto *ordinary = ::operator new(17);</span>
+<span id="L478">  *static_cast&lt;volatile unsigned char *&gt;(ordinary) = 17;</span>
+<span id="L479">  const auto ordinary_count = allocation::end();</span>
+<span id="L480">  ::operator delete(ordinary);</span>
+<span id="L481">  CHECK(ordinary_count == 1);</span>
+<span id="L482">  allocation::begin();</span>
+<span id="L483">  auto *aligned = ::operator new (64, std::align_val_t{64});</span>
+<span id="L484">  *static_cast&lt;volatile unsigned char *&gt;(aligned) = 64;</span>
+<span id="L485">  const auto aligned_count = allocation::end();</span>
+<span id="L486">  ::operator delete (aligned, std::align_val_t{64});</span>
+<span id="L487">  CHECK(aligned_count == 1);</span>
+<span id="L488">  return true;</span>
+<span id="L489">}</span>
+<span id="L490"></span>
+<span id="L491">int main(int argc, char **argv) {</span>
+<span id="L492">  std::cout &lt;&lt; std::unitbuf;</span>
+<span id="L493">  int selected = -1, selected_dispatch = -1;</span>
+<span id="L494">  std::filesystem::path reference;</span>
+<span id="L495">  if (argc != 1) {</span>
+<span id="L496">    if ((argc != 3 &amp;&amp; argc != 7) || std::string_view(argv[1]) != &quot;--case&quot;)</span>
+<span id="L497">      return 64;</span>
+<span id="L498">    const std::string_view value = argv[2];</span>
+<span id="L499">    const auto parsed =</span>
+<span id="L500">        std::from_chars(value.data(), value.data() + value.size(), selected);</span>
+<span id="L501">    if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() ||</span>
+<span id="L502">        selected &lt; 0 || selected &gt; 18)</span>
+<span id="L503">      return 64;</span>
+<span id="L504">  }</span>
+<span id="L505">  if (argc == 7) {</span>
+<span id="L506">    if ((selected != 9 &amp;&amp; selected != 18) ||</span>
+<span id="L507">        std::string_view(argv[3]) != &quot;--dispatch&quot; ||</span>
+<span id="L508">        std::string_view(argv[5]) != &quot;--reference&quot;)</span>
+<span id="L509">      return 64;</span>
+<span id="L510">    const std::string_view dispatch = argv[4];</span>
+<span id="L511">    selected_dispatch = dispatch == &quot;cpu&quot;      ? 0</span>
+<span id="L512">                        : dispatch == &quot;kernel&quot; ? 1</span>
+<span id="L513">                        : dispatch == &quot;graph&quot;  ? 2</span>
+<span id="L514">                                               : -1;</span>
+<span id="L515">    if (selected_dispatch &lt; 0 || !*argv[6])</span>
+<span id="L516">      return 64;</span>
+<span id="L517">    reference = argv[6];</span>
+<span id="L518">  }</span>
+<span id="L519">  if (selected &lt;= 0) {</span>
+<span id="L520">    if (!allocation_control() || !native_contract() || !foreign_artifacts() ||</span>
+<span id="L521">        !partial_startup())</span>
+<span id="L522">      return 1;</span>
+<span id="L523">    for (auto dispatch : {Dispatch::kernel, Dispatch::graph}) {</span>
+<span id="L524">      if (!negatives(dispatch))</span>
+<span id="L525">        return 1;</span>
+<span id="L526">      for (bool host : {false, true})</span>
+<span id="L527">        for (bool lost : {false, true})</span>
+<span id="L528">          if (!recovery(host, dispatch, lost))</span>
+<span id="L529">            return 1;</span>
+<span id="L530">    }</span>
+<span id="L531">    if (!independent_owners())</span>
+<span id="L532">      return 1;</span>
+<span id="L533">  }</span>
+<span id="L534">  int case_number = 0;</span>
+<span id="L535">  const auto run_case = [&amp;](Options o) {</span>
+<span id="L536">    ++case_number;</span>
+<span id="L537">    return selected &gt;= 0 &amp;&amp; selected != case_number</span>
+<span id="L538">               ? true</span>
+<span id="L539">               : parity(o, selected_dispatch, reference);</span>
+<span id="L540">  };</span>
+<span id="L541">  for (bool host : {false, true}) {</span>
+<span id="L542">    for (std::size_t i = 0; i &lt; 4; ++i) {</span>
+<span id="L543">      Options o;</span>
+<span id="L544">      o.host = host;</span>
+<span id="L545">      o.count = std::array&lt;std::size_t, 4&gt;{1, 17, 16, 256}[i];</span>
+<span id="L546">      o.workers = static_cast&lt;std::uint32_t&gt;(i % 3 + 1);</span>
+<span id="L547">      o.grain = std::array&lt;std::size_t, 4&gt;{1, 4, 16, 64}[i];</span>
+<span id="L548">      if (!run_case(o))</span>
+<span id="L549">        return 1;</span>
+<span id="L550">    }</span>
+<span id="L551">    for (auto campaign :</span>
+<span id="L552">         {Campaign::control_rejected, Campaign::control_replaced,</span>
+<span id="L553">          Campaign::stale_input, Campaign::peer_missing}) {</span>
+<span id="L554">      Options o;</span>
+<span id="L555">      o.host = host;</span>
+<span id="L556">      o.campaign = campaign;</span>
+<span id="L557">      if (!run_case(o))</span>
+<span id="L558">        return 1;</span>
+<span id="L559">    }</span>
+<span id="L560">    Options max;</span>
+<span id="L561">    max.host = host;</span>
+<span id="L562">    max.count = 256;</span>
+<span id="L563">    max.ticks = 1024;</span>
+<span id="L564">    max.workers = 3;</span>
+<span id="L565">    max.grain = 64;</span>
+<span id="L566">    if (!run_case(max))</span>
+<span id="L567">      return 1;</span>
+<span id="L568">  }</span>
+<span id="L569">  std::cout &lt;&lt; &quot;PASS requested golden CUDA test cases\n&quot;;</span>
+<span id="L570">}</span></pre></html>

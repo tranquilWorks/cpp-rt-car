@@ -1,0 +1,2358 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>rt/src/device_manager.cpp</title><h1>rt/src/device_manager.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;device_manager.hpp&quot;</span>
+<span id="L2"></span>
+<span id="L3">#include &quot;aligned_storage.hpp&quot;</span>
+<span id="L4"></span>
+<span id="L5">#include &lt;algorithm&gt;</span>
+<span id="L6">#include &lt;chrono&gt;</span>
+<span id="L7">#include &lt;cstring&gt;</span>
+<span id="L8">#include &lt;limits&gt;</span>
+<span id="L9">#include &lt;new&gt;</span>
+<span id="L10">#include &lt;thread&gt;</span>
+<span id="L11">#include &lt;utility&gt;</span>
+<span id="L12"></span>
+<span id="L13">#include &lt;rt/arch.hpp&gt;</span>
+<span id="L14"></span>
+<span id="L15">namespace {</span>
+<span id="L16"></span>
+<span id="L17">constexpr std::uint32_t kOutstandingFree = 0;</span>
+<span id="L18">constexpr std::uint32_t kOutstandingOwned = 1;</span>
+<span id="L19">constexpr std::uint32_t kOutstandingSubmitting = 2;</span>
+<span id="L20">constexpr std::uint32_t kOutstandingSubmitted = 3;</span>
+<span id="L21">constexpr std::uint32_t kOutstandingEarlyReady = 4;</span>
+<span id="L22">constexpr std::uint32_t kBatchFree = 0;</span>
+<span id="L23">constexpr std::uint32_t kBatchReserved = 1;</span>
+<span id="L24">constexpr std::uint32_t kBatchQueued = 2;</span>
+<span id="L25">constexpr std::uint32_t kBatchSubmitting = 3;</span>
+<span id="L26">constexpr std::uint32_t kBatchSubmitted = 4;</span>
+<span id="L27">constexpr std::uint32_t kBatchEarlyReady = 5;</span>
+<span id="L28">constexpr std::uint32_t kBatchOwned = 6;</span>
+<span id="L29">constexpr std::uint32_t kBatchCompletionReady = 7;</span>
+<span id="L30">constexpr std::uint32_t kBatchRateTerminal = 8;</span>
+<span id="L31">constexpr std::uint32_t kBatchRateQuarantineOwned = 9;</span>
+<span id="L32">constexpr std::uint32_t kBatchRateQuarantined = 10;</span>
+<span id="L33"></span>
+<span id="L34">constexpr std::uint8_t kBackendOwnershipNone = 0;</span>
+<span id="L35">constexpr std::uint8_t kBackendOwnershipInitialized = 1;</span>
+<span id="L36">constexpr std::uint8_t kBackendOwnershipInitializationUncertain = 2;</span>
+<span id="L37"></span>
+<span id="L38">bool bytes_zero(const std::uint64_t* values, std::size_t count) noexcept {</span>
+<span id="L39">    for (std::size_t index = 0; index &lt; count; ++index) {</span>
+<span id="L40">        if (values[index] != 0) {</span>
+<span id="L41">            return false;</span>
+<span id="L42">        }</span>
+<span id="L43">    }</span>
+<span id="L44">    return true;</span>
+<span id="L45">}</span>
+<span id="L46"></span>
+<span id="L47">bool valid_access(std::uint32_t access) noexcept {</span>
+<span id="L48">    return access == RTFW_DEVICE_ACCESS_READ ||</span>
+<span id="L49">           access == RTFW_DEVICE_ACCESS_WRITE ||</span>
+<span id="L50">           access == RTFW_DEVICE_ACCESS_READ_WRITE;</span>
+<span id="L51">}</span>
+<span id="L52"></span>
+<span id="L53">std::uint64_t monotonic_now_ns() noexcept {</span>
+<span id="L54">    const auto now = std::chrono::steady_clock::now().time_since_epoch();</span>
+<span id="L55">    return static_cast&lt;std::uint64_t&gt;(</span>
+<span id="L56">        std::chrono::duration_cast&lt;std::chrono::nanoseconds&gt;(now).count());</span>
+<span id="L57">}</span>
+<span id="L58"></span>
+<span id="L59">rt::HalV2Status runtime_status_to_hal(rt::Status status) noexcept {</span>
+<span id="L60">    switch (status) {</span>
+<span id="L61">    case rt::Status::device_queue_full:</span>
+<span id="L62">        return rt::HalV2Status::queue_full;</span>
+<span id="L63">    case rt::Status::device_timeout:</span>
+<span id="L64">        return rt::HalV2Status::timeout;</span>
+<span id="L65">    case rt::Status::device_lost:</span>
+<span id="L66">        return rt::HalV2Status::lost;</span>
+<span id="L67">    case rt::Status::device_canceled:</span>
+<span id="L68">        return rt::HalV2Status::canceled;</span>
+<span id="L69">    case rt::Status::device_reset_required:</span>
+<span id="L70">        return rt::HalV2Status::reset_required;</span>
+<span id="L71">    case rt::Status::resource_exhausted:</span>
+<span id="L72">        return rt::HalV2Status::resource_exhausted;</span>
+<span id="L73">    default:</span>
+<span id="L74">        return rt::HalV2Status::error;</span>
+<span id="L75">    }</span>
+<span id="L76">}</span>
+<span id="L77"></span>
+<span id="L78">} // namespace</span>
+<span id="L79"></span>
+<span id="L80">namespace rt::detail {</span>
+<span id="L81"></span>
+<span id="L82">std::size_t device_command_slots(const DeviceBackendSpec&amp; backend,</span>
+<span id="L83">                                 std::size_t global_capacity,</span>
+<span id="L84">                                 bool native_per_backend) noexcept {</span>
+<span id="L85">    if (!native_per_backend || !backend.command_state) return global_capacity;</span>
+<span id="L86">    return std::min({global_capacity,</span>
+<span id="L87">                     static_cast&lt;std::size_t&gt;(backend.capabilities.max_in_flight),</span>
+<span id="L88">                     static_cast&lt;std::size_t&gt;(backend.command_state-&gt;capabilities</span>
+<span id="L89">                                                  .max_in_flight_batches)});</span>
+<span id="L90">}</span>
+<span id="L91"></span>
+<span id="L92">DeviceManager::DeviceManager(std::uint32_t owner,</span>
+<span id="L93">                             std::vector&lt;DeviceBackendSpec&gt; backends,</span>
+<span id="L94">                             std::vector&lt;DeviceBufferSpec&gt; buffers,</span>
+<span id="L95">                             std::vector&lt;DeviceTimelineSpec&gt; timelines,</span>
+<span id="L96">                             std::size_t outstanding_capacity,</span>
+<span id="L97">                             std::size_t completion_batch,</span>
+<span id="L98">    bool native_per_backend)</span>
+<span id="L99">    : owner_(owner), backends_(std::move(backends)),</span>
+<span id="L100">      initialized_backends_(backends_.size(), 0), buffers_(std::move(buffers)),</span>
+<span id="L101">      timeline_specs_(std::move(timelines)),</span>
+<span id="L102">      native_memory_(buffers_.size()),</span>
+<span id="L103">      outstanding_slots_(</span>
+<span id="L104">          outstanding_capacity == 0</span>
+<span id="L105">              ? nullptr</span>
+<span id="L106">              : std::make_unique&lt;Outstanding[]&gt;(outstanding_capacity)),</span>
+<span id="L107">      outstanding_capacity_(outstanding_capacity),</span>
+<span id="L108">      completion_buffer_(</span>
+<span id="L109">          completion_batch == 0</span>
+<span id="L110">              ? nullptr</span>
+<span id="L111">              : std::make_unique&lt;HalV2Completion[]&gt;(completion_batch)),</span>
+<span id="L112">      completion_batch_(completion_batch) {</span>
+<span id="L113">    timeline_count_ = timeline_specs_.size();</span>
+<span id="L114">    if (timeline_count_ != 0) {</span>
+<span id="L115">        timelines_ = std::make_unique&lt;TimelineState[]&gt;(timeline_count_);</span>
+<span id="L116">        for (std::size_t index = 0; index &lt; timeline_count_; ++index) {</span>
+<span id="L117">            timelines_[index].name = timeline_specs_[index].name;</span>
+<span id="L118">            timelines_[index].backend_index = timeline_specs_[index].backend_index;</span>
+<span id="L119">            timelines_[index].initial_value = timeline_specs_[index].initial_value;</span>
+<span id="L120">            timelines_[index].last_accepted.store(</span>
+<span id="L121">                timeline_specs_[index].initial_value, std::memory_order_relaxed);</span>
+<span id="L122">            timelines_[index].completed.store(</span>
+<span id="L123">                timeline_specs_[index].initial_value, std::memory_order_relaxed);</span>
+<span id="L124">        }</span>
+<span id="L125">    }</span>
+<span id="L126">    native_per_backend_ = native_per_backend;</span>
+<span id="L127">    batch_backends_ = backends_.empty()</span>
+<span id="L128">        ? nullptr</span>
+<span id="L129">        : std::make_unique&lt;BatchBackendState[]&gt;(backends_.size());</span>
+<span id="L130">    for (std::size_t index = 0; index &lt; backends_.size(); ++index) {</span>
+<span id="L131">        if (!backends_[index].command_state) {</span>
+<span id="L132">            continue;</span>
+<span id="L133">        }</span>
+<span id="L134">        batch_backends_[index].slot_offset = batch_slot_count_;</span>
+<span id="L135">        batch_backends_[index].slot_count = device_command_slots(</span>
+<span id="L136">            backends_[index], outstanding_capacity_, native_per_backend);</span>
+<span id="L137">        batch_backends_[index].lane_index = batch_backend_count_++;</span>
+<span id="L138">        batch_slot_count_ += batch_backends_[index].slot_count;</span>
+<span id="L139">    }</span>
+<span id="L140">    if (batch_slot_count_ != 0) {</span>
+<span id="L141">        batch_slots_ = std::make_unique&lt;BatchSlot[]&gt;(batch_slot_count_);</span>
+<span id="L142">        batch_completion_buffer_ =</span>
+<span id="L143">            std::make_unique&lt;HalV2BatchCompletion[]&gt;(completion_batch_);</span>
+<span id="L144">    }</span>
+<span id="L145">    if (batch_backend_count_ != 0) {</span>
+<span id="L146">        submission_threads_ = std::make_unique&lt;NativeThread[]&gt;(batch_backend_count_);</span>
+<span id="L147">        submission_startup_results_ =</span>
+<span id="L148">            std::make_unique&lt;ThreadStartupResult[]&gt;(batch_backend_count_);</span>
+<span id="L149">        submission_contexts_ =</span>
+<span id="L150">            std::make_unique&lt;SubmissionLaneContext[]&gt;(batch_backend_count_);</span>
+<span id="L151">        for (std::size_t backend_index = 0; backend_index &lt; backends_.size();</span>
+<span id="L152">             ++backend_index) {</span>
+<span id="L153">            const auto lane = batch_backends_[backend_index].lane_index;</span>
+<span id="L154">            if (lane != std::numeric_limits&lt;std::size_t&gt;::max()) {</span>
+<span id="L155">                submission_contexts_[lane] = {this, backend_index};</span>
+<span id="L156">            }</span>
+<span id="L157">        }</span>
+<span id="L158">    }</span>
+<span id="L159">}</span>
+<span id="L160"></span>
+<span id="L161">DeviceManager::~DeviceManager() {</span>
+<span id="L162">    (void)stop();</span>
+<span id="L163">}</span>
+<span id="L164"></span>
+<span id="L165">void DeviceManager::append_control_extents(</span>
+<span id="L166">    std::vector&lt;LogicalControlExtent&gt;&amp; extents,</span>
+<span id="L167">    std::uint64_t&amp; next_extent_id) const {</span>
+<span id="L168">    const auto add = [&amp;](const void* data, std::size_t count, std::size_t size) {</span>
+<span id="L169">        if (count == 0) {</span>
+<span id="L170">            return;</span>
+<span id="L171">        }</span>
+<span id="L172">        extents.push_back({</span>
+<span id="L173">            next_extent_id++,</span>
+<span id="L174">            ControlExtentOwner::device,</span>
+<span id="L175">            data,</span>
+<span id="L176">            count * size,</span>
+<span id="L177">        });</span>
+<span id="L178">    };</span>
+<span id="L179">    add(this, 1, sizeof(*this));</span>
+<span id="L180">    add(backends_.data(), backends_.capacity(), sizeof(backends_[0]));</span>
+<span id="L181">    for (const auto&amp; backend : backends_) {</span>
+<span id="L182">        const auto begin = reinterpret_cast&lt;std::uintptr_t&gt;(&amp;backend);</span>
+<span id="L183">        const auto end = begin + sizeof(backend);</span>
+<span id="L184">        const auto name = reinterpret_cast&lt;std::uintptr_t&gt;(</span>
+<span id="L185">            backend.name.data());</span>
+<span id="L186">        if (name &lt; begin || name &gt;= end) {</span>
+<span id="L187">            add(backend.name.data(), backend.name.capacity() + 1, 1);</span>
+<span id="L188">        }</span>
+<span id="L189">        if (backend.v1_adapter) {</span>
+<span id="L190">            add(backend.v1_adapter, 1, sizeof(*backend.v1_adapter));</span>
+<span id="L191">            add(</span>
+<span id="L192">                backend.v1_adapter-&gt;completion_storage(),</span>
+<span id="L193">                backend.v1_adapter-&gt;completion_capacity(),</span>
+<span id="L194">                sizeof(rtfw_device_completion));</span>
+<span id="L195">        }</span>
+<span id="L196">        if (backend.memory_state) {</span>
+<span id="L197">          add(backend.memory_state, 1, sizeof(*backend.memory_state));</span>
+<span id="L198">        }</span>
+<span id="L199">        if (backend.command_state) {</span>
+<span id="L200">          add(backend.command_state, 1, sizeof(*backend.command_state));</span>
+<span id="L201">        }</span>
+<span id="L202">    }</span>
+<span id="L203">    add(initialized_backends_.data(), initialized_backends_.capacity(), sizeof(initialized_backends_[0]));</span>
+<span id="L204">    add(buffers_.data(), buffers_.capacity(), sizeof(buffers_[0]));</span>
+<span id="L205">    add(native_memory_.data(), native_memory_.capacity(),</span>
+<span id="L206">        sizeof(native_memory_[0]));</span>
+<span id="L207">    add(timelines_.get(), timeline_count_, sizeof(TimelineState));</span>
+<span id="L208">    add(batch_backends_.get(), backends_.size(), sizeof(BatchBackendState));</span>
+<span id="L209">    add(batch_slots_.get(), batch_slot_count_, sizeof(BatchSlot));</span>
+<span id="L210">    add(submission_threads_.get(), batch_backend_count_, sizeof(NativeThread));</span>
+<span id="L211">    add(submission_startup_results_.get(), batch_backend_count_,</span>
+<span id="L212">        sizeof(ThreadStartupResult));</span>
+<span id="L213">    add(submission_contexts_.get(), batch_backend_count_,</span>
+<span id="L214">        sizeof(SubmissionLaneContext));</span>
+<span id="L215">    add(batch_completion_buffer_.get(),</span>
+<span id="L216">        batch_backend_count_ == 0 ? 0 : completion_batch_,</span>
+<span id="L217">        sizeof(HalV2BatchCompletion));</span>
+<span id="L218">    add(outstanding_slots_.get(), outstanding_capacity_, sizeof(Outstanding));</span>
+<span id="L219">    add(completion_buffer_.get(), completion_batch_, sizeof(HalV2Completion));</span>
+<span id="L220">}</span>
+<span id="L221"></span>
+<span id="L222">bool DeviceManager::estimate_control_storage(</span>
+<span id="L223">    std::size_t backend_count,</span>
+<span id="L224">    std::size_t backend_name_bytes,</span>
+<span id="L225">    std::size_t adapted_v1_count,</span>
+<span id="L226">    std::size_t buffer_count,</span>
+<span id="L227">    std::size_t timeline_count,</span>
+<span id="L228">    std::size_t batch_backend_count,</span>
+<span id="L229">    std::size_t outstanding_capacity,</span>
+<span id="L230">    std::size_t completion_batch,</span>
+<span id="L231">    std::size_t&amp; bytes,</span>
+<span id="L232">    std::size_t resolved_batch_slots) noexcept {</span>
+<span id="L233">    bytes = sizeof(DeviceManager);</span>
+<span id="L234">    const auto add =</span>
+<span id="L235">        [&amp;bytes](std::size_t count, std::size_t size) {</span>
+<span id="L236">            std::size_t product = 0;</span>
+<span id="L237">            std::size_t total = 0;</span>
+<span id="L238">            if (!checked_multiply(count, size, product) ||</span>
+<span id="L239">                !checked_add(bytes, product, total)) {</span>
+<span id="L240">                return false;</span>
+<span id="L241">            }</span>
+<span id="L242">            bytes = total;</span>
+<span id="L243">            return true;</span>
+<span id="L244">        };</span>
+<span id="L245">    std::size_t adapted_completion_count = 0;</span>
+<span id="L246">    if (!checked_multiply(</span>
+<span id="L247">            adapted_v1_count,</span>
+<span id="L248">            completion_batch,</span>
+<span id="L249">            adapted_completion_count)) {</span>
+<span id="L250">        return false;</span>
+<span id="L251">    }</span>
+<span id="L252">    std::size_t batch_slot_count = 0;</span>
+<span id="L253">    if (resolved_batch_slots != 0) {</span>
+<span id="L254">        batch_slot_count = resolved_batch_slots;</span>
+<span id="L255">    } else if (!checked_multiply(batch_backend_count, outstanding_capacity,</span>
+<span id="L256">                                 batch_slot_count)) {</span>
+<span id="L257">        return false;</span>
+<span id="L258">    }</span>
+<span id="L259">    return add(backend_count, sizeof(DeviceBackendSpec)) &amp;&amp;</span>
+<span id="L260">           add(backend_name_bytes, 1) &amp;&amp;</span>
+<span id="L261">           add(adapted_v1_count, sizeof(DeviceV1CompatibilityAdapter)) &amp;&amp;</span>
+<span id="L262">           add(adapted_completion_count, sizeof(rtfw_device_completion)) &amp;&amp;</span>
+<span id="L263">           add(backend_count, sizeof(HeterogeneousMemoryState)) &amp;&amp;</span>
+<span id="L264">           add(batch_backend_count, sizeof(CommandTimelineExtensionState)) &amp;&amp;</span>
+<span id="L265">           add(backend_count, sizeof(std::uint8_t)) &amp;&amp;</span>
+<span id="L266">           add(buffer_count, sizeof(DeviceBufferSpec)) &amp;&amp;</span>
+<span id="L267">           add(buffer_count, sizeof(NativeMemoryState)) &amp;&amp;</span>
+<span id="L268">           add(timeline_count, sizeof(TimelineState)) &amp;&amp;</span>
+<span id="L269">           add(backend_count, sizeof(BatchBackendState)) &amp;&amp;</span>
+<span id="L270">           add(batch_slot_count, sizeof(BatchSlot)) &amp;&amp;</span>
+<span id="L271">           add(batch_backend_count, sizeof(NativeThread)) &amp;&amp;</span>
+<span id="L272">           add(batch_backend_count, sizeof(ThreadStartupResult)) &amp;&amp;</span>
+<span id="L273">           add(batch_backend_count, sizeof(SubmissionLaneContext)) &amp;&amp;</span>
+<span id="L274">           add(batch_backend_count == 0 ? 0 : completion_batch,</span>
+<span id="L275">               sizeof(HalV2BatchCompletion)) &amp;&amp;</span>
+<span id="L276">           add(outstanding_capacity, sizeof(Outstanding)) &amp;&amp;</span>
+<span id="L277">           add(completion_batch, sizeof(HalV2Completion));</span>
+<span id="L278">}</span>
+<span id="L279"></span>
+<span id="L280">Status DeviceManager::initialize_backends() noexcept {</span>
+<span id="L281">    for (std::size_t index = 0;</span>
+<span id="L282">         index &lt; backends_.size();</span>
+<span id="L283">         ++index) {</span>
+<span id="L284">        auto&amp; backend = backends_[index];</span>
+<span id="L285">        HalV2InitializeConfig config;</span>
+<span id="L286">        config.requested_in_flight = backend.command_state</span>
+<span id="L287">            ? batch_backends_[index].slot_count : outstanding_capacity_;</span>
+<span id="L288">        std::size_t buffer_count = 0;</span>
+<span id="L289">        for (const auto&amp; buffer : buffers_) {</span>
+<span id="L290">            buffer_count += buffer.backend_index == index ? 1u : 0u;</span>
+<span id="L291">        }</span>
+<span id="L292">        config.requested_registered_buffers = buffer_count;</span>
+<span id="L293"></span>
+<span id="L294">        HalV2Status device_status = HalV2Status::internal_error;</span>
+<span id="L295">        try {</span>
+<span id="L296">            device_status = backend.api.initialize(</span>
+<span id="L297">                backend.api.instance,</span>
+<span id="L298">                &amp;config);</span>
+<span id="L299">        } catch (...) {</span>
+<span id="L300">            device_status = HalV2Status::internal_error;</span>
+<span id="L301">        }</span>
+<span id="L302">        const auto status = hal_v2_status_to_runtime(device_status);</span>
+<span id="L303">        if (status != Status::ok) {</span>
+<span id="L304">            initialized_backends_[index] =</span>
+<span id="L305">                kBackendOwnershipInitializationUncertain;</span>
+<span id="L306">            (void)shutdown_backends();</span>
+<span id="L307">            return status;</span>
+<span id="L308">        }</span>
+<span id="L309">        initialized_backends_[index] =</span>
+<span id="L310">            kBackendOwnershipInitialized;</span>
+<span id="L311">    }</span>
+<span id="L312"></span>
+<span id="L313">    for (std::size_t index = 0; index &lt; buffers_.size(); ++index) {</span>
+<span id="L314">        const auto&amp; buffer = buffers_[index];</span>
+<span id="L315">        auto &amp;backend = backends_[buffer.backend_index];</span>
+<span id="L316">        HalV2Status device_status = HalV2Status::internal_error;</span>
+<span id="L317">        auto &amp;native = native_memory_[index];</span>
+<span id="L318">        if (buffer.heterogeneous) {</span>
+<span id="L319">          if (!backend.memory_state ||</span>
+<span id="L320">              !backend.memory_state-&gt;native_extension) {</span>
+<span id="L321">            (void)shutdown_backends();</span>
+<span id="L322">            return Status::invalid_state;</span>
+<span id="L323">          }</span>
+<span id="L324">          HalV2MemoryRegistration registration;</span>
+<span id="L325">          registration.domain_identity = buffer.domain_identity;</span>
+<span id="L326">          registration.bytes = buffer.bytes;</span>
+<span id="L327">          registration.ownership = buffer.ownership;</span>
+<span id="L328">          registration.access = buffer.flags;</span>
+<span id="L329">          registration.coherency = buffer.coherency;</span>
+<span id="L330">          registration.synchronization = buffer.synchronization;</span>
+<span id="L331">          registration.host_data = buffer.storage.data();</span>
+<span id="L332">          registration.opaque_handle = buffer.opaque_handle;</span>
+<span id="L333">          std::copy(buffer.name.begin(), buffer.name.end(),</span>
+<span id="L334">                    registration.name.begin());</span>
+<span id="L335">          native.heterogeneous_owned = 1;</span>
+<span id="L336">          try {</span>
+<span id="L337">            device_status = backend.memory_state-&gt;extension.register_memory(</span>
+<span id="L338">                backend.memory_state-&gt;extension.instance, &amp;registration,</span>
+<span id="L339">                &amp;native.heterogeneous_token);</span>
+<span id="L340">          } catch (...) {</span>
+<span id="L341">            device_status = HalV2Status::internal_error;</span>
+<span id="L342">          }</span>
+<span id="L343">          if (device_status == HalV2Status::ok &amp;&amp;</span>
+<span id="L344">              !validate_memory_token(native.heterogeneous_token, true)) {</span>
+<span id="L345">            device_status = HalV2Status::internal_error;</span>
+<span id="L346">          }</span>
+<span id="L347">        } else {</span>
+<span id="L348">          HalV2BufferRegistration registration;</span>
+<span id="L349">          registration.flags = buffer.flags;</span>
+<span id="L350">          registration.data = buffer.storage.data();</span>
+<span id="L351">          registration.bytes = buffer.bytes;</span>
+<span id="L352">          std::copy(buffer.name.begin(), buffer.name.end(),</span>
+<span id="L353">                    registration.name.begin());</span>
+<span id="L354">          try {</span>
+<span id="L355">            device_status = backend.api.register_buffer(</span>
+<span id="L356">                backend.api.instance, &amp;registration, &amp;native.legacy_token);</span>
+<span id="L357">          } catch (...) {</span>
+<span id="L358">            device_status = HalV2Status::internal_error;</span>
+<span id="L359">          }</span>
+<span id="L360">        }</span>
+<span id="L361">        const auto status = hal_v2_status_to_runtime(device_status);</span>
+<span id="L362">        if (status != Status::ok ||</span>
+<span id="L363">            (!buffer.heterogeneous &amp;&amp; native.legacy_token == 0)) {</span>
+<span id="L364">          (void)shutdown_backends();</span>
+<span id="L365">          return status == Status::ok ? Status::device_error : status;</span>
+<span id="L366">        }</span>
+<span id="L367">    }</span>
+<span id="L368">    return Status::ok;</span>
+<span id="L369">}</span>
+<span id="L370"></span>
+<span id="L371">bool DeviceManager::backend_has_registered_buffers(</span>
+<span id="L372">    std::size_t backend_index) const noexcept {</span>
+<span id="L373">    for (std::size_t index = 0;</span>
+<span id="L374">         index &lt; buffers_.size();</span>
+<span id="L375">         ++index) {</span>
+<span id="L376">      if (buffers_[index].backend_index == backend_index &amp;&amp;</span>
+<span id="L377">          (native_memory_[index].legacy_token != 0 ||</span>
+<span id="L378">           native_memory_[index].heterogeneous_owned != 0)) {</span>
+<span id="L379">        return true;</span>
+<span id="L380">      }</span>
+<span id="L381">    }</span>
+<span id="L382">    return false;</span>
+<span id="L383">}</span>
+<span id="L384"></span>
+<span id="L385">bool DeviceManager::has_backend_ownership() const noexcept {</span>
+<span id="L386">  return std::any_of(native_memory_.begin(), native_memory_.end(),</span>
+<span id="L387">                     [](const NativeMemoryState &amp;state) {</span>
+<span id="L388">                       return state.legacy_token != 0 ||</span>
+<span id="L389">                              state.heterogeneous_owned != 0;</span>
+<span id="L390">                     }) ||</span>
+<span id="L391">         std::any_of(initialized_backends_.begin(), initialized_backends_.end(),</span>
+<span id="L392">                     [](std::uint8_t initialized) { return initialized != 0; });</span>
+<span id="L393">}</span>
+<span id="L394"></span>
+<span id="L395">bool DeviceManager::cleanup_pending() const noexcept {</span>
+<span id="L396">    if (has_backend_ownership() || service_thread_.joinable()) {</span>
+<span id="L397">        return true;</span>
+<span id="L398">    }</span>
+<span id="L399">    for (std::size_t lane = 0; lane &lt; batch_backend_count_; ++lane) {</span>
+<span id="L400">        if (submission_threads_[lane].joinable()) {</span>
+<span id="L401">            return true;</span>
+<span id="L402">        }</span>
+<span id="L403">    }</span>
+<span id="L404">    return false;</span>
+<span id="L405">}</span>
+<span id="L406"></span>
+<span id="L407">Status DeviceManager::shutdown_backends() noexcept {</span>
+<span id="L408">    Status first_failure = Status::ok;</span>
+<span id="L409">    for (std::size_t index = buffers_.size(); index != 0; --index) {</span>
+<span id="L410">        const auto buffer_index = index - 1;</span>
+<span id="L411">        auto &amp;native = native_memory_[buffer_index];</span>
+<span id="L412">        if (native.legacy_token == 0 &amp;&amp; native.heterogeneous_owned == 0) {</span>
+<span id="L413">          continue;</span>
+<span id="L414">        }</span>
+<span id="L415">        const auto backend_index =</span>
+<span id="L416">            static_cast&lt;std::size_t&gt;(</span>
+<span id="L417">                buffers_[buffer_index].backend_index);</span>
+<span id="L418">        if (backend_index &gt;= backends_.size() ||</span>
+<span id="L419">            initialized_backends_[backend_index] ==</span>
+<span id="L420">                kBackendOwnershipNone) {</span>
+<span id="L421">            if (first_failure == Status::ok) {</span>
+<span id="L422">                first_failure = Status::invalid_state;</span>
+<span id="L423">            }</span>
+<span id="L424">            continue;</span>
+<span id="L425">        }</span>
+<span id="L426">        auto&amp; backend = backends_[backend_index];</span>
+<span id="L427">        HalV2Status device_status = HalV2Status::internal_error;</span>
+<span id="L428">        if (buffers_[buffer_index].heterogeneous) {</span>
+<span id="L429">          HalV2MemoryRegistration registration;</span>
+<span id="L430">          const auto &amp;buffer = buffers_[buffer_index];</span>
+<span id="L431">          registration.domain_identity = buffer.domain_identity;</span>
+<span id="L432">          registration.bytes = buffer.bytes;</span>
+<span id="L433">          registration.ownership = buffer.ownership;</span>
+<span id="L434">          registration.access = buffer.flags;</span>
+<span id="L435">          registration.coherency = buffer.coherency;</span>
+<span id="L436">          registration.synchronization = buffer.synchronization;</span>
+<span id="L437">          registration.host_data = buffer.storage.data();</span>
+<span id="L438">          registration.opaque_handle = buffer.opaque_handle;</span>
+<span id="L439">          std::copy(buffer.name.begin(), buffer.name.end(),</span>
+<span id="L440">                    registration.name.begin());</span>
+<span id="L441">          try {</span>
+<span id="L442">            device_status = backend.memory_state-&gt;extension.unregister_memory(</span>
+<span id="L443">                backend.memory_state-&gt;extension.instance, &amp;registration,</span>
+<span id="L444">                &amp;native.heterogeneous_token);</span>
+<span id="L445">          } catch (...) {</span>
+<span id="L446">            device_status = HalV2Status::internal_error;</span>
+<span id="L447">          }</span>
+<span id="L448">        } else {</span>
+<span id="L449">          try {</span>
+<span id="L450">            device_status = backend.api.unregister_buffer(backend.api.instance,</span>
+<span id="L451">                                                          native.legacy_token);</span>
+<span id="L452">          } catch (...) {</span>
+<span id="L453">            device_status = HalV2Status::internal_error;</span>
+<span id="L454">          }</span>
+<span id="L455">        }</span>
+<span id="L456">        const auto status = hal_v2_status_to_runtime(device_status);</span>
+<span id="L457">        if (status == Status::ok) {</span>
+<span id="L458">          native = {};</span>
+<span id="L459">        } else if (first_failure == Status::ok) {</span>
+<span id="L460">            first_failure = status;</span>
+<span id="L461">        }</span>
+<span id="L462">    }</span>
+<span id="L463">    for (std::size_t index = backends_.size(); index != 0; --index) {</span>
+<span id="L464">        const auto backend_index = index - 1;</span>
+<span id="L465">        const auto ownership =</span>
+<span id="L466">            initialized_backends_[backend_index];</span>
+<span id="L467">        if (ownership == kBackendOwnershipNone ||</span>
+<span id="L468">            backend_has_registered_buffers(backend_index)) {</span>
+<span id="L469">            continue;</span>
+<span id="L470">        }</span>
+<span id="L471">        auto&amp; backend = backends_[backend_index];</span>
+<span id="L472">        HalV2Status device_status = HalV2Status::internal_error;</span>
+<span id="L473">        try {</span>
+<span id="L474">            device_status =</span>
+<span id="L475">                backend.api.shutdown(backend.api.instance);</span>
+<span id="L476">        } catch (...) {</span>
+<span id="L477">            device_status = HalV2Status::internal_error;</span>
+<span id="L478">        }</span>
+<span id="L479">        const auto status = hal_v2_status_to_runtime(device_status);</span>
+<span id="L480">        if (status == Status::ok ||</span>
+<span id="L481">            (ownership ==</span>
+<span id="L482">                 kBackendOwnershipInitializationUncertain &amp;&amp;</span>
+<span id="L483">             device_status == HalV2Status::invalid_state)) {</span>
+<span id="L484">            initialized_backends_[backend_index] =</span>
+<span id="L485">                kBackendOwnershipNone;</span>
+<span id="L486">        } else if (first_failure == Status::ok) {</span>
+<span id="L487">            first_failure = status;</span>
+<span id="L488">        }</span>
+<span id="L489">    }</span>
+<span id="L490">    return first_failure;</span>
+<span id="L491">}</span>
+<span id="L492"></span>
+<span id="L493">Status DeviceManager::start_lane(</span>
+<span id="L494">    Executor&amp; executor,</span>
+<span id="L495">    DeviceEventObserver observer,</span>
+<span id="L496">    void* observer_data,</span>
+<span id="L497">    ThreadPolicyProvider&amp; provider,</span>
+<span id="L498">    ThreadStartupGate&amp; gate,</span>
+<span id="L499">    const ThreadRolePlan&amp; plan) noexcept {</span>
+<span id="L500">    if (started_.load(std::memory_order_acquire) ||</span>
+<span id="L501">        has_backend_ownership() ||</span>
+<span id="L502">        service_thread_.joinable() ||</span>
+<span id="L503">        outstanding_capacity_ == 0 ||</span>
+<span id="L504">        completion_batch_ == 0 ||</span>
+<span id="L505">        backends_.empty()) {</span>
+<span id="L506">        return Status::invalid_state;</span>
+<span id="L507">    }</span>
+<span id="L508">    executor_ = &amp;executor;</span>
+<span id="L509">    observer_ = observer;</span>
+<span id="L510">    observer_data_ = observer_data;</span>
+<span id="L511">    stopping_.store(false, std::memory_order_release);</span>
+<span id="L512">    service_ready_.store(false, std::memory_order_relaxed);</span>
+<span id="L513">    started_.store(true, std::memory_order_release);</span>
+<span id="L514">    wait_strategy_ = plan.resolved.wait_strategy;</span>
+<span id="L515">    const auto status = service_thread_.start(</span>
+<span id="L516">        provider,</span>
+<span id="L517">        gate,</span>
+<span id="L518">        plan,</span>
+<span id="L519">        0,</span>
+<span id="L520">        startup_result_,</span>
+<span id="L521">        &amp;DeviceManager::service_entry,</span>
+<span id="L522">        this);</span>
+<span id="L523">    if (status != Status::ok) {</span>
+<span id="L524">        started_.store(false, std::memory_order_release);</span>
+<span id="L525">        executor_ = nullptr;</span>
+<span id="L526">        observer_ = nullptr;</span>
+<span id="L527">        observer_data_ = nullptr;</span>
+<span id="L528">        return status;</span>
+<span id="L529">    }</span>
+<span id="L530">    return Status::ok;</span>
+<span id="L531">}</span>
+<span id="L532"></span>
+<span id="L533">Status DeviceManager::start_submission_lanes(</span>
+<span id="L534">    ThreadPolicyProvider&amp; provider,</span>
+<span id="L535">    ThreadStartupGate&amp; gate,</span>
+<span id="L536">    const ThreadRolePlan&amp; plan) noexcept {</span>
+<span id="L537">    if (!started_.load(std::memory_order_acquire) ||</span>
+<span id="L538">        (batch_backend_count_ != 0 &amp;&amp;</span>
+<span id="L539">         (!submission_threads_ || !submission_startup_results_ ||</span>
+<span id="L540">          !submission_contexts_))) {</span>
+<span id="L541">        return Status::invalid_state;</span>
+<span id="L542">    }</span>
+<span id="L543">    batch_stopping_.store(false, std::memory_order_release);</span>
+<span id="L544">    batch_admission_open_.store(true, std::memory_order_release);</span>
+<span id="L545">    for (std::size_t lane = 0; lane &lt; batch_backend_count_; ++lane) {</span>
+<span id="L546">        const auto status = submission_threads_[lane].start(</span>
+<span id="L547">            provider, gate, plan, lane, submission_startup_results_[lane],</span>
+<span id="L548">            &amp;DeviceManager::submission_entry, &amp;submission_contexts_[lane]);</span>
+<span id="L549">        if (status != Status::ok) {</span>
+<span id="L550">            batch_admission_open_.store(false, std::memory_order_release);</span>
+<span id="L551">            batch_stopping_.store(true, std::memory_order_release);</span>
+<span id="L552">            for (std::size_t prior = lane; prior != 0; --prior) {</span>
+<span id="L553">                const auto backend = submission_contexts_[prior - 1].backend_index;</span>
+<span id="L554">                batch_backends_[backend].wake_sequence.fetch_add(</span>
+<span id="L555">                    1, std::memory_order_release);</span>
+<span id="L556">                batch_backends_[backend].wake_sequence.notify_all();</span>
+<span id="L557">            }</span>
+<span id="L558">            return status;</span>
+<span id="L559">        }</span>
+<span id="L560">    }</span>
+<span id="L561">    return Status::ok;</span>
+<span id="L562">}</span>
+<span id="L563"></span>
+<span id="L564">Status DeviceManager::initialize() noexcept {</span>
+<span id="L565">    if (!started_.load(std::memory_order_acquire)) {</span>
+<span id="L566">        return Status::invalid_state;</span>
+<span id="L567">    }</span>
+<span id="L568">    return initialize_backends();</span>
+<span id="L569">}</span>
+<span id="L570"></span>
+<span id="L571">void DeviceManager::wait_started() const noexcept {</span>
+<span id="L572">    service_thread_.wait_started();</span>
+<span id="L573">    for (std::size_t lane = 0; lane &lt; batch_backend_count_; ++lane) {</span>
+<span id="L574">        submission_threads_[lane].wait_started();</span>
+<span id="L575">    }</span>
+<span id="L576">}</span>
+<span id="L577"></span>
+<span id="L578">Status DeviceManager::request_batch_stop() noexcept {</span>
+<span id="L579">    batch_admission_open_.store(false, std::memory_order_release);</span>
+<span id="L580">    batch_stopping_.store(true, std::memory_order_release);</span>
+<span id="L581">    Status first_failure = Status::ok;</span>
+<span id="L582">    for (std::size_t backend_index = 0; backend_index &lt; backends_.size();</span>
+<span id="L583">         ++backend_index) {</span>
+<span id="L584">        auto* state = backends_[backend_index].command_state;</span>
+<span id="L585">        if (!state) {</span>
+<span id="L586">            continue;</span>
+<span id="L587">        }</span>
+<span id="L588">        auto&amp; control = batch_backends_[backend_index];</span>
+<span id="L589">        bool request_needed =</span>
+<span id="L590">            initialized_backends_[backend_index] != kBackendOwnershipNone;</span>
+<span id="L591">        if (control.lane_index != std::numeric_limits&lt;std::size_t&gt;::max()) {</span>
+<span id="L592">            request_needed = request_needed ||</span>
+<span id="L593">                submission_threads_[control.lane_index].joinable();</span>
+<span id="L594">        }</span>
+<span id="L595">        for (std::size_t offset = 0;</span>
+<span id="L596">             !request_needed &amp;&amp; offset &lt; control.slot_count; ++offset) {</span>
+<span id="L597">            request_needed = batch_slots_[control.slot_offset + offset]</span>
+<span id="L598">                                 .state.load(std::memory_order_acquire) !=</span>
+<span id="L599">                             kBatchFree;</span>
+<span id="L600">        }</span>
+<span id="L601">        if (!request_needed) {</span>
+<span id="L602">            continue;</span>
+<span id="L603">        }</span>
+<span id="L604">        HalV2Status result = HalV2Status::internal_error;</span>
+<span id="L605">        try {</span>
+<span id="L606">            result = state-&gt;extension.request_stop(state-&gt;extension.instance);</span>
+<span id="L607">        } catch (...) {</span>
+<span id="L608">            result = HalV2Status::internal_error;</span>
+<span id="L609">        }</span>
+<span id="L610">        const auto status = hal_v2_status_to_runtime(result);</span>
+<span id="L611">        if (status != Status::ok &amp;&amp; first_failure == Status::ok) {</span>
+<span id="L612">            first_failure = status;</span>
+<span id="L613">        }</span>
+<span id="L614">        for (std::size_t offset = 0; offset &lt; control.slot_count; ++offset) {</span>
+<span id="L615">            auto&amp; slot = batch_slots_[control.slot_offset + offset];</span>
+<span id="L616">            const auto slot_state = slot.state.load(std::memory_order_acquire);</span>
+<span id="L617">            if (slot_state == kBatchFree || slot_state == kBatchReserved) {</span>
+<span id="L618">                continue;</span>
+<span id="L619">            }</span>
+<span id="L620">            if (slot_state != kBatchQueued &amp;&amp;</span>
+<span id="L621">                slot_state != kBatchRateTerminal &amp;&amp;</span>
+<span id="L622">                slot_state != kBatchRateQuarantineOwned &amp;&amp;</span>
+<span id="L623">                slot_state != kBatchRateQuarantined &amp;&amp;</span>
+<span id="L624">                !slot.cancellation_requested.exchange(</span>
+<span id="L625">                    true, std::memory_order_acq_rel)) {</span>
+<span id="L626">                try {</span>
+<span id="L627">                    (void)state-&gt;extension.cancel(</span>
+<span id="L628">                        state-&gt;extension.instance, slot.batch.batch_id);</span>
+<span id="L629">                } catch (...) {</span>
+<span id="L630">                }</span>
+<span id="L631">            }</span>
+<span id="L632">            if (slot_state == kBatchQueued) {</span>
+<span id="L633">                auto expected = kBatchQueued;</span>
+<span id="L634">                if (slot.state.compare_exchange_strong(</span>
+<span id="L635">                        expected, kBatchOwned, std::memory_order_acq_rel,</span>
+<span id="L636">                        std::memory_order_relaxed)) {</span>
+<span id="L637">                    finish_batch_slot(slot, Status::device_canceled, false);</span>
+<span id="L638">                }</span>
+<span id="L639">            } else if (!slot.rate_owned &amp;&amp;</span>
+<span id="L640">                       !slot.graph_released.exchange(</span>
+<span id="L641">                           true, std::memory_order_acq_rel) &amp;&amp; executor_) {</span>
+<span id="L642">                (void)executor_-&gt;complete_external(</span>
+<span id="L643">                    slot.phase_index, Status::device_canceled);</span>
+<span id="L644">            }</span>
+<span id="L645">        }</span>
+<span id="L646">        control.wake_sequence.fetch_add(1, std::memory_order_release);</span>
+<span id="L647">        control.wake_sequence.notify_all();</span>
+<span id="L648">    }</span>
+<span id="L649">    return first_failure;</span>
+<span id="L650">}</span>
+<span id="L651"></span>
+<span id="L652">Status DeviceManager::quiesce_lane() noexcept {</span>
+<span id="L653">    const bool was_started =</span>
+<span id="L654">        started_.exchange(false, std::memory_order_acq_rel);</span>
+<span id="L655">    if (was_started || service_thread_.joinable()) {</span>
+<span id="L656">        stopping_.store(true, std::memory_order_release);</span>
+<span id="L657">        wake_sequence_.fetch_add(1, std::memory_order_release);</span>
+<span id="L658">        wake_sequence_.notify_all();</span>
+<span id="L659">        service_thread_.wait_quiescent();</span>
+<span id="L660">        for (std::size_t index = 0;</span>
+<span id="L661">             index &lt; outstanding_capacity_;</span>
+<span id="L662">             ++index) {</span>
+<span id="L663">            auto&amp; slot = outstanding_slots_[index];</span>
+<span id="L664">            const auto previous =</span>
+<span id="L665">                slot.state.exchange(</span>
+<span id="L666">                    kOutstandingFree,</span>
+<span id="L667">                    std::memory_order_acq_rel);</span>
+<span id="L668">            if (previous == kOutstandingSubmitted &amp;&amp; executor_) {</span>
+<span id="L669">                (void)executor_-&gt;complete_external(</span>
+<span id="L670">                    slot.phase_index,</span>
+<span id="L671">                    Status::device_canceled);</span>
+<span id="L672">            }</span>
+<span id="L673">        }</span>
+<span id="L674">        outstanding_count_.store(0, std::memory_order_release);</span>
+<span id="L675">        executor_ = nullptr;</span>
+<span id="L676">        observer_ = nullptr;</span>
+<span id="L677">        observer_data_ = nullptr;</span>
+<span id="L678">    }</span>
+<span id="L679">    return Status::ok;</span>
+<span id="L680">}</span>
+<span id="L681"></span>
+<span id="L682">Status DeviceManager::cleanup_lane() noexcept {</span>
+<span id="L683">    return service_thread_.cleanup_and_join();</span>
+<span id="L684">}</span>
+<span id="L685"></span>
+<span id="L686">Status DeviceManager::stop_lane() noexcept {</span>
+<span id="L687">    const auto request_status = request_batch_stop();</span>
+<span id="L688">    Status submission_status = Status::ok;</span>
+<span id="L689">    for (std::size_t lane = batch_backend_count_; lane != 0; --lane) {</span>
+<span id="L690">        if (!submission_threads_[lane - 1].joinable()) {</span>
+<span id="L691">            continue;</span>
+<span id="L692">        }</span>
+<span id="L693">        submission_threads_[lane - 1].wait_quiescent();</span>
+<span id="L694">        const auto status = submission_threads_[lane - 1].cleanup_and_join();</span>
+<span id="L695">        if (submission_status == Status::ok &amp;&amp; status != Status::ok) {</span>
+<span id="L696">            submission_status = status;</span>
+<span id="L697">        }</span>
+<span id="L698">    }</span>
+<span id="L699">    for (std::size_t backend_index = 0; backend_index &lt; backends_.size();</span>
+<span id="L700">         ++backend_index) {</span>
+<span id="L701">        fail_backend_batches(backend_index, Status::device_canceled);</span>
+<span id="L702">    }</span>
+<span id="L703">    const auto quiesce_status = quiesce_lane();</span>
+<span id="L704">    const auto cleanup_status = cleanup_lane();</span>
+<span id="L705">    if (request_status != Status::ok) {</span>
+<span id="L706">        return request_status;</span>
+<span id="L707">    }</span>
+<span id="L708">    if (submission_status != Status::ok) {</span>
+<span id="L709">        return submission_status;</span>
+<span id="L710">    }</span>
+<span id="L711">    return quiesce_status != Status::ok ? quiesce_status : cleanup_status;</span>
+<span id="L712">}</span>
+<span id="L713"></span>
+<span id="L714">Status DeviceManager::stop() noexcept {</span>
+<span id="L715">    const auto request_status = request_batch_stop();</span>
+<span id="L716">    Status submission_status = Status::ok;</span>
+<span id="L717">    for (std::size_t lane = batch_backend_count_; lane != 0; --lane) {</span>
+<span id="L718">        if (!submission_threads_[lane - 1].joinable()) {</span>
+<span id="L719">            continue;</span>
+<span id="L720">        }</span>
+<span id="L721">        submission_threads_[lane - 1].wait_quiescent();</span>
+<span id="L722">        const auto status = submission_threads_[lane - 1].cleanup_and_join();</span>
+<span id="L723">        if (submission_status == Status::ok &amp;&amp; status != Status::ok) {</span>
+<span id="L724">            submission_status = status;</span>
+<span id="L725">        }</span>
+<span id="L726">    }</span>
+<span id="L727">    for (std::size_t backend_index = 0; backend_index &lt; backends_.size();</span>
+<span id="L728">         ++backend_index) {</span>
+<span id="L729">        fail_backend_batches(backend_index, Status::device_canceled);</span>
+<span id="L730">    }</span>
+<span id="L731">    const auto quiesce_status = quiesce_lane();</span>
+<span id="L732">    // A timed-out rate batch can retain a native terminal completion after the</span>
+<span id="L733">    // service lane quiesces. Collect at most one bounded batch per backend on</span>
+<span id="L734">    // each checked stop before unregistering its referenced buffers. Unfinished</span>
+<span id="L735">    // work still makes unregister fail and retains ownership for a later retry.</span>
+<span id="L736">    if (quiesce_status == Status::ok) {</span>
+<span id="L737">        for (std::size_t backend_index = 0;</span>
+<span id="L738">             backend_index &lt; backends_.size(); ++backend_index) {</span>
+<span id="L739">            if (initialized_backends_[backend_index] != kBackendOwnershipNone &amp;&amp;</span>
+<span id="L740">                backends_[backend_index].command_state) {</span>
+<span id="L741">                poll_batch_completions(backend_index);</span>
+<span id="L742">            }</span>
+<span id="L743">        }</span>
+<span id="L744">    }</span>
+<span id="L745">    const auto backend_status = shutdown_backends();</span>
+<span id="L746">    if (backend_status == Status::ok) {</span>
+<span id="L747">        release_rate_slots_after_shutdown();</span>
+<span id="L748">    }</span>
+<span id="L749">    const auto cleanup_status = cleanup_lane();</span>
+<span id="L750">    if (request_status != Status::ok) {</span>
+<span id="L751">        return request_status;</span>
+<span id="L752">    }</span>
+<span id="L753">    if (submission_status != Status::ok) {</span>
+<span id="L754">        return submission_status;</span>
+<span id="L755">    }</span>
+<span id="L756">    if (quiesce_status != Status::ok) {</span>
+<span id="L757">        return quiesce_status;</span>
+<span id="L758">    }</span>
+<span id="L759">    if (backend_status != Status::ok) {</span>
+<span id="L760">        return backend_status;</span>
+<span id="L761">    }</span>
+<span id="L762">    return cleanup_status;</span>
+<span id="L763">}</span>
+<span id="L764"></span>
+<span id="L765">void DeviceManager::release_rate_slots_after_shutdown() noexcept {</span>
+<span id="L766">    for (std::size_t index = 0; index &lt; batch_slot_count_; ++index) {</span>
+<span id="L767">        auto&amp; slot = batch_slots_[index];</span>
+<span id="L768">        if (!slot.rate_owned) {</span>
+<span id="L769">            continue;</span>
+<span id="L770">        }</span>
+<span id="L771">        const auto previous = slot.state.exchange(</span>
+<span id="L772">            kBatchFree, std::memory_order_acq_rel);</span>
+<span id="L773">        if (previous != kBatchFree &amp;&amp; previous != kBatchReserved) {</span>
+<span id="L774">            auto count = outstanding_count_.load(std::memory_order_relaxed);</span>
+<span id="L775">            while (count != 0 &amp;&amp;</span>
+<span id="L776">                   !outstanding_count_.compare_exchange_weak(</span>
+<span id="L777">                       count, count - 1, std::memory_order_release,</span>
+<span id="L778">                       std::memory_order_relaxed)) {</span>
+<span id="L779">            }</span>
+<span id="L780">        }</span>
+<span id="L781">        slot.rate_owned = false;</span>
+<span id="L782">    }</span>
+<span id="L783">}</span>
+<span id="L784"></span>
+<span id="L785">DeviceManager::Outstanding* DeviceManager::acquire_outstanding() noexcept {</span>
+<span id="L786">    const auto first =</span>
+<span id="L787">        slot_hint_.fetch_add(1, std::memory_order_relaxed) %</span>
+<span id="L788">        outstanding_capacity_;</span>
+<span id="L789">    for (std::size_t offset = 0;</span>
+<span id="L790">         offset &lt; outstanding_capacity_;</span>
+<span id="L791">         ++offset) {</span>
+<span id="L792">        auto&amp; slot = outstanding_slots_[</span>
+<span id="L793">            (first + offset) % outstanding_capacity_];</span>
+<span id="L794">        auto expected = kOutstandingFree;</span>
+<span id="L795">        if (slot.state.compare_exchange_strong(</span>
+<span id="L796">                expected,</span>
+<span id="L797">                kOutstandingOwned,</span>
+<span id="L798">                std::memory_order_acq_rel,</span>
+<span id="L799">                std::memory_order_relaxed)) {</span>
+<span id="L800">            return &amp;slot;</span>
+<span id="L801">        }</span>
+<span id="L802">    }</span>
+<span id="L803">    return nullptr;</span>
+<span id="L804">}</span>
+<span id="L805"></span>
+<span id="L806">Status DeviceManager::submit(</span>
+<span id="L807">    std::size_t backend_index,</span>
+<span id="L808">    std::size_t phase_index,</span>
+<span id="L809">    std::size_t worker_index,</span>
+<span id="L810">    std::uint64_t frame_index,</span>
+<span id="L811">    const DeviceSubmission&amp; requested,</span>
+<span id="L812">    std::uint64_t&amp; out_submission_id) noexcept {</span>
+<span id="L813">    out_submission_id = 0;</span>
+<span id="L814">    if (!started_.load(std::memory_order_acquire) ||</span>
+<span id="L815">        backend_index &gt;= backends_.size() ||</span>
+<span id="L816">        requested.struct_size &lt; sizeof(requested) ||</span>
+<span id="L817">        requested.abi_version != RTFW_DEVICE_ABI_VERSION ||</span>
+<span id="L818">        requested.submission_id != 0 ||</span>
+<span id="L819">        requested.frame_index != 0 ||</span>
+<span id="L820">        requested.timeout_ns == 0 ||</span>
+<span id="L821">        requested.flags != 0 ||</span>
+<span id="L822">        requested.payload_size &gt;</span>
+<span id="L823">            RTFW_DEVICE_INLINE_PAYLOAD_CAPACITY ||</span>
+<span id="L824">        requested.buffer_count &gt;</span>
+<span id="L825">            RTFW_DEVICE_BUFFER_REF_CAPACITY ||</span>
+<span id="L826">        !bytes_zero(</span>
+<span id="L827">            requested.reserved,</span>
+<span id="L828">            std::size(requested.reserved))) {</span>
+<span id="L829">        return Status::invalid_argument;</span>
+<span id="L830">    }</span>
+<span id="L831"></span>
+<span id="L832">    HalV2Submission submission;</span>
+<span id="L833">    submission.timeout_ns = requested.timeout_ns;</span>
+<span id="L834">    submission.opcode = requested.opcode;</span>
+<span id="L835">    submission.flags = requested.flags;</span>
+<span id="L836">    submission.payload_size = requested.payload_size;</span>
+<span id="L837">    submission.buffer_count = requested.buffer_count;</span>
+<span id="L838">    std::copy(</span>
+<span id="L839">        std::begin(requested.payload),</span>
+<span id="L840">        std::end(requested.payload),</span>
+<span id="L841">        submission.payload.begin());</span>
+<span id="L842">    for (std::size_t index = 0;</span>
+<span id="L843">         index &lt; requested.buffer_count;</span>
+<span id="L844">         ++index) {</span>
+<span id="L845">        const auto&amp; requested_reference = requested.buffers[index];</span>
+<span id="L846">        auto&amp; reference = submission.buffers[index];</span>
+<span id="L847">        const DeviceBufferHandle logical{requested_reference.buffer_token};</span>
+<span id="L848">        if (!logical.valid() ||</span>
+<span id="L849">            logical.owner() != owner_ ||</span>
+<span id="L850">            logical.index() &gt;= buffers_.size() ||</span>
+<span id="L851">            requested_reference.reserved0 != 0 ||</span>
+<span id="L852">            !valid_access(requested_reference.access)) {</span>
+<span id="L853">            return Status::invalid_handle;</span>
+<span id="L854">        }</span>
+<span id="L855">        const auto buffer_index =</span>
+<span id="L856">            static_cast&lt;std::size_t&gt;(logical.index());</span>
+<span id="L857">        const auto&amp; buffer = buffers_[buffer_index];</span>
+<span id="L858">        const auto *domain =</span>
+<span id="L859">            backends_[backend_index].memory_state</span>
+<span id="L860">                ? find_memory_domain(*backends_[backend_index].memory_state,</span>
+<span id="L861">                                     buffer.domain_identity)</span>
+<span id="L862">                : nullptr;</span>
+<span id="L863">        if (buffer.backend_index != backend_index || !domain ||</span>
+<span id="L864">            requested_reference.offset &gt; buffer.bytes ||</span>
+<span id="L865">            requested_reference.bytes &gt;</span>
+<span id="L866">                buffer.bytes - requested_reference.offset ||</span>
+<span id="L867">            requested_reference.offset % domain-&gt;offset_granularity != 0 ||</span>
+<span id="L868">            requested_reference.bytes % domain-&gt;byte_granularity != 0) {</span>
+<span id="L869">          return Status::invalid_argument;</span>
+<span id="L870">        }</span>
+<span id="L871">        const auto required_access =</span>
+<span id="L872">            requested_reference.access == RTFW_DEVICE_ACCESS_READ</span>
+<span id="L873">                ? RTFW_DEVICE_BUFFER_DEVICE_READ</span>
+<span id="L874">            : requested_reference.access == RTFW_DEVICE_ACCESS_WRITE</span>
+<span id="L875">                ? RTFW_DEVICE_BUFFER_DEVICE_WRITE</span>
+<span id="L876">                : RTFW_DEVICE_BUFFER_DEVICE_READ |</span>
+<span id="L877">                      RTFW_DEVICE_BUFFER_DEVICE_WRITE;</span>
+<span id="L878">        if ((required_access &amp; ~buffer.flags) != 0 ||</span>
+<span id="L879">            (buffer.heterogeneous &amp;&amp;</span>
+<span id="L880">             buffer.synchronization != hal_v2_memory_sync_none)) {</span>
+<span id="L881">          return Status::device_error;</span>
+<span id="L882">        }</span>
+<span id="L883">        reference.buffer_token =</span>
+<span id="L884">            buffer.heterogeneous ? native_memory_[buffer_index]</span>
+<span id="L885">                                       .heterogeneous_token.submission_token</span>
+<span id="L886">                                 : native_memory_[buffer_index].legacy_token;</span>
+<span id="L887">        if (reference.buffer_token == 0) {</span>
+<span id="L888">          return Status::invalid_state;</span>
+<span id="L889">        }</span>
+<span id="L890">        reference.access = requested_reference.access;</span>
+<span id="L891">        reference.offset = requested_reference.offset;</span>
+<span id="L892">        reference.bytes = requested_reference.bytes;</span>
+<span id="L893">    }</span>
+<span id="L894"></span>
+<span id="L895">    auto* slot = acquire_outstanding();</span>
+<span id="L896">    if (!slot) {</span>
+<span id="L897">        queue_rejections_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L898">        return Status::device_queue_full;</span>
+<span id="L899">    }</span>
+<span id="L900">    auto submission_id =</span>
+<span id="L901">        next_submission_id_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L902">    if (submission_id == 0) {</span>
+<span id="L903">        submission_id =</span>
+<span id="L904">            next_submission_id_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L905">    }</span>
+<span id="L906">    slot-&gt;submission_id = submission_id;</span>
+<span id="L907">    slot-&gt;frame_index = frame_index;</span>
+<span id="L908">    slot-&gt;backend_index =</span>
+<span id="L909">        static_cast&lt;std::uint32_t&gt;(backend_index);</span>
+<span id="L910">    slot-&gt;phase_index =</span>
+<span id="L911">        static_cast&lt;std::uint32_t&gt;(phase_index);</span>
+<span id="L912">    slot-&gt;state.store(</span>
+<span id="L913">        kOutstandingSubmitting,</span>
+<span id="L914">        std::memory_order_release);</span>
+<span id="L915"></span>
+<span id="L916">    submission.submission_id = submission_id;</span>
+<span id="L917">    submission.frame_index = frame_index;</span>
+<span id="L918">    HalV2Status device_status = HalV2Status::internal_error;</span>
+<span id="L919">    try {</span>
+<span id="L920">        device_status = backends_[backend_index].api.submit(</span>
+<span id="L921">            backends_[backend_index].api.instance,</span>
+<span id="L922">            &amp;submission);</span>
+<span id="L923">    } catch (...) {</span>
+<span id="L924">        device_status = HalV2Status::internal_error;</span>
+<span id="L925">    }</span>
+<span id="L926">    const auto status = hal_v2_status_to_runtime(device_status);</span>
+<span id="L927">    if (status != Status::ok) {</span>
+<span id="L928">        const auto previous = slot-&gt;state.exchange(</span>
+<span id="L929">            kOutstandingFree,</span>
+<span id="L930">            std::memory_order_acq_rel);</span>
+<span id="L931">        if (status == Status::device_queue_full) {</span>
+<span id="L932">            queue_rejections_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L933">        } else {</span>
+<span id="L934">            record_failure(status);</span>
+<span id="L935">        }</span>
+<span id="L936">        // Publishing a completion for a rejected submission violates the ABI</span>
+<span id="L937">        // contract. Fail closed instead of applying an unaccepted result.</span>
+<span id="L938">        return previous == kOutstandingEarlyReady</span>
+<span id="L939">            ? Status::device_error</span>
+<span id="L940">            : status;</span>
+<span id="L941">    }</span>
+<span id="L942"></span>
+<span id="L943">    outstanding_count_.fetch_add(1, std::memory_order_release);</span>
+<span id="L944">    submissions_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L945">    out_submission_id = submission_id;</span>
+<span id="L946">    auto submitted_event = DeviceEvent{</span>
+<span id="L947">        DeviceEventKind::submitted,</span>
+<span id="L948">        Status::ok,</span>
+<span id="L949">        backend_index,</span>
+<span id="L950">        phase_index,</span>
+<span id="L951">        frame_index,</span>
+<span id="L952">        submission_id,</span>
+<span id="L953">        0,</span>
+<span id="L954">    };</span>
+<span id="L955">    submitted_event.producer = RuntimeTraceProducer::worker;</span>
+<span id="L956">    submitted_event.worker_index = worker_index;</span>
+<span id="L957">    emit(submitted_event);</span>
+<span id="L958">    auto expected = kOutstandingSubmitting;</span>
+<span id="L959">    if (!slot-&gt;state.compare_exchange_strong(</span>
+<span id="L960">            expected,</span>
+<span id="L961">            kOutstandingSubmitted,</span>
+<span id="L962">            std::memory_order_acq_rel,</span>
+<span id="L963">            std::memory_order_relaxed)) {</span>
+<span id="L964">        if (expected != kOutstandingEarlyReady) {</span>
+<span id="L965">            fail_backend_outstanding(</span>
+<span id="L966">                backend_index,</span>
+<span id="L967">                Status::device_error);</span>
+<span id="L968">            return Status::ok;</span>
+<span id="L969">        }</span>
+<span id="L970">        expected = kOutstandingEarlyReady;</span>
+<span id="L971">        if (!slot-&gt;state.compare_exchange_strong(</span>
+<span id="L972">                expected,</span>
+<span id="L973">                kOutstandingOwned,</span>
+<span id="L974">                std::memory_order_acq_rel,</span>
+<span id="L975">                std::memory_order_relaxed)) {</span>
+<span id="L976">            fail_backend_outstanding(</span>
+<span id="L977">                backend_index,</span>
+<span id="L978">                Status::device_error);</span>
+<span id="L979">            return Status::ok;</span>
+<span id="L980">        }</span>
+<span id="L981">        finalize_completion(</span>
+<span id="L982">            *slot,</span>
+<span id="L983">            backend_index,</span>
+<span id="L984">            slot-&gt;early_completion);</span>
+<span id="L985">        return Status::ok;</span>
+<span id="L986">    }</span>
+<span id="L987">    wake_sequence_.fetch_add(1, std::memory_order_release);</span>
+<span id="L988">    wake_sequence_.notify_one();</span>
+<span id="L989">    return Status::ok;</span>
+<span id="L990">}</span>
+<span id="L991"></span>
+<span id="L992">std::size_t DeviceManager::timeline_count(</span>
+<span id="L993">    std::size_t backend_index) const noexcept {</span>
+<span id="L994">    std::size_t count = 0;</span>
+<span id="L995">    for (std::size_t index = 0; index &lt; timeline_count_; ++index) {</span>
+<span id="L996">        count += timelines_[index].backend_index == backend_index ? 1u : 0u;</span>
+<span id="L997">    }</span>
+<span id="L998">    return count;</span>
+<span id="L999">}</span>
+<span id="L1000"></span>
+<span id="L1001">bool DeviceManager::timeline_at(</span>
+<span id="L1002">    std::size_t backend_index,</span>
+<span id="L1003">    std::size_t ordinal,</span>
+<span id="L1004">    DeviceTimelineInfo&amp; info) const noexcept {</span>
+<span id="L1005">    for (std::size_t index = 0; index &lt; timeline_count_; ++index) {</span>
+<span id="L1006">        const auto&amp; timeline = timelines_[index];</span>
+<span id="L1007">        if (timeline.backend_index != backend_index) {</span>
+<span id="L1008">            continue;</span>
+<span id="L1009">        }</span>
+<span id="L1010">        if (ordinal-- != 0) {</span>
+<span id="L1011">            continue;</span>
+<span id="L1012">        }</span>
+<span id="L1013">        DeviceTimelineInfo candidate;</span>
+<span id="L1014">        candidate.timeline = DeviceTimelineHandle{</span>
+<span id="L1015">            owner_, static_cast&lt;std::uint32_t&gt;(index)};</span>
+<span id="L1016">        candidate.backend = DeviceBackendHandle{</span>
+<span id="L1017">            owner_, static_cast&lt;std::uint32_t&gt;(backend_index)};</span>
+<span id="L1018">        candidate.name = timeline.name;</span>
+<span id="L1019">        candidate.initial_value = timeline.initial_value;</span>
+<span id="L1020">        candidate.last_accepted_value =</span>
+<span id="L1021">            timeline.last_accepted.load(std::memory_order_acquire);</span>
+<span id="L1022">        candidate.completed_value =</span>
+<span id="L1023">            timeline.completed.load(std::memory_order_acquire);</span>
+<span id="L1024">        info = candidate;</span>
+<span id="L1025">        return true;</span>
+<span id="L1026">    }</span>
+<span id="L1027">    return false;</span>
+<span id="L1028">}</span>
+<span id="L1029"></span>
+<span id="L1030">bool DeviceManager::timeline_info(</span>
+<span id="L1031">    DeviceTimelineHandle handle,</span>
+<span id="L1032">    DeviceTimelineInfo&amp; info) const noexcept {</span>
+<span id="L1033">    info = {};</span>
+<span id="L1034">    if (!handle.valid() || handle.owner() != owner_ ||</span>
+<span id="L1035">        handle.index() &gt;= timeline_count_) {</span>
+<span id="L1036">        return false;</span>
+<span id="L1037">    }</span>
+<span id="L1038">    const auto&amp; timeline = timelines_[handle.index()];</span>
+<span id="L1039">    info.timeline = handle;</span>
+<span id="L1040">    info.backend = DeviceBackendHandle{owner_, timeline.backend_index};</span>
+<span id="L1041">    info.name = timeline.name;</span>
+<span id="L1042">    info.initial_value = timeline.initial_value;</span>
+<span id="L1043">    info.last_accepted_value =</span>
+<span id="L1044">        timeline.last_accepted.load(std::memory_order_acquire);</span>
+<span id="L1045">    info.completed_value =</span>
+<span id="L1046">        timeline.completed.load(std::memory_order_acquire);</span>
+<span id="L1047">    return true;</span>
+<span id="L1048">}</span>
+<span id="L1049"></span>
+<span id="L1050">Status DeviceManager::submit_batch(</span>
+<span id="L1051">    std::size_t backend_index,</span>
+<span id="L1052">    std::size_t phase_index,</span>
+<span id="L1053">    std::size_t worker_index,</span>
+<span id="L1054">    std::uint64_t frame_index,</span>
+<span id="L1055">    const DeviceCommandBatch&amp; requested,</span>
+<span id="L1056">    const DeviceCommandBatch&amp; declaration,</span>
+<span id="L1057">    std::uint64_t&amp; out_batch_id,</span>
+<span id="L1058">    const DeviceRateReleaseIdentity* rate_identity,</span>
+<span id="L1059">    DeviceRateTicket* rate_ticket,</span>
+<span id="L1060">    const DeviceRateSimulationTiming* simulation) noexcept {</span>
+<span id="L1061">    out_batch_id = 0;</span>
+<span id="L1062">    if (rate_ticket) {</span>
+<span id="L1063">        *rate_ticket = {};</span>
+<span id="L1064">    }</span>
+<span id="L1065">    if (!started_.load(std::memory_order_acquire) ||</span>
+<span id="L1066">        !batch_admission_open_.load(std::memory_order_acquire) ||</span>
+<span id="L1067">        backend_index &gt;= backends_.size() ||</span>
+<span id="L1068">        !backends_[backend_index].command_state ||</span>
+<span id="L1069">        !validate_batch_shape(requested) ||</span>
+<span id="L1070">        !batch_matches_declaration(requested, declaration) ||</span>
+<span id="L1071">        ((rate_identity == nullptr) != (rate_ticket == nullptr)) ||</span>
+<span id="L1072">        (rate_identity &amp;&amp;</span>
+<span id="L1073">         (rate_identity-&gt;reference_index ==</span>
+<span id="L1074">              std::numeric_limits&lt;std::size_t&gt;::max() ||</span>
+<span id="L1075">          !rate_identity-&gt;domain.valid() || !rate_identity-&gt;phase.valid() ||</span>
+<span id="L1076">          rate_identity-&gt;phase.index() != phase_index)) ||</span>
+<span id="L1077">        (simulation &amp;&amp;</span>
+<span id="L1078">         (!rate_identity || simulation-&gt;host_watchdog_ns == 0 ||</span>
+<span id="L1079">          simulation-&gt;host_watchdog_ns &gt; device_rate_simulation_watchdog_limit_ns ||</span>
+<span id="L1080">          backends_[backend_index].capabilities.deterministic_mock == 0))) {</span>
+<span id="L1081">        return Status::invalid_argument;</span>
+<span id="L1082">    }</span>
+<span id="L1083">    const auto&amp; capabilities =</span>
+<span id="L1084">        backends_[backend_index].command_state-&gt;capabilities;</span>
+<span id="L1085">    const auto simulation_start_ns = simulation ? monotonic_now_ns() : 0;</span>
+<span id="L1086">    if (requested.command_count &gt; capabilities.max_commands_per_batch ||</span>
+<span id="L1087">        requested.wait_count &gt; capabilities.max_wait_points ||</span>
+<span id="L1088">        requested.signal_count &gt; capabilities.max_signal_points ||</span>
+<span id="L1089">        requested.timeout_ns &gt;</span>
+<span id="L1090">            std::numeric_limits&lt;std::uint64_t&gt;::max() - monotonic_now_ns() ||</span>
+<span id="L1091">        (simulation &amp;&amp; simulation-&gt;host_watchdog_ns &gt;</span>
+<span id="L1092">            std::numeric_limits&lt;std::uint64_t&gt;::max() - simulation_start_ns)) {</span>
+<span id="L1093">        return Status::invalid_argument;</span>
+<span id="L1094">    }</span>
+<span id="L1095">    auto&amp; control = batch_backends_[backend_index];</span>
+<span id="L1096">    if (control.admission.test_and_set(std::memory_order_acquire)) {</span>
+<span id="L1097">        queue_rejections_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1098">        return Status::device_queue_full;</span>
+<span id="L1099">    }</span>
+<span id="L1100">    const auto release_admission = [&amp;control] {</span>
+<span id="L1101">        control.admission.clear(std::memory_order_release);</span>
+<span id="L1102">    };</span>
+<span id="L1103">    if (!batch_admission_open_.load(std::memory_order_acquire)) {</span>
+<span id="L1104">        release_admission();</span>
+<span id="L1105">        return Status::invalid_state;</span>
+<span id="L1106">    }</span>
+<span id="L1107"></span>
+<span id="L1108">    BatchSlot* slot = nullptr;</span>
+<span id="L1109">    for (std::size_t offset = 0; offset &lt; control.slot_count; ++offset) {</span>
+<span id="L1110">        auto&amp; candidate = batch_slots_[control.slot_offset + offset];</span>
+<span id="L1111">        auto expected = kBatchFree;</span>
+<span id="L1112">        if (candidate.state.compare_exchange_strong(</span>
+<span id="L1113">                expected, kBatchReserved, std::memory_order_acq_rel,</span>
+<span id="L1114">                std::memory_order_relaxed)) {</span>
+<span id="L1115">            slot = &amp;candidate;</span>
+<span id="L1116">            break;</span>
+<span id="L1117">        }</span>
+<span id="L1118">    }</span>
+<span id="L1119">    if (!slot) {</span>
+<span id="L1120">        release_admission();</span>
+<span id="L1121">        queue_rejections_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1122">        return Status::device_queue_full;</span>
+<span id="L1123">    }</span>
+<span id="L1124">    const auto reject = [&amp;](Status status) {</span>
+<span id="L1125">        slot-&gt;state.store(kBatchFree, std::memory_order_release);</span>
+<span id="L1126">        release_admission();</span>
+<span id="L1127">        return status;</span>
+<span id="L1128">    };</span>
+<span id="L1129"></span>
+<span id="L1130">    for (std::size_t index = 0; index &lt; requested.wait_count; ++index) {</span>
+<span id="L1131">        const auto handle = DeviceTimelineHandle{</span>
+<span id="L1132">            requested.waits[index].timeline_handle};</span>
+<span id="L1133">        if (!handle.valid() || handle.owner() != owner_ ||</span>
+<span id="L1134">            handle.index() &gt;= timeline_count_ ||</span>
+<span id="L1135">            timelines_[handle.index()].backend_index != backend_index ||</span>
+<span id="L1136">            requested.waits[index].value &gt;</span>
+<span id="L1137">                timelines_[handle.index()].last_accepted.load(</span>
+<span id="L1138">                    std::memory_order_relaxed)) {</span>
+<span id="L1139">            return reject(Status::invalid_handle);</span>
+<span id="L1140">        }</span>
+<span id="L1141">        for (std::size_t prior = 0; prior &lt; index; ++prior) {</span>
+<span id="L1142">            if (requested.waits[prior].timeline_handle == handle.value) {</span>
+<span id="L1143">                return reject(Status::invalid_argument);</span>
+<span id="L1144">            }</span>
+<span id="L1145">        }</span>
+<span id="L1146">    }</span>
+<span id="L1147">    for (std::size_t index = 0; index &lt; requested.signal_count; ++index) {</span>
+<span id="L1148">        const auto handle = DeviceTimelineHandle{</span>
+<span id="L1149">            requested.signals[index].timeline_handle};</span>
+<span id="L1150">        if (!handle.valid() || handle.owner() != owner_ ||</span>
+<span id="L1151">            handle.index() &gt;= timeline_count_ ||</span>
+<span id="L1152">            timelines_[handle.index()].backend_index != backend_index ||</span>
+<span id="L1153">            requested.signals[index].value &lt;=</span>
+<span id="L1154">                timelines_[handle.index()].last_accepted.load(</span>
+<span id="L1155">                    std::memory_order_relaxed)) {</span>
+<span id="L1156">            return reject(Status::invalid_handle);</span>
+<span id="L1157">        }</span>
+<span id="L1158">        for (std::size_t prior = 0; prior &lt; index; ++prior) {</span>
+<span id="L1159">            if (requested.signals[prior].timeline_handle == handle.value) {</span>
+<span id="L1160">                return reject(Status::invalid_argument);</span>
+<span id="L1161">            }</span>
+<span id="L1162">        }</span>
+<span id="L1163">    }</span>
+<span id="L1164"></span>
+<span id="L1165">    DeviceCommandBatch translated = requested;</span>
+<span id="L1166">    const auto translate_reference =</span>
+<span id="L1167">        [&amp;](const HalV2BufferReference&amp; input,</span>
+<span id="L1168">            HalV2BufferReference&amp; output,</span>
+<span id="L1169">            std::size_t&amp; buffer_index) -&gt; Status {</span>
+<span id="L1170">            const DeviceBufferHandle logical{input.buffer_token};</span>
+<span id="L1171">            if (!logical.valid() || logical.owner() != owner_ ||</span>
+<span id="L1172">                logical.index() &gt;= buffers_.size() ||</span>
+<span id="L1173">                input.reserved0 != 0 || !valid_access(input.access)) {</span>
+<span id="L1174">                return Status::invalid_handle;</span>
+<span id="L1175">            }</span>
+<span id="L1176">            buffer_index = logical.index();</span>
+<span id="L1177">            const auto&amp; buffer = buffers_[buffer_index];</span>
+<span id="L1178">            const auto* domain = backends_[backend_index].memory_state</span>
+<span id="L1179">                ? find_memory_domain(*backends_[backend_index].memory_state,</span>
+<span id="L1180">                                     buffer.domain_identity)</span>
+<span id="L1181">                : nullptr;</span>
+<span id="L1182">            if (buffer.backend_index != backend_index || !domain ||</span>
+<span id="L1183">                input.offset &gt; buffer.bytes ||</span>
+<span id="L1184">                input.bytes &gt; buffer.bytes - input.offset ||</span>
+<span id="L1185">                input.offset % domain-&gt;offset_granularity != 0 ||</span>
+<span id="L1186">                input.bytes % domain-&gt;byte_granularity != 0) {</span>
+<span id="L1187">                return Status::invalid_argument;</span>
+<span id="L1188">            }</span>
+<span id="L1189">            const auto required_access =</span>
+<span id="L1190">                input.access == RTFW_DEVICE_ACCESS_READ</span>
+<span id="L1191">                    ? RTFW_DEVICE_BUFFER_DEVICE_READ</span>
+<span id="L1192">                : input.access == RTFW_DEVICE_ACCESS_WRITE</span>
+<span id="L1193">                    ? RTFW_DEVICE_BUFFER_DEVICE_WRITE</span>
+<span id="L1194">                    : RTFW_DEVICE_BUFFER_DEVICE_READ |</span>
+<span id="L1195">                          RTFW_DEVICE_BUFFER_DEVICE_WRITE;</span>
+<span id="L1196">            if ((required_access &amp; ~buffer.flags) != 0) {</span>
+<span id="L1197">                return Status::invalid_argument;</span>
+<span id="L1198">            }</span>
+<span id="L1199">            const auto token = buffer.heterogeneous</span>
+<span id="L1200">                ? native_memory_[buffer_index]</span>
+<span id="L1201">                      .heterogeneous_token.submission_token</span>
+<span id="L1202">                : native_memory_[buffer_index].legacy_token;</span>
+<span id="L1203">            if (token == 0) {</span>
+<span id="L1204">                return Status::invalid_state;</span>
+<span id="L1205">            }</span>
+<span id="L1206">            output = input;</span>
+<span id="L1207">            output.buffer_token = token;</span>
+<span id="L1208">            return Status::ok;</span>
+<span id="L1209">        };</span>
+<span id="L1210">    const auto covers = [](const HalV2BufferReference&amp; operation,</span>
+<span id="L1211">                           const HalV2BufferReference&amp; reference) {</span>
+<span id="L1212">        return operation.buffer_token == reference.buffer_token &amp;&amp;</span>
+<span id="L1213">               operation.offset &lt;= reference.offset &amp;&amp;</span>
+<span id="L1214">               operation.bytes &gt;= reference.bytes &amp;&amp;</span>
+<span id="L1215">               reference.offset - operation.offset &lt;=</span>
+<span id="L1216">                   operation.bytes - reference.bytes;</span>
+<span id="L1217">    };</span>
+<span id="L1218">    const auto has_operation = [&amp;](std::size_t command_index,</span>
+<span id="L1219">                                   const HalV2BufferReference&amp; reference,</span>
+<span id="L1220">                                   HalV2MemoryOperation operation,</span>
+<span id="L1221">                                   bool before) {</span>
+<span id="L1222">        const auto matches = [&amp;](const DeviceCommand&amp; command) {</span>
+<span id="L1223">            if (command.operation != static_cast&lt;std::uint32_t&gt;(operation)) {</span>
+<span id="L1224">                return false;</span>
+<span id="L1225">            }</span>
+<span id="L1226">            const auto kind = static_cast&lt;HalV2CommandKind&gt;(command.kind);</span>
+<span id="L1227">            if (kind == HalV2CommandKind::memory_synchronization) {</span>
+<span id="L1228">                return covers(command.target, reference);</span>
+<span id="L1229">            }</span>
+<span id="L1230">            if (kind != HalV2CommandKind::copy) {</span>
+<span id="L1231">                return false;</span>
+<span id="L1232">            }</span>
+<span id="L1233">            return covers(operation == HalV2MemoryOperation::copy_to_device</span>
+<span id="L1234">                              ? command.destination</span>
+<span id="L1235">                              : command.source,</span>
+<span id="L1236">                          reference);</span>
+<span id="L1237">        };</span>
+<span id="L1238">        if (before) {</span>
+<span id="L1239">            for (std::size_t cursor = command_index; cursor != 0; --cursor) {</span>
+<span id="L1240">                if (matches(requested.commands[cursor - 1])) {</span>
+<span id="L1241">                    return true;</span>
+<span id="L1242">                }</span>
+<span id="L1243">            }</span>
+<span id="L1244">        } else {</span>
+<span id="L1245">            for (std::size_t cursor = command_index + 1;</span>
+<span id="L1246">                 cursor &lt; requested.command_count; ++cursor) {</span>
+<span id="L1247">                if (matches(requested.commands[cursor])) {</span>
+<span id="L1248">                    return true;</span>
+<span id="L1249">                }</span>
+<span id="L1250">            }</span>
+<span id="L1251">        }</span>
+<span id="L1252">        return false;</span>
+<span id="L1253">    };</span>
+<span id="L1254"></span>
+<span id="L1255">    for (std::size_t command_index = 0;</span>
+<span id="L1256">         command_index &lt; requested.command_count; ++command_index) {</span>
+<span id="L1257">        const auto&amp; command = requested.commands[command_index];</span>
+<span id="L1258">        auto&amp; translated_command = translated.commands[command_index];</span>
+<span id="L1259">        const auto kind = static_cast&lt;HalV2CommandKind&gt;(command.kind);</span>
+<span id="L1260">        if (kind == HalV2CommandKind::dispatch) {</span>
+<span id="L1261">            for (std::size_t ref_index = 0;</span>
+<span id="L1262">                 ref_index &lt; command.buffer_count; ++ref_index) {</span>
+<span id="L1263">                std::size_t buffer_index = 0;</span>
+<span id="L1264">                const auto status = translate_reference(</span>
+<span id="L1265">                    command.buffers[ref_index],</span>
+<span id="L1266">                    translated_command.buffers[ref_index], buffer_index);</span>
+<span id="L1267">                if (status != Status::ok) {</span>
+<span id="L1268">                    return reject(status);</span>
+<span id="L1269">                }</span>
+<span id="L1270">                const auto&amp; buffer = buffers_[buffer_index];</span>
+<span id="L1271">                if ((buffer.synchronization &amp; hal_v2_memory_sync_timeline) != 0) {</span>
+<span id="L1272">                    return reject(Status::device_error);</span>
+<span id="L1273">                }</span>
+<span id="L1274">                const bool reads = command.buffers[ref_index].access !=</span>
+<span id="L1275">                    RTFW_DEVICE_ACCESS_WRITE;</span>
+<span id="L1276">                const bool writes = command.buffers[ref_index].access !=</span>
+<span id="L1277">                    RTFW_DEVICE_ACCESS_READ;</span>
+<span id="L1278">                if (reads &amp;&amp;</span>
+<span id="L1279">                    (((buffer.synchronization &amp; hal_v2_memory_sync_flush) != 0 &amp;&amp;</span>
+<span id="L1280">                      !has_operation(command_index, command.buffers[ref_index],</span>
+<span id="L1281">                                     HalV2MemoryOperation::flush, true)) ||</span>
+<span id="L1282">                     ((buffer.synchronization &amp;</span>
+<span id="L1283">                       hal_v2_memory_sync_copy_to_device) != 0 &amp;&amp;</span>
+<span id="L1284">                      !has_operation(command_index, command.buffers[ref_index],</span>
+<span id="L1285">                                     HalV2MemoryOperation::copy_to_device,</span>
+<span id="L1286">                                     true)))) {</span>
+<span id="L1287">                    return reject(Status::device_error);</span>
+<span id="L1288">                }</span>
+<span id="L1289">                if (writes &amp;&amp;</span>
+<span id="L1290">                    (((buffer.synchronization &amp;</span>
+<span id="L1291">                       hal_v2_memory_sync_invalidate) != 0 &amp;&amp;</span>
+<span id="L1292">                      !has_operation(command_index, command.buffers[ref_index],</span>
+<span id="L1293">                                     HalV2MemoryOperation::invalidate, false)) ||</span>
+<span id="L1294">                     ((buffer.synchronization &amp;</span>
+<span id="L1295">                       hal_v2_memory_sync_copy_from_device) != 0 &amp;&amp;</span>
+<span id="L1296">                      !has_operation(command_index, command.buffers[ref_index],</span>
+<span id="L1297">                                     HalV2MemoryOperation::copy_from_device,</span>
+<span id="L1298">                                     false)))) {</span>
+<span id="L1299">                    return reject(Status::device_error);</span>
+<span id="L1300">                }</span>
+<span id="L1301">            }</span>
+<span id="L1302">        } else if (kind == HalV2CommandKind::copy) {</span>
+<span id="L1303">            std::size_t source_index = 0;</span>
+<span id="L1304">            std::size_t destination_index = 0;</span>
+<span id="L1305">            auto status = translate_reference(</span>
+<span id="L1306">                command.source, translated_command.source, source_index);</span>
+<span id="L1307">            if (status == Status::ok) {</span>
+<span id="L1308">                status = translate_reference(</span>
+<span id="L1309">                    command.destination, translated_command.destination,</span>
+<span id="L1310">                    destination_index);</span>
+<span id="L1311">            }</span>
+<span id="L1312">            if (status != Status::ok || command.source.bytes !=</span>
+<span id="L1313">                    command.destination.bytes ||</span>
+<span id="L1314">                command.source.access != RTFW_DEVICE_ACCESS_READ ||</span>
+<span id="L1315">                command.destination.access != RTFW_DEVICE_ACCESS_WRITE) {</span>
+<span id="L1316">                return reject(status == Status::ok ? Status::invalid_argument</span>
+<span id="L1317">                                                   : status);</span>
+<span id="L1318">            }</span>
+<span id="L1319">            const auto operation =</span>
+<span id="L1320">                static_cast&lt;HalV2MemoryOperation&gt;(command.operation);</span>
+<span id="L1321">            const auto obligation_index =</span>
+<span id="L1322">                operation == HalV2MemoryOperation::copy_to_device</span>
+<span id="L1323">                    ? destination_index</span>
+<span id="L1324">                    : source_index;</span>
+<span id="L1325">            const auto obligation = operation ==</span>
+<span id="L1326">                    HalV2MemoryOperation::copy_to_device</span>
+<span id="L1327">                ? hal_v2_memory_sync_copy_to_device</span>
+<span id="L1328">                : hal_v2_memory_sync_copy_from_device;</span>
+<span id="L1329">            if ((buffers_[obligation_index].synchronization &amp; obligation) == 0) {</span>
+<span id="L1330">                return reject(Status::device_error);</span>
+<span id="L1331">            }</span>
+<span id="L1332">        } else {</span>
+<span id="L1333">            std::size_t target_index = 0;</span>
+<span id="L1334">            const auto status = translate_reference(</span>
+<span id="L1335">                command.target, translated_command.target, target_index);</span>
+<span id="L1336">            const auto operation =</span>
+<span id="L1337">                static_cast&lt;HalV2MemoryOperation&gt;(command.operation);</span>
+<span id="L1338">            const auto obligation = operation == HalV2MemoryOperation::flush</span>
+<span id="L1339">                ? hal_v2_memory_sync_flush</span>
+<span id="L1340">                : hal_v2_memory_sync_invalidate;</span>
+<span id="L1341">            if (status != Status::ok ||</span>
+<span id="L1342">                (buffers_[target_index].synchronization &amp; obligation) == 0) {</span>
+<span id="L1343">                return reject(status == Status::ok ? Status::device_error</span>
+<span id="L1344">                                                   : status);</span>
+<span id="L1345">            }</span>
+<span id="L1346">        }</span>
+<span id="L1347">    }</span>
+<span id="L1348"></span>
+<span id="L1349">    auto batch_id = next_batch_id_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1350">    if (batch_id == 0) {</span>
+<span id="L1351">        batch_id = next_batch_id_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1352">    }</span>
+<span id="L1353">    translated.batch_id = batch_id;</span>
+<span id="L1354">    translated.frame_index = frame_index;</span>
+<span id="L1355">    slot-&gt;batch = translated;</span>
+<span id="L1356">    slot-&gt;backend_index = static_cast&lt;std::uint32_t&gt;(backend_index);</span>
+<span id="L1357">    slot-&gt;phase_index = static_cast&lt;std::uint32_t&gt;(phase_index);</span>
+<span id="L1358">    slot-&gt;frame_index = frame_index;</span>
+<span id="L1359">    slot-&gt;sequence = control.next_sequence.fetch_add(</span>
+<span id="L1360">        1, std::memory_order_relaxed);</span>
+<span id="L1361">    slot-&gt;deadline_ns = simulation</span>
+<span id="L1362">        ? simulation_start_ns + simulation-&gt;host_watchdog_ns</span>
+<span id="L1363">        : monotonic_now_ns() + requested.timeout_ns;</span>
+<span id="L1364">    slot-&gt;simulation_timing = simulation != nullptr;</span>
+<span id="L1365">    slot-&gt;logical_clock = simulation ? simulation-&gt;logical_clock : nullptr;</span>
+<span id="L1366">    slot-&gt;logical_deadline_ns = simulation ? simulation-&gt;logical_deadline_ns : 0;</span>
+<span id="L1367">    slot-&gt;early_completion = {};</span>
+<span id="L1368">    slot-&gt;early_completion_valid = false;</span>
+<span id="L1369">    slot-&gt;cancellation_requested.store(false, std::memory_order_relaxed);</span>
+<span id="L1370">    slot-&gt;rate_owned = rate_identity != nullptr;</span>
+<span id="L1371">    slot-&gt;terminal_status = Status::ok;</span>
+<span id="L1372">    slot-&gt;rate_identity = rate_identity</span>
+<span id="L1373">        ? *rate_identity</span>
+<span id="L1374">        : DeviceRateReleaseIdentity{};</span>
+<span id="L1375">    slot-&gt;graph_released.store(false, std::memory_order_relaxed);</span>
+<span id="L1376">    for (std::size_t index = 0; index &lt; requested.signal_count; ++index) {</span>
+<span id="L1377">        const auto handle = DeviceTimelineHandle{</span>
+<span id="L1378">            requested.signals[index].timeline_handle};</span>
+<span id="L1379">        timelines_[handle.index()].last_accepted.store(</span>
+<span id="L1380">            requested.signals[index].value, std::memory_order_relaxed);</span>
+<span id="L1381">    }</span>
+<span id="L1382">    outstanding_count_.fetch_add(1, std::memory_order_release);</span>
+<span id="L1383">    slot-&gt;state.store(kBatchQueued, std::memory_order_release);</span>
+<span id="L1384">    release_admission();</span>
+<span id="L1385">    submissions_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1386">    out_batch_id = batch_id;</span>
+<span id="L1387">    if (rate_ticket) {</span>
+<span id="L1388">        rate_ticket-&gt;slot_index = static_cast&lt;std::size_t&gt;(</span>
+<span id="L1389">            slot - batch_slots_.get());</span>
+<span id="L1390">        rate_ticket-&gt;batch_id = batch_id;</span>
+<span id="L1391">        rate_ticket-&gt;identity = *rate_identity;</span>
+<span id="L1392">    }</span>
+<span id="L1393">    auto event = DeviceEvent{DeviceEventKind::submitted, Status::ok,</span>
+<span id="L1394">                             backend_index, phase_index, frame_index, batch_id,</span>
+<span id="L1395">                             0};</span>
+<span id="L1396">    event.producer = RuntimeTraceProducer::worker;</span>
+<span id="L1397">    event.worker_index = worker_index;</span>
+<span id="L1398">    emit(event);</span>
+<span id="L1399">    control.wake_sequence.fetch_add(1, std::memory_order_release);</span>
+<span id="L1400">    control.wake_sequence.notify_one();</span>
+<span id="L1401">    wake_sequence_.fetch_add(1, std::memory_order_release);</span>
+<span id="L1402">    wake_sequence_.notify_one();</span>
+<span id="L1403">    if (batch_stopping_.load(std::memory_order_acquire)) {</span>
+<span id="L1404">        auto expected = kBatchQueued;</span>
+<span id="L1405">        if (slot-&gt;state.compare_exchange_strong(</span>
+<span id="L1406">                expected, kBatchOwned, std::memory_order_acq_rel,</span>
+<span id="L1407">                std::memory_order_relaxed)) {</span>
+<span id="L1408">            finish_batch_slot(*slot, Status::device_canceled, false);</span>
+<span id="L1409">        }</span>
+<span id="L1410">    }</span>
+<span id="L1411">    return Status::ok;</span>
+<span id="L1412">}</span>
+<span id="L1413"></span>
+<span id="L1414">void DeviceManager::emit(const DeviceEvent&amp; event) noexcept {</span>
+<span id="L1415">    if (observer_) {</span>
+<span id="L1416">        observer_(observer_data_, event);</span>
+<span id="L1417">    }</span>
+<span id="L1418">}</span>
+<span id="L1419"></span>
+<span id="L1420">void DeviceManager::process_completion(</span>
+<span id="L1421">    std::size_t backend_index,</span>
+<span id="L1422">    const HalV2Completion&amp; completion) noexcept {</span>
+<span id="L1423">    if (!validate_hal_v2_completion(completion)) {</span>
+<span id="L1424">        fail_backend_outstanding(</span>
+<span id="L1425">            backend_index,</span>
+<span id="L1426">            Status::device_error);</span>
+<span id="L1427">        return;</span>
+<span id="L1428">    }</span>
+<span id="L1429">    for (std::size_t index = 0;</span>
+<span id="L1430">         index &lt; outstanding_capacity_;</span>
+<span id="L1431">         ++index) {</span>
+<span id="L1432">        auto&amp; slot = outstanding_slots_[index];</span>
+<span id="L1433">        auto state = slot.state.load(std::memory_order_acquire);</span>
+<span id="L1434">        if ((state != kOutstandingSubmitting &amp;&amp;</span>
+<span id="L1435">             state != kOutstandingSubmitted) ||</span>
+<span id="L1436">            slot.submission_id != completion.submission_id ||</span>
+<span id="L1437">            slot.backend_index != backend_index) {</span>
+<span id="L1438">            continue;</span>
+<span id="L1439">        }</span>
+<span id="L1440">        if (state == kOutstandingSubmitting) {</span>
+<span id="L1441">            slot.early_completion = completion;</span>
+<span id="L1442">            auto expected = kOutstandingSubmitting;</span>
+<span id="L1443">            if (slot.state.compare_exchange_strong(</span>
+<span id="L1444">                    expected,</span>
+<span id="L1445">                    kOutstandingEarlyReady,</span>
+<span id="L1446">                    std::memory_order_release,</span>
+<span id="L1447">                    std::memory_order_relaxed)) {</span>
+<span id="L1448">                return;</span>
+<span id="L1449">            }</span>
+<span id="L1450">            state = expected;</span>
+<span id="L1451">        }</span>
+<span id="L1452">        if (state == kOutstandingSubmitted) {</span>
+<span id="L1453">            auto expected = kOutstandingSubmitted;</span>
+<span id="L1454">            if (slot.state.compare_exchange_strong(</span>
+<span id="L1455">                    expected,</span>
+<span id="L1456">                    kOutstandingOwned,</span>
+<span id="L1457">                    std::memory_order_acq_rel,</span>
+<span id="L1458">                    std::memory_order_relaxed)) {</span>
+<span id="L1459">                finalize_completion(</span>
+<span id="L1460">                    slot,</span>
+<span id="L1461">                    backend_index,</span>
+<span id="L1462">                    completion);</span>
+<span id="L1463">                return;</span>
+<span id="L1464">            }</span>
+<span id="L1465">        }</span>
+<span id="L1466">        return;</span>
+<span id="L1467">    }</span>
+<span id="L1468">    failures_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1469">}</span>
+<span id="L1470"></span>
+<span id="L1471">void DeviceManager::finalize_completion(</span>
+<span id="L1472">    Outstanding&amp; slot,</span>
+<span id="L1473">    std::size_t backend_index,</span>
+<span id="L1474">    const HalV2Completion&amp; completion) noexcept {</span>
+<span id="L1475">    const auto status =</span>
+<span id="L1476">        hal_v2_status_to_runtime(</span>
+<span id="L1477">            static_cast&lt;HalV2Status&gt;(completion.status));</span>
+<span id="L1478">    completions_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1479">    if (status != Status::ok) {</span>
+<span id="L1480">        record_failure(status);</span>
+<span id="L1481">    }</span>
+<span id="L1482">    emit(DeviceEvent{</span>
+<span id="L1483">        DeviceEventKind::completed,</span>
+<span id="L1484">        status,</span>
+<span id="L1485">        backend_index,</span>
+<span id="L1486">        slot.phase_index,</span>
+<span id="L1487">        slot.frame_index,</span>
+<span id="L1488">        slot.submission_id,</span>
+<span id="L1489">        completion.device_timestamp_ns,</span>
+<span id="L1490">    });</span>
+<span id="L1491">    outstanding_count_.fetch_sub(1, std::memory_order_release);</span>
+<span id="L1492">    slot.state.store(kOutstandingFree, std::memory_order_release);</span>
+<span id="L1493">    if (executor_) {</span>
+<span id="L1494">        (void)executor_-&gt;complete_external(</span>
+<span id="L1495">            slot.phase_index,</span>
+<span id="L1496">            status);</span>
+<span id="L1497">    }</span>
+<span id="L1498">}</span>
+<span id="L1499"></span>
+<span id="L1500">void DeviceManager::fail_backend_outstanding(</span>
+<span id="L1501">    std::size_t backend_index,</span>
+<span id="L1502">    Status status) noexcept {</span>
+<span id="L1503">    for (std::size_t index = 0;</span>
+<span id="L1504">         index &lt; outstanding_capacity_;</span>
+<span id="L1505">         ++index) {</span>
+<span id="L1506">        auto&amp; slot = outstanding_slots_[index];</span>
+<span id="L1507">        auto state = slot.state.load(std::memory_order_acquire);</span>
+<span id="L1508">        if ((state != kOutstandingSubmitting &amp;&amp;</span>
+<span id="L1509">             state != kOutstandingSubmitted) ||</span>
+<span id="L1510">            slot.backend_index != backend_index) {</span>
+<span id="L1511">            continue;</span>
+<span id="L1512">        }</span>
+<span id="L1513">        if (state == kOutstandingSubmitting) {</span>
+<span id="L1514">            HalV2Completion completion;</span>
+<span id="L1515">            completion.status = static_cast&lt;std::int32_t&gt;(</span>
+<span id="L1516">                runtime_status_to_hal(status));</span>
+<span id="L1517">            completion.submission_id = slot.submission_id;</span>
+<span id="L1518">            slot.early_completion = completion;</span>
+<span id="L1519">            auto expected = kOutstandingSubmitting;</span>
+<span id="L1520">            if (slot.state.compare_exchange_strong(</span>
+<span id="L1521">                    expected,</span>
+<span id="L1522">                    kOutstandingEarlyReady,</span>
+<span id="L1523">                    std::memory_order_release,</span>
+<span id="L1524">                    std::memory_order_relaxed)) {</span>
+<span id="L1525">                continue;</span>
+<span id="L1526">            }</span>
+<span id="L1527">            state = expected;</span>
+<span id="L1528">        }</span>
+<span id="L1529">        if (state != kOutstandingSubmitted) {</span>
+<span id="L1530">            continue;</span>
+<span id="L1531">        }</span>
+<span id="L1532">        auto expected = kOutstandingSubmitted;</span>
+<span id="L1533">        if (!slot.state.compare_exchange_strong(</span>
+<span id="L1534">                expected,</span>
+<span id="L1535">                kOutstandingOwned,</span>
+<span id="L1536">                std::memory_order_acq_rel,</span>
+<span id="L1537">                std::memory_order_relaxed)) {</span>
+<span id="L1538">            continue;</span>
+<span id="L1539">        }</span>
+<span id="L1540">        record_failure(status);</span>
+<span id="L1541">        emit(DeviceEvent{</span>
+<span id="L1542">            DeviceEventKind::completed,</span>
+<span id="L1543">            status,</span>
+<span id="L1544">            backend_index,</span>
+<span id="L1545">            slot.phase_index,</span>
+<span id="L1546">            slot.frame_index,</span>
+<span id="L1547">            slot.submission_id,</span>
+<span id="L1548">            0,</span>
+<span id="L1549">        });</span>
+<span id="L1550">        if (executor_) {</span>
+<span id="L1551">            (void)executor_-&gt;complete_external(</span>
+<span id="L1552">                slot.phase_index,</span>
+<span id="L1553">                status);</span>
+<span id="L1554">        }</span>
+<span id="L1555">        outstanding_count_.fetch_sub(1, std::memory_order_release);</span>
+<span id="L1556">        slot.state.store(kOutstandingFree, std::memory_order_release);</span>
+<span id="L1557">    }</span>
+<span id="L1558">}</span>
+<span id="L1559"></span>
+<span id="L1560">void DeviceManager::record_failure(Status status) noexcept {</span>
+<span id="L1561">    failures_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1562">    if (status == Status::device_timeout) {</span>
+<span id="L1563">        timeouts_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1564">    }</span>
+<span id="L1565">    if (status == Status::device_lost) {</span>
+<span id="L1566">        losses_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1567">    }</span>
+<span id="L1568">}</span>
+<span id="L1569"></span>
+<span id="L1570">void DeviceManager::finish_batch_slot(</span>
+<span id="L1571">    BatchSlot&amp; slot,</span>
+<span id="L1572">    Status status,</span>
+<span id="L1573">    bool publish_timeline,</span>
+<span id="L1574">    const HalV2BatchCompletion* completion) noexcept {</span>
+<span id="L1575">    // This caller owns the slot. Validate simulator deadlines before either</span>
+<span id="L1576">    // timeline or payload success, without interpreting backend timestamps as</span>
+<span id="L1577">    // Runtime-clock timestamps.</span>
+<span id="L1578">    if (slot.simulation_timing.load(std::memory_order_relaxed)) {</span>
+<span id="L1579">        if (status == Status::ok &amp;&amp;</span>
+<span id="L1580">            (monotonic_now_ns() &gt;=</span>
+<span id="L1581">                 slot.deadline_ns.load(std::memory_order_relaxed) ||</span>
+<span id="L1582">             (slot.logical_clock &amp;&amp;</span>
+<span id="L1583">              slot.logical_clock-&gt;now_ns() &gt;= slot.logical_deadline_ns))) {</span>
+<span id="L1584">            status = Status::device_timeout;</span>
+<span id="L1585">        }</span>
+<span id="L1586">        if (status != Status::ok) {</span>
+<span id="L1587">            publish_timeline = false;</span>
+<span id="L1588">        }</span>
+<span id="L1589">    }</span>
+<span id="L1590">    if (publish_timeline) {</span>
+<span id="L1591">        for (std::size_t index = 0; index &lt; slot.batch.signal_count; ++index) {</span>
+<span id="L1592">            const auto handle = DeviceTimelineHandle{</span>
+<span id="L1593">                slot.batch.signals[index].timeline_handle};</span>
+<span id="L1594">            if (handle.owner() != owner_ || handle.index() &gt;= timeline_count_) {</span>
+<span id="L1595">                status = Status::device_error;</span>
+<span id="L1596">                publish_timeline = false;</span>
+<span id="L1597">                break;</span>
+<span id="L1598">            }</span>
+<span id="L1599">        }</span>
+<span id="L1600">    }</span>
+<span id="L1601">    if (publish_timeline) {</span>
+<span id="L1602">        for (std::size_t index = 0; index &lt; slot.batch.signal_count; ++index) {</span>
+<span id="L1603">            const auto handle = DeviceTimelineHandle{</span>
+<span id="L1604">                slot.batch.signals[index].timeline_handle};</span>
+<span id="L1605">            auto&amp; completed = timelines_[handle.index()].completed;</span>
+<span id="L1606">            auto current = completed.load(std::memory_order_relaxed);</span>
+<span id="L1607">            while (current &lt; slot.batch.signals[index].value &amp;&amp;</span>
+<span id="L1608">                   !completed.compare_exchange_weak(</span>
+<span id="L1609">                       current, slot.batch.signals[index].value,</span>
+<span id="L1610">                       std::memory_order_release,</span>
+<span id="L1611">                       std::memory_order_relaxed)) {</span>
+<span id="L1612">            }</span>
+<span id="L1613">        }</span>
+<span id="L1614">    }</span>
+<span id="L1615">    completions_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1616">    if (status != Status::ok) {</span>
+<span id="L1617">        record_failure(status);</span>
+<span id="L1618">    }</span>
+<span id="L1619">    emit(DeviceEvent{DeviceEventKind::completed, status, slot.backend_index,</span>
+<span id="L1620">                     slot.phase_index, slot.frame_index, slot.batch.batch_id,</span>
+<span id="L1621">                     0});</span>
+<span id="L1622">    if (slot.rate_owned) {</span>
+<span id="L1623">        slot.graph_released.store(true, std::memory_order_release);</span>
+<span id="L1624">        slot.terminal_status = status;</span>
+<span id="L1625">        if (completion &amp;&amp; (status == Status::ok ||</span>
+<span id="L1626">                           slot.simulation_timing.load(std::memory_order_relaxed))) {</span>
+<span id="L1627">            slot.early_completion = *completion;</span>
+<span id="L1628">            slot.early_completion_valid = true;</span>
+<span id="L1629">        }</span>
+<span id="L1630">        slot.state.store(kBatchRateTerminal, std::memory_order_release);</span>
+<span id="L1631">        slot.state.notify_all();</span>
+<span id="L1632">        return;</span>
+<span id="L1633">    }</span>
+<span id="L1634">    retire_device_batch_slot(</span>
+<span id="L1635">        slot, outstanding_count_, kBatchFree,</span>
+<span id="L1636">        [this](std::uint32_t backend_index) noexcept {</span>
+<span id="L1637">            if (backend_index &lt; backends_.size()) {</span>
+<span id="L1638">                batch_backends_[backend_index].wake_sequence.fetch_add(</span>
+<span id="L1639">                    1, std::memory_order_release);</span>
+<span id="L1640">                batch_backends_[backend_index].wake_sequence.notify_all();</span>
+<span id="L1641">            }</span>
+<span id="L1642">        },</span>
+<span id="L1643">        [this, status](std::uint32_t phase_index) noexcept {</span>
+<span id="L1644">            if (executor_) {</span>
+<span id="L1645">                (void)executor_-&gt;complete_external(phase_index, status);</span>
+<span id="L1646">            }</span>
+<span id="L1647">        });</span>
+<span id="L1648">}</span>
+<span id="L1649"></span>
+<span id="L1650">void DeviceManager::finish_rate_quarantine(</span>
+<span id="L1651">    BatchSlot&amp; slot,</span>
+<span id="L1652">    Status status) noexcept {</span>
+<span id="L1653">    completions_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1654">    if (status != Status::ok) {</span>
+<span id="L1655">        record_failure(status);</span>
+<span id="L1656">    }</span>
+<span id="L1657">    emit(DeviceEvent{DeviceEventKind::completed, status, slot.backend_index,</span>
+<span id="L1658">                     slot.phase_index, slot.frame_index, slot.batch.batch_id,</span>
+<span id="L1659">                     0});</span>
+<span id="L1660">    slot.graph_released.store(true, std::memory_order_release);</span>
+<span id="L1661">    slot.terminal_status = status;</span>
+<span id="L1662">    slot.early_completion_valid = false;</span>
+<span id="L1663">    slot.state.store(kBatchRateQuarantined, std::memory_order_release);</span>
+<span id="L1664">    slot.state.notify_all();</span>
+<span id="L1665">}</span>
+<span id="L1666"></span>
+<span id="L1667">Status DeviceManager::wait_rate_batch(</span>
+<span id="L1668">    const DeviceRateTicket&amp; ticket,</span>
+<span id="L1669">    DeviceRateCompletion&amp; completion) noexcept {</span>
+<span id="L1670">    completion = {};</span>
+<span id="L1671">    if (!ticket.valid() || ticket.slot_index &gt;= batch_slot_count_) {</span>
+<span id="L1672">        return Status::invalid_argument;</span>
+<span id="L1673">    }</span>
+<span id="L1674">    auto&amp; slot = batch_slots_[ticket.slot_index];</span>
+<span id="L1675">    const auto identity_matches = [&amp;] {</span>
+<span id="L1676">        return slot.rate_owned &amp;&amp; slot.batch.batch_id == ticket.batch_id &amp;&amp;</span>
+<span id="L1677">               slot.rate_identity.reference_index ==</span>
+<span id="L1678">                   ticket.identity.reference_index &amp;&amp;</span>
+<span id="L1679">               slot.rate_identity.domain == ticket.identity.domain &amp;&amp;</span>
+<span id="L1680">               slot.rate_identity.phase == ticket.identity.phase &amp;&amp;</span>
+<span id="L1681">               slot.rate_identity.supercycle_cycle ==</span>
+<span id="L1682">                   ticket.identity.supercycle_cycle &amp;&amp;</span>
+<span id="L1683">               slot.rate_identity.domain_release_sequence ==</span>
+<span id="L1684">                   ticket.identity.domain_release_sequence &amp;&amp;</span>
+<span id="L1685">               slot.rate_identity.substep_ordinal ==</span>
+<span id="L1686">                   ticket.identity.substep_ordinal &amp;&amp;</span>
+<span id="L1687">               slot.rate_identity.logical_release_ns ==</span>
+<span id="L1688">                   ticket.identity.logical_release_ns &amp;&amp;</span>
+<span id="L1689">               slot.rate_identity.nominal_release_ns ==</span>
+<span id="L1690">                   ticket.identity.nominal_release_ns &amp;&amp;</span>
+<span id="L1691">               slot.rate_identity.absolute_deadline_ns ==</span>
+<span id="L1692">                   ticket.identity.absolute_deadline_ns &amp;&amp;</span>
+<span id="L1693">               slot.rate_identity.completion_budget_ns ==</span>
+<span id="L1694">                   ticket.identity.completion_budget_ns;</span>
+<span id="L1695">    };</span>
+<span id="L1696">    auto state = slot.state.load(std::memory_order_acquire);</span>
+<span id="L1697">    if (state == kBatchFree || state == kBatchReserved ||</span>
+<span id="L1698">        !identity_matches()) {</span>
+<span id="L1699">        return Status::invalid_handle;</span>
+<span id="L1700">    }</span>
+<span id="L1701">    for (;;) {</span>
+<span id="L1702">        state = slot.state.load(std::memory_order_acquire);</span>
+<span id="L1703">        if (!identity_matches()) {</span>
+<span id="L1704">            return Status::invalid_handle;</span>
+<span id="L1705">        }</span>
+<span id="L1706">        if (state == kBatchRateTerminal) {</span>
+<span id="L1707">            auto expected = kBatchRateTerminal;</span>
+<span id="L1708">            if (!slot.state.compare_exchange_strong(</span>
+<span id="L1709">                    expected, kBatchOwned, std::memory_order_acq_rel,</span>
+<span id="L1710">                    std::memory_order_relaxed)) {</span>
+<span id="L1711">                continue;</span>
+<span id="L1712">            }</span>
+<span id="L1713">            const auto result = slot.terminal_status;</span>
+<span id="L1714">            completion.status = result;</span>
+<span id="L1715">            completion.timestamp_domain_identity =</span>
+<span id="L1716">                slot.early_completion_valid</span>
+<span id="L1717">                ? slot.early_completion.timestamp_domain_identity</span>
+<span id="L1718">                : 0;</span>
+<span id="L1719">            completion.timestamp = slot.early_completion_valid</span>
+<span id="L1720">                ? slot.early_completion.device_timestamp</span>
+<span id="L1721">                : 0;</span>
+<span id="L1722">            completion.terminal_slot_owned = true;</span>
+<span id="L1723">            return result;</span>
+<span id="L1724">        }</span>
+<span id="L1725">        if (state == kBatchRateQuarantined) {</span>
+<span id="L1726">            completion.status = slot.terminal_status;</span>
+<span id="L1727">            return slot.terminal_status;</span>
+<span id="L1728">        }</span>
+<span id="L1729">        if (state == kBatchFree || state == kBatchReserved) {</span>
+<span id="L1730">            return Status::invalid_handle;</span>
+<span id="L1731">        }</span>
+<span id="L1732">        std::this_thread::yield();</span>
+<span id="L1733">    }</span>
+<span id="L1734">}</span>
+<span id="L1735"></span>
+<span id="L1736">Status DeviceManager::release_rate_batch(</span>
+<span id="L1737">    const DeviceRateTicket&amp; ticket) noexcept {</span>
+<span id="L1738">    if (!ticket.valid() || ticket.slot_index &gt;= batch_slot_count_) {</span>
+<span id="L1739">        return Status::invalid_argument;</span>
+<span id="L1740">    }</span>
+<span id="L1741">    auto&amp; slot = batch_slots_[ticket.slot_index];</span>
+<span id="L1742">    if (slot.state.load(std::memory_order_acquire) != kBatchOwned ||</span>
+<span id="L1743">        !slot.rate_owned || slot.batch.batch_id != ticket.batch_id ||</span>
+<span id="L1744">        slot.rate_identity.reference_index != ticket.identity.reference_index ||</span>
+<span id="L1745">        slot.rate_identity.domain != ticket.identity.domain ||</span>
+<span id="L1746">        slot.rate_identity.phase != ticket.identity.phase ||</span>
+<span id="L1747">        slot.rate_identity.supercycle_cycle !=</span>
+<span id="L1748">            ticket.identity.supercycle_cycle ||</span>
+<span id="L1749">        slot.rate_identity.domain_release_sequence !=</span>
+<span id="L1750">            ticket.identity.domain_release_sequence ||</span>
+<span id="L1751">        slot.rate_identity.substep_ordinal != ticket.identity.substep_ordinal) {</span>
+<span id="L1752">        return Status::invalid_handle;</span>
+<span id="L1753">    }</span>
+<span id="L1754">    outstanding_count_.fetch_sub(1, std::memory_order_release);</span>
+<span id="L1755">    const auto backend_index = static_cast&lt;std::size_t&gt;(slot.backend_index);</span>
+<span id="L1756">    slot.rate_owned = false;</span>
+<span id="L1757">    slot.early_completion_valid = false;</span>
+<span id="L1758">    slot.state.store(kBatchFree, std::memory_order_release);</span>
+<span id="L1759">    if (backend_index &lt; backends_.size()) {</span>
+<span id="L1760">        batch_backends_[backend_index].wake_sequence.fetch_add(</span>
+<span id="L1761">            1, std::memory_order_release);</span>
+<span id="L1762">        batch_backends_[backend_index].wake_sequence.notify_all();</span>
+<span id="L1763">    }</span>
+<span id="L1764">    return Status::ok;</span>
+<span id="L1765">}</span>
+<span id="L1766"></span>
+<span id="L1767">void DeviceManager::fail_backend_batches(</span>
+<span id="L1768">    std::size_t backend_index, Status status) noexcept {</span>
+<span id="L1769">    if (backend_index &gt;= backends_.size() ||</span>
+<span id="L1770">        !backends_[backend_index].command_state) {</span>
+<span id="L1771">        return;</span>
+<span id="L1772">    }</span>
+<span id="L1773">    auto&amp; control = batch_backends_[backend_index];</span>
+<span id="L1774">    for (std::size_t offset = 0; offset &lt; control.slot_count; ++offset) {</span>
+<span id="L1775">        auto&amp; slot = batch_slots_[control.slot_offset + offset];</span>
+<span id="L1776">        auto state = slot.state.load(std::memory_order_acquire);</span>
+<span id="L1777">        if (state == kBatchFree || state == kBatchReserved ||</span>
+<span id="L1778">            state == kBatchOwned) {</span>
+<span id="L1779">            continue;</span>
+<span id="L1780">        }</span>
+<span id="L1781">        if (state == kBatchSubmitting) {</span>
+<span id="L1782">            HalV2BatchCompletion completion;</span>
+<span id="L1783">            completion.status = static_cast&lt;std::int32_t&gt;(</span>
+<span id="L1784">                runtime_status_to_hal(status));</span>
+<span id="L1785">            completion.batch_id = slot.batch.batch_id;</span>
+<span id="L1786">            completion.signal_count = slot.batch.signal_count;</span>
+<span id="L1787">            const auto* memory = backends_[backend_index].memory_state;</span>
+<span id="L1788">            completion.timestamp_domain_identity = memory</span>
+<span id="L1789">                ? memory-&gt;snapshot.completion_timestamp_domain_identity</span>
+<span id="L1790">                : 0;</span>
+<span id="L1791">            std::copy_n(slot.batch.signals.begin(), slot.batch.signal_count,</span>
+<span id="L1792">                        completion.signals.begin());</span>
+<span id="L1793">            slot.early_completion = completion;</span>
+<span id="L1794">            slot.early_completion_valid = false;</span>
+<span id="L1795">            auto expected = kBatchSubmitting;</span>
+<span id="L1796">            if (slot.state.compare_exchange_strong(</span>
+<span id="L1797">                    expected, kBatchEarlyReady, std::memory_order_release,</span>
+<span id="L1798">                    std::memory_order_relaxed)) {</span>
+<span id="L1799">                continue;</span>
+<span id="L1800">            }</span>
+<span id="L1801">            state = expected;</span>
+<span id="L1802">        }</span>
+<span id="L1803">        if (state == kBatchQueued || state == kBatchSubmitted) {</span>
+<span id="L1804">            auto expected = state;</span>
+<span id="L1805">            if (slot.state.compare_exchange_strong(</span>
+<span id="L1806">                    expected, kBatchOwned, std::memory_order_acq_rel,</span>
+<span id="L1807">                    std::memory_order_relaxed)) {</span>
+<span id="L1808">                finish_batch_slot(slot, status, false);</span>
+<span id="L1809">            }</span>
+<span id="L1810">        } else if (state == kBatchCompletionReady) {</span>
+<span id="L1811">            auto expected = kBatchCompletionReady;</span>
+<span id="L1812">            if (slot.state.compare_exchange_strong(</span>
+<span id="L1813">                    expected, kBatchOwned, std::memory_order_acq_rel,</span>
+<span id="L1814">                    std::memory_order_relaxed)) {</span>
+<span id="L1815">                finish_batch_slot(</span>
+<span id="L1816">                    slot,</span>
+<span id="L1817">                    hal_v2_status_to_runtime(static_cast&lt;HalV2Status&gt;(</span>
+<span id="L1818">                        slot.early_completion.status)),</span>
+<span id="L1819">                    slot.early_completion_valid,</span>
+<span id="L1820">                    slot.early_completion_valid</span>
+<span id="L1821">                        ? &amp;slot.early_completion</span>
+<span id="L1822">                        : nullptr);</span>
+<span id="L1823">            }</span>
+<span id="L1824">        }</span>
+<span id="L1825">    }</span>
+<span id="L1826">}</span>
+<span id="L1827"></span>
+<span id="L1828">void DeviceManager::submission_loop(std::size_t backend_index) noexcept {</span>
+<span id="L1829">    auto&amp; control = batch_backends_[backend_index];</span>
+<span id="L1830">    auto&amp; extension = backends_[backend_index].command_state-&gt;extension;</span>
+<span id="L1831">    while (!batch_stopping_.load(std::memory_order_acquire)) {</span>
+<span id="L1832">        auto* selected = select_device_submission_or_wait(</span>
+<span id="L1833">            control.wake_sequence, batch_stopping_, [&amp;]() noexcept {</span>
+<span id="L1834">                BatchSlot* candidate = nullptr;</span>
+<span id="L1835">                std::uint64_t selected_sequence =</span>
+<span id="L1836">                    std::numeric_limits&lt;std::uint64_t&gt;::max();</span>
+<span id="L1837">                for (std::size_t offset = 0; offset &lt; control.slot_count; ++offset) {</span>
+<span id="L1838">                    auto&amp; slot = batch_slots_[control.slot_offset + offset];</span>
+<span id="L1839">                    if (slot.state.load(std::memory_order_acquire) == kBatchQueued &amp;&amp;</span>
+<span id="L1840">                        slot.sequence &lt; selected_sequence) {</span>
+<span id="L1841">                        candidate = &amp;slot;</span>
+<span id="L1842">                        selected_sequence = slot.sequence;</span>
+<span id="L1843">                    }</span>
+<span id="L1844">                }</span>
+<span id="L1845">                return candidate;</span>
+<span id="L1846">            });</span>
+<span id="L1847">        if (!selected) {</span>
+<span id="L1848">            continue;</span>
+<span id="L1849">        }</span>
+<span id="L1850">        bool waits_ready = true;</span>
+<span id="L1851">        for (std::size_t index = 0; index &lt; selected-&gt;batch.wait_count; ++index) {</span>
+<span id="L1852">            const auto handle = DeviceTimelineHandle{</span>
+<span id="L1853">                selected-&gt;batch.waits[index].timeline_handle};</span>
+<span id="L1854">            if (handle.owner() != owner_ || handle.index() &gt;= timeline_count_ ||</span>
+<span id="L1855">                timelines_[handle.index()].completed.load(</span>
+<span id="L1856">                    std::memory_order_acquire) &lt;</span>
+<span id="L1857">                    selected-&gt;batch.waits[index].value) {</span>
+<span id="L1858">                waits_ready = false;</span>
+<span id="L1859">                break;</span>
+<span id="L1860">            }</span>
+<span id="L1861">        }</span>
+<span id="L1862">        if (!waits_ready) {</span>
+<span id="L1863">            if (monotonic_now_ns() &gt;= selected-&gt;deadline_ns) {</span>
+<span id="L1864">                auto expected = kBatchQueued;</span>
+<span id="L1865">                if (selected-&gt;state.compare_exchange_strong(</span>
+<span id="L1866">                        expected, kBatchOwned, std::memory_order_acq_rel,</span>
+<span id="L1867">                        std::memory_order_relaxed)) {</span>
+<span id="L1868">                    finish_batch_slot(*selected, Status::device_timeout, false);</span>
+<span id="L1869">                }</span>
+<span id="L1870">            } else if (wait_strategy_ == WaitStrategy::yield) {</span>
+<span id="L1871">                std::this_thread::yield();</span>
+<span id="L1872">            } else {</span>
+<span id="L1873">                rt::cpu_relax();</span>
+<span id="L1874">            }</span>
+<span id="L1875">            continue;</span>
+<span id="L1876">        }</span>
+<span id="L1877">        auto expected = kBatchQueued;</span>
+<span id="L1878">        if (!selected-&gt;state.compare_exchange_strong(</span>
+<span id="L1879">                expected, kBatchSubmitting, std::memory_order_acq_rel,</span>
+<span id="L1880">                std::memory_order_relaxed)) {</span>
+<span id="L1881">            continue;</span>
+<span id="L1882">        }</span>
+<span id="L1883">        HalV2Status callback_status = HalV2Status::internal_error;</span>
+<span id="L1884">        try {</span>
+<span id="L1885">            callback_status = extension.submit(</span>
+<span id="L1886">                extension.instance, &amp;selected-&gt;batch);</span>
+<span id="L1887">        } catch (...) {</span>
+<span id="L1888">            callback_status = HalV2Status::internal_error;</span>
+<span id="L1889">        }</span>
+<span id="L1890">        const auto status = hal_v2_status_to_runtime(callback_status);</span>
+<span id="L1891">        if (status != Status::ok) {</span>
+<span id="L1892">            auto prior = kBatchSubmitting;</span>
+<span id="L1893">            if (selected-&gt;state.compare_exchange_strong(</span>
+<span id="L1894">                    prior, kBatchOwned, std::memory_order_acq_rel,</span>
+<span id="L1895">                    std::memory_order_relaxed)) {</span>
+<span id="L1896">                finish_batch_slot(*selected, status, false);</span>
+<span id="L1897">            } else if (prior == kBatchEarlyReady &amp;&amp;</span>
+<span id="L1898">                       selected-&gt;state.compare_exchange_strong(</span>
+<span id="L1899">                           prior, kBatchOwned, std::memory_order_acq_rel,</span>
+<span id="L1900">                           std::memory_order_relaxed)) {</span>
+<span id="L1901">                finish_batch_slot(*selected, Status::device_error, false);</span>
+<span id="L1902">            }</span>
+<span id="L1903">            continue;</span>
+<span id="L1904">        }</span>
+<span id="L1905">        expected = kBatchSubmitting;</span>
+<span id="L1906">        if (selected-&gt;state.compare_exchange_strong(</span>
+<span id="L1907">                expected, kBatchSubmitted, std::memory_order_acq_rel,</span>
+<span id="L1908">                std::memory_order_relaxed)) {</span>
+<span id="L1909">            continue;</span>
+<span id="L1910">        }</span>
+<span id="L1911">        if (expected == kBatchEarlyReady) {</span>
+<span id="L1912">            expected = kBatchEarlyReady;</span>
+<span id="L1913">            if (selected-&gt;state.compare_exchange_strong(</span>
+<span id="L1914">                    expected, kBatchCompletionReady, std::memory_order_acq_rel,</span>
+<span id="L1915">                    std::memory_order_relaxed)) {</span>
+<span id="L1916">                wake_sequence_.fetch_add(1, std::memory_order_release);</span>
+<span id="L1917">                wake_sequence_.notify_one();</span>
+<span id="L1918">            }</span>
+<span id="L1919">        }</span>
+<span id="L1920">    }</span>
+<span id="L1921">}</span>
+<span id="L1922"></span>
+<span id="L1923">void DeviceManager::submission_entry(void* context) noexcept {</span>
+<span id="L1924">    auto* lane = static_cast&lt;SubmissionLaneContext*&gt;(context);</span>
+<span id="L1925">    lane-&gt;manager-&gt;submission_loop(lane-&gt;backend_index);</span>
+<span id="L1926">}</span>
+<span id="L1927"></span>
+<span id="L1928">void DeviceManager::process_batch_completion(</span>
+<span id="L1929">    std::size_t backend_index,</span>
+<span id="L1930">    const HalV2BatchCompletion&amp; completion) noexcept {</span>
+<span id="L1931">    auto&amp; control = batch_backends_[backend_index];</span>
+<span id="L1932">    for (std::size_t offset = 0; offset &lt; control.slot_count; ++offset) {</span>
+<span id="L1933">        auto&amp; slot = batch_slots_[control.slot_offset + offset];</span>
+<span id="L1934">        auto state = slot.state.load(std::memory_order_acquire);</span>
+<span id="L1935">        if (slot.batch.batch_id == completion.batch_id &amp;&amp;</span>
+<span id="L1936">            (state == kBatchRateQuarantineOwned ||</span>
+<span id="L1937">             state == kBatchRateQuarantined)) {</span>
+<span id="L1938">            return;</span>
+<span id="L1939">        }</span>
+<span id="L1940">        if (slot.batch.batch_id != completion.batch_id ||</span>
+<span id="L1941">            (state != kBatchSubmitting &amp;&amp; state != kBatchSubmitted)) {</span>
+<span id="L1942">            continue;</span>
+<span id="L1943">        }</span>
+<span id="L1944">        if (state == kBatchSubmitting) {</span>
+<span id="L1945">            slot.early_completion = completion;</span>
+<span id="L1946">            slot.early_completion_valid = true;</span>
+<span id="L1947">            auto expected = kBatchSubmitting;</span>
+<span id="L1948">            if (slot.state.compare_exchange_strong(</span>
+<span id="L1949">                    expected, kBatchEarlyReady, std::memory_order_release,</span>
+<span id="L1950">                    std::memory_order_relaxed)) {</span>
+<span id="L1951">                return;</span>
+<span id="L1952">            }</span>
+<span id="L1953">            state = expected;</span>
+<span id="L1954">        }</span>
+<span id="L1955">        if (state == kBatchSubmitted) {</span>
+<span id="L1956">            auto expected = kBatchSubmitted;</span>
+<span id="L1957">            if (slot.state.compare_exchange_strong(</span>
+<span id="L1958">                    expected, kBatchOwned, std::memory_order_acq_rel,</span>
+<span id="L1959">                    std::memory_order_relaxed)) {</span>
+<span id="L1960">                finish_batch_slot(</span>
+<span id="L1961">                    slot,</span>
+<span id="L1962">                    hal_v2_status_to_runtime(</span>
+<span id="L1963">                        static_cast&lt;HalV2Status&gt;(completion.status)),</span>
+<span id="L1964">                    true,</span>
+<span id="L1965">                    &amp;completion);</span>
+<span id="L1966">            }</span>
+<span id="L1967">        }</span>
+<span id="L1968">        return;</span>
+<span id="L1969">    }</span>
+<span id="L1970">}</span>
+<span id="L1971"></span>
+<span id="L1972">void DeviceManager::poll_batch_completions(</span>
+<span id="L1973">    std::size_t backend_index) noexcept {</span>
+<span id="L1974">    auto* command_state = backends_[backend_index].command_state;</span>
+<span id="L1975">    if (!command_state) {</span>
+<span id="L1976">        return;</span>
+<span id="L1977">    }</span>
+<span id="L1978">    const auto poll_capacity = native_per_backend_ ? std::min(</span>
+<span id="L1979">        completion_batch_, static_cast&lt;std::size_t&gt;(</span>
+<span id="L1980">            command_state-&gt;capabilities.completion_batch_capacity))</span>
+<span id="L1981">        : completion_batch_;</span>
+<span id="L1982">    std::fill_n(batch_completion_buffer_.get(), poll_capacity,</span>
+<span id="L1983">                HalV2BatchCompletion{});</span>
+<span id="L1984">    for (std::size_t index = 0; index &lt; poll_capacity; ++index) {</span>
+<span id="L1985">        batch_completion_buffer_[index].struct_size = 0;</span>
+<span id="L1986">    }</span>
+<span id="L1987">    std::uint64_t count = 0;</span>
+<span id="L1988">    HalV2Status callback_status = HalV2Status::internal_error;</span>
+<span id="L1989">    try {</span>
+<span id="L1990">        callback_status = command_state-&gt;extension.poll(</span>
+<span id="L1991">            command_state-&gt;extension.instance, batch_completion_buffer_.get(),</span>
+<span id="L1992">            poll_capacity, &amp;count);</span>
+<span id="L1993">    } catch (...) {</span>
+<span id="L1994">        callback_status = HalV2Status::internal_error;</span>
+<span id="L1995">    }</span>
+<span id="L1996">    service_polls_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L1997">    const auto callback_runtime_status =</span>
+<span id="L1998">        hal_v2_status_to_runtime(callback_status);</span>
+<span id="L1999">    if (callback_runtime_status != Status::ok || count &gt; poll_capacity) {</span>
+<span id="L2000">        fail_backend_batches(</span>
+<span id="L2001">            backend_index, callback_runtime_status == Status::ok</span>
+<span id="L2002">                               ? Status::device_error</span>
+<span id="L2003">                               : callback_runtime_status);</span>
+<span id="L2004">        return;</span>
+<span id="L2005">    }</span>
+<span id="L2006">    bool valid = true;</span>
+<span id="L2007">    auto&amp; control = batch_backends_[backend_index];</span>
+<span id="L2008">    const auto timestamp_domain = backends_[backend_index].memory_state</span>
+<span id="L2009">        ? backends_[backend_index]</span>
+<span id="L2010">              .memory_state-&gt;snapshot.completion_timestamp_domain_identity</span>
+<span id="L2011">        : 0;</span>
+<span id="L2012">    for (std::size_t completion_index = 0;</span>
+<span id="L2013">         completion_index &lt; static_cast&lt;std::size_t&gt;(count); ++completion_index) {</span>
+<span id="L2014">        const auto&amp; completion = batch_completion_buffer_[completion_index];</span>
+<span id="L2015">        if (!validate_batch_completion(completion) ||</span>
+<span id="L2016">            completion.timestamp_domain_identity != timestamp_domain) {</span>
+<span id="L2017">            valid = false;</span>
+<span id="L2018">            break;</span>
+<span id="L2019">        }</span>
+<span id="L2020">        for (std::size_t prior = 0; prior &lt; completion_index; ++prior) {</span>
+<span id="L2021">            if (batch_completion_buffer_[prior].batch_id == completion.batch_id) {</span>
+<span id="L2022">                valid = false;</span>
+<span id="L2023">                break;</span>
+<span id="L2024">            }</span>
+<span id="L2025">        }</span>
+<span id="L2026">        BatchSlot* matched = nullptr;</span>
+<span id="L2027">        for (std::size_t offset = 0; valid &amp;&amp; offset &lt; control.slot_count;</span>
+<span id="L2028">             ++offset) {</span>
+<span id="L2029">            auto&amp; slot = batch_slots_[control.slot_offset + offset];</span>
+<span id="L2030">            const auto state = slot.state.load(std::memory_order_acquire);</span>
+<span id="L2031">            if (slot.batch.batch_id == completion.batch_id &amp;&amp;</span>
+<span id="L2032">                (state == kBatchSubmitting || state == kBatchSubmitted ||</span>
+<span id="L2033">                 state == kBatchRateQuarantineOwned ||</span>
+<span id="L2034">                 state == kBatchRateQuarantined)) {</span>
+<span id="L2035">                matched = &amp;slot;</span>
+<span id="L2036">                break;</span>
+<span id="L2037">            }</span>
+<span id="L2038">        }</span>
+<span id="L2039">        if (!matched || completion.signal_count != matched-&gt;batch.signal_count) {</span>
+<span id="L2040">            valid = false;</span>
+<span id="L2041">            break;</span>
+<span id="L2042">        }</span>
+<span id="L2043">        for (std::size_t signal = 0; signal &lt; completion.signal_count; ++signal) {</span>
+<span id="L2044">            if (completion.signals[signal].timeline_handle !=</span>
+<span id="L2045">                    matched-&gt;batch.signals[signal].timeline_handle ||</span>
+<span id="L2046">                completion.signals[signal].value !=</span>
+<span id="L2047">                    matched-&gt;batch.signals[signal].value) {</span>
+<span id="L2048">                valid = false;</span>
+<span id="L2049">                break;</span>
+<span id="L2050">            }</span>
+<span id="L2051">        }</span>
+<span id="L2052">    }</span>
+<span id="L2053">    if (!valid) {</span>
+<span id="L2054">        fail_backend_batches(backend_index, Status::device_error);</span>
+<span id="L2055">        return;</span>
+<span id="L2056">    }</span>
+<span id="L2057">    for (std::size_t completion_index = 0;</span>
+<span id="L2058">         completion_index &lt; static_cast&lt;std::size_t&gt;(count); ++completion_index) {</span>
+<span id="L2059">        process_batch_completion(</span>
+<span id="L2060">            backend_index, batch_completion_buffer_[completion_index]);</span>
+<span id="L2061">    }</span>
+<span id="L2062">}</span>
+<span id="L2063"></span>
+<span id="L2064">void DeviceManager::service_loop() noexcept {</span>
+<span id="L2065">    service_starts_.fetch_add(1, std::memory_order_release);</span>
+<span id="L2066">    service_ready_.store(true, std::memory_order_release);</span>
+<span id="L2067">    while (!stopping_.load(std::memory_order_acquire)) {</span>
+<span id="L2068">        if (outstanding_count_.load(std::memory_order_acquire) == 0) {</span>
+<span id="L2069">            if (wait_strategy_ == WaitStrategy::spin) {</span>
+<span id="L2070">                rt::cpu_relax();</span>
+<span id="L2071">                continue;</span>
+<span id="L2072">            }</span>
+<span id="L2073">            if (wait_strategy_ == WaitStrategy::yield) {</span>
+<span id="L2074">                std::this_thread::yield();</span>
+<span id="L2075">                continue;</span>
+<span id="L2076">            }</span>
+<span id="L2077">            const auto observed =</span>
+<span id="L2078">                wake_sequence_.load(std::memory_order_acquire);</span>
+<span id="L2079">            if (!stopping_.load(std::memory_order_acquire) &amp;&amp;</span>
+<span id="L2080">                outstanding_count_.load(std::memory_order_acquire) == 0) {</span>
+<span id="L2081">                wake_sequence_.wait(</span>
+<span id="L2082">                    observed,</span>
+<span id="L2083">                    std::memory_order_relaxed);</span>
+<span id="L2084">            }</span>
+<span id="L2085">            continue;</span>
+<span id="L2086">        }</span>
+<span id="L2087">        for (std::size_t backend_index = 0;</span>
+<span id="L2088">             backend_index &lt; backends_.size();</span>
+<span id="L2089">             ++backend_index) {</span>
+<span id="L2090">            auto&amp; batch_control = batch_backends_[backend_index];</span>
+<span id="L2091">            for (std::size_t offset = 0; offset &lt; batch_control.slot_count;</span>
+<span id="L2092">                 ++offset) {</span>
+<span id="L2093">                auto&amp; slot = batch_slots_[batch_control.slot_offset + offset];</span>
+<span id="L2094">                auto expected = kBatchCompletionReady;</span>
+<span id="L2095">                if (slot.state.compare_exchange_strong(</span>
+<span id="L2096">                        expected, kBatchOwned, std::memory_order_acq_rel,</span>
+<span id="L2097">                        std::memory_order_relaxed)) {</span>
+<span id="L2098">                    finish_batch_slot(</span>
+<span id="L2099">                        slot,</span>
+<span id="L2100">                        hal_v2_status_to_runtime(static_cast&lt;HalV2Status&gt;(</span>
+<span id="L2101">                            slot.early_completion.status)),</span>
+<span id="L2102">                        slot.early_completion_valid,</span>
+<span id="L2103">                        slot.early_completion_valid</span>
+<span id="L2104">                            ? &amp;slot.early_completion</span>
+<span id="L2105">                            : nullptr);</span>
+<span id="L2106">                }</span>
+<span id="L2107">            }</span>
+<span id="L2108">            std::fill_n(</span>
+<span id="L2109">                completion_buffer_.get(),</span>
+<span id="L2110">                completion_batch_,</span>
+<span id="L2111">                HalV2Completion{});</span>
+<span id="L2112">            for (std::size_t index = 0; index &lt; completion_batch_; ++index) {</span>
+<span id="L2113">                completion_buffer_[index].struct_size = 0;</span>
+<span id="L2114">            }</span>
+<span id="L2115">            std::uint64_t count = 0;</span>
+<span id="L2116">            HalV2Status device_status = HalV2Status::internal_error;</span>
+<span id="L2117">            try {</span>
+<span id="L2118">                device_status = backends_[backend_index].api.poll(</span>
+<span id="L2119">                    backends_[backend_index].api.instance,</span>
+<span id="L2120">                    completion_buffer_.get(),</span>
+<span id="L2121">                    completion_batch_,</span>
+<span id="L2122">                    &amp;count);</span>
+<span id="L2123">            } catch (...) {</span>
+<span id="L2124">                device_status = HalV2Status::internal_error;</span>
+<span id="L2125">            }</span>
+<span id="L2126">            service_polls_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L2127">            const auto status =</span>
+<span id="L2128">                hal_v2_status_to_runtime(device_status);</span>
+<span id="L2129">            if (status != Status::ok ||</span>
+<span id="L2130">                count &gt; completion_batch_) {</span>
+<span id="L2131">                fail_backend_outstanding(</span>
+<span id="L2132">                    backend_index,</span>
+<span id="L2133">                    status == Status::ok</span>
+<span id="L2134">                        ? Status::device_error</span>
+<span id="L2135">                        : status);</span>
+<span id="L2136">                continue;</span>
+<span id="L2137">            }</span>
+<span id="L2138">            bool batch_valid = true;</span>
+<span id="L2139">            for (std::size_t completion_index = 0;</span>
+<span id="L2140">                 completion_index &lt; static_cast&lt;std::size_t&gt;(count);</span>
+<span id="L2141">                 ++completion_index) {</span>
+<span id="L2142">                const auto&amp; completion =</span>
+<span id="L2143">                    completion_buffer_[completion_index];</span>
+<span id="L2144">                if (!validate_hal_v2_completion(completion)) {</span>
+<span id="L2145">                    batch_valid = false;</span>
+<span id="L2146">                    break;</span>
+<span id="L2147">                }</span>
+<span id="L2148">                for (std::size_t prior = 0;</span>
+<span id="L2149">                     prior &lt; completion_index;</span>
+<span id="L2150">                     ++prior) {</span>
+<span id="L2151">                    if (completion_buffer_[prior].submission_id ==</span>
+<span id="L2152">                        completion.submission_id) {</span>
+<span id="L2153">                        batch_valid = false;</span>
+<span id="L2154">                        break;</span>
+<span id="L2155">                    }</span>
+<span id="L2156">                }</span>
+<span id="L2157">                bool matched = false;</span>
+<span id="L2158">                for (std::size_t slot_index = 0;</span>
+<span id="L2159">                     batch_valid &amp;&amp; slot_index &lt; outstanding_capacity_;</span>
+<span id="L2160">                     ++slot_index) {</span>
+<span id="L2161">                    const auto&amp; slot = outstanding_slots_[slot_index];</span>
+<span id="L2162">                    const auto slot_state =</span>
+<span id="L2163">                        slot.state.load(std::memory_order_acquire);</span>
+<span id="L2164">                    if ((slot_state == kOutstandingSubmitting ||</span>
+<span id="L2165">                         slot_state == kOutstandingSubmitted) &amp;&amp;</span>
+<span id="L2166">                        slot.backend_index == backend_index &amp;&amp;</span>
+<span id="L2167">                        slot.submission_id == completion.submission_id) {</span>
+<span id="L2168">                        matched = true;</span>
+<span id="L2169">                        break;</span>
+<span id="L2170">                    }</span>
+<span id="L2171">                }</span>
+<span id="L2172">                if (!matched) {</span>
+<span id="L2173">                    batch_valid = false;</span>
+<span id="L2174">                }</span>
+<span id="L2175">                if (!batch_valid) {</span>
+<span id="L2176">                    break;</span>
+<span id="L2177">                }</span>
+<span id="L2178">            }</span>
+<span id="L2179">            if (!batch_valid) {</span>
+<span id="L2180">                fail_backend_outstanding(</span>
+<span id="L2181">                    backend_index,</span>
+<span id="L2182">                    Status::device_error);</span>
+<span id="L2183">                continue;</span>
+<span id="L2184">            }</span>
+<span id="L2185">            for (std::size_t completion_index = 0;</span>
+<span id="L2186">                 completion_index &lt;</span>
+<span id="L2187">                     static_cast&lt;std::size_t&gt;(count);</span>
+<span id="L2188">                 ++completion_index) {</span>
+<span id="L2189">                process_completion(</span>
+<span id="L2190">                    backend_index,</span>
+<span id="L2191">                    completion_buffer_[completion_index]);</span>
+<span id="L2192">            }</span>
+<span id="L2193">            poll_batch_completions(backend_index);</span>
+<span id="L2194">        }</span>
+<span id="L2195">        for (std::size_t backend_index = 0; backend_index &lt; backends_.size();</span>
+<span id="L2196">             ++backend_index) {</span>
+<span id="L2197">            auto&amp; control = batch_backends_[backend_index];</span>
+<span id="L2198">            for (std::size_t offset = 0; offset &lt; control.slot_count; ++offset) {</span>
+<span id="L2199">                auto&amp; slot = batch_slots_[control.slot_offset + offset];</span>
+<span id="L2200">                const auto state = slot.state.load(std::memory_order_acquire);</span>
+<span id="L2201">                const bool simulator = slot.simulation_timing.load(</span>
+<span id="L2202">                    std::memory_order_relaxed);</span>
+<span id="L2203">                if ((state == kBatchSubmitted ||</span>
+<span id="L2204">                     (state == kBatchSubmitting &amp;&amp; slot.rate_owned) ||</span>
+<span id="L2205">                     (simulator &amp;&amp; (state == kBatchQueued ||</span>
+<span id="L2206">                                    state == kBatchEarlyReady))) &amp;&amp;</span>
+<span id="L2207">                    monotonic_now_ns() &gt;= slot.deadline_ns) {</span>
+<span id="L2208">                    auto expected = state;</span>
+<span id="L2209">                    const auto target = slot.rate_owned</span>
+<span id="L2210">                        ? kBatchRateQuarantineOwned</span>
+<span id="L2211">                        : kBatchOwned;</span>
+<span id="L2212">                    if (!slot.state.compare_exchange_strong(</span>
+<span id="L2213">                            expected, target, std::memory_order_acq_rel,</span>
+<span id="L2214">                            std::memory_order_relaxed)) {</span>
+<span id="L2215">                        continue;</span>
+<span id="L2216">                    }</span>
+<span id="L2217">                    if (state == kBatchQueued) {</span>
+<span id="L2218">                        // No vendor callback owns an unsent batch, but the</span>
+<span id="L2219">                        // submission lane may hold a selected-slot pointer.</span>
+<span id="L2220">                        // Keep its storage until checked stop joins that lane.</span>
+<span id="L2221">                        finish_rate_quarantine(slot, Status::device_timeout);</span>
+<span id="L2222">                        continue;</span>
+<span id="L2223">                    }</span>
+<span id="L2224">                    if (!slot.cancellation_requested.exchange(</span>
+<span id="L2225">                            true, std::memory_order_acq_rel)) {</span>
+<span id="L2226">                        try {</span>
+<span id="L2227">                            (void)backends_[backend_index]</span>
+<span id="L2228">                                .command_state-&gt;extension.cancel(</span>
+<span id="L2229">                                    backends_[backend_index]</span>
+<span id="L2230">                                        .command_state-&gt;extension.instance,</span>
+<span id="L2231">                                    slot.batch.batch_id);</span>
+<span id="L2232">                        } catch (...) {</span>
+<span id="L2233">                        }</span>
+<span id="L2234">                    }</span>
+<span id="L2235">                    if (slot.rate_owned) {</span>
+<span id="L2236">                        finish_rate_quarantine(</span>
+<span id="L2237">                            slot, Status::device_timeout);</span>
+<span id="L2238">                    } else {</span>
+<span id="L2239">                        finish_batch_slot(</span>
+<span id="L2240">                            slot, Status::device_timeout, false);</span>
+<span id="L2241">                    }</span>
+<span id="L2242">                }</span>
+<span id="L2243">            }</span>
+<span id="L2244">        }</span>
+<span id="L2245">        rt::cpu_relax();</span>
+<span id="L2246">    }</span>
+<span id="L2247">}</span>
+<span id="L2248"></span>
+<span id="L2249">void DeviceManager::service_entry(void* manager) noexcept {</span>
+<span id="L2250">    static_cast&lt;DeviceManager*&gt;(manager)-&gt;service_loop();</span>
+<span id="L2251">}</span>
+<span id="L2252"></span>
+<span id="L2253">Status DeviceManager::health(</span>
+<span id="L2254">    std::size_t backend_index,</span>
+<span id="L2255">    DeviceHealth&amp; output) noexcept {</span>
+<span id="L2256">    output = make_device_health();</span>
+<span id="L2257">    if (!started_.load(std::memory_order_acquire) ||</span>
+<span id="L2258">        backend_index &gt;= backends_.size()) {</span>
+<span id="L2259">        return Status::invalid_state;</span>
+<span id="L2260">    }</span>
+<span id="L2261">    HalV2Health hal_health;</span>
+<span id="L2262">    hal_health.reserved0 = std::numeric_limits&lt;std::uint32_t&gt;::max();</span>
+<span id="L2263">    HalV2Status device_status = HalV2Status::internal_error;</span>
+<span id="L2264">    try {</span>
+<span id="L2265">        device_status = backends_[backend_index].api.get_health(</span>
+<span id="L2266">            backends_[backend_index].api.instance,</span>
+<span id="L2267">            &amp;hal_health);</span>
+<span id="L2268">    } catch (...) {</span>
+<span id="L2269">        device_status = HalV2Status::internal_error;</span>
+<span id="L2270">    }</span>
+<span id="L2271">    const auto status = hal_v2_status_to_runtime(device_status);</span>
+<span id="L2272">    if (status != Status::ok) {</span>
+<span id="L2273">        return status;</span>
+<span id="L2274">    }</span>
+<span id="L2275">    if (!validate_hal_v2_health(hal_health)) {</span>
+<span id="L2276">        return Status::device_error;</span>
+<span id="L2277">    }</span>
+<span id="L2278">    output.state = hal_health.state;</span>
+<span id="L2279">    output.last_status = hal_health.last_status;</span>
+<span id="L2280">    output.generation = hal_health.generation;</span>
+<span id="L2281">    output.submissions = hal_health.submissions;</span>
+<span id="L2282">    output.completions = hal_health.completions;</span>
+<span id="L2283">    output.queue_rejections = hal_health.queue_rejections;</span>
+<span id="L2284">    output.timeouts = hal_health.timeouts;</span>
+<span id="L2285">    output.errors = hal_health.errors;</span>
+<span id="L2286">    output.losses = hal_health.losses;</span>
+<span id="L2287">    output.cancellations = hal_health.cancellations;</span>
+<span id="L2288">    output.resets = hal_health.resets;</span>
+<span id="L2289">    output.outstanding = hal_health.outstanding;</span>
+<span id="L2290">    return Status::ok;</span>
+<span id="L2291">}</span>
+<span id="L2292"></span>
+<span id="L2293">Status DeviceManager::reset(std::size_t backend_index) noexcept {</span>
+<span id="L2294">    if (!started_.load(std::memory_order_acquire) ||</span>
+<span id="L2295">        backend_index &gt;= backends_.size()) {</span>
+<span id="L2296">        return Status::invalid_state;</span>
+<span id="L2297">    }</span>
+<span id="L2298">    for (std::size_t index = 0;</span>
+<span id="L2299">         index &lt; outstanding_capacity_;</span>
+<span id="L2300">         ++index) {</span>
+<span id="L2301">        if (outstanding_slots_[index].state.load(</span>
+<span id="L2302">                std::memory_order_acquire) ==</span>
+<span id="L2303">                kOutstandingSubmitted &amp;&amp;</span>
+<span id="L2304">            outstanding_slots_[index].backend_index ==</span>
+<span id="L2305">                backend_index) {</span>
+<span id="L2306">            return Status::invalid_state;</span>
+<span id="L2307">        }</span>
+<span id="L2308">    }</span>
+<span id="L2309">    if (backends_[backend_index].command_state) {</span>
+<span id="L2310">        const auto&amp; control = batch_backends_[backend_index];</span>
+<span id="L2311">        for (std::size_t offset = 0; offset &lt; control.slot_count; ++offset) {</span>
+<span id="L2312">            if (batch_slots_[control.slot_offset + offset].state.load(</span>
+<span id="L2313">                    std::memory_order_acquire) != kBatchFree) {</span>
+<span id="L2314">                return Status::invalid_state;</span>
+<span id="L2315">            }</span>
+<span id="L2316">        }</span>
+<span id="L2317">    }</span>
+<span id="L2318">    HalV2Status device_status = HalV2Status::internal_error;</span>
+<span id="L2319">    try {</span>
+<span id="L2320">        device_status = backends_[backend_index].api.reset(</span>
+<span id="L2321">            backends_[backend_index].api.instance);</span>
+<span id="L2322">    } catch (...) {</span>
+<span id="L2323">        device_status = HalV2Status::internal_error;</span>
+<span id="L2324">    }</span>
+<span id="L2325">    const auto status = hal_v2_status_to_runtime(device_status);</span>
+<span id="L2326">    if (status == Status::ok) {</span>
+<span id="L2327">        resets_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L2328">        auto reset_event = DeviceEvent{</span>
+<span id="L2329">            DeviceEventKind::reset,</span>
+<span id="L2330">            status,</span>
+<span id="L2331">            backend_index,</span>
+<span id="L2332">            std::numeric_limits&lt;std::size_t&gt;::max(),</span>
+<span id="L2333">            0,</span>
+<span id="L2334">            0,</span>
+<span id="L2335">            0,</span>
+<span id="L2336">        };</span>
+<span id="L2337">        reset_event.producer = RuntimeTraceProducer::host;</span>
+<span id="L2338">        emit(reset_event);</span>
+<span id="L2339">    }</span>
+<span id="L2340">    return status;</span>
+<span id="L2341">}</span>
+<span id="L2342"></span>
+<span id="L2343">DeviceManagerStats DeviceManager::stats() const noexcept {</span>
+<span id="L2344">    return DeviceManagerStats{</span>
+<span id="L2345">        submissions_.load(std::memory_order_acquire),</span>
+<span id="L2346">        completions_.load(std::memory_order_acquire),</span>
+<span id="L2347">        failures_.load(std::memory_order_acquire),</span>
+<span id="L2348">        queue_rejections_.load(std::memory_order_acquire),</span>
+<span id="L2349">        timeouts_.load(std::memory_order_acquire),</span>
+<span id="L2350">        losses_.load(std::memory_order_acquire),</span>
+<span id="L2351">        resets_.load(std::memory_order_acquire),</span>
+<span id="L2352">        service_polls_.load(std::memory_order_acquire),</span>
+<span id="L2353">        outstanding_count_.load(std::memory_order_acquire),</span>
+<span id="L2354">        service_starts_.load(std::memory_order_acquire),</span>
+<span id="L2355">    };</span>
+<span id="L2356">}</span>
+<span id="L2357"></span>
+<span id="L2358">} // namespace rt::detail</span></pre></html>

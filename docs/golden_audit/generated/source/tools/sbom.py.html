@@ -1,0 +1,512 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tools/sbom.py</title><h1>tools/sbom.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#!/usr/bin/env python3</span>
+<span id="L2">&quot;&quot;&quot;Verify immutable inputs and create/verify deterministic SPDX 2.3 SBOMs.&quot;&quot;&quot;</span>
+<span id="L3"></span>
+<span id="L4">from __future__ import annotations</span>
+<span id="L5"></span>
+<span id="L6">import argparse</span>
+<span id="L7">import hashlib</span>
+<span id="L8">import json</span>
+<span id="L9">import pathlib</span>
+<span id="L10">import re</span>
+<span id="L11">import subprocess</span>
+<span id="L12">import sys</span>
+<span id="L13">from typing import Any</span>
+<span id="L14"></span>
+<span id="L15"></span>
+<span id="L16">MAX_JSON_BYTES = 4 * 1024 * 1024</span>
+<span id="L17">MAX_FILES = 256</span>
+<span id="L18">MAX_TOTAL_BYTES = 8 * 1024 * 1024 * 1024</span>
+<span id="L19"></span>
+<span id="L20"></span>
+<span id="L21">class DuplicateKeyError(ValueError):</span>
+<span id="L22">    pass</span>
+<span id="L23"></span>
+<span id="L24"></span>
+<span id="L25">def reject_duplicates(pairs: list[tuple[str, Any]]) -&gt; dict[str, Any]:</span>
+<span id="L26">    output: dict[str, Any] = {}</span>
+<span id="L27">    for key, value in pairs:</span>
+<span id="L28">        if key in output:</span>
+<span id="L29">            raise DuplicateKeyError(f&quot;duplicate JSON key: {key}&quot;)</span>
+<span id="L30">        output[key] = value</span>
+<span id="L31">    return output</span>
+<span id="L32"></span>
+<span id="L33"></span>
+<span id="L34">def strict_json(path: pathlib.Path, maximum: int = MAX_JSON_BYTES) -&gt; Any:</span>
+<span id="L35">    if path.is_symlink() or not path.is_file():</span>
+<span id="L36">        raise ValueError(f&quot;not a regular file: {path}&quot;)</span>
+<span id="L37">    if path.stat().st_size &gt; maximum:</span>
+<span id="L38">        raise ValueError(f&quot;JSON input exceeds {maximum} bytes: {path}&quot;)</span>
+<span id="L39">    try:</span>
+<span id="L40">        return json.loads(</span>
+<span id="L41">            path.read_text(encoding=&quot;utf-8&quot;),</span>
+<span id="L42">            object_pairs_hook=reject_duplicates,</span>
+<span id="L43">        )</span>
+<span id="L44">    except (OSError, UnicodeError, json.JSONDecodeError) as exc:</span>
+<span id="L45">        raise ValueError(f&quot;cannot parse {path}: {exc}&quot;) from exc</span>
+<span id="L46"></span>
+<span id="L47"></span>
+<span id="L48">def canonical_json(value: Any) -&gt; bytes:</span>
+<span id="L49">    return json.dumps(</span>
+<span id="L50">        value,</span>
+<span id="L51">        sort_keys=True,</span>
+<span id="L52">        separators=(&quot;,&quot;, &quot;:&quot;),</span>
+<span id="L53">        ensure_ascii=False,</span>
+<span id="L54">    ).encode(&quot;utf-8&quot;)</span>
+<span id="L55"></span>
+<span id="L56"></span>
+<span id="L57">def sha256(path: pathlib.Path) -&gt; str:</span>
+<span id="L58">    if path.is_symlink() or not path.is_file():</span>
+<span id="L59">        raise ValueError(f&quot;not a regular file: {path}&quot;)</span>
+<span id="L60">    if path.stat().st_size &gt; MAX_TOTAL_BYTES:</span>
+<span id="L61">        raise ValueError(f&quot;file exceeds byte limit: {path}&quot;)</span>
+<span id="L62">    digest = hashlib.sha256()</span>
+<span id="L63">    with path.open(&quot;rb&quot;) as stream:</span>
+<span id="L64">        for chunk in iter(lambda: stream.read(1024 * 1024), b&quot;&quot;):</span>
+<span id="L65">            digest.update(chunk)</span>
+<span id="L66">    return digest.hexdigest()</span>
+<span id="L67"></span>
+<span id="L68"></span>
+<span id="L69">def checked_commit(value: str) -&gt; str:</span>
+<span id="L70">    normalized = value.lower()</span>
+<span id="L71">    if re.fullmatch(r&quot;[0-9a-f]{40}&quot;, normalized) is None:</span>
+<span id="L72">        raise ValueError(&quot;source commit must be a complete 40-character Git SHA&quot;)</span>
+<span id="L73">    return normalized</span>
+<span id="L74"></span>
+<span id="L75"></span>
+<span id="L76">def load_dependency_policy(path: pathlib.Path) -&gt; dict[str, Any]:</span>
+<span id="L77">    value = strict_json(path)</span>
+<span id="L78">    if not isinstance(value, dict) or value.get(&quot;schema_version&quot;) != 1:</span>
+<span id="L79">        raise ValueError(&quot;dependency policy schema_version must be 1&quot;)</span>
+<span id="L80">    dependencies = value.get(&quot;dependencies&quot;)</span>
+<span id="L81">    actions = value.get(&quot;workflow_actions&quot;)</span>
+<span id="L82">    if not isinstance(dependencies, dict) or not isinstance(actions, dict):</span>
+<span id="L83">        raise ValueError(&quot;dependency policy lacks dependencies/workflow_actions&quot;)</span>
+<span id="L84">    return value</span>
+<span id="L85"></span>
+<span id="L86"></span>
+<span id="L87">def load_assurance_policy(path: pathlib.Path) -&gt; dict[str, Any]:</span>
+<span id="L88">    value = strict_json(path)</span>
+<span id="L89">    if not isinstance(value, dict) or value.get(&quot;schema_version&quot;) != 1:</span>
+<span id="L90">        raise ValueError(&quot;portable assurance policy schema_version must be 1&quot;)</span>
+<span id="L91">    return value</span>
+<span id="L92"></span>
+<span id="L93"></span>
+<span id="L94">def git_output(arguments: list[str], cwd: pathlib.Path) -&gt; str:</span>
+<span id="L95">    try:</span>
+<span id="L96">        completed = subprocess.run(</span>
+<span id="L97">            [&quot;git&quot;, *arguments],</span>
+<span id="L98">            cwd=cwd,</span>
+<span id="L99">            check=True,</span>
+<span id="L100">            capture_output=True,</span>
+<span id="L101">            text=True,</span>
+<span id="L102">            timeout=60,</span>
+<span id="L103">        )</span>
+<span id="L104">    except (OSError, subprocess.SubprocessError) as exc:</span>
+<span id="L105">        raise ValueError(f&quot;git {&#x27; &#x27;.join(arguments)} failed: {exc}&quot;) from exc</span>
+<span id="L106">    return completed.stdout.strip()</span>
+<span id="L107"></span>
+<span id="L108"></span>
+<span id="L109">def verify_dependencies(</span>
+<span id="L110">    root: pathlib.Path,</span>
+<span id="L111">    policy_path: pathlib.Path,</span>
+<span id="L112">) -&gt; dict[str, Any]:</span>
+<span id="L113">    policy = load_dependency_policy(policy_path)</span>
+<span id="L114">    dependencies = policy[&quot;dependencies&quot;]</span>
+<span id="L115">    cmake = (root / &quot;CMakeLists.txt&quot;).read_text(encoding=&quot;utf-8&quot;)</span>
+<span id="L116">    modules = (root / &quot;.gitmodules&quot;).read_text(encoding=&quot;utf-8&quot;)</span>
+<span id="L117">    vcpkg = strict_json(root / &quot;vcpkg.json&quot;)</span>
+<span id="L118">    lock = strict_json(root / &quot;vcpkg-lock.json&quot;)</span>
+<span id="L119"></span>
+<span id="L120">    googletest = dependencies[&quot;googletest&quot;]</span>
+<span id="L121">    gtest_path = root / googletest[&quot;submodule_path&quot;]</span>
+<span id="L122">    if googletest[&quot;repository&quot;] not in modules:</span>
+<span id="L123">        raise ValueError(&quot;GoogleTest submodule URL does not match policy&quot;)</span>
+<span id="L124">    if not (gtest_path / &quot;.git&quot;).exists():</span>
+<span id="L125">        raise ValueError(&quot;GoogleTest submodule is missing or uninitialized&quot;)</span>
+<span id="L126">    if git_output([&quot;rev-parse&quot;, &quot;HEAD&quot;], gtest_path) != googletest[&quot;submodule_commit&quot;]:</span>
+<span id="L127">        raise ValueError(&quot;GoogleTest submodule commit does not match policy&quot;)</span>
+<span id="L128">    if git_output([&quot;status&quot;, &quot;--porcelain&quot;, &quot;--untracked-files=all&quot;], gtest_path):</span>
+<span id="L129">        raise ValueError(&quot;GoogleTest submodule is dirty or contains extra files&quot;)</span>
+<span id="L130">    for token in (</span>
+<span id="L131">        f&quot;URL {googletest[&#x27;fallback_url&#x27;]}&quot;,</span>
+<span id="L132">        f&quot;URL_HASH SHA256={googletest[&#x27;fallback_sha256&#x27;]}&quot;,</span>
+<span id="L133">    ):</span>
+<span id="L134">        if token not in cmake:</span>
+<span id="L135">            raise ValueError(f&quot;GoogleTest fallback pin is missing: {token}&quot;)</span>
+<span id="L136"></span>
+<span id="L137">    rapidcheck = dependencies[&quot;rapidcheck&quot;]</span>
+<span id="L138">    for token in (</span>
+<span id="L139">        f&quot;GIT_REPOSITORY {rapidcheck[&#x27;repository&#x27;]}&quot;,</span>
+<span id="L140">        f&quot;GIT_TAG {rapidcheck[&#x27;commit&#x27;]}&quot;,</span>
+<span id="L141">    ):</span>
+<span id="L142">        if token not in cmake:</span>
+<span id="L143">            raise ValueError(f&quot;RapidCheck immutable pin is missing: {token}&quot;)</span>
+<span id="L144">    fetch_names = re.findall(r&quot;FetchContent_Declare\(\s*([A-Za-z0-9_.+-]+)&quot;, cmake)</span>
+<span id="L145">    if sorted(fetch_names) != [&quot;googletest&quot;, &quot;rapidcheck&quot;]:</span>
+<span id="L146">        raise ValueError(f&quot;unlisted FetchContent dependencies: {fetch_names}&quot;)</span>
+<span id="L147"></span>
+<span id="L148">    vcpkg_policy = dependencies[&quot;vcpkg&quot;]</span>
+<span id="L149">    if vcpkg.get(&quot;builtin-baseline&quot;) != vcpkg_policy[&quot;builtin_baseline&quot;]:</span>
+<span id="L150">        raise ValueError(&quot;vcpkg baseline does not match policy&quot;)</span>
+<span id="L151">    if vcpkg.get(&quot;dependencies&quot;) != []:</span>
+<span id="L152">        raise ValueError(&quot;vcpkg manifest contains unlisted dependencies&quot;)</span>
+<span id="L153">    if lock != {&quot;version&quot;: 1, &quot;packages&quot;: {}}:</span>
+<span id="L154">        raise ValueError(&quot;vcpkg lock contains unlisted packages&quot;)</span>
+<span id="L155"></span>
+<span id="L156">    expected_actions = policy[&quot;workflow_actions&quot;]</span>
+<span id="L157">    found_actions: dict[str, str] = {}</span>
+<span id="L158">    workflow_paths = sorted((root / &quot;.github/workflows&quot;).glob(&quot;*.y*ml&quot;))</span>
+<span id="L159">    if not workflow_paths:</span>
+<span id="L160">        raise ValueError(&quot;no workflows found&quot;)</span>
+<span id="L161">    for path in workflow_paths:</span>
+<span id="L162">        text = path.read_text(encoding=&quot;utf-8&quot;)</span>
+<span id="L163">        for reference in re.findall(</span>
+<span id="L164">            r&quot;^\s*(?:-\s*)?uses:\s*([^\s#]+)&quot;, text, re.MULTILINE</span>
+<span id="L165">        ):</span>
+<span id="L166">            if reference.startswith(&quot;./&quot;):</span>
+<span id="L167">                continue</span>
+<span id="L168">            if reference.count(&quot;@&quot;) != 1:</span>
+<span id="L169">                raise ValueError(f&quot;invalid action reference in {path}: {reference}&quot;)</span>
+<span id="L170">            action, revision = reference.rsplit(&quot;@&quot;, 1)</span>
+<span id="L171">            if expected_actions.get(action) != revision:</span>
+<span id="L172">                raise ValueError(f&quot;unreviewed action reference: {reference}&quot;)</span>
+<span id="L173">            if re.fullmatch(r&quot;[0-9a-f]{40}&quot;, revision) is None:</span>
+<span id="L174">                raise ValueError(f&quot;action is not pinned to a full commit: {reference}&quot;)</span>
+<span id="L175">            previous = found_actions.setdefault(action, revision)</span>
+<span id="L176">            if previous != revision:</span>
+<span id="L177">                raise ValueError(f&quot;action has inconsistent revisions: {action}&quot;)</span>
+<span id="L178">    if set(found_actions) != set(expected_actions):</span>
+<span id="L179">        raise ValueError(</span>
+<span id="L180">            &quot;workflow action inventory differs from policy: &quot;</span>
+<span id="L181">            f&quot;missing={sorted(set(expected_actions) - set(found_actions))}, &quot;</span>
+<span id="L182">            f&quot;extra={sorted(set(found_actions) - set(expected_actions))}&quot;</span>
+<span id="L183">        )</span>
+<span id="L184">    ci = (root / &quot;.github/workflows/ci.yml&quot;).read_text(encoding=&quot;utf-8&quot;)</span>
+<span id="L185">    if &quot;continue-on-error: true&quot; in ci:</span>
+<span id="L186">        raise ValueError(&quot;CI contains a success-for-failure fallback&quot;)</span>
+<span id="L187">    if &quot;actions/dependency-review-action@&quot; not in ci or &quot;fail-on-severity: high&quot; not in ci:</span>
+<span id="L188">        raise ValueError(&quot;blocking high-severity dependency review is missing&quot;)</span>
+<span id="L189"></span>
+<span id="L190">    return {</span>
+<span id="L191">        &quot;schema_version&quot;: 1,</span>
+<span id="L192">        &quot;identity_only&quot;: True,</span>
+<span id="L193">        &quot;vulnerability_clearance&quot;: False,</span>
+<span id="L194">        &quot;dependencies&quot;: [</span>
+<span id="L195">            {</span>
+<span id="L196">                &quot;name&quot;: name,</span>
+<span id="L197">                &quot;identity&quot;: record.get(&quot;submodule_commit&quot;)</span>
+<span id="L198">                or record.get(&quot;commit&quot;)</span>
+<span id="L199">                or record.get(&quot;builtin_baseline&quot;),</span>
+<span id="L200">                &quot;license&quot;: record.get(&quot;license&quot;),</span>
+<span id="L201">                &quot;purpose&quot;: record.get(&quot;purpose&quot;),</span>
+<span id="L202">            }</span>
+<span id="L203">            for name, record in sorted(dependencies.items())</span>
+<span id="L204">        ],</span>
+<span id="L205">        &quot;workflow_actions&quot;: [</span>
+<span id="L206">            {&quot;name&quot;: name, &quot;commit&quot;: revision}</span>
+<span id="L207">            for name, revision in sorted(expected_actions.items())</span>
+<span id="L208">        ],</span>
+<span id="L209">    }</span>
+<span id="L210"></span>
+<span id="L211"></span>
+<span id="L212">def candidate_files(</span>
+<span id="L213">    artifact_dir: pathlib.Path,</span>
+<span id="L214">    policy: dict[str, Any],</span>
+<span id="L215">) -&gt; tuple[pathlib.Path, pathlib.Path]:</span>
+<span id="L216">    artifact = policy[&quot;artifacts&quot;]</span>
+<span id="L217">    archive_suffix = artifact[&quot;archive_suffix&quot;]</span>
+<span id="L218">    checksum_suffix = artifact[&quot;checksum_suffix&quot;]</span>
+<span id="L219">    paths = list(artifact_dir.iterdir())</span>
+<span id="L220">    if len(paths) &gt; int(artifact[&quot;maximum_files&quot;]):</span>
+<span id="L221">        raise ValueError(&quot;artifact directory exceeds file-count policy&quot;)</span>
+<span id="L222">    total = 0</span>
+<span id="L223">    for path in paths:</span>
+<span id="L224">        if path.is_symlink() or not path.is_file():</span>
+<span id="L225">            raise ValueError(f&quot;artifact inventory entry is not regular: {path.name}&quot;)</span>
+<span id="L226">        total += path.stat().st_size</span>
+<span id="L227">    if total &gt; int(artifact[&quot;maximum_total_bytes&quot;]):</span>
+<span id="L228">        raise ValueError(&quot;artifact directory exceeds byte policy&quot;)</span>
+<span id="L229">    allowed_named = {</span>
+<span id="L230">        artifact[&quot;sbom&quot;],</span>
+<span id="L231">        artifact[&quot;provenance&quot;],</span>
+<span id="L232">        artifact[&quot;manifest&quot;],</span>
+<span id="L233">    }</span>
+<span id="L234">    archives = [path for path in paths if path.name.endswith(archive_suffix)]</span>
+<span id="L235">    checksums = [path for path in paths if path.name.endswith(checksum_suffix)]</span>
+<span id="L236">    unexpected = [</span>
+<span id="L237">        path.name</span>
+<span id="L238">        for path in paths</span>
+<span id="L239">        if path not in archives and path not in checksums and path.name not in allowed_named</span>
+<span id="L240">    ]</span>
+<span id="L241">    if unexpected:</span>
+<span id="L242">        raise ValueError(f&quot;artifact directory contains unlisted files: {sorted(unexpected)}&quot;)</span>
+<span id="L243">    if len(archives) != 1 or len(checksums) != 1:</span>
+<span id="L244">        raise ValueError(&quot;expected exactly one package archive and checksum&quot;)</span>
+<span id="L245">    if checksums[0].name != archives[0].name + &quot;.sha256&quot;:</span>
+<span id="L246">        raise ValueError(&quot;checksum sidecar does not match the archive name&quot;)</span>
+<span id="L247">    words = checksums[0].read_text(encoding=&quot;utf-8&quot;).strip().split()</span>
+<span id="L248">    if not words or words[0].lower() != sha256(archives[0]):</span>
+<span id="L249">        raise ValueError(&quot;checksum sidecar does not match archive bytes&quot;)</span>
+<span id="L250">    return archives[0], checksums[0]</span>
+<span id="L251"></span>
+<span id="L252"></span>
+<span id="L253">def spdx_id(name: str) -&gt; str:</span>
+<span id="L254">    return &quot;SPDXRef-&quot; + re.sub(r&quot;[^A-Za-z0-9.-]&quot;, &quot;-&quot;, name)</span>
+<span id="L255"></span>
+<span id="L256"></span>
+<span id="L257">def create_sbom(</span>
+<span id="L258">    artifact_dir: pathlib.Path,</span>
+<span id="L259">    policy: dict[str, Any],</span>
+<span id="L260">    dependency_policy: dict[str, Any],</span>
+<span id="L261">    source_commit: str,</span>
+<span id="L262">) -&gt; dict[str, Any]:</span>
+<span id="L263">    commit = checked_commit(source_commit)</span>
+<span id="L264">    archive, checksum = candidate_files(artifact_dir, policy)</span>
+<span id="L265">    version = policy[&quot;version&quot;]</span>
+<span id="L266">    root_id = &quot;SPDXRef-Package-RTFW&quot;</span>
+<span id="L267">    files = []</span>
+<span id="L268">    for path in sorted((archive, checksum), key=lambda value: value.name):</span>
+<span id="L269">        files.append(</span>
+<span id="L270">            {</span>
+<span id="L271">                &quot;SPDXID&quot;: spdx_id(&quot;File-&quot; + path.name),</span>
+<span id="L272">                &quot;fileName&quot;: &quot;./&quot; + path.name,</span>
+<span id="L273">                &quot;checksums&quot;: [</span>
+<span id="L274">                    {&quot;algorithm&quot;: &quot;SHA256&quot;, &quot;checksumValue&quot;: sha256(path)}</span>
+<span id="L275">                ],</span>
+<span id="L276">                &quot;fileTypes&quot;: [&quot;ARCHIVE&quot; if path == archive else &quot;OTHER&quot;],</span>
+<span id="L277">            }</span>
+<span id="L278">        )</span>
+<span id="L279">    identity = hashlib.sha256(</span>
+<span id="L280">        canonical_json({&quot;commit&quot;: commit, &quot;files&quot;: files})</span>
+<span id="L281">    ).hexdigest()</span>
+<span id="L282">    packages = [</span>
+<span id="L283">        {</span>
+<span id="L284">            &quot;SPDXID&quot;: root_id,</span>
+<span id="L285">            &quot;name&quot;: &quot;rtfw&quot;,</span>
+<span id="L286">            &quot;versionInfo&quot;: version,</span>
+<span id="L287">            &quot;downloadLocation&quot;: &quot;NOASSERTION&quot;,</span>
+<span id="L288">            &quot;filesAnalyzed&quot;: False,</span>
+<span id="L289">            &quot;licenseConcluded&quot;: &quot;Apache-2.0&quot;,</span>
+<span id="L290">            &quot;licenseDeclared&quot;: &quot;Apache-2.0&quot;,</span>
+<span id="L291">            &quot;copyrightText&quot;: &quot;NOASSERTION&quot;,</span>
+<span id="L292">            &quot;externalRefs&quot;: [</span>
+<span id="L293">                {</span>
+<span id="L294">                    &quot;referenceCategory&quot;: &quot;OTHER&quot;,</span>
+<span id="L295">                    &quot;referenceType&quot;: &quot;vcs&quot;,</span>
+<span id="L296">                    &quot;referenceLocator&quot;: f&quot;git+{policy[&#x27;source_repository&#x27;]}@{commit}&quot;,</span>
+<span id="L297">                }</span>
+<span id="L298">            ],</span>
+<span id="L299">        }</span>
+<span id="L300">    ]</span>
+<span id="L301">    relationships = [</span>
+<span id="L302">        {</span>
+<span id="L303">            &quot;spdxElementId&quot;: &quot;SPDXRef-DOCUMENT&quot;,</span>
+<span id="L304">            &quot;relationshipType&quot;: &quot;DESCRIBES&quot;,</span>
+<span id="L305">            &quot;relatedSpdxElement&quot;: root_id,</span>
+<span id="L306">        }</span>
+<span id="L307">    ]</span>
+<span id="L308">    for file_record in files:</span>
+<span id="L309">        relationships.append(</span>
+<span id="L310">            {</span>
+<span id="L311">                &quot;spdxElementId&quot;: root_id,</span>
+<span id="L312">                &quot;relationshipType&quot;: &quot;GENERATES&quot;,</span>
+<span id="L313">                &quot;relatedSpdxElement&quot;: file_record[&quot;SPDXID&quot;],</span>
+<span id="L314">            }</span>
+<span id="L315">        )</span>
+<span id="L316">    for name, record in sorted(dependency_policy[&quot;dependencies&quot;].items()):</span>
+<span id="L317">        package_id = spdx_id(&quot;Dependency-&quot; + name)</span>
+<span id="L318">        identity_value = (</span>
+<span id="L319">            record.get(&quot;submodule_commit&quot;)</span>
+<span id="L320">            or record.get(&quot;commit&quot;)</span>
+<span id="L321">            or record.get(&quot;builtin_baseline&quot;)</span>
+<span id="L322">        )</span>
+<span id="L323">        packages.append(</span>
+<span id="L324">            {</span>
+<span id="L325">                &quot;SPDXID&quot;: package_id,</span>
+<span id="L326">                &quot;name&quot;: name,</span>
+<span id="L327">                &quot;versionInfo&quot;: identity_value,</span>
+<span id="L328">                &quot;downloadLocation&quot;: record.get(&quot;repository&quot;, &quot;NOASSERTION&quot;),</span>
+<span id="L329">                &quot;filesAnalyzed&quot;: False,</span>
+<span id="L330">                &quot;licenseConcluded&quot;: record[&quot;license&quot;],</span>
+<span id="L331">                &quot;licenseDeclared&quot;: record[&quot;license&quot;],</span>
+<span id="L332">                &quot;copyrightText&quot;: &quot;NOASSERTION&quot;,</span>
+<span id="L333">                &quot;comment&quot;: record[&quot;purpose&quot;],</span>
+<span id="L334">            }</span>
+<span id="L335">        )</span>
+<span id="L336">        relationship = (</span>
+<span id="L337">            &quot;TEST_DEPENDENCY_OF&quot;</span>
+<span id="L338">            if &quot;test&quot; in record[&quot;purpose&quot;]</span>
+<span id="L339">            else &quot;BUILD_DEPENDENCY_OF&quot;</span>
+<span id="L340">        )</span>
+<span id="L341">        relationships.append(</span>
+<span id="L342">            {</span>
+<span id="L343">                &quot;spdxElementId&quot;: package_id,</span>
+<span id="L344">                &quot;relationshipType&quot;: relationship,</span>
+<span id="L345">                &quot;relatedSpdxElement&quot;: root_id,</span>
+<span id="L346">            }</span>
+<span id="L347">        )</span>
+<span id="L348">    return {</span>
+<span id="L349">        &quot;SPDXID&quot;: &quot;SPDXRef-DOCUMENT&quot;,</span>
+<span id="L350">        &quot;spdxVersion&quot;: policy[&quot;spdx&quot;][&quot;version&quot;],</span>
+<span id="L351">        &quot;dataLicense&quot;: policy[&quot;spdx&quot;][&quot;data_license&quot;],</span>
+<span id="L352">        &quot;name&quot;: f&quot;rtfw-{version}-portable-candidate&quot;,</span>
+<span id="L353">        &quot;documentNamespace&quot;: f&quot;https://rtfw.dev/spdx/rtfw/{version}/{commit}/{identity}&quot;,</span>
+<span id="L354">        &quot;creationInfo&quot;: {</span>
+<span id="L355">            &quot;created&quot;: policy[&quot;spdx&quot;][&quot;creation_time&quot;],</span>
+<span id="L356">            &quot;creators&quot;: [&quot;Tool: rtfw-sbom-v1&quot;],</span>
+<span id="L357">            &quot;licenseListVersion&quot;: &quot;3.25&quot;,</span>
+<span id="L358">        },</span>
+<span id="L359">        &quot;documentDescribes&quot;: [root_id],</span>
+<span id="L360">        &quot;packages&quot;: packages,</span>
+<span id="L361">        &quot;files&quot;: files,</span>
+<span id="L362">        &quot;relationships&quot;: relationships,</span>
+<span id="L363">    }</span>
+<span id="L364"></span>
+<span id="L365"></span>
+<span id="L366">def validate_spdx_shape(value: Any) -&gt; None:</span>
+<span id="L367">    if not isinstance(value, dict):</span>
+<span id="L368">        raise ValueError(&quot;SBOM top-level value must be an object&quot;)</span>
+<span id="L369">    required = {</span>
+<span id="L370">        &quot;SPDXID&quot;, &quot;spdxVersion&quot;, &quot;dataLicense&quot;, &quot;name&quot;, &quot;documentNamespace&quot;,</span>
+<span id="L371">        &quot;creationInfo&quot;, &quot;documentDescribes&quot;, &quot;packages&quot;, &quot;files&quot;, &quot;relationships&quot;,</span>
+<span id="L372">    }</span>
+<span id="L373">    if set(value) != required:</span>
+<span id="L374">        raise ValueError(&quot;SBOM top-level inventory differs from policy&quot;)</span>
+<span id="L375">    if value[&quot;SPDXID&quot;] != &quot;SPDXRef-DOCUMENT&quot; or value[&quot;spdxVersion&quot;] != &quot;SPDX-2.3&quot;:</span>
+<span id="L376">        raise ValueError(&quot;SBOM is not an SPDX 2.3 document&quot;)</span>
+<span id="L377">    if not isinstance(value[&quot;packages&quot;], list) or not value[&quot;packages&quot;]:</span>
+<span id="L378">        raise ValueError(&quot;SBOM packages must be non-empty&quot;)</span>
+<span id="L379">    if not isinstance(value[&quot;files&quot;], list) or len(value[&quot;files&quot;]) != 2:</span>
+<span id="L380">        raise ValueError(&quot;SBOM must cover the archive and checksum files&quot;)</span>
+<span id="L381">    identifiers = [</span>
+<span id="L382">        record.get(&quot;SPDXID&quot;)</span>
+<span id="L383">        for collection in (value[&quot;packages&quot;], value[&quot;files&quot;])</span>
+<span id="L384">        for record in collection</span>
+<span id="L385">        if isinstance(record, dict)</span>
+<span id="L386">    ]</span>
+<span id="L387">    if len(identifiers) != len(set(identifiers)) or any(</span>
+<span id="L388">        not isinstance(item, str) or not item.startswith(&quot;SPDXRef-&quot;)</span>
+<span id="L389">        for item in identifiers</span>
+<span id="L390">    ):</span>
+<span id="L391">        raise ValueError(&quot;SBOM contains duplicate or invalid SPDX identifiers&quot;)</span>
+<span id="L392">    if any(</span>
+<span id="L393">        pathlib.PurePosixPath(record.get(&quot;fileName&quot;, &quot;&quot;)).is_absolute()</span>
+<span id="L394">        or &quot;..&quot; in pathlib.PurePosixPath(record.get(&quot;fileName&quot;, &quot;&quot;)).parts</span>
+<span id="L395">        for record in value[&quot;files&quot;]</span>
+<span id="L396">    ):</span>
+<span id="L397">        raise ValueError(&quot;SBOM contains an unsafe file path&quot;)</span>
+<span id="L398"></span>
+<span id="L399"></span>
+<span id="L400">def verify_schema_identity(root: pathlib.Path, policy: dict[str, Any]) -&gt; None:</span>
+<span id="L401">    schema = root / policy[&quot;spdx&quot;][&quot;schema_path&quot;]</span>
+<span id="L402">    if sha256(schema) != policy[&quot;spdx&quot;][&quot;schema_sha256&quot;]:</span>
+<span id="L403">        raise ValueError(&quot;retained official SPDX schema digest mismatch&quot;)</span>
+<span id="L404">    schema_value = strict_json(schema)</span>
+<span id="L405">    if not isinstance(schema_value, dict) or &quot;SPDX&quot; not in str(schema_value.get(&quot;title&quot;, &quot;&quot;)):</span>
+<span id="L406">        raise ValueError(&quot;retained SPDX schema identity is malformed&quot;)</span>
+<span id="L407"></span>
+<span id="L408"></span>
+<span id="L409">def write_new(path: pathlib.Path, value: Any) -&gt; None:</span>
+<span id="L410">    if path.exists() or path.is_symlink():</span>
+<span id="L411">        raise ValueError(f&quot;output already exists: {path}&quot;)</span>
+<span id="L412">    temporary = path.with_name(path.name + &quot;.tmp&quot;)</span>
+<span id="L413">    try:</span>
+<span id="L414">        temporary.write_bytes(canonical_json(value) + b&quot;\n&quot;)</span>
+<span id="L415">        temporary.replace(path)</span>
+<span id="L416">    except Exception:</span>
+<span id="L417">        if temporary.exists() and not temporary.is_symlink():</span>
+<span id="L418">            temporary.unlink()</span>
+<span id="L419">        raise</span>
+<span id="L420"></span>
+<span id="L421"></span>
+<span id="L422">def verify_sbom(</span>
+<span id="L423">    root: pathlib.Path,</span>
+<span id="L424">    sbom_path: pathlib.Path,</span>
+<span id="L425">    artifact_dir: pathlib.Path,</span>
+<span id="L426">    policy: dict[str, Any],</span>
+<span id="L427">    dependency_policy: dict[str, Any],</span>
+<span id="L428">    source_commit: str,</span>
+<span id="L429">) -&gt; dict[str, Any]:</span>
+<span id="L430">    verify_schema_identity(root, policy)</span>
+<span id="L431">    value = strict_json(sbom_path)</span>
+<span id="L432">    validate_spdx_shape(value)</span>
+<span id="L433">    if canonical_json(value) + b&quot;\n&quot; != sbom_path.read_bytes():</span>
+<span id="L434">        raise ValueError(&quot;SBOM is not canonical deterministic JSON&quot;)</span>
+<span id="L435">    expected = create_sbom(</span>
+<span id="L436">        artifact_dir, policy, dependency_policy, source_commit</span>
+<span id="L437">    )</span>
+<span id="L438">    if value != expected:</span>
+<span id="L439">        raise ValueError(&quot;SBOM does not match exact package/source/dependency inputs&quot;)</span>
+<span id="L440">    return {</span>
+<span id="L441">        &quot;schema_version&quot;: 1,</span>
+<span id="L442">        &quot;spdx_version&quot;: &quot;SPDX-2.3&quot;,</span>
+<span id="L443">        &quot;schema_sha256&quot;: policy[&quot;spdx&quot;][&quot;schema_sha256&quot;],</span>
+<span id="L444">        &quot;sbom_sha256&quot;: sha256(sbom_path),</span>
+<span id="L445">        &quot;deterministic&quot;: True,</span>
+<span id="L446">        &quot;test_dependencies_shipped&quot;: False,</span>
+<span id="L447">    }</span>
+<span id="L448"></span>
+<span id="L449"></span>
+<span id="L450">def main(argv: list[str] | None = None) -&gt; int:</span>
+<span id="L451">    parser = argparse.ArgumentParser()</span>
+<span id="L452">    subparsers = parser.add_subparsers(dest=&quot;command&quot;, required=True)</span>
+<span id="L453">    dependencies = subparsers.add_parser(&quot;verify-dependencies&quot;)</span>
+<span id="L454">    dependencies.add_argument(&quot;--policy&quot;, type=pathlib.Path, required=True)</span>
+<span id="L455">    dependencies.add_argument(</span>
+<span id="L456">        &quot;--repo-root&quot;, type=pathlib.Path,</span>
+<span id="L457">        default=pathlib.Path(__file__).resolve().parents[1]</span>
+<span id="L458">    )</span>
+<span id="L459">    dependencies.add_argument(&quot;--output&quot;, type=pathlib.Path)</span>
+<span id="L460">    for name in (&quot;create&quot;, &quot;verify&quot;):</span>
+<span id="L461">        command = subparsers.add_parser(name)</span>
+<span id="L462">        command.add_argument(&quot;--artifact-dir&quot;, type=pathlib.Path, required=True)</span>
+<span id="L463">        command.add_argument(&quot;--policy&quot;, type=pathlib.Path, required=True)</span>
+<span id="L464">        command.add_argument(&quot;--dependency-policy&quot;, type=pathlib.Path, required=True)</span>
+<span id="L465">        command.add_argument(&quot;--source-commit&quot;, required=True)</span>
+<span id="L466">        command.add_argument(&quot;--repo-root&quot;, type=pathlib.Path, required=True)</span>
+<span id="L467">        if name == &quot;create&quot;:</span>
+<span id="L468">            command.add_argument(&quot;--output&quot;, type=pathlib.Path, required=True)</span>
+<span id="L469">        else:</span>
+<span id="L470">            command.add_argument(&quot;--sbom&quot;, type=pathlib.Path, required=True)</span>
+<span id="L471">    args = parser.parse_args(argv)</span>
+<span id="L472">    try:</span>
+<span id="L473">        if args.command == &quot;verify-dependencies&quot;:</span>
+<span id="L474">            result = verify_dependencies(</span>
+<span id="L475">                args.repo_root.resolve(strict=True),</span>
+<span id="L476">                args.policy.resolve(strict=True),</span>
+<span id="L477">            )</span>
+<span id="L478">            if args.output:</span>
+<span id="L479">                write_new(args.output.resolve(strict=False), result)</span>
+<span id="L480">        else:</span>
+<span id="L481">            root = args.repo_root.resolve(strict=True)</span>
+<span id="L482">            policy = load_assurance_policy(args.policy.resolve(strict=True))</span>
+<span id="L483">            dependency_policy = load_dependency_policy(</span>
+<span id="L484">                args.dependency_policy.resolve(strict=True)</span>
+<span id="L485">            )</span>
+<span id="L486">            artifact_dir = args.artifact_dir.resolve(strict=True)</span>
+<span id="L487">            verify_schema_identity(root, policy)</span>
+<span id="L488">            if args.command == &quot;create&quot;:</span>
+<span id="L489">                value = create_sbom(</span>
+<span id="L490">                    artifact_dir, policy, dependency_policy, args.source_commit</span>
+<span id="L491">                )</span>
+<span id="L492">                validate_spdx_shape(value)</span>
+<span id="L493">                write_new(args.output.resolve(strict=False), value)</span>
+<span id="L494">                result = {&quot;created&quot;: True, &quot;spdx_version&quot;: &quot;SPDX-2.3&quot;}</span>
+<span id="L495">            else:</span>
+<span id="L496">                result = verify_sbom(</span>
+<span id="L497">                    root,</span>
+<span id="L498">                    args.sbom.resolve(strict=True),</span>
+<span id="L499">                    artifact_dir,</span>
+<span id="L500">                    policy,</span>
+<span id="L501">                    dependency_policy,</span>
+<span id="L502">                    args.source_commit,</span>
+<span id="L503">                )</span>
+<span id="L504">        print(json.dumps(result, sort_keys=True))</span>
+<span id="L505">        return 0</span>
+<span id="L506">    except (OSError, UnicodeError, ValueError, subprocess.SubprocessError) as exc:</span>
+<span id="L507">        print(f&quot;Portable assurance failed: {exc}&quot;, file=sys.stderr)</span>
+<span id="L508">        return 1</span>
+<span id="L509"></span>
+<span id="L510"></span>
+<span id="L511">if __name__ == &quot;__main__&quot;:</span>
+<span id="L512">    raise SystemExit(main())</span></pre></html>

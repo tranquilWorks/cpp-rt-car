@@ -100,3 +100,10 @@ jobs:
         run: python3 tests/golden_showcase/verify_package.py --work-directory build-golden-showcase-package
       - name: Golden showcase static analysis
         run: clang++ --analyze -Xanalyzer -analyzer-output=text -std=c++20 -Wall -Wextra -Werror -Irt/include -Icore/include -Iinclude -Ibench/include samples/golden_showcase/provider.cpp samples/golden_showcase/variants.cpp samples/golden_showcase/experiments.cpp samples/golden_showcase/main.cpp samples/golden_showcase/experiment_main.cpp samples/golden_showcase/telemetry_loss.cpp tests/golden_showcase/test_showcase.cpp
+      - name: Golden source and capability audit
+        run: |
+          python3 tools/generate_golden_audit.py --check
+          python3 tools/check_golden_audit.py
+          python3 -m unittest discover -s tests/golden_audit -p 'test_*.py'
+      - name: Golden installed documentation and bounded soak
+        run: python3 tests/golden_audit/verify_package.py --work-directory build-golden-audit-package

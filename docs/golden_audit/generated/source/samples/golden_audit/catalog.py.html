@@ -1,0 +1,281 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_audit/catalog.py</title><h1>samples/golden_audit/catalog.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">&quot;&quot;&quot;Source-linked audit inventory and offline bundle validation (standard library).&quot;&quot;&quot;</span>
+<span id="L2">import hashlib</span>
+<span id="L3">import html</span>
+<span id="L4">import json</span>
+<span id="L5">from pathlib import Path, PurePosixPath</span>
+<span id="L6">import re</span>
+<span id="L7"></span>
+<span id="L8">REQUIREMENTS_SHA = &#x27;cf8054b0e990a836f21327f337156b786872fb47793af012cbe3f45ddf0a97a6&#x27;</span>
+<span id="L9">YAML_SHA = &#x27;3b8a9aff7e370bac2ba24a4a24778cb4866fef2ce7d42b4d64c11a4c41e112a5&#x27;</span>
+<span id="L10">BASELINE = &#x27;912ce878ad311d38e452a5d2916ee0daa6ee3f72&#x27;</span>
+<span id="L11">FROZEN = &#x27;9c93b5d5970caa5dc4570a4d0c43c9ca21ab7aa5a7211c02ce946cf8ffa62771&#x27;</span>
+<span id="L12">REQUIREMENT_BINDING = dict(repository=&#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L13">    revision=&#x27;14d624e25e7038fae18d4ab0af5122d4577c4564&#x27;,</span>
+<span id="L14">    path=&#x27;products/cpp-rt-car/acceptance.yaml&#x27;, blob=&#x27;cfe72dd40080626953df24355880703e437aa83a&#x27;,</span>
+<span id="L15">    yaml_sha256=YAML_SHA, json_sha256=REQUIREMENTS_SHA, target_baseline=BASELINE)</span>
+<span id="L16">CAPABILITIES = tuple(&#x27;CAP-M&#x27; + str(n) for n in range(15, 27))</span>
+<span id="L17">STATUS = {&#x27;portable_implemented&#x27;, &#x27;remaining_engineering&#x27;, &#x27;gated_unperformed&#x27;, &#x27;claim_limit&#x27;}</span>
+<span id="L18"></span>
+<span id="L19"></span>
+<span id="L20">def require(ok, message):</span>
+<span id="L21">    if not ok:</span>
+<span id="L22">        raise ValueError(message)</span>
+<span id="L23"></span>
+<span id="L24"></span>
+<span id="L25">def sha(data):</span>
+<span id="L26">    return hashlib.sha256(data).hexdigest()</span>
+<span id="L27"></span>
+<span id="L28"></span>
+<span id="L29">def encoded(value):</span>
+<span id="L30">    return (json.dumps(value, sort_keys=True, indent=2) + &#x27;\n&#x27;).encode()</span>
+<span id="L31"></span>
+<span id="L32"></span>
+<span id="L33">def load(path):</span>
+<span id="L34">    def pairs(items):</span>
+<span id="L35">        result = {}</span>
+<span id="L36">        for key, value in items:</span>
+<span id="L37">            require(key not in result, &#x27;duplicate JSON key: &#x27; + key)</span>
+<span id="L38">            result[key] = value</span>
+<span id="L39">        return result</span>
+<span id="L40">    return json.loads(Path(path).read_text(encoding=&#x27;utf-8&#x27;), object_pairs_hook=pairs,</span>
+<span id="L41">                      parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))</span>
+<span id="L42"></span>
+<span id="L43"></span>
+<span id="L44">def safe(path):</span>
+<span id="L45">    require(isinstance(path, str) and path and &#x27;\\&#x27; not in path and &#x27;:&#x27; not in path,</span>
+<span id="L46">            &#x27;invalid relative path&#x27;)</span>
+<span id="L47">    p = PurePosixPath(path)</span>
+<span id="L48">    require(not p.is_absolute() and all(v not in (&#x27;&#x27;, &#x27;.&#x27;, &#x27;..&#x27;) for v in path.split(&#x27;/&#x27;)),</span>
+<span id="L49">            &#x27;unsafe relative path: &#x27; + path)</span>
+<span id="L50">    return p</span>
+<span id="L51"></span>
+<span id="L52"></span>
+<span id="L53">def read(root, name):</span>
+<span id="L54">    safe(name)</span>
+<span id="L55">    path = root / name</span>
+<span id="L56">    require(path.is_file() and not path.is_symlink() and</span>
+<span id="L57">            root.resolve() in path.resolve().parents, &#x27;missing/escaped file: &#x27; + name)</span>
+<span id="L58">    return path.read_bytes()</span>
+<span id="L59"></span>
+<span id="L60"></span>
+<span id="L61">def requirement_rows(data):</span>
+<span id="L62">    require(data[&#x27;schema_version&#x27;] == 1, &#x27;requirement schema&#x27;)</span>
+<span id="L63">    require(tuple(c[&#x27;id&#x27;] for c in data[&#x27;capabilities&#x27;]) == CAPABILITIES,</span>
+<span id="L64">            &#x27;complete CAP-M15 through CAP-M26 inventory&#x27;)</span>
+<span id="L65">    rows = {}</span>
+<span id="L66">    for cap in data[&#x27;capabilities&#x27;]:</span>
+<span id="L67">        for kind, values in [(&#x27;outcome&#x27;, [cap[&#x27;outcome&#x27;]]), (&#x27;scenario&#x27;, cap[&#x27;scenarios&#x27;]),</span>
+<span id="L68">                             (&#x27;automated&#x27;, cap[&#x27;evidence&#x27;][&#x27;automated&#x27;]),</span>
+<span id="L69">                             (&#x27;manual&#x27;, cap[&#x27;evidence&#x27;][&#x27;manual&#x27;]),</span>
+<span id="L70">                             (&#x27;limit&#x27;, [cap[&#x27;claim_limit&#x27;]])]:</span>
+<span id="L71">            for index, text in enumerate(values):</span>
+<span id="L72">                rows[f&#x27;{cap[&quot;id&quot;]}/{kind}/{index + 1}&#x27;] = text</span>
+<span id="L73">    return rows</span>
+<span id="L74"></span>
+<span id="L75"></span>
+<span id="L76">def disposition(key):</span>
+<span id="L77">    cap, kind, number = key.split(&#x27;/&#x27;)</span>
+<span id="L78">    n = int(number)</span>
+<span id="L79">    if kind == &#x27;limit&#x27;:</span>
+<span id="L80">        return &#x27;claim_limit&#x27;</span>
+<span id="L81">    if kind == &#x27;manual&#x27; or (cap == &#x27;CAP-M18&#x27; and kind in (&#x27;scenario&#x27;, &#x27;outcome&#x27;)):</span>
+<span id="L82">        return &#x27;gated_unperformed&#x27;</span>
+<span id="L83">    if cap == &#x27;CAP-M19&#x27; and ((kind == &#x27;scenario&#x27; and n in (1, 3)) or kind in (&#x27;automated&#x27;, &#x27;outcome&#x27;)):</span>
+<span id="L84">        return &#x27;remaining_engineering&#x27;</span>
+<span id="L85">    if cap == &#x27;CAP-M20&#x27;:</span>
+<span id="L86">        return &#x27;remaining_engineering&#x27;</span>
+<span id="L87">    if cap == &#x27;CAP-M26&#x27; and kind == &#x27;scenario&#x27; and n == 2:</span>
+<span id="L88">        return &#x27;gated_unperformed&#x27;</span>
+<span id="L89">    return &#x27;portable_implemented&#x27;</span>
+<span id="L90"></span>
+<span id="L91"></span>
+<span id="L92">def scenario_rows(c):</span>
+<span id="L93">    &quot;&quot;&quot;Derive coverage from frozen contract structure, independently of the map.&quot;&quot;&quot;</span>
+<span id="L94">    result = {}</span>
+<span id="L95">    for category in (&#x27;rates&#x27;, &#x27;phases&#x27;, &#x27;channels&#x27;, &#x27;faults&#x27;, &#x27;levers&#x27;, &#x27;artifacts&#x27;, &#x27;variants&#x27;):</span>
+<span id="L96">        for item in c[category]:</span>
+<span id="L97">            result[category + &#x27;/&#x27; + item[&#x27;id&#x27;]] = item</span>
+<span id="L98">    for name in c[&#x27;resources&#x27;]:</span>
+<span id="L99">        result[&#x27;resources/&#x27; + name] = name</span>
+<span id="L100">    for item in c[&#x27;state&#x27;][&#x27;fields&#x27;]:</span>
+<span id="L101">        result[&#x27;state/&#x27; + item[&#x27;id&#x27;]] = item</span>
+<span id="L102">    for item in c[&#x27;controls&#x27;][&#x27;schemas&#x27;]:</span>
+<span id="L103">        result[&#x27;controls/&#x27; + item[&#x27;id&#x27;]] = item</span>
+<span id="L104">    for item in c[&#x27;controls&#x27;][&#x27;boundaries&#x27;]:</span>
+<span id="L105">        result[&#x27;boundaries/&#x27; + item[&#x27;kind&#x27;]] = item</span>
+<span id="L106">    for item in c[&#x27;benchmarks&#x27;][&#x27;cases&#x27;]:</span>
+<span id="L107">        result[&#x27;benchmarks/&#x27; + item[&#x27;id&#x27;]] = item</span>
+<span id="L108">    for i, edge in enumerate(c[&#x27;edges&#x27;]):</span>
+<span id="L109">        result[&#x27;edges/&#x27; + str(i)] = edge</span>
+<span id="L110">    # Preserve the whole record as well as individually navigable members.</span>
+<span id="L111">    for name in (&#x27;state&#x27;, &#x27;clock&#x27;, &#x27;execution&#x27;, &#x27;controls&#x27;, &#x27;telemetry&#x27;, &#x27;external_cil&#x27;):</span>
+<span id="L112">        result[&#x27;contracts/&#x27; + name] = c[name]</span>
+<span id="L113">    return result</span>
+<span id="L114"></span>
+<span id="L115"></span>
+<span id="L116">def verify_inputs(requirements_bytes, yaml_bytes, contract, mapping, audit):</span>
+<span id="L117">    require(sha(requirements_bytes) == REQUIREMENTS_SHA and sha(yaml_bytes) == YAML_SHA,</span>
+<span id="L118">            &#x27;foreign or changed canonical requirements&#x27;)</span>
+<span id="L119">    require(sha(json.dumps(contract, sort_keys=True, separators=(&#x27;,&#x27;, &#x27;:&#x27;)).encode()) == FROZEN,</span>
+<span id="L120">            &#x27;changed frozen scenario contract&#x27;)</span>
+<span id="L121">    expected = requirement_rows(json.loads(requirements_bytes))</span>
+<span id="L122">    require(audit[&#x27;schema&#x27;] == 1 and audit[&#x27;baseline&#x27;] == BASELINE, &#x27;audit identity&#x27;)</span>
+<span id="L123">    require([r[&#x27;id&#x27;] for r in audit[&#x27;requirements&#x27;]] == list(expected),</span>
+<span id="L124">            &#x27;missing/duplicate/reordered requirement&#x27;)</span>
+<span id="L125">    for row in audit[&#x27;requirements&#x27;]:</span>
+<span id="L126">        require(row[&#x27;requirement&#x27;] == expected[row[&#x27;id&#x27;]], &#x27;changed requirement text&#x27;)</span>
+<span id="L127">        require(row[&#x27;status&#x27;] == disposition(row[&#x27;id&#x27;]), &#x27;unsupported requirement disposition&#x27;)</span>
+<span id="L128">        require(isinstance(row[&#x27;assessment&#x27;], str) and len(row[&#x27;assessment&#x27;]) &gt;= 30,</span>
+<span id="L129">                &#x27;missing evidence assessment&#x27;)</span>
+<span id="L130">        require(row[&#x27;sources&#x27;] and row[&#x27;tests&#x27;] and row[&#x27;evidence&#x27;], &#x27;missing traceability&#x27;)</span>
+<span id="L131">    scenarios = scenario_rows(contract)</span>
+<span id="L132">    require(mapping[&#x27;schema&#x27;] == 1 and [r[&#x27;id&#x27;] for r in mapping[&#x27;entries&#x27;]] == list(scenarios),</span>
+<span id="L133">            &#x27;missing/duplicate/reordered scenario map entry&#x27;)</span>
+<span id="L134">    for row in mapping[&#x27;entries&#x27;]:</span>
+<span id="L135">        require(row[&#x27;contract&#x27;] == scenarios[row[&#x27;id&#x27;]], &#x27;changed frozen scenario mapping&#x27;)</span>
+<span id="L136">        require(row[&#x27;sources&#x27;] and row[&#x27;tests&#x27;] and len(row[&#x27;explanation&#x27;]) &gt;= 30,</span>
+<span id="L137">                &#x27;missing scenario explanation/source/test&#x27;)</span>
+<span id="L138">    require(audit[&#x27;remaining_actions&#x27;] and len({r[&#x27;id&#x27;] for r in audit[&#x27;remaining_actions&#x27;]}) ==</span>
+<span id="L139">            len(audit[&#x27;remaining_actions&#x27;]), &#x27;missing/duplicate remaining action&#x27;)</span>
+<span id="L140">    required = {&#x27;M18-physical-rt&#x27;, &#x27;M19-unreal&#x27;, &#x27;M20-release-engineering&#x27;, &#x27;M25-human-review&#x27;,</span>
+<span id="L141">                &#x27;protected-fixture-findings&#x27;, &#x27;foreign-replay-boundary&#x27;, &#x27;application-models&#x27;}</span>
+<span id="L142">    require({r[&#x27;id&#x27;] for r in audit[&#x27;remaining_actions&#x27;]} == required, &#x27;remaining-action inventory&#x27;)</span>
+<span id="L143">    require(all(r[&#x27;status&#x27;] in (&#x27;open&#x27;, &#x27;gated&#x27;) and r[&#x27;next_action&#x27;] and r[&#x27;evidence&#x27;]</span>
+<span id="L144">                for r in audit[&#x27;remaining_actions&#x27;]), &#x27;unjustified remaining-action closure&#x27;)</span>
+<span id="L145">    return expected, scenarios</span>
+<span id="L146"></span>
+<span id="L147"></span>
+<span id="L148">def references(mapping, audit):</span>
+<span id="L149">    refs = []</span>
+<span id="L150">    for row in mapping[&#x27;entries&#x27;]:</span>
+<span id="L151">        refs += row[&#x27;sources&#x27;] + row[&#x27;tests&#x27;]</span>
+<span id="L152">    for row in audit[&#x27;requirements&#x27;]:</span>
+<span id="L153">        refs += row[&#x27;sources&#x27;] + row[&#x27;tests&#x27;] + row[&#x27;evidence&#x27;]</span>
+<span id="L154">    for row in audit[&#x27;remaining_actions&#x27;]:</span>
+<span id="L155">        refs += row[&#x27;evidence&#x27;]</span>
+<span id="L156">    return refs</span>
+<span id="L157"></span>
+<span id="L158"></span>
+<span id="L159">def reference_line(data, ref):</span>
+<span id="L160">    require(set(ref) == {&#x27;path&#x27;, &#x27;anchor&#x27;}, &#x27;source reference schema&#x27;)</span>
+<span id="L161">    safe(ref[&#x27;path&#x27;])</span>
+<span id="L162">    lines = data.decode(&#x27;utf-8&#x27;).splitlines()</span>
+<span id="L163">    matches = [i for i, line in enumerate(lines, 1) if ref[&#x27;anchor&#x27;] in line]</span>
+<span id="L164">    require(bool(ref[&#x27;anchor&#x27;]) and len(matches) == 1,</span>
+<span id="L165">            &#x27;missing/ambiguous source anchor: &#x27; + ref[&#x27;path&#x27;] + &#x27;: &#x27; + ref[&#x27;anchor&#x27;])</span>
+<span id="L166">    return matches[0]</span>
+<span id="L167"></span>
+<span id="L168"></span>
+<span id="L169">def source_page(data, path):</span>
+<span id="L170">    body = &#x27;\n&#x27;.join(f&#x27;&lt;span id=&quot;L{i}&quot;&gt;{html.escape(line)}&lt;/span&gt;&#x27;</span>
+<span id="L171">                     for i, line in enumerate(data.decode(&#x27;utf-8&#x27;).splitlines(), 1))</span>
+<span id="L172">    return (&#x27;&lt;!doctype html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&lt;title&gt;&#x27; + html.escape(path) +</span>
+<span id="L173">            &#x27;&lt;/title&gt;&lt;h1&gt;&#x27; + html.escape(path) + &#x27;&lt;/h1&gt;&lt;p&gt;Exact source snapshot for documentation. &#x27;</span>
+<span id="L174">            &#x27;Private implementation and test files are not installed SDK APIs.&lt;/p&gt;&lt;pre&gt;&#x27; + body +</span>
+<span id="L175">            &#x27;&lt;/pre&gt;&lt;/html&gt;\n&#x27;).encode()</span>
+<span id="L176"></span>
+<span id="L177"></span>
+<span id="L178">def coverage(mapping, audit):</span>
+<span id="L179">    return {&#x27;schema&#x27;: 1, &#x27;batch&#x27;: &#x27;M26-06&#x27;, &#x27;baseline&#x27;: BASELINE,</span>
+<span id="L180">        &#x27;requirement_count&#x27;: len(audit[&#x27;requirements&#x27;]), &#x27;scenario_entry_count&#x27;: len(mapping[&#x27;entries&#x27;]),</span>
+<span id="L181">        &#x27;dispositions&#x27;: {s: [r[&#x27;id&#x27;] for r in audit[&#x27;requirements&#x27;] if r[&#x27;status&#x27;] == s] for s in sorted(STATUS)},</span>
+<span id="L182">        &#x27;remaining_actions&#x27;: [r[&#x27;id&#x27;] for r in audit[&#x27;remaining_actions&#x27;]],</span>
+<span id="L183">        &#x27;meaning&#x27;: &#x27;Source and retained-evidence audit; fresh execution results are separate.&#x27;,</span>
+<span id="L184">        &#x27;physical&#x27;: &#x27;NOT_RUN&#x27;, &#x27;rt&#x27;: &#x27;NOT_RUN&#x27;, &#x27;human_acceptance&#x27;: &#x27;NOT_RUN&#x27;,</span>
+<span id="L185">        &#x27;controlled_performance&#x27;: &#x27;NOT_RUN&#x27;, &#x27;unreal&#x27;: &#x27;NOT_RUN&#x27;, &#x27;release&#x27;: &#x27;NOT_RUN&#x27;}</span>
+<span id="L186"></span>
+<span id="L187"></span>
+<span id="L188">def render(root):</span>
+<span id="L189">    inputs = root / &#x27;docs/golden_audit&#x27;</span>
+<span id="L190">    requirement_bytes = read(inputs, &#x27;requirements.json&#x27;)</span>
+<span id="L191">    yaml_bytes = read(inputs, &#x27;requirements.yaml&#x27;)</span>
+<span id="L192">    binding = load(inputs / &#x27;requirements-binding.json&#x27;)</span>
+<span id="L193">    require(binding == REQUIREMENT_BINDING, &#x27;canonical requirement binding&#x27;)</span>
+<span id="L194">    contract_bytes = read(root, &#x27;samples/golden_system/contract.json&#x27;)</span>
+<span id="L195">    contract = json.loads(contract_bytes)</span>
+<span id="L196">    mapping, audit = load(inputs / &#x27;source-map.json&#x27;), load(inputs / &#x27;capabilities.json&#x27;)</span>
+<span id="L197">    verify_inputs(requirement_bytes, yaml_bytes, contract, mapping, audit)</span>
+<span id="L198">    refs = references(mapping, audit)</span>
+<span id="L199">    paths = {r[&#x27;path&#x27;] for r in refs} | {&#x27;samples/golden_system/contract.json&#x27;}</span>
+<span id="L200">    snapshots = {p: read(root, p) for p in sorted(paths)}</span>
+<span id="L201">    for ref in refs:</span>
+<span id="L202">        reference_line(snapshots[ref[&#x27;path&#x27;]], ref)</span>
+<span id="L203">    output = {&#x27;requirements.json&#x27;: requirement_bytes, &#x27;requirements.yaml&#x27;: yaml_bytes,</span>
+<span id="L204">              &#x27;requirements-binding.json&#x27;: read(inputs, &#x27;requirements-binding.json&#x27;),</span>
+<span id="L205">              &#x27;contract.json&#x27;: contract_bytes, &#x27;source-map.json&#x27;: encoded(mapping),</span>
+<span id="L206">              &#x27;capabilities.json&#x27;: encoded(audit)}</span>
+<span id="L207">    for path, data in snapshots.items():</span>
+<span id="L208">        output[&#x27;source/&#x27; + path + &#x27;.txt&#x27;] = data</span>
+<span id="L209">        output[&#x27;source/&#x27; + path + &#x27;.html&#x27;] = source_page(data, path)</span>
+<span id="L210">    def links(items):</span>
+<span id="L211">        return &#x27; · &#x27;.join(&#x27;&lt;a href=&quot;source/&#x27; + r[&#x27;path&#x27;] + &#x27;.html#L&#x27; +</span>
+<span id="L212">                         str(reference_line(snapshots[r[&#x27;path&#x27;]], r)) + &#x27;&quot;&gt;&#x27; +</span>
+<span id="L213">                         html.escape(r[&#x27;path&#x27;]) + &#x27;&lt;/a&gt;&#x27; for r in items)</span>
+<span id="L214">    sections = [&#x27;&lt;h2 id=&quot;scenario&quot;&gt;Complete scenario map&lt;/h2&gt;&#x27;]</span>
+<span id="L215">    for row in mapping[&#x27;entries&#x27;]:</span>
+<span id="L216">        sections += [&#x27;&lt;section id=&quot;&#x27; + row[&#x27;id&#x27;].replace(&#x27;/&#x27;, &#x27;-&#x27;) + &#x27;&quot;&gt;&lt;h3&gt;&#x27; +</span>
+<span id="L217">                     html.escape(row[&#x27;id&#x27;]) + &#x27;&lt;/h3&gt;&lt;p&gt;&#x27; + html.escape(row[&#x27;explanation&#x27;]) +</span>
+<span id="L218">                     &#x27;&lt;/p&gt;&lt;p&gt;Source: &#x27; + links(row[&#x27;sources&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Checks: &#x27; +</span>
+<span id="L219">                     links(row[&#x27;tests&#x27;]) + &#x27;&lt;/p&gt;&lt;details&gt;&lt;summary&gt;Frozen requirement record&lt;/summary&gt;&lt;pre&gt;&#x27; +</span>
+<span id="L220">                     html.escape(json.dumps(row[&#x27;contract&#x27;], indent=2)) + &#x27;&lt;/pre&gt;&lt;/details&gt;&lt;/section&gt;&#x27;]</span>
+<span id="L221">    sections += [&#x27;&lt;h2 id=&quot;capabilities&quot;&gt;CAP-M15 through CAP-M26 audit&lt;/h2&gt;&#x27;]</span>
+<span id="L222">    for row in audit[&#x27;requirements&#x27;]:</span>
+<span id="L223">        sections += [&#x27;&lt;section id=&quot;&#x27; + row[&#x27;id&#x27;].replace(&#x27;/&#x27;, &#x27;-&#x27;) + &#x27;&quot;&gt;&lt;h3&gt;&#x27; +</span>
+<span id="L224">                     html.escape(row[&#x27;id&#x27;]) + &#x27; — &#x27; + row[&#x27;status&#x27;] + &#x27;&lt;/h3&gt;&lt;p&gt;&#x27; +</span>
+<span id="L225">                     html.escape(row[&#x27;requirement&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;&#x27; + html.escape(row[&#x27;assessment&#x27;]) +</span>
+<span id="L226">                     &#x27;&lt;/p&gt;&lt;p&gt;Source: &#x27; + links(row[&#x27;sources&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Checks: &#x27; +</span>
+<span id="L227">                     links(row[&#x27;tests&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Retained evidence: &#x27; + links(row[&#x27;evidence&#x27;]) +</span>
+<span id="L228">                     &#x27;&lt;/p&gt;&lt;/section&gt;&#x27;]</span>
+<span id="L229">    sections += [&#x27;&lt;h2 id=&quot;remaining&quot;&gt;Remaining actions&lt;/h2&gt;&#x27;]</span>
+<span id="L230">    for row in audit[&#x27;remaining_actions&#x27;]:</span>
+<span id="L231">        sections += [&#x27;&lt;section id=&quot;&#x27; + row[&#x27;id&#x27;] + &#x27;&quot;&gt;&lt;h3&gt;&#x27; + row[&#x27;id&#x27;] + &#x27;&lt;/h3&gt;&lt;p&gt;&#x27; +</span>
+<span id="L232">                     html.escape(row[&#x27;next_action&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;&#x27; + links(row[&#x27;evidence&#x27;]) + &#x27;&lt;/p&gt;&lt;/section&gt;&#x27;]</span>
+<span id="L233">    narrative = read(inputs, &#x27;guide.html&#x27;).decode()</span>
+<span id="L234">    output[&#x27;index.html&#x27;] = (&#x27;&lt;!doctype html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&#x27;</span>
+<span id="L235">                           &#x27;&lt;title&gt;RTFW golden system and capability audit&lt;/title&gt;&#x27;</span>
+<span id="L236">                           &#x27;&lt;style&gt;body{max-width:1000px;margin:2rem auto;padding:0 1rem;&#x27;</span>
+<span id="L237">                           &#x27;font:17px/1.5 system-ui}pre{overflow:auto;background:#f2f4f6;padding:1rem}&#x27;</span>
+<span id="L238">                           &#x27;section{border-top:1px solid #ddd;padding:1rem 0}&lt;/style&gt;&#x27; +</span>
+<span id="L239">                           narrative + &#x27;\n&#x27;.join(sections) + &#x27;&lt;/html&gt;\n&#x27;).encode()</span>
+<span id="L240">    output[&#x27;coverage.json&#x27;] = encoded(coverage(mapping, audit))</span>
+<span id="L241">    output[&#x27;inventory.json&#x27;] = encoded({&#x27;schema&#x27;: 1, &#x27;baseline&#x27;: BASELINE,</span>
+<span id="L242">        &#x27;sources&#x27;: {p: sha(v) for p, v in snapshots.items()},</span>
+<span id="L243">        &#x27;outputs&#x27;: {p: sha(v) for p, v in sorted(output.items())}})</span>
+<span id="L244">    return output</span>
+<span id="L245"></span>
+<span id="L246"></span>
+<span id="L247">def verify_bundle(directory):</span>
+<span id="L248">    inventory = load(directory / &#x27;inventory.json&#x27;)</span>
+<span id="L249">    require(inventory[&#x27;schema&#x27;] == 1 and inventory[&#x27;baseline&#x27;] == BASELINE, &#x27;bundle identity&#x27;)</span>
+<span id="L250">    actual = {p.relative_to(directory).as_posix() for p in directory.rglob(&#x27;*&#x27;) if p.is_file()}</span>
+<span id="L251">    require(actual == set(inventory[&#x27;outputs&#x27;]) | {&#x27;inventory.json&#x27;}, &#x27;bundle file inventory&#x27;)</span>
+<span id="L252">    for path, digest in inventory[&#x27;outputs&#x27;].items():</span>
+<span id="L253">        require(sha(read(directory, path)) == digest, &#x27;stale bundle file: &#x27; + path)</span>
+<span id="L254">    mapping, audit = load(directory / &#x27;source-map.json&#x27;), load(directory / &#x27;capabilities.json&#x27;)</span>
+<span id="L255">    require(load(directory / &#x27;requirements-binding.json&#x27;) == REQUIREMENT_BINDING,</span>
+<span id="L256">            &#x27;canonical requirement binding&#x27;)</span>
+<span id="L257">    verify_inputs(read(directory, &#x27;requirements.json&#x27;), read(directory, &#x27;requirements.yaml&#x27;),</span>
+<span id="L258">                  load(directory / &#x27;contract.json&#x27;), mapping, audit)</span>
+<span id="L259">    require(load(directory / &#x27;coverage.json&#x27;) == coverage(mapping, audit), &#x27;fabricated capability coverage&#x27;)</span>
+<span id="L260">    refs = references(mapping, audit)</span>
+<span id="L261">    require(set(inventory[&#x27;sources&#x27;]) == {r[&#x27;path&#x27;] for r in refs} | {&#x27;samples/golden_system/contract.json&#x27;},</span>
+<span id="L262">            &#x27;source snapshot inventory&#x27;)</span>
+<span id="L263">    for path, digest in inventory[&#x27;sources&#x27;].items():</span>
+<span id="L264">        data = read(directory, &#x27;source/&#x27; + path + &#x27;.txt&#x27;)</span>
+<span id="L265">        require(sha(data) == digest and read(directory, &#x27;source/&#x27; + path + &#x27;.html&#x27;) == source_page(data, path),</span>
+<span id="L266">                &#x27;source snapshot/line anchor mismatch&#x27;)</span>
+<span id="L267">    for ref in refs:</span>
+<span id="L268">        reference_line(read(directory, &#x27;source/&#x27; + ref[&#x27;path&#x27;] + &#x27;.txt&#x27;), ref)</span>
+<span id="L269">    for path in actual:</span>
+<span id="L270">        if not path.endswith(&#x27;.html&#x27;):</span>
+<span id="L271">            continue</span>
+<span id="L272">        content = read(directory, path).decode()</span>
+<span id="L273">        for target in re.findall(r&#x27;href=&quot;([^&quot;]+)&quot;&#x27;, content):</span>
+<span id="L274">            require(not re.match(r&#x27;\w+:|//&#x27;, target), &#x27;offline manual contains external link&#x27;)</span>
+<span id="L275">            location, _, fragment = target.partition(&#x27;#&#x27;)</span>
+<span id="L276">            candidate = (directory / path).parent / location if location else directory / path</span>
+<span id="L277">            require(candidate.is_file() and directory.resolve() in candidate.resolve().parents,</span>
+<span id="L278">                    &#x27;broken/escaped offline link&#x27;)</span>
+<span id="L279">            if fragment:</span>
+<span id="L280">                require(&#x27;id=&quot;&#x27; + fragment + &#x27;&quot;&#x27; in candidate.read_text(), &#x27;broken offline fragment&#x27;)</span>
+<span id="L281">    return inventory</span></pre></html>

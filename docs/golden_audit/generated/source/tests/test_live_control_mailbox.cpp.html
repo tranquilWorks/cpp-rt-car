@@ -1,0 +1,2049 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_live_control_mailbox.cpp</title><h1>tests/test_live_control_mailbox.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;array&gt;</span>
+<span id="L5">#include &lt;barrier&gt;</span>
+<span id="L6">#include &lt;chrono&gt;</span>
+<span id="L7">#include &lt;cstddef&gt;</span>
+<span id="L8">#include &lt;cstdint&gt;</span>
+<span id="L9">#include &lt;limits&gt;</span>
+<span id="L10">#include &lt;optional&gt;</span>
+<span id="L11">#include &lt;span&gt;</span>
+<span id="L12">#include &lt;thread&gt;</span>
+<span id="L13">#include &lt;vector&gt;</span>
+<span id="L14"></span>
+<span id="L15">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L16"></span>
+<span id="L17">#include &quot;rt/src/live_control_mailbox.hpp&quot;</span>
+<span id="L18"></span>
+<span id="L19">namespace {</span>
+<span id="L20"></span>
+<span id="L21">constexpr std::uint64_t kMailbox = 101;</span>
+<span id="L22">constexpr std::uint64_t kProducer = 202;</span>
+<span id="L23"></span>
+<span id="L24">struct ManualClock final : rt::RuntimeClock {</span>
+<span id="L25">    std::uint64_t now_ns() noexcept override { return 1&#x27;000; }</span>
+<span id="L26">    rt::Status sleep_until_ns(std::uint64_t) noexcept override {</span>
+<span id="L27">        return rt::Status::ok;</span>
+<span id="L28">    }</span>
+<span id="L29">    bool supports_absolute_sleep() const noexcept override { return true; }</span>
+<span id="L30">};</span>
+<span id="L31"></span>
+<span id="L32">rt::CallbackResult noop_callback(</span>
+<span id="L33">    void*,</span>
+<span id="L34">    const rt::CallbackContext&amp;) {</span>
+<span id="L35">    return rt::CallbackResult::ok;</span>
+<span id="L36">}</span>
+<span id="L37"></span>
+<span id="L38">rt::CallbackResult failing_callback(</span>
+<span id="L39">    void*,</span>
+<span id="L40">    const rt::CallbackContext&amp;) {</span>
+<span id="L41">    return rt::CallbackResult::error;</span>
+<span id="L42">}</span>
+<span id="L43"></span>
+<span id="L44">rt::CallbackResult noop_replay_input(</span>
+<span id="L45">    void*,</span>
+<span id="L46">    const rt::ReplayInputView&amp;) {</span>
+<span id="L47">    return rt::CallbackResult::ok;</span>
+<span id="L48">}</span>
+<span id="L49"></span>
+<span id="L50">struct GenerationProbe {</span>
+<span id="L51">    std::size_t calls = 0;</span>
+<span id="L52">    std::uint64_t generation_identity = 0;</span>
+<span id="L53">    rt::LiveControlBoundaryTarget target{};</span>
+<span id="L54">    std::size_t record_count = 0;</span>
+<span id="L55">    std::array&lt;std::uint64_t, 4&gt; mailbox_sequences{};</span>
+<span id="L56">    std::array&lt;std::uint64_t, 4&gt; mailbox_identities{};</span>
+<span id="L57">    std::array&lt;rt::LiveControlUpdateKind, 4&gt; update_kinds{};</span>
+<span id="L58">    std::array&lt;std::byte, 4&gt; first_payload_bytes{};</span>
+<span id="L59">};</span>
+<span id="L60"></span>
+<span id="L61">rt::CallbackResult capture_generation_callback(</span>
+<span id="L62">    void* user_data,</span>
+<span id="L63">    const rt::CallbackContext&amp; context) {</span>
+<span id="L64">    auto&amp; probe = *static_cast&lt;GenerationProbe*&gt;(user_data);</span>
+<span id="L65">    ++probe.calls;</span>
+<span id="L66">    probe.generation_identity = 0;</span>
+<span id="L67">    probe.record_count = 0;</span>
+<span id="L68">    if (!context.live_control) {</span>
+<span id="L69">        return rt::CallbackResult::ok;</span>
+<span id="L70">    }</span>
+<span id="L71">    probe.generation_identity = context.live_control-&gt;generation_identity;</span>
+<span id="L72">    probe.target = context.live_control-&gt;target;</span>
+<span id="L73">    probe.record_count = context.live_control-&gt;records.size();</span>
+<span id="L74">    for (std::size_t index = 0;</span>
+<span id="L75">         index &lt; context.live_control-&gt;records.size() &amp;&amp;</span>
+<span id="L76">             index &lt; probe.mailbox_sequences.size();</span>
+<span id="L77">         ++index) {</span>
+<span id="L78">        const auto&amp; record = context.live_control-&gt;records[index];</span>
+<span id="L79">        probe.mailbox_sequences[index] = record.record.mailbox_sequence;</span>
+<span id="L80">        probe.mailbox_identities[index] = record.record.mailbox_identity;</span>
+<span id="L81">        probe.update_kinds[index] = record.record.update_kind;</span>
+<span id="L82">        probe.first_payload_bytes[index] = record.payload.empty()</span>
+<span id="L83">            ? std::byte{0}</span>
+<span id="L84">            : record.payload.front();</span>
+<span id="L85">    }</span>
+<span id="L86">    return rt::CallbackResult::ok;</span>
+<span id="L87">}</span>
+<span id="L88"></span>
+<span id="L89">rt::CallbackResult capture_generation_then_fail_callback(</span>
+<span id="L90">    void* user_data,</span>
+<span id="L91">    const rt::CallbackContext&amp; context) {</span>
+<span id="L92">    (void)capture_generation_callback(user_data, context);</span>
+<span id="L93">    return rt::CallbackResult::error;</span>
+<span id="L94">}</span>
+<span id="L95"></span>
+<span id="L96">struct ReentrantAdmissionProbe {</span>
+<span id="L97">    rt::Runtime* runtime = nullptr;</span>
+<span id="L98">    rt::LiveControlProducerHandle handle{};</span>
+<span id="L99">    rt::LiveControlUpdateRecord update{};</span>
+<span id="L100">    std::array&lt;std::byte, 1&gt; payload{std::byte{0x33}};</span>
+<span id="L101">    rt::LiveControlAdmissionResult result =</span>
+<span id="L102">        rt::LiveControlAdmissionResult::accepted;</span>
+<span id="L103">    rt::Status status = rt::Status::internal_error;</span>
+<span id="L104">};</span>
+<span id="L105"></span>
+<span id="L106">rt::CallbackResult reentrant_admission_callback(</span>
+<span id="L107">    void* user_data,</span>
+<span id="L108">    const rt::CallbackContext&amp;) {</span>
+<span id="L109">    auto&amp; probe = *static_cast&lt;ReentrantAdmissionProbe*&gt;(user_data);</span>
+<span id="L110">    probe.status = probe.runtime-&gt;stage_live_control_update(</span>
+<span id="L111">        probe.handle,</span>
+<span id="L112">        probe.update,</span>
+<span id="L113">        probe.payload,</span>
+<span id="L114">        probe.result);</span>
+<span id="L115">    return rt::CallbackResult::ok;</span>
+<span id="L116">}</span>
+<span id="L117"></span>
+<span id="L118">rt::LiveControlPolicy policy(</span>
+<span id="L119">    std::uint32_t mailbox_capacity = 1,</span>
+<span id="L120">    std::uint32_t producer_capacity = 1,</span>
+<span id="L121">    std::uint32_t record_capacity = 2,</span>
+<span id="L122">    std::uint32_t payload_bytes = 16) {</span>
+<span id="L123">    rt::LiveControlPolicy value;</span>
+<span id="L124">    value.policy_identity = 0x4d323201;</span>
+<span id="L125">    value.mailbox_capacity = mailbox_capacity;</span>
+<span id="L126">    value.producer_capacity = producer_capacity;</span>
+<span id="L127">    value.record_capacity = record_capacity;</span>
+<span id="L128">    value.payload_bytes_per_record = payload_bytes;</span>
+<span id="L129">    value.total_payload_storage_bytes =</span>
+<span id="L130">        static_cast&lt;std::uint64_t&gt;(record_capacity) * payload_bytes;</span>
+<span id="L131">    return value;</span>
+<span id="L132">}</span>
+<span id="L133"></span>
+<span id="L134">rt::LiveControlClosurePolicy closure_policy(bool replay = false) {</span>
+<span id="L135">    rt::LiveControlClosurePolicy value;</span>
+<span id="L136">    value.policy_identity = 0x4d323203;</span>
+<span id="L137">    value.action_capacity = 128;</span>
+<span id="L138">    if (replay) {</span>
+<span id="L139">        value.retained_generation_capacity = 16;</span>
+<span id="L140">        value.retained_record_capacity = 32;</span>
+<span id="L141">        value.retained_payload_bytes = 1&#x27;024;</span>
+<span id="L142">        value.replay_record_capacity = 128;</span>
+<span id="L143">        value.replay_max_bytes = 64 * 1&#x27;024;</span>
+<span id="L144">        value.replay_enabled = true;</span>
+<span id="L145">    }</span>
+<span id="L146">    return value;</span>
+<span id="L147">}</span>
+<span id="L148"></span>
+<span id="L149">rt::LiveControlMailboxRegistration mailbox(</span>
+<span id="L150">    std::uint64_t identity = kMailbox,</span>
+<span id="L151">    std::uint32_t record_capacity = 2,</span>
+<span id="L152">    std::uint32_t payload_bytes = 16) {</span>
+<span id="L153">    rt::LiveControlMailboxRegistration value;</span>
+<span id="L154">    value.mailbox_identity = identity;</span>
+<span id="L155">    value.record_capacity = record_capacity;</span>
+<span id="L156">    value.payload_bytes_per_record = payload_bytes;</span>
+<span id="L157">    return value;</span>
+<span id="L158">}</span>
+<span id="L159"></span>
+<span id="L160">rt::LiveControlProducerRegistration producer(</span>
+<span id="L161">    std::uint64_t mailbox_identity = kMailbox,</span>
+<span id="L162">    std::uint64_t producer_identity = kProducer,</span>
+<span id="L163">    std::uint64_t first_sequence = 1) {</span>
+<span id="L164">    rt::LiveControlProducerRegistration value;</span>
+<span id="L165">    value.mailbox_identity = mailbox_identity;</span>
+<span id="L166">    value.producer_identity = producer_identity;</span>
+<span id="L167">    value.first_sequence = first_sequence;</span>
+<span id="L168">    return value;</span>
+<span id="L169">}</span>
+<span id="L170"></span>
+<span id="L171">void configure_live_control(</span>
+<span id="L172">    rt::Runtime&amp; runtime,</span>
+<span id="L173">    std::uint32_t record_capacity = 2,</span>
+<span id="L174">    std::uint32_t payload_bytes = 16,</span>
+<span id="L175">    std::uint64_t first_sequence = 1) {</span>
+<span id="L176">    ASSERT_EQ(</span>
+<span id="L177">        runtime.set_live_control_policy(</span>
+<span id="L178">            policy(1, 1, record_capacity, payload_bytes)),</span>
+<span id="L179">        rt::Status::ok);</span>
+<span id="L180">    ASSERT_EQ(</span>
+<span id="L181">        runtime.register_live_control_mailbox(</span>
+<span id="L182">            mailbox(kMailbox, record_capacity, payload_bytes)),</span>
+<span id="L183">        rt::Status::ok);</span>
+<span id="L184">    ASSERT_EQ(</span>
+<span id="L185">        runtime.register_live_control_producer(</span>
+<span id="L186">            producer(kMailbox, kProducer, first_sequence)),</span>
+<span id="L187">        rt::Status::ok);</span>
+<span id="L188">}</span>
+<span id="L189"></span>
+<span id="L190">rt::LiveControlProducerHandle finalized_handle(rt::Runtime&amp; runtime) {</span>
+<span id="L191">    rt::LiveControlProducerHandle handle;</span>
+<span id="L192">    EXPECT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L193">    EXPECT_EQ(</span>
+<span id="L194">        runtime.live_control_producer_handle(kMailbox, kProducer, handle),</span>
+<span id="L195">        rt::Status::ok);</span>
+<span id="L196">    EXPECT_TRUE(handle.valid());</span>
+<span id="L197">    return handle;</span>
+<span id="L198">}</span>
+<span id="L199"></span>
+<span id="L200">rt::LiveControlUpdateRecord host_update(</span>
+<span id="L201">    const rt::LiveControlProducerHandle&amp; handle,</span>
+<span id="L202">    std::uint64_t producer_sequence,</span>
+<span id="L203">    std::span&lt;const std::byte&gt; payload,</span>
+<span id="L204">    std::uint64_t frame = 7) {</span>
+<span id="L205">    rt::LiveControlUpdateRecord update;</span>
+<span id="L206">    update.runtime_id = handle.runtime_id;</span>
+<span id="L207">    update.configuration_generation = handle.configuration_generation;</span>
+<span id="L208">    update.mailbox_identity = handle.mailbox_identity;</span>
+<span id="L209">    update.producer_identity = handle.producer_identity;</span>
+<span id="L210">    update.producer_sequence = producer_sequence;</span>
+<span id="L211">    update.target_frame_index = frame;</span>
+<span id="L212">    update.payload_bytes = static_cast&lt;std::uint32_t&gt;(payload.size());</span>
+<span id="L213">    update.payload_digest = rt::live_control_payload_digest(payload);</span>
+<span id="L214">    return update;</span>
+<span id="L215">}</span>
+<span id="L216"></span>
+<span id="L217">rt::ObservabilityMetadata metadata(rt::Runtime&amp; runtime) {</span>
+<span id="L218">    rt::ObservabilityMetadata value;</span>
+<span id="L219">    EXPECT_EQ(runtime.observability_metadata(value), rt::Status::ok);</span>
+<span id="L220">    return value;</span>
+<span id="L221">}</span>
+<span id="L222"></span>
+<span id="L223">struct CompatibilityIds {</span>
+<span id="L224">    std::uint64_t config = 0;</span>
+<span id="L225">    std::uint64_t graph = 0;</span>
+<span id="L226">    std::uint64_t replay = 0;</span>
+<span id="L227">};</span>
+<span id="L228"></span>
+<span id="L229">std::vector&lt;std::byte&gt; checkpoint_artifact(rt::Runtime&amp; runtime) {</span>
+<span id="L230">    std::size_t required = 0;</span>
+<span id="L231">    EXPECT_EQ(runtime.checkpoint_size(required), rt::Status::ok);</span>
+<span id="L232">    std::vector&lt;std::byte&gt; checkpoint(required);</span>
+<span id="L233">    rt::ArtifactWriteResult write;</span>
+<span id="L234">    EXPECT_EQ(</span>
+<span id="L235">        runtime.write_checkpoint(0, checkpoint, write),</span>
+<span id="L236">        rt::Status::ok);</span>
+<span id="L237">    return checkpoint;</span>
+<span id="L238">}</span>
+<span id="L239"></span>
+<span id="L240">CompatibilityIds compatibility_ids(rt::Runtime&amp; runtime) {</span>
+<span id="L241">    const auto observable = metadata(runtime);</span>
+<span id="L242">    const auto checkpoint = checkpoint_artifact(runtime);</span>
+<span id="L243">    rt::CheckpointMetadata inspected;</span>
+<span id="L244">    EXPECT_EQ(</span>
+<span id="L245">        rt::inspect_checkpoint_artifact(checkpoint, inspected),</span>
+<span id="L246">        rt::Status::ok);</span>
+<span id="L247">    return {observable.config_id, inspected.graph_id, inspected.replay_id};</span>
+<span id="L248">}</span>
+<span id="L249"></span>
+<span id="L250">} // namespace</span>
+<span id="L251"></span>
+<span id="L252">TEST(LiveControlMailbox, PublicLayoutAndDisabledPathRemainAdditive) {</span>
+<span id="L253">    EXPECT_EQ(sizeof(rt::LiveControlPolicy), 56u);</span>
+<span id="L254">    EXPECT_EQ(sizeof(rt::LiveControlMailboxRegistration), 40u);</span>
+<span id="L255">    EXPECT_EQ(sizeof(rt::LiveControlProducerRegistration), 40u);</span>
+<span id="L256">    EXPECT_EQ(sizeof(rt::LiveControlProducerHandle), 40u);</span>
+<span id="L257">    EXPECT_EQ(sizeof(rt::LiveControlUpdateRecord), 128u);</span>
+<span id="L258">    EXPECT_EQ(sizeof(rt::LiveControlMailboxInfo), 128u);</span>
+<span id="L259">    EXPECT_EQ(sizeof(rt::LiveControlBoundaryTarget), 40u);</span>
+<span id="L260">    EXPECT_EQ(sizeof(rt::LiveControlCommitInfo), 128u);</span>
+<span id="L261">    EXPECT_EQ(sizeof(rt::LiveControlRecordStatusInfo), 80u);</span>
+<span id="L262">    EXPECT_EQ(alignof(rt::LiveControlPolicy), 8u);</span>
+<span id="L263">    EXPECT_EQ(alignof(rt::LiveControlMailboxRegistration), 8u);</span>
+<span id="L264">    EXPECT_EQ(alignof(rt::LiveControlProducerRegistration), 8u);</span>
+<span id="L265">    EXPECT_EQ(alignof(rt::LiveControlProducerHandle), 8u);</span>
+<span id="L266">    EXPECT_EQ(alignof(rt::LiveControlUpdateRecord), 8u);</span>
+<span id="L267">    EXPECT_EQ(alignof(rt::LiveControlMailboxInfo), 8u);</span>
+<span id="L268"></span>
+<span id="L269">    const rt::LiveControlPolicy disabled;</span>
+<span id="L270">    EXPECT_EQ(disabled.schema_version, rt::live_control_schema_version);</span>
+<span id="L271">    EXPECT_EQ(disabled.struct_size, sizeof(disabled));</span>
+<span id="L272">    EXPECT_EQ(disabled.mailbox_capacity, 0u);</span>
+<span id="L273"></span>
+<span id="L274">    rt::Runtime baseline;</span>
+<span id="L275">    ASSERT_EQ(baseline.finalize(), rt::Status::ok);</span>
+<span id="L276">    const auto baseline_metadata = compatibility_ids(baseline);</span>
+<span id="L277">    rt::MemoryPlan baseline_plan;</span>
+<span id="L278">    ASSERT_TRUE(baseline.memory_plan(baseline_plan));</span>
+<span id="L279">    EXPECT_FALSE(baseline.live_control_enabled());</span>
+<span id="L280">    EXPECT_EQ(baseline_plan.live_control_control_bytes, 0u);</span>
+<span id="L281"></span>
+<span id="L282">    rt::Runtime explicit_disabled;</span>
+<span id="L283">    ASSERT_EQ(</span>
+<span id="L284">        explicit_disabled.set_live_control_policy(disabled),</span>
+<span id="L285">        rt::Status::ok);</span>
+<span id="L286">    EXPECT_EQ(</span>
+<span id="L287">        explicit_disabled.set_live_control_policy(disabled),</span>
+<span id="L288">        rt::Status::invalid_state);</span>
+<span id="L289">    const rt::LiveControlClosurePolicy disabled_closure;</span>
+<span id="L290">    ASSERT_EQ(</span>
+<span id="L291">        explicit_disabled.set_live_control_closure_policy(disabled_closure),</span>
+<span id="L292">        rt::Status::ok);</span>
+<span id="L293">    EXPECT_EQ(</span>
+<span id="L294">        explicit_disabled.set_live_control_closure_policy(disabled_closure),</span>
+<span id="L295">        rt::Status::invalid_state);</span>
+<span id="L296">    ASSERT_EQ(explicit_disabled.finalize(), rt::Status::ok);</span>
+<span id="L297">    const auto disabled_metadata = compatibility_ids(explicit_disabled);</span>
+<span id="L298">    rt::MemoryPlan disabled_plan;</span>
+<span id="L299">    ASSERT_TRUE(explicit_disabled.memory_plan(disabled_plan));</span>
+<span id="L300">    EXPECT_FALSE(explicit_disabled.live_control_enabled());</span>
+<span id="L301">    EXPECT_EQ(disabled_plan.live_control_mailbox_count, 0u);</span>
+<span id="L302">    EXPECT_EQ(disabled_plan.live_control_control_bytes, 0u);</span>
+<span id="L303">    EXPECT_EQ(</span>
+<span id="L304">        disabled_plan.runtime_control_bytes,</span>
+<span id="L305">        baseline_plan.runtime_control_bytes);</span>
+<span id="L306">    EXPECT_EQ(disabled_plan.planned_bytes, baseline_plan.planned_bytes);</span>
+<span id="L307">    EXPECT_EQ(disabled_metadata.config, baseline_metadata.config);</span>
+<span id="L308">    EXPECT_EQ(disabled_metadata.graph, baseline_metadata.graph);</span>
+<span id="L309">    EXPECT_EQ(disabled_metadata.replay, baseline_metadata.replay);</span>
+<span id="L310">}</span>
+<span id="L311"></span>
+<span id="L312">TEST(LiveControlMailbox, ConfigurationCopiesAndClosesEveryCapacityBoundary) {</span>
+<span id="L313">    rt::Runtime baseline;</span>
+<span id="L314">    ASSERT_EQ(baseline.finalize(), rt::Status::ok);</span>
+<span id="L315">    rt::MemoryPlan baseline_plan;</span>
+<span id="L316">    ASSERT_TRUE(baseline.memory_plan(baseline_plan));</span>
+<span id="L317"></span>
+<span id="L318">    rt::Runtime runtime;</span>
+<span id="L319">    auto configured_policy = policy(1, 1, 2, 8);</span>
+<span id="L320">    ASSERT_EQ(</span>
+<span id="L321">        runtime.set_live_control_policy(configured_policy),</span>
+<span id="L322">        rt::Status::ok);</span>
+<span id="L323">    configured_policy.policy_identity = 0;</span>
+<span id="L324"></span>
+<span id="L325">    auto malformed_mailbox = mailbox(kMailbox, 2, 8);</span>
+<span id="L326">    malformed_mailbox.reserved.front() = std::byte{1};</span>
+<span id="L327">    EXPECT_EQ(</span>
+<span id="L328">        runtime.register_live_control_mailbox(malformed_mailbox),</span>
+<span id="L329">        rt::Status::invalid_argument);</span>
+<span id="L330">    ASSERT_EQ(</span>
+<span id="L331">        runtime.register_live_control_mailbox(mailbox(kMailbox, 2, 8)),</span>
+<span id="L332">        rt::Status::ok);</span>
+<span id="L333">    EXPECT_EQ(</span>
+<span id="L334">        runtime.register_live_control_mailbox(mailbox(kMailbox, 1, 8)),</span>
+<span id="L335">        rt::Status::capacity_exceeded);</span>
+<span id="L336">    EXPECT_EQ(</span>
+<span id="L337">        runtime.register_live_control_producer(producer(999, kProducer)),</span>
+<span id="L338">        rt::Status::invalid_argument);</span>
+<span id="L339">    ASSERT_EQ(</span>
+<span id="L340">        runtime.register_live_control_producer(producer()),</span>
+<span id="L341">        rt::Status::ok);</span>
+<span id="L342">    EXPECT_EQ(</span>
+<span id="L343">        runtime.register_live_control_producer(producer()),</span>
+<span id="L344">        rt::Status::capacity_exceeded);</span>
+<span id="L345"></span>
+<span id="L346">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L347">    EXPECT_TRUE(runtime.live_control_enabled());</span>
+<span id="L348">    EXPECT_EQ(runtime.live_control_mailbox_count(), 1u);</span>
+<span id="L349">    EXPECT_EQ(runtime.live_control_producer_count(), 1u);</span>
+<span id="L350">    EXPECT_EQ(</span>
+<span id="L351">        runtime.register_live_control_mailbox(mailbox()),</span>
+<span id="L352">        rt::Status::invalid_state);</span>
+<span id="L353"></span>
+<span id="L354">    rt::MemoryPlan plan;</span>
+<span id="L355">    ASSERT_TRUE(runtime.memory_plan(plan));</span>
+<span id="L356">    EXPECT_EQ(plan.live_control_mailbox_count, 1u);</span>
+<span id="L357">    EXPECT_EQ(plan.live_control_producer_count, 1u);</span>
+<span id="L358">    EXPECT_EQ(plan.live_control_record_capacity, 2u);</span>
+<span id="L359">    EXPECT_EQ(plan.live_control_payload_storage_bytes, 16u);</span>
+<span id="L360">    EXPECT_GT(plan.live_control_control_bytes, 16u);</span>
+<span id="L361">    EXPECT_EQ(</span>
+<span id="L362">        plan.runtime_control_bytes,</span>
+<span id="L363">        baseline_plan.runtime_control_bytes +</span>
+<span id="L364">            plan.live_control_control_bytes);</span>
+<span id="L365">    EXPECT_EQ(</span>
+<span id="L366">        plan.planned_bytes,</span>
+<span id="L367">        baseline_plan.planned_bytes + plan.live_control_control_bytes);</span>
+<span id="L368"></span>
+<span id="L369">    rt::Runtime wider_payload;</span>
+<span id="L370">    configure_live_control(wider_payload, 2, 16);</span>
+<span id="L371">    (void)finalized_handle(wider_payload);</span>
+<span id="L372">    rt::MemoryPlan wider_plan;</span>
+<span id="L373">    ASSERT_TRUE(wider_payload.memory_plan(wider_plan));</span>
+<span id="L374">    // Eight additional bytes in each of two slots are present once in</span>
+<span id="L375">    // staging and once in each inactive/active generation store.</span>
+<span id="L376">    EXPECT_EQ(</span>
+<span id="L377">        wider_plan.live_control_control_bytes -</span>
+<span id="L378">            plan.live_control_control_bytes,</span>
+<span id="L379">        48u);</span>
+<span id="L380">}</span>
+<span id="L381"></span>
+<span id="L382">TEST(LiveControlMailbox, FailedBudgetFinalizationIsTransactionalAndRetryable) {</span>
+<span id="L383">    rt::Runtime runtime;</span>
+<span id="L384">    rt::RuntimeConfig constrained;</span>
+<span id="L385">    constrained.memory_budget_bytes = 1;</span>
+<span id="L386">    ASSERT_EQ(runtime.configure(constrained), rt::Status::ok);</span>
+<span id="L387">    configure_live_control(runtime, 2, 8);</span>
+<span id="L388">    EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L389">    EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L390">    EXPECT_FALSE(runtime.live_control_enabled());</span>
+<span id="L391"></span>
+<span id="L392">    rt::RuntimeConfig corrected;</span>
+<span id="L393">    ASSERT_EQ(runtime.configure(corrected), rt::Status::ok);</span>
+<span id="L394">    const auto handle = finalized_handle(runtime);</span>
+<span id="L395">    EXPECT_TRUE(handle.valid());</span>
+<span id="L396">    EXPECT_TRUE(runtime.live_control_enabled());</span>
+<span id="L397">}</span>
+<span id="L398"></span>
+<span id="L399">TEST(LiveControlMailbox, CopiesBeforePublicationAndRejectsWithoutOverwrite) {</span>
+<span id="L400">    rt::Runtime runtime;</span>
+<span id="L401">    configure_live_control(runtime, 2, 8);</span>
+<span id="L402">    const auto handle = finalized_handle(runtime);</span>
+<span id="L403"></span>
+<span id="L404">    std::array payload{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}};</span>
+<span id="L405">    auto first = host_update(handle, 1, payload, 11);</span>
+<span id="L406">    rt::LiveControlAdmissionResult result;</span>
+<span id="L407">    ASSERT_EQ(</span>
+<span id="L408">        runtime.stage_live_control_update(handle, first, payload, result),</span>
+<span id="L409">        rt::Status::ok);</span>
+<span id="L410">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L411">    payload.fill(std::byte{9});</span>
+<span id="L412"></span>
+<span id="L413">    rt::LiveControlUpdateRecord published;</span>
+<span id="L414">    ASSERT_TRUE(runtime.live_control_record_at(kMailbox, 1, published));</span>
+<span id="L415">    EXPECT_EQ(published.mailbox_sequence, 1u);</span>
+<span id="L416">    EXPECT_EQ(published.target_frame_index, 11u);</span>
+<span id="L417">    EXPECT_EQ(published.payload_digest, first.payload_digest);</span>
+<span id="L418"></span>
+<span id="L419">    std::array&lt;std::byte, 4&gt; copied{};</span>
+<span id="L420">    ASSERT_EQ(</span>
+<span id="L421">        runtime.copy_live_control_payload(kMailbox, 1, copied),</span>
+<span id="L422">        rt::Status::ok);</span>
+<span id="L423">    EXPECT_EQ(copied[0], std::byte{1});</span>
+<span id="L424">    EXPECT_EQ(copied[3], std::byte{4});</span>
+<span id="L425">    std::array&lt;std::byte, 3&gt; short_output{</span>
+<span id="L426">        std::byte{7}, std::byte{7}, std::byte{7}};</span>
+<span id="L427">    EXPECT_EQ(</span>
+<span id="L428">        runtime.copy_live_control_payload(kMailbox, 1, short_output),</span>
+<span id="L429">        rt::Status::capacity_exceeded);</span>
+<span id="L430">    EXPECT_EQ(short_output[0], std::byte{7});</span>
+<span id="L431"></span>
+<span id="L432">    const std::array second_payload{std::byte{5}, std::byte{6}};</span>
+<span id="L433">    auto second = host_update(handle, 2, second_payload, 12);</span>
+<span id="L434">    second.payload_digest ^= 1;</span>
+<span id="L435">    ASSERT_EQ(</span>
+<span id="L436">        runtime.stage_live_control_update(</span>
+<span id="L437">            handle, second, second_payload, result),</span>
+<span id="L438">        rt::Status::ok);</span>
+<span id="L439">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::invalid);</span>
+<span id="L440">    second.payload_digest = rt::live_control_payload_digest(second_payload);</span>
+<span id="L441">    ASSERT_EQ(</span>
+<span id="L442">        runtime.stage_live_control_update(</span>
+<span id="L443">            handle, second, second_payload, result),</span>
+<span id="L444">        rt::Status::ok);</span>
+<span id="L445">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L446"></span>
+<span id="L447">    auto one_over = host_update(handle, 3, second_payload, 13);</span>
+<span id="L448">    ASSERT_EQ(</span>
+<span id="L449">        runtime.stage_live_control_update(</span>
+<span id="L450">            handle, one_over, second_payload, result),</span>
+<span id="L451">        rt::Status::ok);</span>
+<span id="L452">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::full);</span>
+<span id="L453"></span>
+<span id="L454">    rt::LiveControlMailboxInfo info;</span>
+<span id="L455">    ASSERT_TRUE(runtime.live_control_mailbox_info(kMailbox, info));</span>
+<span id="L456">    EXPECT_EQ(info.accepted, 2u);</span>
+<span id="L457">    EXPECT_EQ(info.invalid, 1u);</span>
+<span id="L458">    EXPECT_EQ(info.full, 1u);</span>
+<span id="L459">    EXPECT_EQ(info.occupancy, 2u);</span>
+<span id="L460">    EXPECT_EQ(info.next_mailbox_sequence, 3u);</span>
+<span id="L461">    EXPECT_TRUE(info.admission_open);</span>
+<span id="L462">}</span>
+<span id="L463"></span>
+<span id="L464">TEST(LiveControlMailbox, OneAttemptContentionReturnsBusyWithoutPublication) {</span>
+<span id="L465">    rt::Runtime runtime;</span>
+<span id="L466">    configure_live_control(runtime, 1, 8);</span>
+<span id="L467">    const auto handle = finalized_handle(runtime);</span>
+<span id="L468">    const std::array payload{std::byte{0x61}};</span>
+<span id="L469">    const auto update = host_update(handle, 1, payload);</span>
+<span id="L470">    ASSERT_TRUE(</span>
+<span id="L471">        rt::detail::RuntimeLiveControlTestAccess::claim(runtime, kMailbox));</span>
+<span id="L472">    rt::LiveControlAdmissionResult result;</span>
+<span id="L473">    ASSERT_EQ(</span>
+<span id="L474">        runtime.stage_live_control_update(handle, update, payload, result),</span>
+<span id="L475">        rt::Status::ok);</span>
+<span id="L476">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::busy);</span>
+<span id="L477">    rt::LiveControlMailboxInfo info;</span>
+<span id="L478">    ASSERT_TRUE(runtime.live_control_mailbox_info(kMailbox, info));</span>
+<span id="L479">    EXPECT_EQ(info.busy, 1u);</span>
+<span id="L480">    EXPECT_EQ(info.occupancy, 0u);</span>
+<span id="L481">    rt::LiveControlUpdateRecord unpublished;</span>
+<span id="L482">    EXPECT_FALSE(runtime.live_control_record_at(kMailbox, 1, unpublished));</span>
+<span id="L483">    rt::detail::RuntimeLiveControlTestAccess::release(runtime, kMailbox);</span>
+<span id="L484">    ASSERT_EQ(</span>
+<span id="L485">        runtime.stage_live_control_update(handle, update, payload, result),</span>
+<span id="L486">        rt::Status::ok);</span>
+<span id="L487">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L488">}</span>
+<span id="L489"></span>
+<span id="L490">TEST(LiveControlMailbox, ValidatesExactCompiledRateTargetsAndClosedKinds) {</span>
+<span id="L491">    rt::Runtime runtime;</span>
+<span id="L492">    rt::PhaseHandle phase;</span>
+<span id="L493">    rt::RateDomainHandle domain;</span>
+<span id="L494">    ASSERT_EQ(</span>
+<span id="L495">        runtime.register_callback({&quot;phase&quot;, &amp;noop_callback, nullptr}, phase),</span>
+<span id="L496">        rt::Status::ok);</span>
+<span id="L497">    ASSERT_EQ(</span>
+<span id="L498">        runtime.register_rate_domain(</span>
+<span id="L499">            {&quot;control&quot;, 1&#x27;000, 1, 1&#x27;000, 100}, domain),</span>
+<span id="L500">        rt::Status::ok);</span>
+<span id="L501">    ASSERT_EQ(</span>
+<span id="L502">        runtime.bind_phase_to_rate_domain(phase, domain),</span>
+<span id="L503">        rt::Status::ok);</span>
+<span id="L504">    configure_live_control(runtime, 3, 8);</span>
+<span id="L505">    const auto handle = finalized_handle(runtime);</span>
+<span id="L506"></span>
+<span id="L507">    rt::ReferenceRelease release;</span>
+<span id="L508">    ASSERT_TRUE(runtime.reference_release_at(0, release));</span>
+<span id="L509">    const std::array payload{std::byte{0x44}};</span>
+<span id="L510">    auto update = host_update(handle, 1, payload);</span>
+<span id="L511">    update.target_kind = rt::LiveControlTargetKind::rate_release;</span>
+<span id="L512">    update.target_frame_index = std::numeric_limits&lt;std::uint64_t&gt;::max();</span>
+<span id="L513">    update.reference_release_index = 0;</span>
+<span id="L514">    update.rate_domain_registration_index =</span>
+<span id="L515">        static_cast&lt;std::uint32_t&gt;(release.domain_registration_index);</span>
+<span id="L516">    update.phase_index = release.phase.index();</span>
+<span id="L517">    update.rate_substep_ordinal = release.substep_ordinal;</span>
+<span id="L518">    update.rate_release_sequence = release.domain_release_sequence;</span>
+<span id="L519"></span>
+<span id="L520">    rt::LiveControlAdmissionResult result;</span>
+<span id="L521">    ASSERT_EQ(</span>
+<span id="L522">        runtime.stage_live_control_update(handle, update, payload, result),</span>
+<span id="L523">        rt::Status::ok);</span>
+<span id="L524">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L525"></span>
+<span id="L526">    auto contradictory = host_update(handle, 2, payload);</span>
+<span id="L527">    contradictory.reference_release_index = 0;</span>
+<span id="L528">    ASSERT_EQ(</span>
+<span id="L529">        runtime.stage_live_control_update(</span>
+<span id="L530">            handle, contradictory, payload, result),</span>
+<span id="L531">        rt::Status::ok);</span>
+<span id="L532">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::invalid);</span>
+<span id="L533"></span>
+<span id="L534">    auto out_of_plan = update;</span>
+<span id="L535">    out_of_plan.producer_sequence = 2;</span>
+<span id="L536">    out_of_plan.reference_release_index = 1;</span>
+<span id="L537">    ASSERT_EQ(</span>
+<span id="L538">        runtime.stage_live_control_update(</span>
+<span id="L539">            handle, out_of_plan, payload, result),</span>
+<span id="L540">        rt::Status::ok);</span>
+<span id="L541">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::invalid);</span>
+<span id="L542"></span>
+<span id="L543">    const auto no_payload = std::span&lt;const std::byte&gt;{};</span>
+<span id="L544">    auto missing = host_update(handle, 2, no_payload);</span>
+<span id="L545">    missing.payload_digest = rt::live_control_payload_digest(no_payload);</span>
+<span id="L546">    ASSERT_EQ(</span>
+<span id="L547">        runtime.stage_live_control_update(</span>
+<span id="L548">            handle, missing, no_payload, result),</span>
+<span id="L549">        rt::Status::ok);</span>
+<span id="L550">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::invalid);</span>
+<span id="L551">    auto nonempty_clear = host_update(handle, 2, payload);</span>
+<span id="L552">    nonempty_clear.update_kind = rt::LiveControlUpdateKind::clear_fault;</span>
+<span id="L553">    ASSERT_EQ(</span>
+<span id="L554">        runtime.stage_live_control_update(</span>
+<span id="L555">            handle, nonempty_clear, payload, result),</span>
+<span id="L556">        rt::Status::ok);</span>
+<span id="L557">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L558">    auto empty = host_update(handle, 3, no_payload);</span>
+<span id="L559">    empty.update_kind = rt::LiveControlUpdateKind::clear_fault;</span>
+<span id="L560">    empty.payload_digest = rt::live_control_payload_digest(no_payload);</span>
+<span id="L561">    ASSERT_EQ(</span>
+<span id="L562">        runtime.stage_live_control_update(handle, empty, no_payload, result),</span>
+<span id="L563">        rt::Status::ok);</span>
+<span id="L564">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L565">}</span>
+<span id="L566"></span>
+<span id="L567">TEST(LiveControlMailbox, PastTargetsBecomeMissedAndStopClosesAdmission) {</span>
+<span id="L568">    rt::Runtime runtime;</span>
+<span id="L569">    configure_live_control(runtime, 2, 8);</span>
+<span id="L570">    const auto handle = finalized_handle(runtime);</span>
+<span id="L571">    const std::array payload{std::byte{0x31}};</span>
+<span id="L572">    auto update = host_update(handle, 1, payload);</span>
+<span id="L573">    rt::LiveControlAdmissionResult result;</span>
+<span id="L574">    ASSERT_EQ(</span>
+<span id="L575">        runtime.stage_live_control_update(handle, update, payload, result),</span>
+<span id="L576">        rt::Status::ok);</span>
+<span id="L577">    ASSERT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L578">    const auto before = metadata(runtime);</span>
+<span id="L579"></span>
+<span id="L580">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L581">    rt::StepResult step;</span>
+<span id="L582">    ASSERT_EQ(</span>
+<span id="L583">        runtime.step(</span>
+<span id="L584">            rt::HostFrameContext{</span>
+<span id="L585">                11, std::chrono::nanoseconds{1&#x27;000}, std::nullopt},</span>
+<span id="L586">            &amp;step),</span>
+<span id="L587">        rt::Status::ok);</span>
+<span id="L588">    EXPECT_EQ(step.callbacks_executed, 0u);</span>
+<span id="L589">    EXPECT_TRUE(runtime.live_control_record_at(kMailbox, 1, update));</span>
+<span id="L590">    rt::LiveControlRecordStatusInfo record_status;</span>
+<span id="L591">    ASSERT_TRUE(runtime.live_control_record_status(</span>
+<span id="L592">        kMailbox, 1, record_status));</span>
+<span id="L593">    EXPECT_EQ(record_status.status, rt::LiveControlRecordStatus::missed);</span>
+<span id="L594">    const auto after = metadata(runtime);</span>
+<span id="L595">    EXPECT_EQ(after.config_id, before.config_id);</span>
+<span id="L596"></span>
+<span id="L597">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L598">    auto stopped_update = host_update(handle, 2, payload, 12);</span>
+<span id="L599">    ASSERT_EQ(</span>
+<span id="L600">        runtime.stage_live_control_update(</span>
+<span id="L601">            handle, stopped_update, payload, result),</span>
+<span id="L602">        rt::Status::ok);</span>
+<span id="L603">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::stopped);</span>
+<span id="L604">    rt::LiveControlMailboxInfo info;</span>
+<span id="L605">    ASSERT_TRUE(runtime.live_control_mailbox_info(kMailbox, info));</span>
+<span id="L606">    EXPECT_FALSE(info.admission_open);</span>
+<span id="L607">    EXPECT_EQ(info.stopped, 1u);</span>
+<span id="L608">    EXPECT_EQ(info.occupancy, 0u);</span>
+<span id="L609">}</span>
+<span id="L610"></span>
+<span id="L611">TEST(LiveControlMailbox, RuntimeCallbacksCannotUseTheProducerAdmissionApi) {</span>
+<span id="L612">    rt::Runtime runtime;</span>
+<span id="L613">    ReentrantAdmissionProbe probe;</span>
+<span id="L614">    probe.runtime = &amp;runtime;</span>
+<span id="L615">    ASSERT_EQ(</span>
+<span id="L616">        runtime.register_callback(</span>
+<span id="L617">            {&quot;reentrant&quot;, &amp;reentrant_admission_callback, &amp;probe}),</span>
+<span id="L618">        rt::Status::ok);</span>
+<span id="L619">    configure_live_control(runtime, 1, 8);</span>
+<span id="L620">    probe.handle = finalized_handle(runtime);</span>
+<span id="L621">    probe.update = host_update(probe.handle, 1, probe.payload);</span>
+<span id="L622">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L623">    ASSERT_EQ(</span>
+<span id="L624">        runtime.step(</span>
+<span id="L625">            rt::HostFrameContext{</span>
+<span id="L626">                1, std::chrono::nanoseconds{1&#x27;000}, std::nullopt}),</span>
+<span id="L627">        rt::Status::ok);</span>
+<span id="L628">    EXPECT_EQ(probe.status, rt::Status::invalid_state);</span>
+<span id="L629">    rt::LiveControlMailboxInfo info;</span>
+<span id="L630">    ASSERT_TRUE(runtime.live_control_mailbox_info(kMailbox, info));</span>
+<span id="L631">    EXPECT_EQ(info.occupancy, 0u);</span>
+<span id="L632">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L633">}</span>
+<span id="L634"></span>
+<span id="L635">TEST(LiveControlMailbox, StopRaceEitherCompletesOrRejectsOneWholeRecord) {</span>
+<span id="L636">    rt::Runtime runtime;</span>
+<span id="L637">    configure_live_control(</span>
+<span id="L638">        runtime,</span>
+<span id="L639">        1,</span>
+<span id="L640">        rt::live_control_payload_bytes_limit);</span>
+<span id="L641">    const auto handle = finalized_handle(runtime);</span>
+<span id="L642">    std::vector&lt;std::byte&gt; payload(</span>
+<span id="L643">        rt::live_control_payload_bytes_limit,</span>
+<span id="L644">        std::byte{0x5a});</span>
+<span id="L645">    const auto update = host_update(handle, 1, payload);</span>
+<span id="L646">    rt::Status stage_status = rt::Status::internal_error;</span>
+<span id="L647">    rt::LiveControlAdmissionResult result =</span>
+<span id="L648">        rt::LiveControlAdmissionResult::invalid;</span>
+<span id="L649">    std::barrier start(2);</span>
+<span id="L650">    std::thread producer_thread([&amp;] {</span>
+<span id="L651">        start.arrive_and_wait();</span>
+<span id="L652">        stage_status = runtime.stage_live_control_update(</span>
+<span id="L653">            handle, update, payload, result);</span>
+<span id="L654">    });</span>
+<span id="L655">    start.arrive_and_wait();</span>
+<span id="L656">    const auto first_stop_status = runtime.stop();</span>
+<span id="L657">    producer_thread.join();</span>
+<span id="L658"></span>
+<span id="L659">    EXPECT_TRUE(</span>
+<span id="L660">        first_stop_status == rt::Status::ok ||</span>
+<span id="L661">        first_stop_status == rt::Status::invalid_state);</span>
+<span id="L662">    if (first_stop_status == rt::Status::invalid_state) {</span>
+<span id="L663">        ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L664">    }</span>
+<span id="L665">    EXPECT_EQ(stage_status, rt::Status::ok);</span>
+<span id="L666">    EXPECT_TRUE(</span>
+<span id="L667">        result == rt::LiveControlAdmissionResult::accepted ||</span>
+<span id="L668">        result == rt::LiveControlAdmissionResult::stopped);</span>
+<span id="L669">    rt::LiveControlMailboxInfo info;</span>
+<span id="L670">    ASSERT_TRUE(runtime.live_control_mailbox_info(kMailbox, info));</span>
+<span id="L671">    EXPECT_FALSE(info.admission_open);</span>
+<span id="L672">    EXPECT_EQ(info.occupancy, 0u);</span>
+<span id="L673">    rt::LiveControlUpdateRecord record;</span>
+<span id="L674">    if (runtime.live_control_record_at(kMailbox, 1, record)) {</span>
+<span id="L675">        std::vector&lt;std::byte&gt; copied(payload.size());</span>
+<span id="L676">        ASSERT_EQ(</span>
+<span id="L677">            runtime.copy_live_control_payload(kMailbox, 1, copied),</span>
+<span id="L678">            rt::Status::ok);</span>
+<span id="L679">        EXPECT_EQ(copied, payload);</span>
+<span id="L680">        rt::LiveControlRecordStatusInfo status;</span>
+<span id="L681">        ASSERT_TRUE(runtime.live_control_record_status(</span>
+<span id="L682">            kMailbox, 1, status));</span>
+<span id="L683">        EXPECT_EQ(status.status, rt::LiveControlRecordStatus::stopped);</span>
+<span id="L684">    }</span>
+<span id="L685">}</span>
+<span id="L686"></span>
+<span id="L687">TEST(LiveControlMailbox, HandlesAndStorageAreIsolatedPerRuntime) {</span>
+<span id="L688">    rt::Runtime first_runtime;</span>
+<span id="L689">    rt::Runtime second_runtime;</span>
+<span id="L690">    configure_live_control(first_runtime, 1, 8);</span>
+<span id="L691">    configure_live_control(second_runtime, 1, 8);</span>
+<span id="L692">    const auto first_handle = finalized_handle(first_runtime);</span>
+<span id="L693">    const auto second_handle = finalized_handle(second_runtime);</span>
+<span id="L694">    ASSERT_NE(first_handle.runtime_id, second_handle.runtime_id);</span>
+<span id="L695"></span>
+<span id="L696">    const std::array payload{std::byte{0x72}};</span>
+<span id="L697">    const auto first_update = host_update(first_handle, 1, payload);</span>
+<span id="L698">    rt::LiveControlAdmissionResult result;</span>
+<span id="L699">    ASSERT_EQ(</span>
+<span id="L700">        second_runtime.stage_live_control_update(</span>
+<span id="L701">            first_handle, first_update, payload, result),</span>
+<span id="L702">        rt::Status::ok);</span>
+<span id="L703">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::stale);</span>
+<span id="L704">    rt::LiveControlMailboxInfo info;</span>
+<span id="L705">    ASSERT_TRUE(second_runtime.live_control_mailbox_info(kMailbox, info));</span>
+<span id="L706">    EXPECT_EQ(info.occupancy, 0u);</span>
+<span id="L707">    EXPECT_EQ(info.stale, 0u);</span>
+<span id="L708"></span>
+<span id="L709">    const auto second_update = host_update(second_handle, 1, payload);</span>
+<span id="L710">    ASSERT_EQ(</span>
+<span id="L711">        second_runtime.stage_live_control_update(</span>
+<span id="L712">            second_handle, second_update, payload, result),</span>
+<span id="L713">        rt::Status::ok);</span>
+<span id="L714">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L715">    ASSERT_TRUE(second_runtime.live_control_mailbox_info(kMailbox, info));</span>
+<span id="L716">    EXPECT_EQ(info.occupancy, 1u);</span>
+<span id="L717">    ASSERT_TRUE(first_runtime.live_control_mailbox_info(kMailbox, info));</span>
+<span id="L718">    EXPECT_EQ(info.occupancy, 0u);</span>
+<span id="L719">}</span>
+<span id="L720"></span>
+<span id="L721">TEST(LiveControlMailbox, ConcurrentProducersPublishOnlyCompleteDenseRecords) {</span>
+<span id="L722">    constexpr std::size_t producer_count = 8;</span>
+<span id="L723">    rt::Runtime runtime;</span>
+<span id="L724">    ASSERT_EQ(</span>
+<span id="L725">        runtime.set_live_control_policy(</span>
+<span id="L726">            policy(1, producer_count, producer_count, 8)),</span>
+<span id="L727">        rt::Status::ok);</span>
+<span id="L728">    ASSERT_EQ(</span>
+<span id="L729">        runtime.register_live_control_mailbox(</span>
+<span id="L730">            mailbox(kMailbox, producer_count, 8)),</span>
+<span id="L731">        rt::Status::ok);</span>
+<span id="L732">    for (std::size_t index = 0; index &lt; producer_count; ++index) {</span>
+<span id="L733">        ASSERT_EQ(</span>
+<span id="L734">            runtime.register_live_control_producer(</span>
+<span id="L735">                producer(kMailbox, 1&#x27;000 + index)),</span>
+<span id="L736">            rt::Status::ok);</span>
+<span id="L737">    }</span>
+<span id="L738">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L739"></span>
+<span id="L740">    std::array&lt;rt::LiveControlProducerHandle, producer_count&gt; handles{};</span>
+<span id="L741">    std::array&lt;rt::LiveControlUpdateRecord, producer_count&gt; updates{};</span>
+<span id="L742">    std::array&lt;rt::Status, producer_count&gt; statuses{};</span>
+<span id="L743">    std::array&lt;rt::LiveControlAdmissionResult, producer_count&gt; results{};</span>
+<span id="L744">    std::array&lt;std::array&lt;std::byte, 1&gt;, producer_count&gt; payloads{};</span>
+<span id="L745">    for (std::size_t index = 0; index &lt; producer_count; ++index) {</span>
+<span id="L746">        ASSERT_EQ(</span>
+<span id="L747">            runtime.live_control_producer_handle(</span>
+<span id="L748">                kMailbox, 1&#x27;000 + index, handles[index]),</span>
+<span id="L749">            rt::Status::ok);</span>
+<span id="L750">        payloads[index][0] = static_cast&lt;std::byte&gt;(index + 1);</span>
+<span id="L751">        updates[index] = host_update(handles[index], 1, payloads[index]);</span>
+<span id="L752">    }</span>
+<span id="L753"></span>
+<span id="L754">    std::barrier start(static_cast&lt;std::ptrdiff_t&gt;(producer_count));</span>
+<span id="L755">    std::array&lt;std::thread, producer_count&gt; threads;</span>
+<span id="L756">    for (std::size_t index = 0; index &lt; producer_count; ++index) {</span>
+<span id="L757">        threads[index] = std::thread([&amp;, index] {</span>
+<span id="L758">            start.arrive_and_wait();</span>
+<span id="L759">            statuses[index] = runtime.stage_live_control_update(</span>
+<span id="L760">                handles[index], updates[index], payloads[index], results[index]);</span>
+<span id="L761">        });</span>
+<span id="L762">    }</span>
+<span id="L763">    for (auto&amp; thread : threads) {</span>
+<span id="L764">        thread.join();</span>
+<span id="L765">    }</span>
+<span id="L766"></span>
+<span id="L767">    std::size_t busy = 0;</span>
+<span id="L768">    for (std::size_t index = 0; index &lt; producer_count; ++index) {</span>
+<span id="L769">        EXPECT_EQ(statuses[index], rt::Status::ok);</span>
+<span id="L770">        if (results[index] == rt::LiveControlAdmissionResult::busy) {</span>
+<span id="L771">            ++busy;</span>
+<span id="L772">            ASSERT_EQ(</span>
+<span id="L773">                runtime.stage_live_control_update(</span>
+<span id="L774">                    handles[index],</span>
+<span id="L775">                    updates[index],</span>
+<span id="L776">                    payloads[index],</span>
+<span id="L777">                    results[index]),</span>
+<span id="L778">                rt::Status::ok);</span>
+<span id="L779">        }</span>
+<span id="L780">        EXPECT_EQ(results[index], rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L781">    }</span>
+<span id="L782"></span>
+<span id="L783">    rt::LiveControlMailboxInfo info;</span>
+<span id="L784">    ASSERT_TRUE(runtime.live_control_mailbox_info(kMailbox, info));</span>
+<span id="L785">    EXPECT_EQ(info.accepted, producer_count);</span>
+<span id="L786">    EXPECT_EQ(info.busy, busy);</span>
+<span id="L787">    EXPECT_EQ(info.occupancy, producer_count);</span>
+<span id="L788">    for (std::uint64_t sequence = 1;</span>
+<span id="L789">         sequence &lt;= producer_count;</span>
+<span id="L790">         ++sequence) {</span>
+<span id="L791">        rt::LiveControlUpdateRecord record;</span>
+<span id="L792">        ASSERT_TRUE(</span>
+<span id="L793">            runtime.live_control_record_at(kMailbox, sequence, record));</span>
+<span id="L794">        EXPECT_EQ(record.mailbox_sequence, sequence);</span>
+<span id="L795">        std::array&lt;std::byte, 1&gt; copied{};</span>
+<span id="L796">        EXPECT_EQ(</span>
+<span id="L797">            runtime.copy_live_control_payload(</span>
+<span id="L798">                kMailbox, sequence, copied),</span>
+<span id="L799">            rt::Status::ok);</span>
+<span id="L800">        EXPECT_EQ(</span>
+<span id="L801">            rt::live_control_payload_digest(copied),</span>
+<span id="L802">            record.payload_digest);</span>
+<span id="L803">    }</span>
+<span id="L804">}</span>
+<span id="L805"></span>
+<span id="L806">TEST(LiveControlMailbox, BoundaryPublishesCanonicalReplacementAndReusesSlots) {</span>
+<span id="L807">    rt::Runtime runtime;</span>
+<span id="L808">    GenerationProbe probe;</span>
+<span id="L809">    ASSERT_EQ(</span>
+<span id="L810">        runtime.register_callback(</span>
+<span id="L811">            {&quot;capture&quot;, &amp;capture_generation_callback, &amp;probe}),</span>
+<span id="L812">        rt::Status::ok);</span>
+<span id="L813">    configure_live_control(runtime, 3, 8);</span>
+<span id="L814">    const auto handle = finalized_handle(runtime);</span>
+<span id="L815">    const std::array first_payload{std::byte{0x11}};</span>
+<span id="L816">    const std::array second_payload{std::byte{0x22}};</span>
+<span id="L817">    const std::array third_payload{std::byte{0x33}};</span>
+<span id="L818">    auto first = host_update(handle, 1, first_payload, 7);</span>
+<span id="L819">    auto second = host_update(handle, 2, second_payload, 7);</span>
+<span id="L820">    second.update_kind = rt::LiveControlUpdateKind::controller_parameters;</span>
+<span id="L821">    auto third = host_update(handle, 3, third_payload, 7);</span>
+<span id="L822">    rt::LiveControlAdmissionResult result;</span>
+<span id="L823">    ASSERT_EQ(</span>
+<span id="L824">        runtime.stage_live_control_update(</span>
+<span id="L825">            handle, first, first_payload, result),</span>
+<span id="L826">        rt::Status::ok);</span>
+<span id="L827">    ASSERT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L828">    ASSERT_EQ(</span>
+<span id="L829">        runtime.stage_live_control_update(</span>
+<span id="L830">            handle, second, second_payload, result),</span>
+<span id="L831">        rt::Status::ok);</span>
+<span id="L832">    ASSERT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L833">    ASSERT_EQ(</span>
+<span id="L834">        runtime.stage_live_control_update(</span>
+<span id="L835">            handle, third, third_payload, result),</span>
+<span id="L836">        rt::Status::ok);</span>
+<span id="L837">    ASSERT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L838"></span>
+<span id="L839">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L840">    ASSERT_EQ(</span>
+<span id="L841">        runtime.step(rt::HostFrameContext{</span>
+<span id="L842">            7, std::chrono::nanoseconds{1&#x27;000}, std::nullopt}),</span>
+<span id="L843">        rt::Status::ok);</span>
+<span id="L844">    ASSERT_NE(probe.generation_identity, 0u);</span>
+<span id="L845">    EXPECT_EQ(probe.generation_identity, 0xd2ccc254bb8102daull);</span>
+<span id="L846">    EXPECT_EQ(probe.target.kind, rt::LiveControlTargetKind::host_frame);</span>
+<span id="L847">    EXPECT_EQ(probe.target.frame_index, 7u);</span>
+<span id="L848">    ASSERT_EQ(probe.record_count, 2u);</span>
+<span id="L849">    EXPECT_EQ(probe.mailbox_sequences[0], 2u);</span>
+<span id="L850">    EXPECT_EQ(probe.mailbox_sequences[1], 3u);</span>
+<span id="L851">    EXPECT_EQ(</span>
+<span id="L852">        probe.update_kinds[0],</span>
+<span id="L853">        rt::LiveControlUpdateKind::controller_parameters);</span>
+<span id="L854">    EXPECT_EQ(</span>
+<span id="L855">        probe.update_kinds[1],</span>
+<span id="L856">        rt::LiveControlUpdateKind::scenario_parameters);</span>
+<span id="L857">    EXPECT_EQ(probe.first_payload_bytes[0], std::byte{0x22});</span>
+<span id="L858">    EXPECT_EQ(probe.first_payload_bytes[1], std::byte{0x33});</span>
+<span id="L859"></span>
+<span id="L860">    rt::LiveControlCommitInfo commit;</span>
+<span id="L861">    ASSERT_TRUE(runtime.live_control_commit_info(commit));</span>
+<span id="L862">    EXPECT_EQ(commit.generation_identity, probe.generation_identity);</span>
+<span id="L863">    EXPECT_EQ(commit.survivor_count, 2u);</span>
+<span id="L864">    EXPECT_EQ(commit.committed, 2u);</span>
+<span id="L865">    EXPECT_EQ(commit.replaced, 1u);</span>
+<span id="L866">    EXPECT_EQ(commit.staged_occupancy, 0u);</span>
+<span id="L867">    for (std::uint64_t sequence = 1; sequence &lt;= 3; ++sequence) {</span>
+<span id="L868">        rt::LiveControlRecordStatusInfo status;</span>
+<span id="L869">        ASSERT_TRUE(runtime.live_control_record_status(</span>
+<span id="L870">            kMailbox, sequence, status));</span>
+<span id="L871">        EXPECT_EQ(</span>
+<span id="L872">            status.status,</span>
+<span id="L873">            sequence == 1</span>
+<span id="L874">                ? rt::LiveControlRecordStatus::replaced</span>
+<span id="L875">                : rt::LiveControlRecordStatus::committed);</span>
+<span id="L876">        EXPECT_EQ(status.generation_identity, commit.generation_identity);</span>
+<span id="L877">    }</span>
+<span id="L878"></span>
+<span id="L879">    const std::array fourth_payload{std::byte{0x44}};</span>
+<span id="L880">    const auto fourth = host_update(handle, 4, fourth_payload, 8);</span>
+<span id="L881">    ASSERT_EQ(</span>
+<span id="L882">        runtime.stage_live_control_update(</span>
+<span id="L883">            handle, fourth, fourth_payload, result),</span>
+<span id="L884">        rt::Status::ok);</span>
+<span id="L885">    ASSERT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L886">    rt::LiveControlRecordStatusInfo reclaimed;</span>
+<span id="L887">    reclaimed.runtime_id = 0xfeed;</span>
+<span id="L888">    EXPECT_FALSE(runtime.live_control_record_status(</span>
+<span id="L889">        kMailbox, 1, reclaimed));</span>
+<span id="L890">    EXPECT_EQ(reclaimed.runtime_id, 0xfeedu);</span>
+<span id="L891">    ASSERT_EQ(</span>
+<span id="L892">        runtime.step(rt::HostFrameContext{</span>
+<span id="L893">            8, std::chrono::nanoseconds{1&#x27;000}, std::nullopt}),</span>
+<span id="L894">        rt::Status::ok);</span>
+<span id="L895">    ASSERT_EQ(probe.record_count, 1u);</span>
+<span id="L896">    EXPECT_EQ(probe.mailbox_sequences[0], 4u);</span>
+<span id="L897">    const auto fourth_generation = probe.generation_identity;</span>
+<span id="L898">    ASSERT_EQ(</span>
+<span id="L899">        runtime.step(rt::HostFrameContext{</span>
+<span id="L900">            9, std::chrono::nanoseconds{1&#x27;000}, std::nullopt}),</span>
+<span id="L901">        rt::Status::ok);</span>
+<span id="L902">    EXPECT_EQ(probe.generation_identity, fourth_generation);</span>
+<span id="L903">    EXPECT_EQ(probe.target.frame_index, 8u);</span>
+<span id="L904"></span>
+<span id="L905">    const std::array late_payload{std::byte{0x55}};</span>
+<span id="L906">    const auto late = host_update(handle, 5, late_payload, 8);</span>
+<span id="L907">    ASSERT_EQ(</span>
+<span id="L908">        runtime.stage_live_control_update(</span>
+<span id="L909">            handle, late, late_payload, result),</span>
+<span id="L910">        rt::Status::ok);</span>
+<span id="L911">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::missed);</span>
+<span id="L912">    rt::LiveControlRecordStatusInfo late_status;</span>
+<span id="L913">    ASSERT_TRUE(runtime.live_control_record_status(</span>
+<span id="L914">        kMailbox, 5, late_status));</span>
+<span id="L915">    EXPECT_EQ(late_status.status, rt::LiveControlRecordStatus::missed);</span>
+<span id="L916">    ASSERT_TRUE(runtime.live_control_commit_info(commit));</span>
+<span id="L917">    EXPECT_EQ(commit.missed, 1u);</span>
+<span id="L918">    EXPECT_EQ(commit.staged_occupancy, 0u);</span>
+<span id="L919">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L920">}</span>
+<span id="L921"></span>
+<span id="L922">TEST(LiveControlMailbox, BoundaryOrderIgnoresRegistrationAndArrivalOrder) {</span>
+<span id="L923">    rt::Runtime runtime;</span>
+<span id="L924">    GenerationProbe probe;</span>
+<span id="L925">    ASSERT_EQ(</span>
+<span id="L926">        runtime.register_callback(</span>
+<span id="L927">            {&quot;capture&quot;, &amp;capture_generation_callback, &amp;probe}),</span>
+<span id="L928">        rt::Status::ok);</span>
+<span id="L929">    ASSERT_EQ(</span>
+<span id="L930">        runtime.set_live_control_policy(policy(2, 2, 2, 8)),</span>
+<span id="L931">        rt::Status::ok);</span>
+<span id="L932">    ASSERT_EQ(</span>
+<span id="L933">        runtime.register_live_control_mailbox(mailbox(kMailbox + 1, 1, 8)),</span>
+<span id="L934">        rt::Status::ok);</span>
+<span id="L935">    ASSERT_EQ(</span>
+<span id="L936">        runtime.register_live_control_mailbox(mailbox(kMailbox, 1, 8)),</span>
+<span id="L937">        rt::Status::ok);</span>
+<span id="L938">    ASSERT_EQ(</span>
+<span id="L939">        runtime.register_live_control_producer(</span>
+<span id="L940">            producer(kMailbox + 1, kProducer + 1)),</span>
+<span id="L941">        rt::Status::ok);</span>
+<span id="L942">    ASSERT_EQ(</span>
+<span id="L943">        runtime.register_live_control_producer(</span>
+<span id="L944">            producer(kMailbox, kProducer)),</span>
+<span id="L945">        rt::Status::ok);</span>
+<span id="L946">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L947">    rt::LiveControlProducerHandle high_handle;</span>
+<span id="L948">    rt::LiveControlProducerHandle low_handle;</span>
+<span id="L949">    ASSERT_EQ(</span>
+<span id="L950">        runtime.live_control_producer_handle(</span>
+<span id="L951">            kMailbox + 1, kProducer + 1, high_handle),</span>
+<span id="L952">        rt::Status::ok);</span>
+<span id="L953">    ASSERT_EQ(</span>
+<span id="L954">        runtime.live_control_producer_handle(</span>
+<span id="L955">            kMailbox, kProducer, low_handle),</span>
+<span id="L956">        rt::Status::ok);</span>
+<span id="L957">    const std::array high_payload{std::byte{0x72}};</span>
+<span id="L958">    const std::array low_payload{std::byte{0x71}};</span>
+<span id="L959">    const auto high = host_update(high_handle, 1, high_payload, 7);</span>
+<span id="L960">    const auto low = host_update(low_handle, 1, low_payload, 7);</span>
+<span id="L961">    rt::LiveControlAdmissionResult admission;</span>
+<span id="L962">    ASSERT_EQ(</span>
+<span id="L963">        runtime.stage_live_control_update(</span>
+<span id="L964">            high_handle, high, high_payload, admission),</span>
+<span id="L965">        rt::Status::ok);</span>
+<span id="L966">    ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L967">    ASSERT_EQ(</span>
+<span id="L968">        runtime.stage_live_control_update(</span>
+<span id="L969">            low_handle, low, low_payload, admission),</span>
+<span id="L970">        rt::Status::ok);</span>
+<span id="L971">    ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L972">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L973">    ASSERT_EQ(</span>
+<span id="L974">        runtime.step({7, std::chrono::nanoseconds{1&#x27;000}}),</span>
+<span id="L975">        rt::Status::ok);</span>
+<span id="L976">    ASSERT_EQ(probe.record_count, 2u);</span>
+<span id="L977">    EXPECT_EQ(probe.mailbox_identities[0], kMailbox);</span>
+<span id="L978">    EXPECT_EQ(probe.mailbox_identities[1], kMailbox + 1);</span>
+<span id="L979">    EXPECT_EQ(probe.first_payload_bytes[0], std::byte{0x71});</span>
+<span id="L980">    EXPECT_EQ(probe.first_payload_bytes[1], std::byte{0x72});</span>
+<span id="L981">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L982">}</span>
+<span id="L983"></span>
+<span id="L984">TEST(LiveControlMailbox, ActiveRateReleasePublishesBeforeItsCallback) {</span>
+<span id="L985">    ManualClock clock;</span>
+<span id="L986">    rt::Runtime runtime(clock);</span>
+<span id="L987">    GenerationProbe probe;</span>
+<span id="L988">    ASSERT_EQ(runtime.set_rate_execution_policy({4}), rt::Status::ok);</span>
+<span id="L989">    rt::PhaseHandle phase;</span>
+<span id="L990">    ASSERT_EQ(</span>
+<span id="L991">        runtime.register_callback(</span>
+<span id="L992">            {&quot;rate-capture&quot;, &amp;capture_generation_callback, &amp;probe}, phase),</span>
+<span id="L993">        rt::Status::ok);</span>
+<span id="L994">    rt::RateDomainRegistration domain_registration;</span>
+<span id="L995">    domain_registration.name = &quot;control-rate&quot;;</span>
+<span id="L996">    domain_registration.period_ns = 100;</span>
+<span id="L997">    domain_registration.relative_deadline_ns = 100;</span>
+<span id="L998">    domain_registration.budget_wcet_ns = 10;</span>
+<span id="L999">    domain_registration.late_action = rt::RateLateAction::fail;</span>
+<span id="L1000">    rt::RateDomainHandle domain;</span>
+<span id="L1001">    ASSERT_EQ(</span>
+<span id="L1002">        runtime.register_rate_domain(domain_registration, domain),</span>
+<span id="L1003">        rt::Status::ok);</span>
+<span id="L1004">    ASSERT_EQ(</span>
+<span id="L1005">        runtime.bind_phase_to_rate_domain(phase, domain),</span>
+<span id="L1006">        rt::Status::ok);</span>
+<span id="L1007">    configure_live_control(runtime, 1, 8);</span>
+<span id="L1008">    const auto handle = finalized_handle(runtime);</span>
+<span id="L1009">    rt::ReferenceRelease release;</span>
+<span id="L1010">    ASSERT_TRUE(runtime.reference_release_at(0, release));</span>
+<span id="L1011"></span>
+<span id="L1012">    const std::array payload{std::byte{0x6a}};</span>
+<span id="L1013">    auto update = host_update(handle, 1, payload);</span>
+<span id="L1014">    update.target_kind = rt::LiveControlTargetKind::rate_release;</span>
+<span id="L1015">    update.target_frame_index = std::numeric_limits&lt;std::uint64_t&gt;::max();</span>
+<span id="L1016">    update.reference_release_index = 0;</span>
+<span id="L1017">    update.rate_domain_registration_index =</span>
+<span id="L1018">        static_cast&lt;std::uint32_t&gt;(release.domain_registration_index);</span>
+<span id="L1019">    update.phase_index = release.phase.index();</span>
+<span id="L1020">    update.rate_substep_ordinal = release.substep_ordinal;</span>
+<span id="L1021">    update.rate_release_sequence = release.domain_release_sequence;</span>
+<span id="L1022">    rt::LiveControlAdmissionResult admission;</span>
+<span id="L1023">    ASSERT_EQ(</span>
+<span id="L1024">        runtime.stage_live_control_update(</span>
+<span id="L1025">            handle, update, payload, admission),</span>
+<span id="L1026">        rt::Status::ok);</span>
+<span id="L1027">    ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1028"></span>
+<span id="L1029">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1030">    rt::StepResult result;</span>
+<span id="L1031">    ASSERT_EQ(</span>
+<span id="L1032">        runtime.step(</span>
+<span id="L1033">            {42, std::chrono::nanoseconds{100}, std::nullopt, 1&#x27;000},</span>
+<span id="L1034">            &amp;result),</span>
+<span id="L1035">        rt::Status::ok);</span>
+<span id="L1036">    EXPECT_EQ(result.callbacks_executed, 1u);</span>
+<span id="L1037">    EXPECT_EQ(probe.calls, 1u);</span>
+<span id="L1038">    EXPECT_NE(probe.generation_identity, 0u);</span>
+<span id="L1039">    EXPECT_EQ(probe.target.kind, rt::LiveControlTargetKind::rate_release);</span>
+<span id="L1040">    EXPECT_EQ(probe.target.reference_release_index, 0u);</span>
+<span id="L1041">    EXPECT_EQ(</span>
+<span id="L1042">        probe.target.rate_release_sequence,</span>
+<span id="L1043">        release.domain_release_sequence);</span>
+<span id="L1044">    ASSERT_EQ(probe.record_count, 1u);</span>
+<span id="L1045">    EXPECT_EQ(probe.first_payload_bytes[0], std::byte{0x6a});</span>
+<span id="L1046">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1047">}</span>
+<span id="L1048"></span>
+<span id="L1049">TEST(LiveControlMailbox, ExhaustionPrecedesWrapAndDoesNotPublish) {</span>
+<span id="L1050">    rt::Runtime runtime;</span>
+<span id="L1051">    constexpr auto last_sequence =</span>
+<span id="L1052">        std::numeric_limits&lt;std::uint64_t&gt;::max() - 1;</span>
+<span id="L1053">    configure_live_control(runtime, 2, 8, last_sequence);</span>
+<span id="L1054">    const auto handle = finalized_handle(runtime);</span>
+<span id="L1055">    const std::array payload{std::byte{0x11}};</span>
+<span id="L1056">    auto update = host_update(handle, last_sequence, payload);</span>
+<span id="L1057">    rt::LiveControlAdmissionResult result;</span>
+<span id="L1058">    ASSERT_EQ(</span>
+<span id="L1059">        runtime.stage_live_control_update(handle, update, payload, result),</span>
+<span id="L1060">        rt::Status::ok);</span>
+<span id="L1061">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1062">    update.producer_sequence = std::numeric_limits&lt;std::uint64_t&gt;::max();</span>
+<span id="L1063">    ASSERT_EQ(</span>
+<span id="L1064">        runtime.stage_live_control_update(handle, update, payload, result),</span>
+<span id="L1065">        rt::Status::ok);</span>
+<span id="L1066">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::exhausted);</span>
+<span id="L1067">    rt::LiveControlMailboxInfo info;</span>
+<span id="L1068">    ASSERT_TRUE(runtime.live_control_mailbox_info(kMailbox, info));</span>
+<span id="L1069">    EXPECT_EQ(info.accepted, 1u);</span>
+<span id="L1070">    EXPECT_EQ(info.exhausted, 1u);</span>
+<span id="L1071">    EXPECT_EQ(info.occupancy, 1u);</span>
+<span id="L1072">}</span>
+<span id="L1073"></span>
+<span id="L1074">TEST(LiveControlMailbox, FrozenPolicyChangesIdentityButArrivalsDoNot) {</span>
+<span id="L1075">    rt::Runtime first;</span>
+<span id="L1076">    configure_live_control(first, 1, 8);</span>
+<span id="L1077">    const auto handle = finalized_handle(first);</span>
+<span id="L1078">    const auto before = compatibility_ids(first);</span>
+<span id="L1079">    const auto checkpoint_before = checkpoint_artifact(first);</span>
+<span id="L1080">    const std::array payload{std::byte{0x21}};</span>
+<span id="L1081">    const auto update = host_update(handle, 1, payload);</span>
+<span id="L1082">    rt::LiveControlAdmissionResult result;</span>
+<span id="L1083">    ASSERT_EQ(</span>
+<span id="L1084">        first.stage_live_control_update(handle, update, payload, result),</span>
+<span id="L1085">        rt::Status::ok);</span>
+<span id="L1086">    ASSERT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1087">    const auto after = compatibility_ids(first);</span>
+<span id="L1088">    const auto checkpoint_after = checkpoint_artifact(first);</span>
+<span id="L1089">    EXPECT_EQ(after.config, before.config);</span>
+<span id="L1090">    EXPECT_EQ(after.graph, before.graph);</span>
+<span id="L1091">    EXPECT_EQ(after.replay, before.replay);</span>
+<span id="L1092">    EXPECT_EQ(checkpoint_after, checkpoint_before);</span>
+<span id="L1093"></span>
+<span id="L1094">    rt::Runtime different_policy;</span>
+<span id="L1095">    auto changed = policy(1, 1, 1, 8);</span>
+<span id="L1096">    ++changed.policy_identity;</span>
+<span id="L1097">    ASSERT_EQ(</span>
+<span id="L1098">        different_policy.set_live_control_policy(changed),</span>
+<span id="L1099">        rt::Status::ok);</span>
+<span id="L1100">    ASSERT_EQ(</span>
+<span id="L1101">        different_policy.register_live_control_mailbox(</span>
+<span id="L1102">            mailbox(kMailbox, 1, 8)),</span>
+<span id="L1103">        rt::Status::ok);</span>
+<span id="L1104">    ASSERT_EQ(</span>
+<span id="L1105">        different_policy.register_live_control_producer(producer()),</span>
+<span id="L1106">        rt::Status::ok);</span>
+<span id="L1107">    ASSERT_EQ(different_policy.finalize(), rt::Status::ok);</span>
+<span id="L1108">    const auto different = compatibility_ids(different_policy);</span>
+<span id="L1109">    EXPECT_NE(different.config, before.config);</span>
+<span id="L1110">    EXPECT_NE(different.graph, before.graph);</span>
+<span id="L1111">    EXPECT_NE(different.replay, before.replay);</span>
+<span id="L1112"></span>
+<span id="L1113">    const auto ids_for_declaration_order = [](</span>
+<span id="L1114">        bool reverse,</span>
+<span id="L1115">        std::uint64_t first_sequence) {</span>
+<span id="L1116">        rt::Runtime runtime;</span>
+<span id="L1117">        EXPECT_EQ(</span>
+<span id="L1118">            runtime.set_live_control_policy(policy(2, 2, 2, 8)),</span>
+<span id="L1119">            rt::Status::ok);</span>
+<span id="L1120">        const auto first_mailbox = mailbox(kMailbox, 1, 8);</span>
+<span id="L1121">        const auto second_mailbox = mailbox(kMailbox + 1, 1, 8);</span>
+<span id="L1122">        const auto first_producer = producer(</span>
+<span id="L1123">            kMailbox,</span>
+<span id="L1124">            kProducer,</span>
+<span id="L1125">            first_sequence);</span>
+<span id="L1126">        const auto second_producer = producer(</span>
+<span id="L1127">            kMailbox + 1,</span>
+<span id="L1128">            kProducer + 1,</span>
+<span id="L1129">            1);</span>
+<span id="L1130">        if (reverse) {</span>
+<span id="L1131">            EXPECT_EQ(</span>
+<span id="L1132">                runtime.register_live_control_mailbox(second_mailbox),</span>
+<span id="L1133">                rt::Status::ok);</span>
+<span id="L1134">            EXPECT_EQ(</span>
+<span id="L1135">                runtime.register_live_control_mailbox(first_mailbox),</span>
+<span id="L1136">                rt::Status::ok);</span>
+<span id="L1137">            EXPECT_EQ(</span>
+<span id="L1138">                runtime.register_live_control_producer(second_producer),</span>
+<span id="L1139">                rt::Status::ok);</span>
+<span id="L1140">            EXPECT_EQ(</span>
+<span id="L1141">                runtime.register_live_control_producer(first_producer),</span>
+<span id="L1142">                rt::Status::ok);</span>
+<span id="L1143">        } else {</span>
+<span id="L1144">            EXPECT_EQ(</span>
+<span id="L1145">                runtime.register_live_control_mailbox(first_mailbox),</span>
+<span id="L1146">                rt::Status::ok);</span>
+<span id="L1147">            EXPECT_EQ(</span>
+<span id="L1148">                runtime.register_live_control_mailbox(second_mailbox),</span>
+<span id="L1149">                rt::Status::ok);</span>
+<span id="L1150">            EXPECT_EQ(</span>
+<span id="L1151">                runtime.register_live_control_producer(first_producer),</span>
+<span id="L1152">                rt::Status::ok);</span>
+<span id="L1153">            EXPECT_EQ(</span>
+<span id="L1154">                runtime.register_live_control_producer(second_producer),</span>
+<span id="L1155">                rt::Status::ok);</span>
+<span id="L1156">        }</span>
+<span id="L1157">        EXPECT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1158">        return compatibility_ids(runtime);</span>
+<span id="L1159">    };</span>
+<span id="L1160">    const auto declaration_ids = ids_for_declaration_order(false, 1);</span>
+<span id="L1161">    const auto reordered_ids = ids_for_declaration_order(true, 1);</span>
+<span id="L1162">    EXPECT_EQ(reordered_ids.config, declaration_ids.config);</span>
+<span id="L1163">    EXPECT_EQ(reordered_ids.graph, declaration_ids.graph);</span>
+<span id="L1164">    EXPECT_EQ(reordered_ids.replay, declaration_ids.replay);</span>
+<span id="L1165">    const auto changed_sequence_ids =</span>
+<span id="L1166">        ids_for_declaration_order(false, 2);</span>
+<span id="L1167">    EXPECT_NE(changed_sequence_ids.config, declaration_ids.config);</span>
+<span id="L1168">    EXPECT_NE(changed_sequence_ids.graph, declaration_ids.graph);</span>
+<span id="L1169">    EXPECT_NE(changed_sequence_ids.replay, declaration_ids.replay);</span>
+<span id="L1170">}</span>
+<span id="L1171"></span>
+<span id="L1172">TEST(LiveControlMailbox, ClosureSettlesSuccessWithCanonicalActions) {</span>
+<span id="L1173">    rt::Runtime runtime;</span>
+<span id="L1174">    GenerationProbe probe;</span>
+<span id="L1175">    ASSERT_EQ(</span>
+<span id="L1176">        runtime.register_callback(</span>
+<span id="L1177">            {&quot;capture&quot;, &amp;capture_generation_callback, &amp;probe}),</span>
+<span id="L1178">        rt::Status::ok);</span>
+<span id="L1179">    configure_live_control(runtime, 1, 8);</span>
+<span id="L1180">    ASSERT_EQ(</span>
+<span id="L1181">        runtime.set_live_control_closure_policy(closure_policy()),</span>
+<span id="L1182">        rt::Status::ok);</span>
+<span id="L1183">    const auto handle = finalized_handle(runtime);</span>
+<span id="L1184">    EXPECT_TRUE(runtime.live_control_closure_enabled());</span>
+<span id="L1185">    rt::MemoryPlan plan;</span>
+<span id="L1186">    ASSERT_TRUE(runtime.memory_plan(plan));</span>
+<span id="L1187">    EXPECT_EQ(plan.live_control_action_capacity, 128u);</span>
+<span id="L1188">    EXPECT_GT(plan.live_control_action_storage_bytes, 0u);</span>
+<span id="L1189">    EXPECT_GT(plan.live_control_closure_control_bytes,</span>
+<span id="L1190">              plan.live_control_action_storage_bytes);</span>
+<span id="L1191">    EXPECT_GT(plan.live_control_checkpoint_state_bytes, 0u);</span>
+<span id="L1192"></span>
+<span id="L1193">    const std::array payload{std::byte{0x41}};</span>
+<span id="L1194">    const auto update = host_update(handle, 1, payload, 7);</span>
+<span id="L1195">    rt::LiveControlAdmissionResult admission;</span>
+<span id="L1196">    ASSERT_EQ(</span>
+<span id="L1197">        runtime.stage_live_control_update(</span>
+<span id="L1198">            handle, update, payload, admission),</span>
+<span id="L1199">        rt::Status::ok);</span>
+<span id="L1200">    ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1201">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1202">    ASSERT_EQ(</span>
+<span id="L1203">        runtime.step({7, std::chrono::nanoseconds{1&#x27;000}}),</span>
+<span id="L1204">        rt::Status::ok);</span>
+<span id="L1205"></span>
+<span id="L1206">    rt::LiveControlRecordStatusInfo status;</span>
+<span id="L1207">    ASSERT_TRUE(runtime.live_control_record_status(kMailbox, 1, status));</span>
+<span id="L1208">    EXPECT_EQ(status.status, rt::LiveControlRecordStatus::committed);</span>
+<span id="L1209">    EXPECT_EQ(status.generation_identity, probe.generation_identity);</span>
+<span id="L1210"></span>
+<span id="L1211">    std::array&lt;rt::LiveControlActionRecord, 8&gt; actions{};</span>
+<span id="L1212">    rt::LiveControlActionCursor cursor;</span>
+<span id="L1213">    rt::LiveControlActionReadResult read;</span>
+<span id="L1214">    ASSERT_EQ(</span>
+<span id="L1215">        runtime.read_live_control_actions(cursor, actions, read),</span>
+<span id="L1216">        rt::Status::ok);</span>
+<span id="L1217">    ASSERT_EQ(read.records_read, 3u);</span>
+<span id="L1218">    EXPECT_EQ(actions[0].action, rt::LiveControlActionId::admission);</span>
+<span id="L1219">    EXPECT_EQ(</span>
+<span id="L1220">        actions[1].action,</span>
+<span id="L1221">        rt::LiveControlActionId::provisional_publication);</span>
+<span id="L1222">    EXPECT_EQ(actions[2].action, rt::LiveControlActionId::committed);</span>
+<span id="L1223">    EXPECT_EQ(actions[2].record_status,</span>
+<span id="L1224">              rt::LiveControlRecordStatus::committed);</span>
+<span id="L1225">    EXPECT_EQ(actions[2].payload_digest,</span>
+<span id="L1226">              rt::live_control_payload_digest(payload));</span>
+<span id="L1227">    EXPECT_EQ(read.lost_records, 0u);</span>
+<span id="L1228">    EXPECT_EQ(read.metadata.records_dropped, 0u);</span>
+<span id="L1229">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1230">}</span>
+<span id="L1231"></span>
+<span id="L1232">TEST(LiveControlMailbox, CallbackFailureRestoresPriorGenerationAndRollsBack) {</span>
+<span id="L1233">    rt::Runtime runtime;</span>
+<span id="L1234">    ASSERT_EQ(</span>
+<span id="L1235">        runtime.register_callback({&quot;fail&quot;, &amp;failing_callback, nullptr}),</span>
+<span id="L1236">        rt::Status::ok);</span>
+<span id="L1237">    configure_live_control(runtime, 1, 8);</span>
+<span id="L1238">    ASSERT_EQ(</span>
+<span id="L1239">        runtime.set_live_control_closure_policy(closure_policy()),</span>
+<span id="L1240">        rt::Status::ok);</span>
+<span id="L1241">    const auto handle = finalized_handle(runtime);</span>
+<span id="L1242">    const std::array payload{std::byte{0x51}};</span>
+<span id="L1243">    const auto update = host_update(handle, 1, payload, 7);</span>
+<span id="L1244">    rt::LiveControlAdmissionResult admission;</span>
+<span id="L1245">    ASSERT_EQ(</span>
+<span id="L1246">        runtime.stage_live_control_update(</span>
+<span id="L1247">            handle, update, payload, admission),</span>
+<span id="L1248">        rt::Status::ok);</span>
+<span id="L1249">    ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1250">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1251">    EXPECT_EQ(</span>
+<span id="L1252">        runtime.step({7, std::chrono::nanoseconds{1&#x27;000}}),</span>
+<span id="L1253">        rt::Status::callback_failed);</span>
+<span id="L1254"></span>
+<span id="L1255">    rt::LiveControlCommitInfo commit;</span>
+<span id="L1256">    ASSERT_TRUE(runtime.live_control_commit_info(commit));</span>
+<span id="L1257">    EXPECT_EQ(commit.generation_identity, 0u);</span>
+<span id="L1258">    EXPECT_EQ(commit.survivor_count, 0u);</span>
+<span id="L1259">    EXPECT_EQ(commit.committed, 0u);</span>
+<span id="L1260">    EXPECT_EQ(commit.staged_occupancy, 0u);</span>
+<span id="L1261">    rt::LiveControlRecordStatusInfo status;</span>
+<span id="L1262">    ASSERT_TRUE(runtime.live_control_record_status(kMailbox, 1, status));</span>
+<span id="L1263">    EXPECT_EQ(status.status, rt::LiveControlRecordStatus::rolled_back);</span>
+<span id="L1264"></span>
+<span id="L1265">    std::array&lt;rt::LiveControlActionRecord, 8&gt; actions{};</span>
+<span id="L1266">    rt::LiveControlActionCursor cursor;</span>
+<span id="L1267">    rt::LiveControlActionReadResult read;</span>
+<span id="L1268">    ASSERT_EQ(</span>
+<span id="L1269">        runtime.read_live_control_actions(cursor, actions, read),</span>
+<span id="L1270">        rt::Status::ok);</span>
+<span id="L1271">    ASSERT_EQ(read.records_read, 3u);</span>
+<span id="L1272">    EXPECT_EQ(actions[2].action, rt::LiveControlActionId::rolled_back);</span>
+<span id="L1273">    EXPECT_EQ(actions[2].result, rt::LiveControlActionResult::rolled_back);</span>
+<span id="L1274">    EXPECT_EQ(</span>
+<span id="L1275">        actions[2].terminal_status,</span>
+<span id="L1276">        static_cast&lt;std::int32_t&gt;(rt::Status::callback_failed));</span>
+<span id="L1277">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1278">}</span>
+<span id="L1279"></span>
+<span id="L1280">TEST(LiveControlMailbox, CheckpointRoundTripRetiresHandlesWithoutPartialRestore) {</span>
+<span id="L1281">    rt::Runtime runtime;</span>
+<span id="L1282">    configure_live_control(runtime, 2, 8);</span>
+<span id="L1283">    ASSERT_EQ(</span>
+<span id="L1284">        runtime.set_live_control_closure_policy(closure_policy()),</span>
+<span id="L1285">        rt::Status::ok);</span>
+<span id="L1286">    const auto old_handle = finalized_handle(runtime);</span>
+<span id="L1287">    const std::array first_payload{std::byte{0x61}, std::byte{0x62}};</span>
+<span id="L1288">    const auto first = host_update(old_handle, 1, first_payload, 7);</span>
+<span id="L1289">    rt::LiveControlAdmissionResult admission;</span>
+<span id="L1290">    ASSERT_EQ(</span>
+<span id="L1291">        runtime.stage_live_control_update(</span>
+<span id="L1292">            old_handle, first, first_payload, admission),</span>
+<span id="L1293">        rt::Status::ok);</span>
+<span id="L1294">    ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1295">    const auto checkpoint = checkpoint_artifact(runtime);</span>
+<span id="L1296"></span>
+<span id="L1297">    const std::array second_payload{std::byte{0x71}};</span>
+<span id="L1298">    const auto second = host_update(old_handle, 2, second_payload, 8);</span>
+<span id="L1299">    ASSERT_EQ(</span>
+<span id="L1300">        runtime.stage_live_control_update(</span>
+<span id="L1301">            old_handle, second, second_payload, admission),</span>
+<span id="L1302">        rt::Status::ok);</span>
+<span id="L1303">    ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1304">    auto corrupt = checkpoint;</span>
+<span id="L1305">    corrupt.back() ^= std::byte{1};</span>
+<span id="L1306">    EXPECT_EQ(</span>
+<span id="L1307">        runtime.restore_checkpoint(corrupt),</span>
+<span id="L1308">        rt::Status::invalid_artifact);</span>
+<span id="L1309">    rt::LiveControlUpdateRecord retained;</span>
+<span id="L1310">    EXPECT_TRUE(runtime.live_control_record_at(kMailbox, 2, retained));</span>
+<span id="L1311"></span>
+<span id="L1312">    ASSERT_EQ(runtime.restore_checkpoint(checkpoint), rt::Status::ok);</span>
+<span id="L1313">    EXPECT_FALSE(runtime.live_control_record_at(kMailbox, 2, retained));</span>
+<span id="L1314">    ASSERT_TRUE(runtime.live_control_record_at(kMailbox, 1, retained));</span>
+<span id="L1315">    EXPECT_NE(retained.configuration_generation,</span>
+<span id="L1316">              old_handle.configuration_generation);</span>
+<span id="L1317">    std::array&lt;std::byte, 2&gt; copied{};</span>
+<span id="L1318">    ASSERT_EQ(</span>
+<span id="L1319">        runtime.copy_live_control_payload(kMailbox, 1, copied),</span>
+<span id="L1320">        rt::Status::ok);</span>
+<span id="L1321">    EXPECT_EQ(copied, first_payload);</span>
+<span id="L1322"></span>
+<span id="L1323">    auto stale_update = host_update(old_handle, 2, second_payload, 8);</span>
+<span id="L1324">    ASSERT_EQ(</span>
+<span id="L1325">        runtime.stage_live_control_update(</span>
+<span id="L1326">            old_handle, stale_update, second_payload, admission),</span>
+<span id="L1327">        rt::Status::ok);</span>
+<span id="L1328">    EXPECT_EQ(admission, rt::LiveControlAdmissionResult::stale);</span>
+<span id="L1329">    rt::LiveControlProducerHandle current_handle;</span>
+<span id="L1330">    ASSERT_EQ(</span>
+<span id="L1331">        runtime.live_control_producer_handle(</span>
+<span id="L1332">            kMailbox, kProducer, current_handle),</span>
+<span id="L1333">        rt::Status::ok);</span>
+<span id="L1334">    const auto resumed = host_update(current_handle, 2, second_payload, 8);</span>
+<span id="L1335">    ASSERT_EQ(</span>
+<span id="L1336">        runtime.stage_live_control_update(</span>
+<span id="L1337">            current_handle, resumed, second_payload, admission),</span>
+<span id="L1338">        rt::Status::ok);</span>
+<span id="L1339">    EXPECT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1340">}</span>
+<span id="L1341"></span>
+<span id="L1342">TEST(LiveControlMailbox, OrdinaryReplayInjectsExactRetainedGeneration) {</span>
+<span id="L1343">    rt::Runtime runtime;</span>
+<span id="L1344">    GenerationProbe probe;</span>
+<span id="L1345">    ASSERT_EQ(</span>
+<span id="L1346">        runtime.register_callback(</span>
+<span id="L1347">            {&quot;capture&quot;, &amp;capture_generation_callback, &amp;probe}),</span>
+<span id="L1348">        rt::Status::ok);</span>
+<span id="L1349">    configure_live_control(runtime, 1, 8);</span>
+<span id="L1350">    ASSERT_EQ(</span>
+<span id="L1351">        runtime.set_live_control_closure_policy(closure_policy(true)),</span>
+<span id="L1352">        rt::Status::ok);</span>
+<span id="L1353">    const auto handle = finalized_handle(runtime);</span>
+<span id="L1354">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1355">    const auto checkpoint = checkpoint_artifact(runtime);</span>
+<span id="L1356"></span>
+<span id="L1357">    // The producer admission deliberately occurs after the checkpoint.</span>
+<span id="L1358">    // Replay must reconstruct it from the validated action/journal range and</span>
+<span id="L1359">    // must not depend on the external producer running a second time.</span>
+<span id="L1360">    const std::array payload{std::byte{0x7a}};</span>
+<span id="L1361">    const auto update = host_update(handle, 1, payload, 7);</span>
+<span id="L1362">    rt::LiveControlAdmissionResult admission;</span>
+<span id="L1363">    ASSERT_EQ(</span>
+<span id="L1364">        runtime.stage_live_control_update(</span>
+<span id="L1365">            handle, update, payload, admission),</span>
+<span id="L1366">        rt::Status::ok);</span>
+<span id="L1367">    ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1368"></span>
+<span id="L1369">    const std::array&lt;rt::ReplayInputRecord, 1&gt; inputs{</span>
+<span id="L1370">        rt::ReplayInputRecord{</span>
+<span id="L1371">            {7, std::chrono::nanoseconds{1&#x27;000}}, 1, {}}};</span>
+<span id="L1372">    std::vector&lt;std::byte&gt; input_log(4&#x27;096);</span>
+<span id="L1373">    rt::ArtifactWriteResult input_write;</span>
+<span id="L1374">    ASSERT_EQ(</span>
+<span id="L1375">        runtime.write_input_log(inputs, input_log, input_write),</span>
+<span id="L1376">        rt::Status::ok);</span>
+<span id="L1377">    input_log.resize(input_write.bytes_written);</span>
+<span id="L1378"></span>
+<span id="L1379">    ASSERT_EQ(</span>
+<span id="L1380">        runtime.step({7, std::chrono::nanoseconds{1&#x27;000}}),</span>
+<span id="L1381">        rt::Status::ok);</span>
+<span id="L1382">    const auto expected_generation = probe.generation_identity;</span>
+<span id="L1383">    ASSERT_NE(expected_generation, 0u);</span>
+<span id="L1384"></span>
+<span id="L1385">    std::array&lt;std::byte, 1&gt; short_output{std::byte{0x5a}};</span>
+<span id="L1386">    rt::ArtifactWriteResult short_write;</span>
+<span id="L1387">    EXPECT_EQ(</span>
+<span id="L1388">        runtime.write_live_control_replay_artifact(</span>
+<span id="L1389">            checkpoint,</span>
+<span id="L1390">            input_log,</span>
+<span id="L1391">            rt::LiveControlNestedArtifactKind::input_log,</span>
+<span id="L1392">            short_output,</span>
+<span id="L1393">            short_write),</span>
+<span id="L1394">        rt::Status::capacity_exceeded);</span>
+<span id="L1395">    EXPECT_EQ(short_output.front(), std::byte{0x5a});</span>
+<span id="L1396">    ASSERT_GT(short_write.required_bytes, short_output.size());</span>
+<span id="L1397">    std::vector&lt;std::byte&gt; artifact(short_write.required_bytes);</span>
+<span id="L1398">    rt::ArtifactWriteResult write;</span>
+<span id="L1399">    ASSERT_EQ(</span>
+<span id="L1400">        runtime.write_live_control_replay_artifact(</span>
+<span id="L1401">            checkpoint,</span>
+<span id="L1402">            input_log,</span>
+<span id="L1403">            rt::LiveControlNestedArtifactKind::input_log,</span>
+<span id="L1404">            artifact,</span>
+<span id="L1405">            write),</span>
+<span id="L1406">        rt::Status::ok);</span>
+<span id="L1407">    artifact.resize(write.bytes_written);</span>
+<span id="L1408"></span>
+<span id="L1409">    rt::LiveControlReplayMetadata inspected;</span>
+<span id="L1410">    ASSERT_EQ(</span>
+<span id="L1411">        rt::inspect_live_control_replay_artifact(artifact, inspected),</span>
+<span id="L1412">        rt::Status::ok);</span>
+<span id="L1413">    EXPECT_EQ(inspected.nested_kind,</span>
+<span id="L1414">              rt::LiveControlNestedArtifactKind::input_log);</span>
+<span id="L1415">    EXPECT_EQ(inspected.retained_generation_count, 1u);</span>
+<span id="L1416">    EXPECT_EQ(inspected.retained_record_count, 1u);</span>
+<span id="L1417">    const auto artifact_checksum = inspected.artifact_checksum;</span>
+<span id="L1418">    auto corrupt = artifact;</span>
+<span id="L1419">    corrupt[corrupt.size() / 2] ^= std::byte{1};</span>
+<span id="L1420">    EXPECT_EQ(</span>
+<span id="L1421">        rt::inspect_live_control_replay_artifact(corrupt, inspected),</span>
+<span id="L1422">        rt::Status::invalid_artifact);</span>
+<span id="L1423"></span>
+<span id="L1424">    rt::LiveControlReplayResult replay;</span>
+<span id="L1425">    ASSERT_EQ(</span>
+<span id="L1426">        runtime.replay_live_control(</span>
+<span id="L1427">            artifact, &amp;noop_replay_input, nullptr, &amp;replay),</span>
+<span id="L1428">        rt::Status::ok);</span>
+<span id="L1429">    EXPECT_EQ(replay.frames_replayed, 1u);</span>
+<span id="L1430">    EXPECT_EQ(replay.generations_compared, 1u);</span>
+<span id="L1431">    EXPECT_EQ(replay.mismatch_status, rt::Status::ok);</span>
+<span id="L1432">    EXPECT_EQ(probe.generation_identity, expected_generation);</span>
+<span id="L1433">    rt::LiveControlRecordStatusInfo status;</span>
+<span id="L1434">    ASSERT_TRUE(runtime.live_control_record_status(kMailbox, 1, status));</span>
+<span id="L1435">    EXPECT_EQ(status.status, rt::LiveControlRecordStatus::committed);</span>
+<span id="L1436">    std::array&lt;rt::LiveControlActionRecord, 8&gt; replay_actions{};</span>
+<span id="L1437">    rt::LiveControlActionCursor replay_cursor;</span>
+<span id="L1438">    rt::LiveControlActionReadResult replay_read;</span>
+<span id="L1439">    ASSERT_EQ(</span>
+<span id="L1440">        runtime.read_live_control_actions(</span>
+<span id="L1441">            replay_cursor, replay_actions, replay_read),</span>
+<span id="L1442">        rt::Status::ok);</span>
+<span id="L1443">    ASSERT_EQ(replay_read.records_read, 1u);</span>
+<span id="L1444">    EXPECT_EQ(replay_read.lost_records, 4u);</span>
+<span id="L1445">    EXPECT_EQ(</span>
+<span id="L1446">        replay_actions[0].action,</span>
+<span id="L1447">        rt::LiveControlActionId::replay_verified);</span>
+<span id="L1448">    EXPECT_EQ(</span>
+<span id="L1449">        replay_actions[0].replay_correlation,</span>
+<span id="L1450">        artifact_checksum);</span>
+<span id="L1451">    rt::LiveControlProducerHandle resumed_handle;</span>
+<span id="L1452">    ASSERT_EQ(</span>
+<span id="L1453">        runtime.live_control_producer_handle(</span>
+<span id="L1454">            kMailbox, kProducer, resumed_handle),</span>
+<span id="L1455">        rt::Status::ok);</span>
+<span id="L1456">    const auto resumed = host_update(resumed_handle, 2, payload, 8);</span>
+<span id="L1457">    ASSERT_EQ(</span>
+<span id="L1458">        runtime.stage_live_control_update(</span>
+<span id="L1459">            resumed_handle, resumed, payload, admission),</span>
+<span id="L1460">        rt::Status::ok);</span>
+<span id="L1461">    EXPECT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1462">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1463">}</span>
+<span id="L1464"></span>
+<span id="L1465">TEST(LiveControlMailbox, ReplayMatchesRecordedRollbackBeforeReturningFailure) {</span>
+<span id="L1466">    for (bool lossless : {false, true}) {</span>
+<span id="L1467">        rt::Runtime runtime;</span>
+<span id="L1468">        GenerationProbe probe;</span>
+<span id="L1469">        ASSERT_EQ(runtime.register_callback(</span>
+<span id="L1470">                      {&quot;capture-fail&quot;, &amp;capture_generation_then_fail_callback, &amp;probe}),</span>
+<span id="L1471">                  rt::Status::ok);</span>
+<span id="L1472">        configure_live_control(runtime, 1, 8);</span>
+<span id="L1473">        ASSERT_EQ(runtime.set_live_control_closure_policy(closure_policy(true)),</span>
+<span id="L1474">                  rt::Status::ok);</span>
+<span id="L1475">        if (lossless) {</span>
+<span id="L1476">            rt::LiveControlReplayRetentionPolicy retention;</span>
+<span id="L1477">            retention.policy_identity = 77;</span>
+<span id="L1478">            retention.admission_capacity = 64;</span>
+<span id="L1479">            retention.payload_capacity_bytes = 1024;</span>
+<span id="L1480">            ASSERT_EQ(runtime.set_live_control_replay_retention_policy(retention),</span>
+<span id="L1481">                      rt::Status::ok);</span>
+<span id="L1482">        }</span>
+<span id="L1483">        const auto handle = finalized_handle(runtime);</span>
+<span id="L1484">        ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1485">        const auto checkpoint = checkpoint_artifact(runtime);</span>
+<span id="L1486"></span>
+<span id="L1487">        const std::array payload{std::byte{0x3a}};</span>
+<span id="L1488">        const auto update = host_update(handle, 1, payload, 11);</span>
+<span id="L1489">        rt::LiveControlAdmissionResult admission;</span>
+<span id="L1490">        ASSERT_EQ(runtime.stage_live_control_update(handle, update, payload, admission),</span>
+<span id="L1491">                  rt::Status::ok);</span>
+<span id="L1492">        ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1493">        const std::array&lt;rt::ReplayInputRecord, 1&gt; inputs{</span>
+<span id="L1494">            rt::ReplayInputRecord{{11, std::chrono::nanoseconds{1&#x27;000}}, 1, {}}};</span>
+<span id="L1495">        std::vector&lt;std::byte&gt; input_log(4&#x27;096);</span>
+<span id="L1496">        rt::ArtifactWriteResult input_write;</span>
+<span id="L1497">        ASSERT_EQ(runtime.write_input_log(inputs, input_log, input_write),</span>
+<span id="L1498">                  rt::Status::ok);</span>
+<span id="L1499">        input_log.resize(input_write.bytes_written);</span>
+<span id="L1500"></span>
+<span id="L1501">        ASSERT_EQ(runtime.step({11, std::chrono::nanoseconds{1&#x27;000}}),</span>
+<span id="L1502">                  rt::Status::callback_failed);</span>
+<span id="L1503">        rt::LiveControlRecordStatusInfo record_status;</span>
+<span id="L1504">        ASSERT_TRUE(runtime.live_control_record_status(kMailbox, 1, record_status));</span>
+<span id="L1505">        EXPECT_EQ(record_status.status, rt::LiveControlRecordStatus::rolled_back);</span>
+<span id="L1506"></span>
+<span id="L1507">        std::vector&lt;std::byte&gt; artifact(64 * 1&#x27;024);</span>
+<span id="L1508">        rt::ArtifactWriteResult write;</span>
+<span id="L1509">        ASSERT_EQ(runtime.write_live_control_replay_artifact(</span>
+<span id="L1510">                      checkpoint, input_log,</span>
+<span id="L1511">                      rt::LiveControlNestedArtifactKind::input_log, artifact, write),</span>
+<span id="L1512">                  rt::Status::ok);</span>
+<span id="L1513">        artifact.resize(write.bytes_written);</span>
+<span id="L1514">        rt::LiveControlReplayResult replay;</span>
+<span id="L1515">        EXPECT_EQ(</span>
+<span id="L1516">            runtime.replay_live_control(artifact, &amp;noop_replay_input, nullptr, &amp;replay),</span>
+<span id="L1517">            rt::Status::callback_failed);</span>
+<span id="L1518">        EXPECT_EQ(replay.mismatch_status, rt::Status::callback_failed);</span>
+<span id="L1519">        EXPECT_EQ(replay.mismatch_action_sequence, 0u);</span>
+<span id="L1520">        EXPECT_EQ(replay.mismatch_target.kind, rt::LiveControlTargetKind::host_frame);</span>
+<span id="L1521">        EXPECT_EQ(replay.mismatch_target.frame_index, 11u);</span>
+<span id="L1522">        EXPECT_NE(replay.mismatch_generation_identity, 0u);</span>
+<span id="L1523">        EXPECT_EQ(replay.generations_compared, 1u);</span>
+<span id="L1524">        EXPECT_EQ(replay.frames_replayed, 0u);</span>
+<span id="L1525">        EXPECT_EQ(probe.calls, 2u);</span>
+<span id="L1526">        ASSERT_TRUE(runtime.live_control_record_status(kMailbox, 1, record_status));</span>
+<span id="L1527">        EXPECT_EQ(record_status.status, rt::LiveControlRecordStatus::rolled_back);</span>
+<span id="L1528">        EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1529">    }</span>
+<span id="L1530">}</span>
+<span id="L1531"></span>
+<span id="L1532">namespace {</span>
+<span id="L1533"></span>
+<span id="L1534">rt::LiveControlReplayRetentionPolicy retention_policy(std::size_t admissions = 64,</span>
+<span id="L1535">                                                      std::size_t bytes = 1024) {</span>
+<span id="L1536">    rt::LiveControlReplayRetentionPolicy retention;</span>
+<span id="L1537">    retention.policy_identity = 0x4d32320302;</span>
+<span id="L1538">    retention.admission_capacity = admissions;</span>
+<span id="L1539">    retention.payload_capacity_bytes = bytes;</span>
+<span id="L1540">    return retention;</span>
+<span id="L1541">}</span>
+<span id="L1542"></span>
+<span id="L1543">struct LosslessFixture {</span>
+<span id="L1544">    GenerationProbe probe;</span>
+<span id="L1545">    rt::Runtime runtime;</span>
+<span id="L1546">    rt::LiveControlProducerHandle handle;</span>
+<span id="L1547">    ~LosslessFixture() {</span>
+<span id="L1548">        if (runtime.state() == rt::RuntimeState::running &amp;&amp;</span>
+<span id="L1549">            runtime.stop() != rt::Status::ok) {</span>
+<span id="L1550">            std::terminate();</span>
+<span id="L1551">        }</span>
+<span id="L1552">    }</span>
+<span id="L1553">    void configure(std::uint32_t capacity = 4, std::size_t admissions = 64,</span>
+<span id="L1554">                   std::size_t bytes = 1024, std::uint64_t first = 1,</span>
+<span id="L1555">                   bool lossless = true) {</span>
+<span id="L1556">        ASSERT_EQ(runtime.register_callback(</span>
+<span id="L1557">                      {&quot;lossless&quot;, capture_generation_callback, &amp;probe}),</span>
+<span id="L1558">                  rt::Status::ok);</span>
+<span id="L1559">        configure_live_control(runtime, capacity, 8, first);</span>
+<span id="L1560">        ASSERT_EQ(runtime.set_live_control_closure_policy(closure_policy(true)),</span>
+<span id="L1561">                  rt::Status::ok);</span>
+<span id="L1562">        if (lossless) {</span>
+<span id="L1563">            ASSERT_EQ(runtime.set_live_control_replay_retention_policy(</span>
+<span id="L1564">                          retention_policy(admissions, bytes)),</span>
+<span id="L1565">                      rt::Status::ok);</span>
+<span id="L1566">        }</span>
+<span id="L1567">        handle = finalized_handle(runtime);</span>
+<span id="L1568">        ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1569">    }</span>
+<span id="L1570">    rt::LiveControlAdmissionResult stage(std::uint64_t sequence, std::uint64_t target,</span>
+<span id="L1571">                                         std::span&lt;const std::byte&gt; payload) {</span>
+<span id="L1572">        rt::LiveControlAdmissionResult result{};</span>
+<span id="L1573">        EXPECT_EQ(runtime.stage_live_control_update(</span>
+<span id="L1574">                      handle, host_update(handle, sequence, payload, target), payload,</span>
+<span id="L1575">                      result),</span>
+<span id="L1576">                  rt::Status::ok);</span>
+<span id="L1577">        return result;</span>
+<span id="L1578">    }</span>
+<span id="L1579">    std::vector&lt;std::byte&gt; artifact(std::span&lt;const std::byte&gt; checkpoint,</span>
+<span id="L1580">                                    std::span&lt;const rt::ReplayInputRecord&gt; inputs) {</span>
+<span id="L1581">        std::vector&lt;std::byte&gt; log(4096), output(65536);</span>
+<span id="L1582">        rt::ArtifactWriteResult result;</span>
+<span id="L1583">        EXPECT_EQ(runtime.write_input_log(inputs, log, result), rt::Status::ok);</span>
+<span id="L1584">        log.resize(result.bytes_written);</span>
+<span id="L1585">        EXPECT_EQ(runtime.write_live_control_replay_artifact(</span>
+<span id="L1586">                      checkpoint, log, rt::LiveControlNestedArtifactKind::input_log,</span>
+<span id="L1587">                      output, result),</span>
+<span id="L1588">                  rt::Status::ok);</span>
+<span id="L1589">        output.resize(result.bytes_written);</span>
+<span id="L1590">        return output;</span>
+<span id="L1591">    }</span>
+<span id="L1592">};</span>
+<span id="L1593"></span>
+<span id="L1594">void expect_mailbox_equal(rt::LiveControlMailboxInfo before,</span>
+<span id="L1595">                          rt::LiveControlMailboxInfo after) {</span>
+<span id="L1596">    before.runtime_id = after.runtime_id = 0;</span>
+<span id="L1597">    before.configuration_generation = after.configuration_generation = 0;</span>
+<span id="L1598">    EXPECT_EQ(before.next_mailbox_sequence, after.next_mailbox_sequence);</span>
+<span id="L1599">    EXPECT_EQ(before.accepted, after.accepted);</span>
+<span id="L1600">    EXPECT_EQ(before.invalid, after.invalid);</span>
+<span id="L1601">    EXPECT_EQ(before.full, after.full);</span>
+<span id="L1602">    EXPECT_EQ(before.busy, after.busy);</span>
+<span id="L1603">    EXPECT_EQ(before.stale, after.stale);</span>
+<span id="L1604">    EXPECT_EQ(before.stopped, after.stopped);</span>
+<span id="L1605">    EXPECT_EQ(before.exhausted, after.exhausted);</span>
+<span id="L1606">    EXPECT_EQ(before.occupancy, after.occupancy);</span>
+<span id="L1607">    EXPECT_EQ(before.admission_open, after.admission_open);</span>
+<span id="L1608">}</span>
+<span id="L1609"></span>
+<span id="L1610">std::uint64_t journal_u64(std::span&lt;const std::byte&gt; bytes, std::size_t offset) {</span>
+<span id="L1611">    std::uint64_t value = 0;</span>
+<span id="L1612">    for (std::size_t i = 0; i &lt; 8; ++i)</span>
+<span id="L1613">        value |= std::uint64_t(std::to_integer&lt;unsigned&gt;(bytes[offset + i])) &lt;&lt; (8 * i);</span>
+<span id="L1614">    return value;</span>
+<span id="L1615">}</span>
+<span id="L1616">void journal_put(std::span&lt;std::byte&gt; bytes, std::size_t offset, std::uint64_t value,</span>
+<span id="L1617">                 std::size_t count = 8) {</span>
+<span id="L1618">    for (std::size_t i = 0; i &lt; count; ++i)</span>
+<span id="L1619">        bytes[offset + i] = static_cast&lt;std::byte&gt;(value &gt;&gt; (8 * i));</span>
+<span id="L1620">}</span>
+<span id="L1621">std::uint64_t journal_hash(std::span&lt;const std::byte&gt; bytes,</span>
+<span id="L1622">                           std::uint64_t hash = 14695981039346656037ull) {</span>
+<span id="L1623">    for (auto b : bytes) {</span>
+<span id="L1624">        hash ^= std::to_integer&lt;unsigned&gt;(b);</span>
+<span id="L1625">        hash *= 1099511628211ull;</span>
+<span id="L1626">    }</span>
+<span id="L1627">    return hash;</span>
+<span id="L1628">}</span>
+<span id="L1629">void repair_journal_checksums(std::vector&lt;std::byte&gt;&amp; artifact) {</span>
+<span id="L1630">    auto bytes = std::span&lt;std::byte&gt;(artifact);</span>
+<span id="L1631">    const auto first = static_cast&lt;std::size_t&gt;(journal_u64(bytes, 392));</span>
+<span id="L1632">    const auto payloads = static_cast&lt;std::size_t&gt;(journal_u64(bytes, 408));</span>
+<span id="L1633">    for (auto offset = first; offset &lt; payloads; offset += 184) {</span>
+<span id="L1634">        const auto payload = static_cast&lt;std::size_t&gt;(journal_u64(bytes, offset + 160));</span>
+<span id="L1635">        const auto count =</span>
+<span id="L1636">            static_cast&lt;std::size_t&gt;(journal_u64(bytes, offset + 168) &amp; 0xffffffffu);</span>
+<span id="L1637">        const auto hash = journal_hash(bytes.subspan(payloads + payload, count),</span>
+<span id="L1638">                                       journal_hash(bytes.subspan(offset, 176)));</span>
+<span id="L1639">        journal_put(bytes, offset + 176, hash);</span>
+<span id="L1640">    }</span>
+<span id="L1641">    journal_put(bytes, 424, journal_hash(bytes.subspan(first)));</span>
+<span id="L1642">    journal_put(bytes, 24, 0);</span>
+<span id="L1643">    journal_put(bytes, 24, journal_hash(bytes));</span>
+<span id="L1644">}</span>
+<span id="L1645"></span>
+<span id="L1646">} // namespace</span>
+<span id="L1647"></span>
+<span id="L1648">TEST(LiveControlMailbox, LosslessFutureAndPreCheckpointRecordsPreserveAllOutcomes) {</span>
+<span id="L1649">    LosslessFixture f;</span>
+<span id="L1650">    ASSERT_NO_FATAL_FAILURE(f.configure());</span>
+<span id="L1651">    const std::array a{std::byte{0x11}}, b{std::byte{0x22}}, c{std::byte{0x33}},</span>
+<span id="L1652">        d{std::byte{0x44}}, e{std::byte{0x55}};</span>
+<span id="L1653">    ASSERT_EQ(f.stage(1, 3, a), rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1654">    const auto checkpoint = checkpoint_artifact(f.runtime);</span>
+<span id="L1655">    ASSERT_EQ(f.stage(2, 1, b), rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1656">    auto invalid = host_update(f.handle, 3, c, 3);</span>
+<span id="L1657">    invalid.payload_digest ^= 1;</span>
+<span id="L1658">    rt::LiveControlAdmissionResult result{};</span>
+<span id="L1659">    ASSERT_EQ(f.runtime.stage_live_control_update(f.handle, invalid, c, result),</span>
+<span id="L1660">              rt::Status::ok);</span>
+<span id="L1661">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::invalid);</span>
+<span id="L1662">    auto foreign = f.handle;</span>
+<span id="L1663">    ++foreign.configuration_generation;</span>
+<span id="L1664">    ASSERT_EQ(f.runtime.stage_live_control_update(</span>
+<span id="L1665">                  foreign, host_update(foreign, 3, c, 3), c, result),</span>
+<span id="L1666">              rt::Status::ok);</span>
+<span id="L1667">    EXPECT_EQ(result, rt::LiveControlAdmissionResult::stale);</span>
+<span id="L1668">    ASSERT_TRUE(rt::detail::RuntimeLiveControlTestAccess::claim(f.runtime, kMailbox));</span>
+<span id="L1669">    EXPECT_EQ(f.stage(3, 3, c), rt::LiveControlAdmissionResult::busy);</span>
+<span id="L1670">    rt::detail::RuntimeLiveControlTestAccess::release(f.runtime, kMailbox);</span>
+<span id="L1671">    EXPECT_EQ(f.stage(9, 3, c), rt::LiveControlAdmissionResult::stale);</span>
+<span id="L1672">    ASSERT_EQ(f.stage(3, 3, c), rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1673">    ASSERT_EQ(f.stage(4, 99, d), rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1674">    EXPECT_EQ(f.stage(5, 2, e), rt::LiveControlAdmissionResult::full);</span>
+<span id="L1675">    const std::array&lt;rt::ReplayInputRecord, 2&gt; inputs{</span>
+<span id="L1676">        {{{1, std::chrono::nanoseconds{1000}}, 1, {}},</span>
+<span id="L1677">         {{3, std::chrono::nanoseconds{1000}}, 1, {}}}};</span>
+<span id="L1678">    ASSERT_EQ(f.runtime.step(inputs[0].frame), rt::Status::ok);</span>
+<span id="L1679">    EXPECT_EQ(f.probe.first_payload_bytes[0], b[0]);</span>
+<span id="L1680">    EXPECT_EQ(f.stage(5, 0, e), rt::LiveControlAdmissionResult::missed);</span>
+<span id="L1681">    ASSERT_EQ(f.runtime.step(inputs[1].frame), rt::Status::ok);</span>
+<span id="L1682">    EXPECT_EQ(f.probe.first_payload_bytes[0], c[0]);</span>
+<span id="L1683">    const auto generation = f.probe.generation_identity;</span>
+<span id="L1684">    rt::LiveControlMailboxInfo before;</span>
+<span id="L1685">    ASSERT_TRUE(f.runtime.live_control_mailbox_info(kMailbox, before));</span>
+<span id="L1686">    EXPECT_EQ(before.accepted, 4u);</span>
+<span id="L1687">    EXPECT_EQ(before.invalid, 1u);</span>
+<span id="L1688">    EXPECT_EQ(before.full, 1u);</span>
+<span id="L1689">    EXPECT_EQ(before.busy, 1u);</span>
+<span id="L1690">    EXPECT_EQ(before.stale, 1u); // A foreign handle changed no owner&#x27;s counter.</span>
+<span id="L1691">    EXPECT_EQ(before.next_mailbox_sequence, 6u);</span>
+<span id="L1692">    EXPECT_EQ(before.occupancy, 1u);</span>
+<span id="L1693">    const auto artifact = f.artifact(checkpoint, inputs);</span>
+<span id="L1694">    for (unsigned repeat = 0; repeat &lt; 2; ++repeat) {</span>
+<span id="L1695">        f.probe.calls = 0;</span>
+<span id="L1696">        ASSERT_EQ(f.runtime.replay_live_control(artifact, noop_replay_input, nullptr),</span>
+<span id="L1697">                  rt::Status::ok)</span>
+<span id="L1698">            &lt;&lt; f.runtime.last_error();</span>
+<span id="L1699">        EXPECT_EQ(f.probe.calls, 2u);</span>
+<span id="L1700">        EXPECT_EQ(f.probe.generation_identity, generation);</span>
+<span id="L1701">        rt::LiveControlMailboxInfo after;</span>
+<span id="L1702">        ASSERT_TRUE(f.runtime.live_control_mailbox_info(kMailbox, after));</span>
+<span id="L1703">        expect_mailbox_equal(before, after);</span>
+<span id="L1704">        rt::LiveControlCommitInfo commit;</span>
+<span id="L1705">        ASSERT_TRUE(f.runtime.live_control_commit_info(commit));</span>
+<span id="L1706">        EXPECT_EQ(commit.committed, 2u);</span>
+<span id="L1707">        EXPECT_EQ(commit.replaced, 1u);</span>
+<span id="L1708">        EXPECT_EQ(commit.missed, 1u);</span>
+<span id="L1709">        EXPECT_EQ(commit.staged_occupancy, 1u);</span>
+<span id="L1710">        const std::array&lt;std::uint64_t, 4&gt; sequences{1, 3, 4, 5};</span>
+<span id="L1711">        const std::array statuses{rt::LiveControlRecordStatus::replaced,</span>
+<span id="L1712">                                  rt::LiveControlRecordStatus::committed,</span>
+<span id="L1713">                                  rt::LiveControlRecordStatus::staged,</span>
+<span id="L1714">                                  rt::LiveControlRecordStatus::missed};</span>
+<span id="L1715">        const std::array payloads{a[0], c[0], d[0], e[0]};</span>
+<span id="L1716">        for (std::size_t index = 0; index &lt; sequences.size(); ++index) {</span>
+<span id="L1717">            rt::LiveControlRecordStatusInfo status;</span>
+<span id="L1718">            ASSERT_TRUE(f.runtime.live_control_record_status(kMailbox, sequences[index],</span>
+<span id="L1719">                                                             status));</span>
+<span id="L1720">            EXPECT_EQ(status.status, statuses[index]);</span>
+<span id="L1721">            std::array&lt;std::byte, 1&gt; payload{};</span>
+<span id="L1722">            ASSERT_EQ(f.runtime.copy_live_control_payload(kMailbox, sequences[index],</span>
+<span id="L1723">                                                          payload),</span>
+<span id="L1724">                      rt::Status::ok);</span>
+<span id="L1725">            EXPECT_EQ(payload[0], payloads[index]);</span>
+<span id="L1726">        }</span>
+<span id="L1727">    }</span>
+<span id="L1728">}</span>
+<span id="L1729"></span>
+<span id="L1730">TEST(LiveControlMailbox, LosslessSemanticJournalCorruptionRejectsBeforeRestore) {</span>
+<span id="L1731">    LosslessFixture f;</span>
+<span id="L1732">    ASSERT_NO_FATAL_FAILURE(f.configure(2));</span>
+<span id="L1733">    const auto checkpoint = checkpoint_artifact(f.runtime);</span>
+<span id="L1734">    const std::array a{std::byte{7}}, b{std::byte{8}};</span>
+<span id="L1735">    ASSERT_EQ(f.stage(1, 7, a), rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1736">    ASSERT_EQ(f.stage(2, 7, b), rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1737">    const std::array&lt;rt::ReplayInputRecord, 1&gt; inputs{</span>
+<span id="L1738">        {{{7, std::chrono::nanoseconds{1000}}, 1, {}}}};</span>
+<span id="L1739">    ASSERT_EQ(f.runtime.step(inputs[0].frame), rt::Status::ok);</span>
+<span id="L1740">    const auto artifact = f.artifact(checkpoint, inputs);</span>
+<span id="L1741">    ASSERT_GT(artifact.size(), 448u);</span>
+<span id="L1742">    rt::LiveControlMailboxInfo before;</span>
+<span id="L1743">    ASSERT_TRUE(f.runtime.live_control_mailbox_info(kMailbox, before));</span>
+<span id="L1744">    const auto calls = f.probe.calls;</span>
+<span id="L1745">    const auto generation = f.probe.generation_identity;</span>
+<span id="L1746">    for (unsigned mutation = 0; mutation &lt; 6; ++mutation) {</span>
+<span id="L1747">        auto bad = artifact;</span>
+<span id="L1748">        const auto first = static_cast&lt;std::size_t&gt;(journal_u64(bad, 392));</span>
+<span id="L1749">        const auto second = first + 184;</span>
+<span id="L1750">        switch (mutation) {</span>
+<span id="L1751">        case 0:</span>
+<span id="L1752">            journal_put(bad, second + 152, 0, 4);</span>
+<span id="L1753">            break; // Two live records in one slot.</span>
+<span id="L1754">        case 1:</span>
+<span id="L1755">            journal_put(bad, first + 136, kMailbox + 100);</span>
+<span id="L1756">            break;</span>
+<span id="L1757">        case 2:</span>
+<span id="L1758">            journal_put(bad, second + 128, journal_u64(bad, first + 128));</span>
+<span id="L1759">            break;</span>
+<span id="L1760">        case 3:</span>
+<span id="L1761">            bad[first + 157] = std::byte{0};</span>
+<span id="L1762">            break;</span>
+<span id="L1763">        case 4:</span>
+<span id="L1764">            journal_put(bad, 384, 123);</span>
+<span id="L1765">            break;</span>
+<span id="L1766">        case 5:</span>
+<span id="L1767">            bad[static_cast&lt;std::size_t&gt;(journal_u64(bad, 408))] ^= std::byte{1};</span>
+<span id="L1768">            break;</span>
+<span id="L1769">        }</span>
+<span id="L1770">        repair_journal_checksums(bad);</span>
+<span id="L1771">        EXPECT_NE(f.runtime.replay_live_control(bad, noop_replay_input, nullptr),</span>
+<span id="L1772">                  rt::Status::ok)</span>
+<span id="L1773">            &lt;&lt; mutation;</span>
+<span id="L1774">        rt::LiveControlMailboxInfo after;</span>
+<span id="L1775">        ASSERT_TRUE(f.runtime.live_control_mailbox_info(kMailbox, after));</span>
+<span id="L1776">        EXPECT_EQ(after.configuration_generation, before.configuration_generation);</span>
+<span id="L1777">        expect_mailbox_equal(before, after);</span>
+<span id="L1778">        EXPECT_EQ(f.probe.calls, calls);</span>
+<span id="L1779">        EXPECT_EQ(f.probe.generation_identity, generation);</span>
+<span id="L1780">    }</span>
+<span id="L1781">    ASSERT_EQ(f.runtime.replay_live_control(artifact, noop_replay_input, nullptr),</span>
+<span id="L1782">              rt::Status::ok);</span>
+<span id="L1783">}</span>
+<span id="L1784"></span>
+<span id="L1785">TEST(LiveControlMailbox, LosslessRetentionExhaustionCannotExportSuccess) {</span>
+<span id="L1786">    for (bool descriptors : {false, true}) {</span>
+<span id="L1787">        LosslessFixture f;</span>
+<span id="L1788">        ASSERT_NO_FATAL_FAILURE(</span>
+<span id="L1789">            f.configure(2, descriptors ? 1u : 64u, descriptors ? 64u : 1u));</span>
+<span id="L1790">        const auto checkpoint = checkpoint_artifact(f.runtime);</span>
+<span id="L1791">        const std::array payload{std::byte{1}};</span>
+<span id="L1792">        ASSERT_EQ(f.stage(1, 7, payload), rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1793">        ASSERT_EQ(f.stage(2, 7, payload), rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1794">        const std::array&lt;rt::ReplayInputRecord, 1&gt; inputs{</span>
+<span id="L1795">            {{{7, std::chrono::nanoseconds{1000}}, 1, {}}}};</span>
+<span id="L1796">        ASSERT_EQ(f.runtime.step(inputs[0].frame), rt::Status::ok);</span>
+<span id="L1797">        rt::LiveControlActionMetadata metadata;</span>
+<span id="L1798">        ASSERT_EQ(f.runtime.live_control_action_metadata(metadata), rt::Status::ok);</span>
+<span id="L1799">        EXPECT_FALSE(metadata.replay_eligible);</span>
+<span id="L1800">        std::vector&lt;std::byte&gt; log(4096), output(65536, std::byte{0x5a});</span>
+<span id="L1801">        rt::ArtifactWriteResult write;</span>
+<span id="L1802">        ASSERT_EQ(f.runtime.write_input_log(inputs, log, write), rt::Status::ok);</span>
+<span id="L1803">        log.resize(write.bytes_written);</span>
+<span id="L1804">        EXPECT_EQ(f.runtime.write_live_control_replay_artifact(</span>
+<span id="L1805">                      checkpoint, log, rt::LiveControlNestedArtifactKind::input_log,</span>
+<span id="L1806">                      output, write),</span>
+<span id="L1807">                  rt::Status::invalid_artifact);</span>
+<span id="L1808">        EXPECT_EQ(write.bytes_written, 0u);</span>
+<span id="L1809">        EXPECT_TRUE(std::all_of(output.begin(), output.end(),</span>
+<span id="L1810">                                [](std::byte x) { return x == std::byte{0x5a}; }));</span>
+<span id="L1811">    }</span>
+<span id="L1812">}</span>
+<span id="L1813"></span>
+<span id="L1814">TEST(LiveControlMailbox, LosslessStoppedAndExhaustedHistoriesReplayAcrossInstances) {</span>
+<span id="L1815">    for (bool exhausted : {false, true}) {</span>
+<span id="L1816">        const auto first =</span>
+<span id="L1817">            exhausted ? std::numeric_limits&lt;std::uint64_t&gt;::max() - 1 : 1;</span>
+<span id="L1818">        LosslessFixture source, destination;</span>
+<span id="L1819">        ASSERT_NO_FATAL_FAILURE(source.configure(2, 64, 1024, first));</span>
+<span id="L1820">        ASSERT_NO_FATAL_FAILURE(destination.configure(2, 64, 1024, first));</span>
+<span id="L1821">        const auto checkpoint = checkpoint_artifact(source.runtime);</span>
+<span id="L1822">        const std::array payload{std::byte{42}};</span>
+<span id="L1823">        ASSERT_EQ(source.stage(first, 9, payload),</span>
+<span id="L1824">                  rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1825">        if (exhausted) {</span>
+<span id="L1826">            EXPECT_EQ(source.stage(first + 1, 9, payload),</span>
+<span id="L1827">                      rt::LiveControlAdmissionResult::exhausted);</span>
+<span id="L1828">        }</span>
+<span id="L1829">        ASSERT_EQ(source.runtime.stop(), rt::Status::ok);</span>
+<span id="L1830">        EXPECT_EQ(source.stage(first + 1, 9, payload),</span>
+<span id="L1831">                  rt::LiveControlAdmissionResult::stopped);</span>
+<span id="L1832">        rt::LiveControlMailboxInfo before;</span>
+<span id="L1833">        ASSERT_TRUE(source.runtime.live_control_mailbox_info(kMailbox, before));</span>
+<span id="L1834">        EXPECT_EQ(before.admission_open, 0u);</span>
+<span id="L1835">        EXPECT_EQ(before.stopped, 1u);</span>
+<span id="L1836">        EXPECT_EQ(before.exhausted, exhausted ? 1u : 0u);</span>
+<span id="L1837">        const auto artifact = source.artifact(checkpoint, {});</span>
+<span id="L1838">        for (unsigned repeat = 0; repeat &lt; 2; ++repeat) {</span>
+<span id="L1839">            ASSERT_EQ(destination.runtime.replay_live_control(</span>
+<span id="L1840">                          artifact, noop_replay_input, nullptr),</span>
+<span id="L1841">                      rt::Status::ok)</span>
+<span id="L1842">                &lt;&lt; destination.runtime.last_error();</span>
+<span id="L1843">            rt::LiveControlMailboxInfo after;</span>
+<span id="L1844">            ASSERT_TRUE(destination.runtime.live_control_mailbox_info(kMailbox, after));</span>
+<span id="L1845">            expect_mailbox_equal(before, after);</span>
+<span id="L1846">            rt::LiveControlRecordStatusInfo status;</span>
+<span id="L1847">            ASSERT_TRUE(</span>
+<span id="L1848">                destination.runtime.live_control_record_status(kMailbox, 1, status));</span>
+<span id="L1849">            EXPECT_EQ(status.status, rt::LiveControlRecordStatus::stopped);</span>
+<span id="L1850">            std::array&lt;std::byte, 1&gt; copied{};</span>
+<span id="L1851">            ASSERT_EQ(</span>
+<span id="L1852">                destination.runtime.copy_live_control_payload(kMailbox, 1, copied),</span>
+<span id="L1853">                rt::Status::ok);</span>
+<span id="L1854">            EXPECT_EQ(copied, payload);</span>
+<span id="L1855">        }</span>
+<span id="L1856">    }</span>
+<span id="L1857">}</span>
+<span id="L1858"></span>
+<span id="L1859">TEST(LiveControlMailbox, LosslessPolicyIsExplicitFrozenAndExactlyAccounted) {</span>
+<span id="L1860">    rt::Runtime disabled;</span>
+<span id="L1861">    auto policy_value = retention_policy();</span>
+<span id="L1862">    EXPECT_EQ(disabled.set_live_control_replay_retention_policy(policy_value),</span>
+<span id="L1863">              rt::Status::invalid_state);</span>
+<span id="L1864">    for (unsigned invalid = 0; invalid &lt; 7; ++invalid) {</span>
+<span id="L1865">        rt::Runtime runtime;</span>
+<span id="L1866">        configure_live_control(runtime);</span>
+<span id="L1867">        ASSERT_EQ(runtime.set_live_control_closure_policy(closure_policy(true)),</span>
+<span id="L1868">                  rt::Status::ok);</span>
+<span id="L1869">        auto bad = policy_value;</span>
+<span id="L1870">        switch (invalid) {</span>
+<span id="L1871">        case 0:</span>
+<span id="L1872">            bad.schema_version = 1;</span>
+<span id="L1873">            break;</span>
+<span id="L1874">        case 1:</span>
+<span id="L1875">            --bad.struct_size;</span>
+<span id="L1876">            break;</span>
+<span id="L1877">        case 2:</span>
+<span id="L1878">            bad.policy_identity = 0;</span>
+<span id="L1879">            break;</span>
+<span id="L1880">        case 3:</span>
+<span id="L1881">            bad.admission_capacity = 0;</span>
+<span id="L1882">            break;</span>
+<span id="L1883">        case 4:</span>
+<span id="L1884">            bad.admission_capacity = rt::live_control_action_capacity_limit + 1;</span>
+<span id="L1885">            break;</span>
+<span id="L1886">        case 5:</span>
+<span id="L1887">            bad.payload_capacity_bytes = rt::live_control_total_storage_limit + 1;</span>
+<span id="L1888">            break;</span>
+<span id="L1889">        case 6:</span>
+<span id="L1890">            bad.reserved[0] = std::byte{1};</span>
+<span id="L1891">            break;</span>
+<span id="L1892">        }</span>
+<span id="L1893">        EXPECT_EQ(runtime.set_live_control_replay_retention_policy(bad),</span>
+<span id="L1894">                  rt::Status::invalid_argument);</span>
+<span id="L1895">        ASSERT_EQ(runtime.set_live_control_replay_retention_policy(policy_value),</span>
+<span id="L1896">                  rt::Status::ok);</span>
+<span id="L1897">        EXPECT_EQ(runtime.set_live_control_replay_retention_policy(policy_value),</span>
+<span id="L1898">                  rt::Status::invalid_state);</span>
+<span id="L1899">        ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1900">        EXPECT_EQ(runtime.set_live_control_replay_retention_policy(policy_value),</span>
+<span id="L1901">                  rt::Status::invalid_state);</span>
+<span id="L1902">    }</span>
+<span id="L1903">    LosslessFixture a, b;</span>
+<span id="L1904">    ASSERT_NO_FATAL_FAILURE(a.configure(2, 64, 64));</span>
+<span id="L1905">    ASSERT_NO_FATAL_FAILURE(b.configure(2, 64, 128));</span>
+<span id="L1906">    rt::MemoryPlan first, second;</span>
+<span id="L1907">    ASSERT_TRUE(a.runtime.memory_plan(first));</span>
+<span id="L1908">    ASSERT_TRUE(b.runtime.memory_plan(second));</span>
+<span id="L1909">    EXPECT_EQ(second.live_control_closure_control_bytes -</span>
+<span id="L1910">                  first.live_control_closure_control_bytes,</span>
+<span id="L1911">              64u);</span>
+<span id="L1912">    EXPECT_EQ(second.planned_bytes - first.planned_bytes, 64u);</span>
+<span id="L1913">    EXPECT_NE(compatibility_ids(a.runtime).replay, compatibility_ids(b.runtime).replay);</span>
+<span id="L1914">}</span>
+<span id="L1915"></span>
+<span id="L1916">TEST(LiveControlMailbox, ClearFaultRetainsBothSupportedPayloadForms) {</span>
+<span id="L1917">    for (bool lossless : {false, true}) {</span>
+<span id="L1918">        for (bool empty : {false, true}) {</span>
+<span id="L1919">            LosslessFixture f;</span>
+<span id="L1920">            ASSERT_NO_FATAL_FAILURE(f.configure(2, 64, 1024, 1, lossless));</span>
+<span id="L1921">            const auto checkpoint = checkpoint_artifact(f.runtime);</span>
+<span id="L1922">            const std::array bytes{std::byte{1}, std::byte{2}};</span>
+<span id="L1923">            const auto payload = std::span&lt;const std::byte&gt;(bytes).first(empty ? 0 : 2);</span>
+<span id="L1924">            auto update = host_update(f.handle, 1, payload, 7);</span>
+<span id="L1925">            update.update_kind = rt::LiveControlUpdateKind::clear_fault;</span>
+<span id="L1926">            rt::LiveControlAdmissionResult result{};</span>
+<span id="L1927">            ASSERT_EQ(</span>
+<span id="L1928">                f.runtime.stage_live_control_update(f.handle, update, payload, result),</span>
+<span id="L1929">                rt::Status::ok);</span>
+<span id="L1930">            ASSERT_EQ(result, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L1931">            const std::array&lt;rt::ReplayInputRecord, 1&gt; inputs{</span>
+<span id="L1932">                {{{7, std::chrono::nanoseconds{1000}}, 1, {}}}};</span>
+<span id="L1933">            ASSERT_EQ(f.runtime.step(inputs[0].frame), rt::Status::ok);</span>
+<span id="L1934">            const auto artifact = f.artifact(checkpoint, inputs);</span>
+<span id="L1935">            ASSERT_EQ(</span>
+<span id="L1936">                f.runtime.replay_live_control(artifact, noop_replay_input, nullptr),</span>
+<span id="L1937">                rt::Status::ok)</span>
+<span id="L1938">                &lt;&lt; f.runtime.last_error();</span>
+<span id="L1939">            EXPECT_EQ(f.probe.update_kinds[0], rt::LiveControlUpdateKind::clear_fault);</span>
+<span id="L1940">            EXPECT_EQ(f.probe.first_payload_bytes[0], empty ? std::byte{0} : bytes[0]);</span>
+<span id="L1941">        }</span>
+<span id="L1942">    }</span>
+<span id="L1943">}</span>
+<span id="L1944"></span>
+<span id="L1945">TEST(LiveControlMailbox, ConcurrentLosslessProducersReplayOrExplicitlyDisqualifyLoss) {</span>
+<span id="L1946">    GenerationProbe probe;</span>
+<span id="L1947">    rt::Runtime runtime;</span>
+<span id="L1948">    ASSERT_EQ(runtime.register_callback(</span>
+<span id="L1949">                  {&quot;concurrent-lossless&quot;, capture_generation_callback, &amp;probe}),</span>
+<span id="L1950">              rt::Status::ok);</span>
+<span id="L1951">    ASSERT_EQ(runtime.set_live_control_policy(policy(1, 4, 8, 8)), rt::Status::ok);</span>
+<span id="L1952">    ASSERT_EQ(runtime.register_live_control_mailbox(mailbox(kMailbox, 8, 8)),</span>
+<span id="L1953">              rt::Status::ok);</span>
+<span id="L1954">    for (std::uint64_t index = 0; index &lt; 4; ++index) {</span>
+<span id="L1955">        ASSERT_EQ(runtime.register_live_control_producer(</span>
+<span id="L1956">                      producer(kMailbox, kProducer + index)),</span>
+<span id="L1957">                  rt::Status::ok);</span>
+<span id="L1958">    }</span>
+<span id="L1959">    ASSERT_EQ(runtime.set_live_control_closure_policy(closure_policy(true)),</span>
+<span id="L1960">              rt::Status::ok);</span>
+<span id="L1961">    ASSERT_EQ(runtime.set_live_control_replay_retention_policy(retention_policy()),</span>
+<span id="L1962">              rt::Status::ok);</span>
+<span id="L1963">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1964">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1965">    const auto checkpoint = checkpoint_artifact(runtime);</span>
+<span id="L1966">    std::array&lt;rt::LiveControlProducerHandle, 4&gt; handles;</span>
+<span id="L1967">    for (std::size_t index = 0; index &lt; handles.size(); ++index) {</span>
+<span id="L1968">        ASSERT_EQ(runtime.live_control_producer_handle(kMailbox, kProducer + index,</span>
+<span id="L1969">                                                       handles[index]),</span>
+<span id="L1970">                  rt::Status::ok);</span>
+<span id="L1971">    }</span>
+<span id="L1972">    std::barrier ready(4);</span>
+<span id="L1973">    std::array&lt;std::array&lt;rt::LiveControlAdmissionResult, 2&gt;, 4&gt; results{};</span>
+<span id="L1974">    std::array&lt;std::thread, 4&gt; workers;</span>
+<span id="L1975">    for (std::size_t index = 0; index &lt; workers.size(); ++index) {</span>
+<span id="L1976">        workers[index] = std::thread([&amp;, index] {</span>
+<span id="L1977">            std::uint64_t sequence = 1;</span>
+<span id="L1978">            for (std::size_t attempt = 0; attempt &lt; 2; ++attempt) {</span>
+<span id="L1979">                const std::array payload{static_cast&lt;std::byte&gt;(index + 1),</span>
+<span id="L1980">                                         static_cast&lt;std::byte&gt;(attempt + 11)};</span>
+<span id="L1981">                ready.arrive_and_wait();</span>
+<span id="L1982">                EXPECT_EQ(runtime.stage_live_control_update(</span>
+<span id="L1983">                              handles[index],</span>
+<span id="L1984">                              host_update(handles[index], sequence, payload, 7),</span>
+<span id="L1985">                              payload, results[index][attempt]),</span>
+<span id="L1986">                          rt::Status::ok);</span>
+<span id="L1987">                if (results[index][attempt] == rt::LiveControlAdmissionResult::accepted)</span>
+<span id="L1988">                    ++sequence;</span>
+<span id="L1989">            }</span>
+<span id="L1990">        });</span>
+<span id="L1991">    }</span>
+<span id="L1992">    for (auto&amp; worker : workers)</span>
+<span id="L1993">        worker.join();</span>
+<span id="L1994">    std::size_t accepted = 0, busy = 0;</span>
+<span id="L1995">    for (const auto&amp; producer_results : results) {</span>
+<span id="L1996">        for (auto result : producer_results) {</span>
+<span id="L1997">            accepted += result == rt::LiveControlAdmissionResult::accepted ? 1u : 0u;</span>
+<span id="L1998">            busy += result == rt::LiveControlAdmissionResult::busy ? 1u : 0u;</span>
+<span id="L1999">        }</span>
+<span id="L2000">    }</span>
+<span id="L2001">    ASSERT_GT(accepted, 0u);</span>
+<span id="L2002">    EXPECT_EQ(accepted + busy, 8u);</span>
+<span id="L2003">    const std::array&lt;rt::ReplayInputRecord, 1&gt; inputs{</span>
+<span id="L2004">        {{{7, std::chrono::nanoseconds{1000}}, 1, {}}}};</span>
+<span id="L2005">    ASSERT_EQ(runtime.step(inputs[0].frame), rt::Status::ok);</span>
+<span id="L2006">    std::array&lt;std::array&lt;std::byte, 2&gt;, 8&gt; retained{};</span>
+<span id="L2007">    for (std::size_t index = 0; index &lt; accepted; ++index) {</span>
+<span id="L2008">        ASSERT_EQ(</span>
+<span id="L2009">            runtime.copy_live_control_payload(kMailbox, index + 1, retained[index]),</span>
+<span id="L2010">            rt::Status::ok);</span>
+<span id="L2011">    }</span>
+<span id="L2012">    rt::LiveControlMailboxInfo before;</span>
+<span id="L2013">    ASSERT_TRUE(runtime.live_control_mailbox_info(kMailbox, before));</span>
+<span id="L2014">    EXPECT_EQ(before.accepted, accepted);</span>
+<span id="L2015">    EXPECT_EQ(before.busy, busy);</span>
+<span id="L2016">    rt::LiveControlActionMetadata metadata;</span>
+<span id="L2017">    ASSERT_EQ(runtime.live_control_action_metadata(metadata), rt::Status::ok);</span>
+<span id="L2018">    std::vector&lt;std::byte&gt; log(4096), artifact(65536);</span>
+<span id="L2019">    rt::ArtifactWriteResult write;</span>
+<span id="L2020">    ASSERT_EQ(runtime.write_input_log(inputs, log, write), rt::Status::ok);</span>
+<span id="L2021">    log.resize(write.bytes_written);</span>
+<span id="L2022">    const auto exported = runtime.write_live_control_replay_artifact(</span>
+<span id="L2023">        checkpoint, log, rt::LiveControlNestedArtifactKind::input_log, artifact, write);</span>
+<span id="L2024">    if (metadata.replay_eligible) {</span>
+<span id="L2025">        ASSERT_EQ(exported, rt::Status::ok);</span>
+<span id="L2026">        artifact.resize(write.bytes_written);</span>
+<span id="L2027">        for (unsigned repeat = 0; repeat &lt; 2; ++repeat) {</span>
+<span id="L2028">            ASSERT_EQ(runtime.replay_live_control(artifact, noop_replay_input, nullptr),</span>
+<span id="L2029">                      rt::Status::ok)</span>
+<span id="L2030">                &lt;&lt; runtime.last_error();</span>
+<span id="L2031">            rt::LiveControlMailboxInfo after;</span>
+<span id="L2032">            ASSERT_TRUE(runtime.live_control_mailbox_info(kMailbox, after));</span>
+<span id="L2033">            expect_mailbox_equal(before, after);</span>
+<span id="L2034">            for (std::size_t index = 0; index &lt; accepted; ++index) {</span>
+<span id="L2035">                std::array&lt;std::byte, 2&gt; payload{};</span>
+<span id="L2036">                ASSERT_EQ(</span>
+<span id="L2037">                    runtime.copy_live_control_payload(kMailbox, index + 1, payload),</span>
+<span id="L2038">                    rt::Status::ok);</span>
+<span id="L2039">                EXPECT_EQ(payload, retained[index]);</span>
+<span id="L2040">            }</span>
+<span id="L2041">        }</span>
+<span id="L2042">    } else {</span>
+<span id="L2043">        // The existing nonblocking action ring may drop a contested emission.</span>
+<span id="L2044">        // Such a history must never become a successful partial replay artifact.</span>
+<span id="L2045">        EXPECT_EQ(exported, rt::Status::invalid_artifact);</span>
+<span id="L2046">        EXPECT_EQ(write.bytes_written, 0u);</span>
+<span id="L2047">    }</span>
+<span id="L2048">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L2049">}</span></pre></html>

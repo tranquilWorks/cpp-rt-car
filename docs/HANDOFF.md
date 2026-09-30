@@ -1,3 +1,20 @@
+# M26-06 source-linked documentation and capability audit
+
+M26-01 through M26-05 are merged; the final target284 merge is
+`912ce878ad311d38e452a5d2916ee0daa6ee3f72`, canonically closed by control578.
+M26-06 adds the [offline golden manual](golden_audit/generated/index.html),
+100 scenario mappings, 112 canonical requirement dispositions, and the
+[installed audit/soak workflow](golden_audit.md). Its fresh verification and
+integration disposition are retained in M26-06 evidence and its PR.
+
+Portable composition is distinct from global capability qualification. M18
+physical/RT, M19 Unreal, M20 release engineering (including native telemetry
+exporters, controlled performance, signing and migration), independent M25
+human review and the protected fixture/replay findings remain open. No next
+batch, hardware, signing, release or deployment action is activated.
+
+## Historical checkpoints
+
 # M26-05 golden showcase implemented
 
 The optional public-SDK kit provides fifteen meaningful M23 cases, CPU and

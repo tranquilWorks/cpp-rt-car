@@ -1,0 +1,168 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_showcase/artifacts.py</title><h1>samples/golden_showcase/artifacts.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">&quot;&quot;&quot;Independently bind showcase observations to source, state and raw M23 bundles.&quot;&quot;&quot;</span>
+<span id="L2">import argparse</span>
+<span id="L3">import importlib.util</span>
+<span id="L4">import json</span>
+<span id="L5">from pathlib import Path</span>
+<span id="L6">import re</span>
+<span id="L7">import struct</span>
+<span id="L8">import sys</span>
+<span id="L9"></span>
+<span id="L10">HERE=Path(__file__).resolve().parent</span>
+<span id="L11"></span>
+<span id="L12">def module(name,path):</span>
+<span id="L13">    spec=importlib.util.spec_from_file_location(name,path)</span>
+<span id="L14">    value=importlib.util.module_from_spec(spec);spec.loader.exec_module(value)</span>
+<span id="L15">    return value</span>
+<span id="L16"></span>
+<span id="L17">cpu=module(&#x27;showcase_cpu_artifacts&#x27;,HERE.parent/&#x27;golden_system/artifacts.py&#x27;)</span>
+<span id="L18">require,load,sha,canonical,fnv=cpu.require,cpu.load,cpu.sha,cpu.canonical,cpu.fnv</span>
+<span id="L19">FROZEN=cpu.FROZEN</span>
+<span id="L20">IDS=tuple(&#x27;golden-&#x27;+x for x in (&#x27;input&#x27;,&#x27;physics&#x27;,&#x27;stage&#x27;,&#x27;sensor&#x27;,&#x27;controller&#x27;,&#x27;actuator&#x27;,&#x27;aggregate&#x27;,&#x27;telemetry&#x27;,&#x27;host&#x27;,&#x27;memory&#x27;,&#x27;rates&#x27;,&#x27;controls&#x27;,&#x27;replay&#x27;,&#x27;external&#x27;,&#x27;loop&#x27;))</span>
+<span id="L21">SUBSYSTEMS=(&#x27;scenario&#x27;,&#x27;physics&#x27;,&#x27;host_staging&#x27;,&#x27;sampled_io&#x27;,&#x27;controller&#x27;,&#x27;hal&#x27;,&#x27;aggregation&#x27;,&#x27;observability&#x27;,&#x27;executor&#x27;,&#x27;memory&#x27;,&#x27;multi_rate&#x27;,&#x27;live_control&#x27;,&#x27;checkpoint_replay&#x27;,&#x27;external_cil&#x27;,&#x27;whole_loop&#x27;)</span>
+<span id="L22">COUNTERS=(&#x27;operations&#x27;,&#x27;phase_calls&#x27;,&#x27;entity_checks&#x27;,&#x27;faults&#x27;,&#x27;gaps&#x27;,&#x27;cleanup_failures&#x27;)</span>
+<span id="L23">FOLDERS=(&#x27;golden_showcase&#x27;,&#x27;golden_xdma&#x27;,&#x27;golden_cuda&#x27;,&#x27;golden_system&#x27;)</span>
+<span id="L24"></span>
+<span id="L25">def provenance(path):</span>
+<span id="L26">    p=load(path)</span>
+<span id="L27">    require(set(p)=={&#x27;schema&#x27;,&#x27;source_commit&#x27;,&#x27;source_tree&#x27;,&#x27;dirty&#x27;,&#x27;files&#x27;} and p[&#x27;schema&#x27;]==1 and type(p[&#x27;dirty&#x27;]) is bool,&#x27;provenance schema&#x27;)</span>
+<span id="L28">    for key in (&#x27;source_commit&#x27;,&#x27;source_tree&#x27;):require(isinstance(p[key],str) and re.fullmatch(&#x27;[0-9a-f]{40}&#x27;,p[key]),&#x27;source identity&#x27;)</span>
+<span id="L29">    actual={str(x.relative_to(HERE.parent)).replace(&#x27;\\&#x27;,&#x27;/&#x27;):sha(x.read_bytes()) for folder in FOLDERS for x in (HERE.parent/folder).iterdir() if x.is_file() and x.name!=&#x27;provenance.json&#x27;}</span>
+<span id="L30">    require(p[&#x27;files&#x27;]==actual,&#x27;complete showcase/shared source inventory and digests&#x27;)</span>
+<span id="L31">    cpu.contract()</span>
+<span id="L32">    return p</span>
+<span id="L33"></span>
+<span id="L34">def benchmark_tool():</span>
+<span id="L35">    root=HERE.parents[1]</span>
+<span id="L36">    if (root/&#x27;tools/check_benchmark_artifact.py&#x27;).is_file():</span>
+<span id="L37">        return module(&#x27;showcase_benchmark_validator&#x27;,root/&#x27;tools/check_benchmark_artifact.py&#x27;),root/&#x27;bench/schemas&#x27;</span>
+<span id="L38">    root=HERE.parents[1] # installed .../rtfw/examples/golden_showcase -&gt; .../rtfw</span>
+<span id="L39">    return module(&#x27;showcase_benchmark_validator&#x27;,root/&#x27;tools/check_benchmark_artifact.py&#x27;),root/&#x27;bench/schemas&#x27;</span>
+<span id="L40"></span>
+<span id="L41">def variant_inspect(directory,variant):</span>
+<span id="L42">    folder=&#x27;golden_cuda&#x27; if variant==&#x27;sim_cuda&#x27; else &#x27;golden_xdma&#x27;</span>
+<span id="L43">    validator=module(&#x27;showcase_&#x27;+folder,HERE.parent/folder/&#x27;artifacts.py&#x27;)</span>
+<span id="L44">    old=sys.modules.get(&#x27;state&#x27;)</span>
+<span id="L45">    try:</span>
+<span id="L46">        if folder==&#x27;golden_xdma&#x27;:sys.modules[&#x27;state&#x27;]=module(&#x27;showcase_xdma_state&#x27;,HERE.parent/folder/&#x27;state.py&#x27;)</span>
+<span id="L47">        return validator.inspect(directory)</span>
+<span id="L48">    finally:</span>
+<span id="L49">        if old is None:sys.modules.pop(&#x27;state&#x27;,None)</span>
+<span id="L50">        else:sys.modules[&#x27;state&#x27;]=old</span>
+<span id="L51"></span>
+<span id="L52">def state_header(data,e):</span>
+<span id="L53">    require(len(data)==18944,&#x27;state size&#x27;)</span>
+<span id="L54">    require(struct.unpack_from(&#x27;&lt;10I&#x27;,data)==(0x5336324d,1,e[&#x27;count&#x27;],e[&#x27;ticks&#x27;],e[&#x27;workers&#x27;],e[&#x27;grain&#x27;],int(e[&#x27;mode&#x27;]==&#x27;host&#x27;),int(e[&#x27;external&#x27;]),cpu.CAMPAIGNS.index(e[&#x27;campaign&#x27;]),0),&#x27;state configuration&#x27;)</span>
+<span id="L55">    require(data[448:480].hex()==FROZEN and not any(data[488:512]),&#x27;state contract/reserved&#x27;)</span>
+<span id="L56">    checked=bytearray(data);checked[480:488]=bytes(8)</span>
+<span id="L57">    require(fnv(checked)==struct.unpack_from(&#x27;&lt;Q&#x27;,data,480)[0],&#x27;state checksum&#x27;)</span>
+<span id="L58"></span>
+<span id="L59">def probe_state(directory,e,kind):</span>
+<span id="L60">    data=(directory/&#x27;state.bin&#x27;).read_bytes();state_header(data,e)</span>
+<span id="L61">    n,ticks=e[&#x27;count&#x27;],e[&#x27;ticks&#x27;];seed=1</span>
+<span id="L62">    fields=[[[0]*256 for _ in range(3)] for _ in range(6)]</span>
+<span id="L63">    def draw(mod,offset):</span>
+<span id="L64">        nonlocal seed</span>
+<span id="L65">        seed=(seed*1664525+1013904223)%2**32</span>
+<span id="L66">        return seed%mod-offset</span>
+<span id="L67">    for i in range(n):</span>
+<span id="L68">        for a in range(3):</span>
+<span id="L69">            x,v,f=draw(2049,1024),draw(129,64),draw(9,4)</span>
+<span id="L70">            fields[0][a][i]=x+ticks*v+f*ticks*(ticks+1)//2 if kind==1 else x</span>
+<span id="L71">            fields[1][a][i]=v+ticks*f if kind==1 else v</span>
+<span id="L72">            fields[2][a][i]=f</span>
+<span id="L73">            fields[3][a][i]=max(-4,min(4,2*(16-v))) if kind==4 else f</span>
+<span id="L74">            if kind==3:fields[4][a][i],fields[5][a][i]=x+2,v+2</span>
+<span id="L75">    require(list(struct.unpack_from(&#x27;&lt;4608i&#x27;,data,512))==[v for field in fields for axis in field for v in axis],&#x27;independent complete phase state&#x27;)</span>
+<span id="L76">    calls=[0]*8;calls[kind]=ticks</span>
+<span id="L77">    require(list(struct.unpack_from(&#x27;&lt;8Q&#x27;,data,72))==calls,&#x27;probe calls&#x27;)</span>
+<span id="L78">    require(struct.unpack_from(&#x27;&lt;4i&#x27;,data,40)==(8,1,0,0) and struct.unpack_from(&#x27;&lt;QQ&#x27;,data,56)==(ticks,0),&#x27;probe controls&#x27;)</span>
+<span id="L79">    require(not any(data[136:400]),&#x27;probe channel/fault metadata&#x27;)</span>
+<span id="L80">    sums=[sum(a) for field in fields[:2] for a in field] if kind==6 else [0]*6</span>
+<span id="L81">    require(list(struct.unpack_from(&#x27;&lt;6q&#x27;,data,400))==sums,&#x27;probe sums&#x27;)</span>
+<span id="L82"></span>
+<span id="L83">def initial_state(directory,e):</span>
+<span id="L84">    data=(directory/&#x27;state.bin&#x27;).read_bytes();state_header(data,e)</span>
+<span id="L85">    zero=dict(e);zero[&#x27;ticks&#x27;]=0</span>
+<span id="L86">    # Initial memory-only owner: all dynamic state is zero except seeded plant,</span>
+<span id="L87">    # command and the default control configuration.</span>
+<span id="L88">    seed=1;fields=[[[0]*256 for _ in range(3)] for _ in range(6)]</span>
+<span id="L89">    for i in range(e[&#x27;count&#x27;]):</span>
+<span id="L90">        for a in range(3):</span>
+<span id="L91">            for field,mod,offset in ((0,2049,1024),(1,129,64),(2,9,4)):</span>
+<span id="L92">                seed=(seed*1664525+1013904223)%2**32;fields[field][a][i]=seed%mod-offset</span>
+<span id="L93">            fields[3][a][i]=fields[2][a][i]</span>
+<span id="L94">    require(list(struct.unpack_from(&#x27;&lt;4608i&#x27;,data,512))==[v for f in fields for a in f for v in a],&#x27;memory initial state&#x27;)</span>
+<span id="L95">    require(struct.unpack_from(&#x27;&lt;4i&#x27;,data,40)==(8,1,0,0) and not any(data[56:448]),&#x27;memory initial metadata&#x27;)</span>
+<span id="L96"></span>
+<span id="L97">def replay_pair(directory,v):</span>
+<span id="L98">    trusted=(directory/&#x27;trusted.bin&#x27;).read_bytes()</span>
+<span id="L99">    require(trusted[:8]==b&#x27;RTFWLCR2&#x27; and len(trusted)&gt;=400,&#x27;trusted schema&#x27;)</span>
+<span id="L100">    word=lambda n:struct.unpack_from(&#x27;&lt;Q&#x27;,trusted,n)[0]</span>
+<span id="L101">    require(word(16)==len(trusted) and word(32)==v[&#x27;runtime_id&#x27;],&#x27;origin owner identity&#x27;)</span>
+<span id="L102">    checked=bytearray(trusted);checked[24:32]=bytes(8)</span>
+<span id="L103">    require(fnv(checked)==word(24),&#x27;trusted checksum&#x27;)</span>
+<span id="L104">    for name,off,size in [(&#x27;checkpoint.bin&#x27;,96,104),(&#x27;active.bin&#x27;,120,128)]:</span>
+<span id="L105">        require(trusted[word(off):word(off)+word(size)]==(directory/name).read_bytes(),&#x27;nested replay pairing&#x27;)</span>
+<span id="L106"></span>
+<span id="L107">def benchmark(directory):</span>
+<span id="L108">    tool,schemas=benchmark_tool()</span>
+<span id="L109">    result=tool.validate_bundle(directory/&#x27;benchmark&#x27;,schemas)</span>
+<span id="L110">    require(result[&#x27;status&#x27;]==&#x27;ok&#x27;,&#x27;benchmark did not pass&#x27;)</span>
+<span id="L111">    d=load(directory/&#x27;benchmark/descriptor.json&#x27;);raw=load(directory/&#x27;benchmark/raw.json&#x27;)</span>
+<span id="L112">    require(d[&#x27;case_id&#x27;] in IDS,&#x27;foreign case&#x27;)</span>
+<span id="L113">    i=IDS.index(d[&#x27;case_id&#x27;])</span>
+<span id="L114">    require(d[&#x27;provider_id&#x27;]==&#x27;rtfw.golden&#x27; and d[&#x27;provider_version&#x27;]==1 and d[&#x27;warmup&#x27;]==2 and d[&#x27;repetitions&#x27;]==5 and d[&#x27;raw_policy&#x27;]==&#x27;all_measured&#x27;,&#x27;frozen provider protocol&#x27;)</span>
+<span id="L115">    require(d[&#x27;subsystem&#x27;]==SUBSYSTEMS[i] and tuple(c[&#x27;name&#x27;] for c in d[&#x27;counters&#x27;])==COUNTERS,&#x27;case subsystem/counters&#x27;)</span>
+<span id="L116">    require(len(d[&#x27;parameters&#x27;])&lt;=16 and len(d[&#x27;counters&#x27;])&lt;=16,&#x27;descriptor capacity&#x27;)</span>
+<span id="L117">    p={x[&#x27;name&#x27;]:x[&#x27;value&#x27;] for x in d[&#x27;parameters&#x27;]}</span>
+<span id="L118">    require(set(p)=={&#x27;entities&#x27;,&#x27;ticks&#x27;,&#x27;workers&#x27;,&#x27;grain&#x27;,&#x27;host&#x27;} and p[&#x27;grain&#x27;] in (1,4,16,64),&#x27;parameters&#x27;)</span>
+<span id="L119">    e=dict(count=p[&#x27;entities&#x27;],ticks=p[&#x27;ticks&#x27;],workers=p[&#x27;workers&#x27;],grain=p[&#x27;grain&#x27;],mode=&#x27;host&#x27; if p[&#x27;host&#x27;] else &#x27;native&#x27;,external=i==13,campaign=&#x27;control_replaced&#x27; if i==11 else &#x27;nominal&#x27;,peer_responses=(p[&#x27;ticks&#x27;]+2)//3 if i==13 else 0)</span>
+<span id="L120">    e[&#x27;phase_calls&#x27;]=[(p[&#x27;ticks&#x27;]-1)//period+1 for period in (1,1,1,2,3,3,6,6)]</span>
+<span id="L121">    paths=directory/&#x27;invocations&#x27;/d[&#x27;case_id&#x27;]</span>
+<span id="L122">    require({x.name for x in paths.iterdir()}==set(map(str,range(7))),&#x27;all seven invocations&#x27;)</span>
+<span id="L123">    state_module=module(&#x27;showcase_state&#x27;,HERE/&#x27;state.py&#x27;)</span>
+<span id="L124">    workload=(&#x27;seed-and-command&#x27;,&#x27;integer-task-integrator&#x27;,&#x27;host-frame-staging&#x27;,&#x27;sample-decode-calibration&#x27;,&#x27;saturating-controller&#x27;,&#x27;actuator-frame-encoding&#x27;,&#x27;six-field-aggregation&#x27;,&#x27;loop-and-all-telemetry-drains&#x27;,&#x27;independent-host-loop&#x27;,&#x27;memory-plan-acquire-observe-release&#x27;,&#x27;reference-schedule-and-loop&#x27;,&#x27;replacement-control-loop&#x27;,&#x27;loop-capture-and-origin-owner-replay&#x27;,&#x27;external-process-cil-loop&#x27;,&#x27;full-loop-telemetry-and-replay&#x27;)[i]+&#x27;.lifecycle-oracle-io&#x27;</span>
+<span id="L125">    require(d[&#x27;workload_kind&#x27;]==workload and d[&#x27;workload_sha256&#x27;]==sha((FROZEN+&#x27;:&#x27;+workload).encode()),&#x27;named workload identity&#x27;)</span>
+<span id="L126">    configurations=(&#x27;cpu-cpu&#x27;,&#x27;sim_cuda-kernel&#x27;,&#x27;sim_cuda-graph&#x27;,&#x27;sim_xdma-cpu&#x27;,&#x27;sim_combined-kernel&#x27;,&#x27;sim_combined-graph&#x27;) if i==14 else (&#x27;bounded-cpu-phase-experiment&#x27;,) if i&lt;7 else (&#x27;frozen-golden-cpu-scenario&#x27;,)</span>
+<span id="L127">    require(d[&#x27;configuration&#x27;] in configurations,&#x27;configuration scope&#x27;)</span>
+<span id="L128">    variant=d[&#x27;configuration&#x27;].split(&#x27;-&#x27;)[0] if i==14 else &#x27;cpu&#x27;</span>
+<span id="L129">    require(result[&#x27;identity&#x27;][&#x27;backend&#x27;]==variant and result[&#x27;identity&#x27;][&#x27;driver&#x27;]==(&#x27;none&#x27; if variant==&#x27;cpu&#x27; else &#x27;owned-simulated-driver&#x27;),&#x27;actual benchmark backend/driver identity&#x27;)</span>
+<span id="L130">    source_digests={}</span>
+<span id="L131">    for ordinal in range(7):</span>
+<span id="L132">        path=paths/str(ordinal);v=load(path/&#x27;invocation.json&#x27;)</span>
+<span id="L133">        require(v[&#x27;schema&#x27;]==1 and v[&#x27;case_id&#x27;]==d[&#x27;case_id&#x27;] and v[&#x27;ordinal&#x27;]==ordinal and v[&#x27;contract_sha256&#x27;]==FROZEN,&#x27;invocation binding&#x27;)</span>
+<span id="L134">        require(v[&#x27;correct&#x27;] is True and not v[&#x27;faults&#x27;] and not v[&#x27;gaps&#x27;] and not v[&#x27;cleanup_failures&#x27;],&#x27;invocation failure&#x27;)</span>
+<span id="L135">        for key,value in v.items():</span>
+<span id="L136">            if key not in (&#x27;case_id&#x27;,&#x27;contract_sha256&#x27;,&#x27;correct&#x27;):require(type(value) is int and 0&lt;=value&lt;2**64,&#x27;invocation integer &#x27;+key)</span>
+<span id="L137">        variant=d[&#x27;configuration&#x27;].split(&#x27;-&#x27;)[0] if i==14 else &#x27;cpu&#x27;</span>
+<span id="L138">        if variant in (&#x27;sim_cuda&#x27;,&#x27;sim_xdma&#x27;,&#x27;sim_combined&#x27;):</span>
+<span id="L139">            run=variant_inspect(path,variant)</span>
+<span id="L140">            require(run[&#x27;dispatch&#x27;]==d[&#x27;configuration&#x27;].split(&#x27;-&#x27;)[1] and all(run[k]==e[k] for k in e if k not in (&#x27;peer_responses&#x27;,&#x27;phase_calls&#x27;)),&#x27;variant configuration&#x27;)</span>
+<span id="L141">            require(run[&#x27;runtime_id&#x27;]==v[&#x27;runtime_id&#x27;] and run[&#x27;replay_frames&#x27;]==v[&#x27;replay_frames&#x27;],&#x27;variant observation binding&#x27;)</span>
+<span id="L142">        elif i&lt;7:probe_state(path,e,i)</span>
+<span id="L143">        elif i==9:initial_state(path,e)</span>
+<span id="L144">        else:state_module.inspect_state(path,e)</span>
+<span id="L145">        require(v[&#x27;checksum&#x27;]==fnv((path/&#x27;state.bin&#x27;).read_bytes()),&#x27;state observation checksum&#x27;)</span>
+<span id="L146">        calls=p[&#x27;ticks&#x27;] if i&lt;7 else 0 if i==9 else sum(e[&#x27;phase_calls&#x27;])</span>
+<span id="L147">        require(v[&#x27;phase_calls&#x27;]==calls and v[&#x27;entity_checks&#x27;]==(0 if i==9 else p[&#x27;ticks&#x27;]*768),&#x27;actual callback/oracle counts&#x27;)</span>
+<span id="L148">        operations=6 if i==9 else p[&#x27;ticks&#x27;]+(27 if i==10 else (p[&#x27;ticks&#x27;]+2)//3 if i==13 else 0)</span>
+<span id="L149">        require(v[&#x27;operations&#x27;]==operations and v[&#x27;planned_bytes&#x27;]&gt;0,&#x27;operation/memory counts&#x27;)</span>
+<span id="L150">        require(v[&#x27;memory_acquired&#x27;]==v[&#x27;memory_released&#x27;]==(0 if i&lt;7 else 3),&#x27;memory conservation&#x27;)</span>
+<span id="L151">        require((v[&#x27;jobs&#x27;]&gt;0)==(bool(p[&#x27;host&#x27;]) and i&gt;=7 and i!=9),&#x27;actual host jobs&#x27;)</span>
+<span id="L152">        require(v[&#x27;replay_frames&#x27;]==(p[&#x27;ticks&#x27;] if i in (12,14) else 0),&#x27;replay frames&#x27;)</span>
+<span id="L153">        if i in (12,14):replay_pair(path,v)</span>
+<span id="L154">        if ordinal&gt;=2:</span>
+<span id="L155">            sample=raw[&#x27;samples&#x27;][ordinal-2]</span>
+<span id="L156">            require(sample[&#x27;checksum&#x27;]==v[&#x27;checksum&#x27;]&amp;((1&lt;&lt;63)-1) and sample[&#x27;counters&#x27;]=={k:v[k] for k in COUNTERS},&#x27;raw invocation linkage&#x27;)</span>
+<span id="L157">        for source in path.iterdir():</span>
+<span id="L158">            require(source.is_file() and not source.is_symlink(),&#x27;invocation source type&#x27;)</span>
+<span id="L159">            source_digests[str(source.relative_to(directory))]=sha(source.read_bytes())</span>
+<span id="L160">    return dict(case=d[&#x27;case_id&#x27;],clock=d[&#x27;clock&#x27;],configuration=d[&#x27;configuration&#x27;],parameters=p,evidence=result[&#x27;evidence_class&#x27;],identity=result[&#x27;identity&#x27;],files=source_digests,benchmark={x.name:sha(x.read_bytes()) for x in (directory/&#x27;benchmark&#x27;).iterdir()})</span>
+<span id="L161"></span>
+<span id="L162"></span>
+<span id="L163">def main():</span>
+<span id="L164">    p=argparse.ArgumentParser();p.add_argument(&#x27;directory&#x27;,type=Path);a=p.parse_args()</span>
+<span id="L165">    try:benchmark(a.directory)</span>
+<span id="L166">    except (OSError,ValueError,KeyError,TypeError,ImportError) as e:p.exit(1,str(e)+&#x27;\n&#x27;)</span>
+<span id="L167">    print(&#x27;PASS source observations, every state field and unchanged M23 bundle validator&#x27;)</span>
+<span id="L168">if __name__==&#x27;__main__&#x27;:main()</span></pre></html>

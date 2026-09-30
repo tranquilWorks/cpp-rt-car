@@ -1437,6 +1437,10 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/golden-xdma-provenance.json"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_xdma RENAME provenance.json)
 install(FILES docs/golden_xdma.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
 
+# The offline audit manual is documentation, with no default SDK tool dependency.
+install(DIRECTORY docs/golden_audit/generated/
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/golden_audit)
+
 # Optional source-only showcase; default Runtime installation stays unchanged.
 if(RTFW_BUILD_BENCHMARKS)
     execute_process(COMMAND "${Python3_EXECUTABLE}"
@@ -1472,4 +1476,16 @@ if(RTFW_BUILD_BENCHMARKS)
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/golden-showcase-provenance.json"
         DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_showcase RENAME provenance.json)
     install(FILES docs/golden_showcase.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+    execute_process(COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/samples/golden_audit/provenance.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/golden-audit-provenance.json"
+        RESULT_VARIABLE golden_audit_provenance_result)
+    if(NOT golden_audit_provenance_result EQUAL 0)
+        message(FATAL_ERROR "Golden audit provenance generation failed")
+    endif()
+    install(FILES samples/golden_audit/README.md samples/golden_audit/catalog.py
+        samples/golden_audit/provenance.py samples/golden_audit/run.py
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_audit)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/golden-audit-provenance.json"
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_audit RENAME provenance.json)
 endif()

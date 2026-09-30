@@ -1,0 +1,57 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_showcase/variants.cpp</title><h1>samples/golden_showcase/variants.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;variants.hpp&quot;</span>
+<span id="L2">#include &quot;../golden_cuda/runner.hpp&quot;</span>
+<span id="L3">#include &quot;../golden_xdma/runner.hpp&quot;</span>
+<span id="L4">#include &lt;charconv&gt;</span>
+<span id="L5">namespace golden::showcase {</span>
+<span id="L6">namespace {</span>
+<span id="L7">// Only bridge freshly produced scalar fields from the unchanged runners.</span>
+<span id="L8">// Independent Python validation checks the complete JSON/state/transcripts.</span>
+<span id="L9">std::uint64_t field(std::string_view json,std::string_view key) {</span>
+<span id="L10">  std::string token(&quot;\&quot;&quot;);</span>
+<span id="L11">  token.append(key);</span>
+<span id="L12">  token.append(&quot;\&quot;:&quot;);</span>
+<span id="L13">  const auto at = json.find(token);</span>
+<span id="L14">  if (at == std::string_view::npos || json.find(token,at + token.size()) != std::string_view::npos)</span>
+<span id="L15">    throw std::runtime_error(&quot;missing or duplicate runner field&quot;);</span>
+<span id="L16">  const auto begin = json.data() + at + token.size();</span>
+<span id="L17">  std::uint64_t value = 0;</span>
+<span id="L18">  const auto parsed = std::from_chars(begin,json.data() + json.size(),value);</span>
+<span id="L19">  if (parsed.ec != std::errc{} || parsed.ptr == json.data() + json.size() ||</span>
+<span id="L20">      (*parsed.ptr != &#x27;,&#x27; &amp;&amp; *parsed.ptr != &#x27;}&#x27;)) throw std::runtime_error(&quot;invalid runner scalar&quot;);</span>
+<span id="L21">  return value;</span>
+<span id="L22">}</span>
+<span id="L23">}</span>
+<span id="L24">bool variant_run(std::string_view variant,std::string_view dispatch,Options options,</span>
+<span id="L25">                 const std::filesystem::path &amp;output,Invocation &amp;v) {</span>
+<span id="L26">  if (output.empty() || options.external) return false;</span>
+<span id="L27">  int status = 1;</span>
+<span id="L28">  if (variant == &quot;sim_cuda&quot; &amp;&amp; (dispatch == &quot;kernel&quot; || dispatch == &quot;graph&quot;)) {</span>
+<span id="L29">    cuda::Arguments a; a.scenario = options; a.dispatch = dispatch; a.output = output;</span>
+<span id="L30">    status = cuda::execute(a);</span>
+<span id="L31">  } else if ((variant == &quot;sim_xdma&quot; &amp;&amp; dispatch == &quot;cpu&quot;) ||</span>
+<span id="L32">             (variant == &quot;sim_combined&quot; &amp;&amp; (dispatch == &quot;kernel&quot; || dispatch == &quot;graph&quot;))) {</span>
+<span id="L33">    xdma::Arguments a; a.scenario = options; a.dispatch = dispatch; a.output = output;</span>
+<span id="L34">    status = xdma::execute(a);</span>
+<span id="L35">  } else return false;</span>
+<span id="L36">  if (status) return false;</span>
+<span id="L37">  std::ifstream json_file(output / &quot;execution.json&quot;);</span>
+<span id="L38">  const std::string json{std::istreambuf_iterator&lt;char&gt;(json_file),{}};</span>
+<span id="L39">  std::ifstream state_file(output / &quot;state.bin&quot;,std::ios::binary);</span>
+<span id="L40">  const std::string state{std::istreambuf_iterator&lt;char&gt;(state_file),{}};</span>
+<span id="L41">  if (state.size() != state_bytes) return false;</span>
+<span id="L42">  v.checksum = digest(std::as_bytes(std::span(state)));</span>
+<span id="L43">  v.operations = options.ticks;</span>
+<span id="L44">  for (auto period : std::array&lt;std::size_t,8&gt;{1,1,1,2,3,3,6,6})</span>
+<span id="L45">    v.phase_calls += (options.ticks + period - 1) / period;</span>
+<span id="L46">  v.entity_checks = options.ticks * 3 * fixed::capacity;</span>
+<span id="L47">  v.runtime_id = field(json,&quot;runtime_id&quot;); v.planned_bytes = field(json,&quot;runtime_planned_bytes&quot;);</span>
+<span id="L48">  v.trace_events = field(json,&quot;trace_events&quot;);</span>
+<span id="L49">  v.actions = field(json,&quot;rate_actions&quot;) + field(json,&quot;mixed_actions&quot;) + field(json,&quot;control_actions&quot;);</span>
+<span id="L50">  v.replay_frames = field(json,&quot;replay_frames&quot;);</span>
+<span id="L51">  v.accepted = field(json,&quot;control_accepted&quot;); v.replaced = field(json,&quot;control_replaced&quot;);</span>
+<span id="L52">  v.jobs = field(json,&quot;jobs_accepted&quot;); v.memory_acquired = field(json,&quot;memory_acquired&quot;);</span>
+<span id="L53">  v.memory_released = field(json,&quot;memory_released&quot;);</span>
+<span id="L54">  v.gaps = field(json,&quot;trace_lost&quot;) + field(json,&quot;action_gaps&quot;);</span>
+<span id="L55">  return v.replay_frames == options.ticks &amp;&amp; !v.gaps &amp;&amp; v.memory_acquired == v.memory_released;</span>
+<span id="L56">}</span>
+<span id="L57">}</span></pre></html>

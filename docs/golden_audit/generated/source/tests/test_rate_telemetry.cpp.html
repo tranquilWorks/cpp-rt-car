@@ -1,0 +1,804 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_rate_telemetry.cpp</title><h1>tests/test_rate_telemetry.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;array&gt;</span>
+<span id="L4">#include &lt;atomic&gt;</span>
+<span id="L5">#include &lt;chrono&gt;</span>
+<span id="L6">#include &lt;cstddef&gt;</span>
+<span id="L7">#include &lt;cstdint&gt;</span>
+<span id="L8">#include &lt;limits&gt;</span>
+<span id="L9">#include &lt;span&gt;</span>
+<span id="L10">#include &lt;string_view&gt;</span>
+<span id="L11">#include &lt;thread&gt;</span>
+<span id="L12">#include &lt;vector&gt;</span>
+<span id="L13"></span>
+<span id="L14">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L15"></span>
+<span id="L16">#include &quot;rt/src/rate_telemetry.hpp&quot;</span>
+<span id="L17">#include &quot;rt/src/snapshot_codec.hpp&quot;</span>
+<span id="L18"></span>
+<span id="L19">namespace {</span>
+<span id="L20"></span>
+<span id="L21">using namespace std::chrono_literals;</span>
+<span id="L22"></span>
+<span id="L23">struct ManualClock final : rt::RuntimeClock {</span>
+<span id="L24">    std::uint64_t now = 1&#x27;000;</span>
+<span id="L25">    std::uint64_t now_ns() noexcept override { return now; }</span>
+<span id="L26">    rt::Status sleep_until_ns(std::uint64_t release) noexcept override {</span>
+<span id="L27">        now = release;</span>
+<span id="L28">        return rt::Status::ok;</span>
+<span id="L29">    }</span>
+<span id="L30">    bool supports_absolute_sleep() const noexcept override { return true; }</span>
+<span id="L31">};</span>
+<span id="L32"></span>
+<span id="L33">rt::CallbackResult count_callback(</span>
+<span id="L34">    void* data,</span>
+<span id="L35">    const rt::CallbackContext&amp; context) {</span>
+<span id="L36">    if (!context.rate_release) {</span>
+<span id="L37">        return rt::CallbackResult::error;</span>
+<span id="L38">    }</span>
+<span id="L39">    ++*static_cast&lt;std::size_t*&gt;(data);</span>
+<span id="L40">    return rt::CallbackResult::ok;</span>
+<span id="L41">}</span>
+<span id="L42"></span>
+<span id="L43">struct BlockingProbe {</span>
+<span id="L44">    std::atomic&lt;bool&gt; entered{false};</span>
+<span id="L45">    std::atomic&lt;bool&gt; release{false};</span>
+<span id="L46">};</span>
+<span id="L47"></span>
+<span id="L48">struct PeriodicInspectionProbe {</span>
+<span id="L49">    rt::Runtime* runtime = nullptr;</span>
+<span id="L50">    std::size_t calls = 0;</span>
+<span id="L51">};</span>
+<span id="L52"></span>
+<span id="L53">rt::CallbackResult inspect_during_periodic(</span>
+<span id="L54">    void* data,</span>
+<span id="L55">    const rt::PeriodicFrameResult&amp;) {</span>
+<span id="L56">    auto&amp; probe = *static_cast&lt;PeriodicInspectionProbe*&gt;(data);</span>
+<span id="L57">    rt::RateTelemetryMetadata metadata;</span>
+<span id="L58">    if (!probe.runtime ||</span>
+<span id="L59">        probe.runtime-&gt;rate_telemetry_metadata(metadata) !=</span>
+<span id="L60">            rt::Status::invalid_state) {</span>
+<span id="L61">        return rt::CallbackResult::error;</span>
+<span id="L62">    }</span>
+<span id="L63">    ++probe.calls;</span>
+<span id="L64">    return rt::CallbackResult::ok;</span>
+<span id="L65">}</span>
+<span id="L66"></span>
+<span id="L67">struct EncodedState {</span>
+<span id="L68">    std::string_view name{};</span>
+<span id="L69">    std::uint32_t schema_version = 0;</span>
+<span id="L70">    std::span&lt;const std::byte&gt; payload{};</span>
+<span id="L71">};</span>
+<span id="L72"></span>
+<span id="L73">bool provide_encoded_state(</span>
+<span id="L74">    void* context,</span>
+<span id="L75">    std::size_t index,</span>
+<span id="L76">    rt::detail::StateWriteView&amp; output) noexcept {</span>
+<span id="L77">    if (index != 0) {</span>
+<span id="L78">        output = {};</span>
+<span id="L79">        return false;</span>
+<span id="L80">    }</span>
+<span id="L81">    const auto&amp; state = *static_cast&lt;const EncodedState*&gt;(context);</span>
+<span id="L82">    output = {state.name, state.schema_version, state.payload};</span>
+<span id="L83">    return true;</span>
+<span id="L84">}</span>
+<span id="L85"></span>
+<span id="L86">rt::CallbackResult blocking_callback(</span>
+<span id="L87">    void* data,</span>
+<span id="L88">    const rt::CallbackContext&amp; context) {</span>
+<span id="L89">    auto&amp; probe = *static_cast&lt;BlockingProbe*&gt;(data);</span>
+<span id="L90">    if (!context.rate_release) {</span>
+<span id="L91">        return rt::CallbackResult::error;</span>
+<span id="L92">    }</span>
+<span id="L93">    probe.entered.store(true, std::memory_order_release);</span>
+<span id="L94">    while (!probe.release.load(std::memory_order_acquire)) {</span>
+<span id="L95">        std::this_thread::yield();</span>
+<span id="L96">    }</span>
+<span id="L97">    return rt::CallbackResult::ok;</span>
+<span id="L98">}</span>
+<span id="L99"></span>
+<span id="L100">rt::RuntimeConfig test_config() {</span>
+<span id="L101">    rt::RuntimeConfig config;</span>
+<span id="L102">    config.callback_capacity = 8;</span>
+<span id="L103">    config.executor_queue_capacity = 8;</span>
+<span id="L104">    config.task_scratch_slots = 8;</span>
+<span id="L105">    config.snapshot_max_bytes = 64 * 1024;</span>
+<span id="L106">    config.memory_budget_bytes = 4 * 1024 * 1024;</span>
+<span id="L107">    return config;</span>
+<span id="L108">}</span>
+<span id="L109"></span>
+<span id="L110">void add_rate(</span>
+<span id="L111">    rt::Runtime&amp; runtime,</span>
+<span id="L112">    const char* name,</span>
+<span id="L113">    bool optional,</span>
+<span id="L114">    rt::RateCriticality criticality,</span>
+<span id="L115">    rt::RateLateAction late_action,</span>
+<span id="L116">    std::size_t&amp; calls,</span>
+<span id="L117">    rt::PhaseHandle&amp; phase,</span>
+<span id="L118">    rt::RateDomainHandle&amp; domain) {</span>
+<span id="L119">    ASSERT_EQ(</span>
+<span id="L120">        runtime.register_callback({name, &amp;count_callback, &amp;calls}, phase),</span>
+<span id="L121">        rt::Status::ok);</span>
+<span id="L122">    ASSERT_EQ(</span>
+<span id="L123">        runtime.register_rate_domain(</span>
+<span id="L124">            {name, 100, 1, 50, 10, criticality, optional, late_action, 0},</span>
+<span id="L125">            domain),</span>
+<span id="L126">        rt::Status::ok);</span>
+<span id="L127">    ASSERT_EQ(</span>
+<span id="L128">        runtime.bind_phase_to_rate_domain(phase, domain),</span>
+<span id="L129">        rt::Status::ok);</span>
+<span id="L130">}</span>
+<span id="L131"></span>
+<span id="L132">void configure_pair(</span>
+<span id="L133">    rt::Runtime&amp; runtime,</span>
+<span id="L134">    std::size_t telemetry_capacity,</span>
+<span id="L135">    std::size_t&amp; mandatory_calls,</span>
+<span id="L136">    std::size_t&amp; optional_calls) {</span>
+<span id="L137">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L138">    ASSERT_EQ(</span>
+<span id="L139">        runtime.set_rate_execution_policy({16, 7, 1, 1, telemetry_capacity}),</span>
+<span id="L140">        rt::Status::ok);</span>
+<span id="L141">    rt::PhaseHandle mandatory_phase;</span>
+<span id="L142">    rt::PhaseHandle optional_phase;</span>
+<span id="L143">    rt::RateDomainHandle mandatory_domain;</span>
+<span id="L144">    rt::RateDomainHandle optional_domain;</span>
+<span id="L145">    add_rate(</span>
+<span id="L146">        runtime, &quot;mandatory&quot;, false, rt::RateCriticality::critical,</span>
+<span id="L147">        rt::RateLateAction::skip, mandatory_calls, mandatory_phase,</span>
+<span id="L148">        mandatory_domain);</span>
+<span id="L149">    add_rate(</span>
+<span id="L150">        runtime, &quot;optional&quot;, true, rt::RateCriticality::background,</span>
+<span id="L151">        rt::RateLateAction::fail, optional_calls, optional_phase,</span>
+<span id="L152">        optional_domain);</span>
+<span id="L153">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L154">}</span>
+<span id="L155"></span>
+<span id="L156">} // namespace</span>
+<span id="L157"></span>
+<span id="L158">TEST(RateTelemetry, NumericSchemaAndCounterTablesAreExact) {</span>
+<span id="L159">    EXPECT_EQ(rt::rate_action_schema_version, 1u);</span>
+<span id="L160">    EXPECT_EQ(sizeof(rt::RateActionRecord), 160u);</span>
+<span id="L161">    EXPECT_EQ(static_cast&lt;unsigned&gt;(rt::RateActionId::execute_on_time), 0u);</span>
+<span id="L162">    EXPECT_EQ(static_cast&lt;unsigned&gt;(rt::RateActionId::optional_shed), 6u);</span>
+<span id="L163">    EXPECT_EQ(static_cast&lt;unsigned&gt;(rt::RateTransitionId::recover), 2u);</span>
+<span id="L164">    EXPECT_EQ(static_cast&lt;unsigned&gt;(rt::RateActionReason::arithmetic_failure), 7u);</span>
+<span id="L165">    EXPECT_EQ(static_cast&lt;unsigned&gt;(rt::RateCounterId::stale_reads), 19u);</span>
+<span id="L166">    for (std::size_t index = 0; index &lt; rt::rate_action_counter_count; ++index) {</span>
+<span id="L167">        rt::RateCounterDefinition definition;</span>
+<span id="L168">        ASSERT_TRUE(rt::rate_counter_definition(index, definition));</span>
+<span id="L169">        EXPECT_EQ(static_cast&lt;std::size_t&gt;(definition.id), index);</span>
+<span id="L170">        EXPECT_EQ(</span>
+<span id="L171">            definition.kind,</span>
+<span id="L172">            index == 16 || index == 17</span>
+<span id="L173">                ? rt::RateCounterKind::gauge</span>
+<span id="L174">                : rt::RateCounterKind::counter);</span>
+<span id="L175">        EXPECT_FALSE(definition.name.empty());</span>
+<span id="L176">    }</span>
+<span id="L177">    rt::RateCounterDefinition invalid;</span>
+<span id="L178">    EXPECT_FALSE(rt::rate_counter_definition(20, invalid));</span>
+<span id="L179">}</span>
+<span id="L180"></span>
+<span id="L181">TEST(RateTelemetry, ConcurrentPublishAndReadRemainBoundedAndRaceFree) {</span>
+<span id="L182">    rt::detail::RateTelemetryRing ring(8);</span>
+<span id="L183">    std::atomic&lt;bool&gt; start{false};</span>
+<span id="L184">    constexpr std::size_t attempts = 20&#x27;000;</span>
+<span id="L185">    const auto producer = [&amp;](std::uint64_t frame_base) {</span>
+<span id="L186">        while (!start.load(std::memory_order_acquire)) {</span>
+<span id="L187">            std::this_thread::yield();</span>
+<span id="L188">        }</span>
+<span id="L189">        for (std::size_t index = 0; index &lt; attempts / 2; ++index) {</span>
+<span id="L190">            rt::RateActionRecord record;</span>
+<span id="L191">            record.frame_index = frame_base + index;</span>
+<span id="L192">            record.release_count = 1;</span>
+<span id="L193">            record.reference_record_count = 1;</span>
+<span id="L194">            (void)ring.emit(record);</span>
+<span id="L195">        }</span>
+<span id="L196">    };</span>
+<span id="L197">    std::thread first(producer, 0);</span>
+<span id="L198">    std::thread second(producer, attempts);</span>
+<span id="L199">    start.store(true, std::memory_order_release);</span>
+<span id="L200">    while (ring.next_sequence() &lt; attempts) {</span>
+<span id="L201">        const auto end = ring.next_sequence();</span>
+<span id="L202">        if (end != 0) {</span>
+<span id="L203">            rt::RateActionRecord record;</span>
+<span id="L204">            (void)ring.read_sequence(end - 1, record);</span>
+<span id="L205">        }</span>
+<span id="L206">        std::this_thread::yield();</span>
+<span id="L207">    }</span>
+<span id="L208">    first.join();</span>
+<span id="L209">    second.join();</span>
+<span id="L210">    EXPECT_EQ(ring.next_sequence(), attempts);</span>
+<span id="L211">    EXPECT_EQ(ring.emitted() + ring.dropped(), attempts);</span>
+<span id="L212">    const auto end = ring.next_sequence();</span>
+<span id="L213">    const auto oldest = ring.oldest_sequence(end);</span>
+<span id="L214">    std::size_t retained = 0;</span>
+<span id="L215">    for (auto sequence = oldest; sequence &lt; end; ++sequence) {</span>
+<span id="L216">        rt::RateActionRecord record;</span>
+<span id="L217">        if (ring.read_sequence(sequence, record)) {</span>
+<span id="L218">            ++retained;</span>
+<span id="L219">            EXPECT_EQ(record.sequence, sequence);</span>
+<span id="L220">            EXPECT_EQ(record.release_count, 1u);</span>
+<span id="L221">        }</span>
+<span id="L222">    }</span>
+<span id="L223">    EXPECT_LE(retained, 8u);</span>
+<span id="L224">}</span>
+<span id="L225"></span>
+<span id="L226">TEST(RateTelemetry, InspectionRejectsAnActiveStep) {</span>
+<span id="L227">    ManualClock clock;</span>
+<span id="L228">    rt::Runtime runtime(clock);</span>
+<span id="L229">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L230">    ASSERT_EQ(runtime.set_rate_execution_policy({2, 1, 1, 1, 2}), rt::Status::ok);</span>
+<span id="L231">    BlockingProbe probe;</span>
+<span id="L232">    rt::PhaseHandle phase;</span>
+<span id="L233">    rt::RateDomainHandle domain;</span>
+<span id="L234">    ASSERT_EQ(</span>
+<span id="L235">        runtime.register_callback({&quot;blocking&quot;, &amp;blocking_callback, &amp;probe}, phase),</span>
+<span id="L236">        rt::Status::ok);</span>
+<span id="L237">    ASSERT_EQ(</span>
+<span id="L238">        runtime.register_rate_domain(</span>
+<span id="L239">            {&quot;rate&quot;, 100, 1, 100, 10, rt::RateCriticality::critical,</span>
+<span id="L240">             false, rt::RateLateAction::fail, 0}, domain),</span>
+<span id="L241">        rt::Status::ok);</span>
+<span id="L242">    ASSERT_EQ(runtime.bind_phase_to_rate_domain(phase, domain), rt::Status::ok);</span>
+<span id="L243">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L244">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L245">    rt::Status step_status = rt::Status::internal_error;</span>
+<span id="L246">    std::thread step_thread([&amp;] {</span>
+<span id="L247">        step_status = runtime.step({0, 100ns, std::nullopt, 1&#x27;000});</span>
+<span id="L248">    });</span>
+<span id="L249">    while (!probe.entered.load(std::memory_order_acquire)) {</span>
+<span id="L250">        std::this_thread::yield();</span>
+<span id="L251">    }</span>
+<span id="L252">    rt::RateTelemetryMetadata metadata;</span>
+<span id="L253">    EXPECT_EQ(runtime.rate_telemetry_metadata(metadata), rt::Status::invalid_state);</span>
+<span id="L254">    rt::RateCounterSnapshot counters;</span>
+<span id="L255">    EXPECT_EQ(runtime.rate_counters_snapshot(counters), rt::Status::invalid_state);</span>
+<span id="L256">    probe.release.store(true, std::memory_order_release);</span>
+<span id="L257">    step_thread.join();</span>
+<span id="L258">    EXPECT_EQ(step_status, rt::Status::ok);</span>
+<span id="L259">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L260">}</span>
+<span id="L261"></span>
+<span id="L262">TEST(RateTelemetry, RuntimeBoundCursorsRejectForeignInstancesTransactionally) {</span>
+<span id="L263">    ManualClock first_clock;</span>
+<span id="L264">    ManualClock second_clock;</span>
+<span id="L265">    rt::Runtime first(first_clock);</span>
+<span id="L266">    rt::Runtime second(second_clock);</span>
+<span id="L267">    std::array&lt;std::size_t, 4&gt; calls{};</span>
+<span id="L268">    configure_pair(first, 2, calls[0], calls[1]);</span>
+<span id="L269">    configure_pair(second, 2, calls[2], calls[3]);</span>
+<span id="L270">    rt::RateTelemetryCursor cursor;</span>
+<span id="L271">    rt::RateTelemetryReadResult read;</span>
+<span id="L272">    std::array&lt;rt::RateActionRecord, 1&gt; records{};</span>
+<span id="L273">    ASSERT_EQ(first.read_rate_actions(cursor, records, read), rt::Status::ok);</span>
+<span id="L274">    ASSERT_NE(cursor.runtime_id, 0u);</span>
+<span id="L275">    const auto committed = cursor;</span>
+<span id="L276">    EXPECT_EQ(</span>
+<span id="L277">        second.read_rate_actions(cursor, records, read),</span>
+<span id="L278">        rt::Status::invalid_argument);</span>
+<span id="L279">    EXPECT_EQ(cursor.runtime_id, committed.runtime_id);</span>
+<span id="L280">    EXPECT_EQ(cursor.next_sequence, committed.next_sequence);</span>
+<span id="L281">}</span>
+<span id="L282"></span>
+<span id="L283">TEST(PeriodicRuntime, RateTelemetrySummaryAndInspectionBoundaryAreExact) {</span>
+<span id="L284">    ManualClock clock;</span>
+<span id="L285">    rt::Runtime runtime(clock);</span>
+<span id="L286">    std::size_t mandatory_calls = 0;</span>
+<span id="L287">    std::size_t optional_calls = 0;</span>
+<span id="L288">    configure_pair(runtime, 8, mandatory_calls, optional_calls);</span>
+<span id="L289">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L290">    PeriodicInspectionProbe probe{&amp;runtime};</span>
+<span id="L291">    rt::PeriodicRunConfig config;</span>
+<span id="L292">    config.frame_count = 2;</span>
+<span id="L293">    config.period = 100ns;</span>
+<span id="L294">    config.first_release_ns = 1&#x27;000;</span>
+<span id="L295">    config.relative_deadline = 100ns;</span>
+<span id="L296">    rt::PeriodicRunResult result;</span>
+<span id="L297">    ASSERT_EQ(</span>
+<span id="L298">        runtime.run_periodic(</span>
+<span id="L299">            config, &amp;inspect_during_periodic, &amp;probe, &amp;result),</span>
+<span id="L300">        rt::Status::ok);</span>
+<span id="L301">    EXPECT_EQ(probe.calls, 2u);</span>
+<span id="L302">    EXPECT_EQ(mandatory_calls, 2u);</span>
+<span id="L303">    EXPECT_EQ(optional_calls, 2u);</span>
+<span id="L304">    EXPECT_EQ(result.rate.due_domain_releases, 4u);</span>
+<span id="L305">    EXPECT_EQ(result.rate.optional_due_domain_releases, 2u);</span>
+<span id="L306">    EXPECT_EQ(result.rate.optional_executed_domain_releases, 2u);</span>
+<span id="L307">    EXPECT_EQ(result.rate.shed_domain_releases, 0u);</span>
+<span id="L308">    EXPECT_EQ(result.rate.currently_shed_domains, 0u);</span>
+<span id="L309">    EXPECT_EQ(result.rate.rate_policy_version, 7u);</span>
+<span id="L310">    rt::RateTelemetryMetadata metadata;</span>
+<span id="L311">    ASSERT_EQ(runtime.rate_telemetry_metadata(metadata), rt::Status::ok);</span>
+<span id="L312">    EXPECT_EQ(metadata.next_sequence, 4u);</span>
+<span id="L313">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L314">}</span>
+<span id="L315"></span>
+<span id="L316">TEST(RateShedding, ThresholdTransitionIsImmediateAndRecoveryIsReverse) {</span>
+<span id="L317">    ManualClock clock;</span>
+<span id="L318">    clock.now = 2&#x27;000;</span>
+<span id="L319">    rt::Runtime runtime(clock);</span>
+<span id="L320">    std::size_t mandatory_calls = 0;</span>
+<span id="L321">    std::size_t optional_calls = 0;</span>
+<span id="L322">    configure_pair(runtime, 16, mandatory_calls, optional_calls);</span>
+<span id="L323">    rt::ObservabilityMetadata global_metadata;</span>
+<span id="L324">    ASSERT_EQ(runtime.observability_metadata(global_metadata), rt::Status::ok);</span>
+<span id="L325">    EXPECT_EQ(global_metadata.schema_version, 2u);</span>
+<span id="L326">    EXPECT_EQ(global_metadata.metric_count, 32u);</span>
+<span id="L327">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L328"></span>
+<span id="L329">    rt::StepResult late;</span>
+<span id="L330">    ASSERT_EQ(</span>
+<span id="L331">        runtime.step({0, 100ns, std::nullopt, 1&#x27;000}, &amp;late),</span>
+<span id="L332">        rt::Status::ok);</span>
+<span id="L333">    EXPECT_EQ(mandatory_calls, 0u);</span>
+<span id="L334">    EXPECT_EQ(optional_calls, 0u);</span>
+<span id="L335">    EXPECT_EQ(late.rate.optional_due_domain_releases, 1u);</span>
+<span id="L336">    EXPECT_EQ(late.rate.shed_domain_releases, 1u);</span>
+<span id="L337">    EXPECT_EQ(late.rate.shed_transitions, 1u);</span>
+<span id="L338">    EXPECT_EQ(late.rate.currently_shed_domains, 1u);</span>
+<span id="L339">    EXPECT_EQ(late.rate.rate_policy_version, 7u);</span>
+<span id="L340"></span>
+<span id="L341">    clock.now = 1&#x27;100;</span>
+<span id="L342">    rt::StepResult recovered;</span>
+<span id="L343">    ASSERT_EQ(</span>
+<span id="L344">        runtime.step({1, 100ns, std::nullopt, 1&#x27;100}, &amp;recovered),</span>
+<span id="L345">        rt::Status::ok);</span>
+<span id="L346">    EXPECT_EQ(mandatory_calls, 1u);</span>
+<span id="L347">    EXPECT_EQ(optional_calls, 1u);</span>
+<span id="L348">    EXPECT_EQ(recovered.rate.optional_executed_domain_releases, 1u);</span>
+<span id="L349">    EXPECT_EQ(recovered.rate.recovery_transitions, 1u);</span>
+<span id="L350">    EXPECT_EQ(recovered.rate.currently_shed_domains, 0u);</span>
+<span id="L351"></span>
+<span id="L352">    std::array&lt;rt::RateActionRecord, 8&gt; records{};</span>
+<span id="L353">    rt::RateTelemetryCursor cursor;</span>
+<span id="L354">    rt::RateTelemetryReadResult read;</span>
+<span id="L355">    ASSERT_EQ(runtime.read_rate_actions(cursor, records, read), rt::Status::ok);</span>
+<span id="L356">    ASSERT_EQ(read.records_read, 4u);</span>
+<span id="L357">    EXPECT_EQ(records[0].action, rt::RateActionId::skip);</span>
+<span id="L358">    EXPECT_EQ(records[0].transition, rt::RateTransitionId::shed);</span>
+<span id="L359">    EXPECT_EQ(records[0].reason, rt::RateActionReason::late_threshold);</span>
+<span id="L360">    EXPECT_EQ(records[0].shed_state_before, 0u);</span>
+<span id="L361">    EXPECT_NE(records[0].shed_state_after, 0u);</span>
+<span id="L362">    EXPECT_EQ(records[1].action, rt::RateActionId::optional_shed);</span>
+<span id="L363">    EXPECT_EQ(records[1].reason, rt::RateActionReason::already_shed);</span>
+<span id="L364">    EXPECT_EQ(records[2].transition, rt::RateTransitionId::recover);</span>
+<span id="L365">    EXPECT_EQ(records[3].action, rt::RateActionId::execute_on_time);</span>
+<span id="L366"></span>
+<span id="L367">    rt::RateCounterSnapshot counters;</span>
+<span id="L368">    ASSERT_EQ(runtime.rate_counters_snapshot(counters), rt::Status::ok);</span>
+<span id="L369">    EXPECT_EQ(counters.values[8], 2u);</span>
+<span id="L370">    EXPECT_EQ(counters.values[9], 1u);</span>
+<span id="L371">    EXPECT_EQ(counters.values[10], 1u);</span>
+<span id="L372">    EXPECT_EQ(counters.values[11], 1u);</span>
+<span id="L373">    EXPECT_EQ(counters.values[12], 1u);</span>
+<span id="L374">    EXPECT_EQ(counters.values[16], 0u);</span>
+<span id="L375">    EXPECT_EQ(counters.values[17], 7u);</span>
+<span id="L376">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L377">}</span>
+<span id="L378"></span>
+<span id="L379">TEST(RateTelemetry, ZeroCapacityAndOverwriteReportExactCursorGaps) {</span>
+<span id="L380">    for (const auto capacity : std::array&lt;std::size_t, 2&gt;{0, 1}) {</span>
+<span id="L381">        ManualClock clock;</span>
+<span id="L382">        rt::Runtime runtime(clock);</span>
+<span id="L383">        std::size_t mandatory_calls = 0;</span>
+<span id="L384">        std::size_t optional_calls = 0;</span>
+<span id="L385">        configure_pair(runtime, capacity, mandatory_calls, optional_calls);</span>
+<span id="L386">        ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L387">        clock.now = 1&#x27;000;</span>
+<span id="L388">        ASSERT_EQ(runtime.step({0, 100ns, std::nullopt, 1&#x27;000}), rt::Status::ok);</span>
+<span id="L389">        clock.now = 1&#x27;100;</span>
+<span id="L390">        ASSERT_EQ(runtime.step({1, 100ns, std::nullopt, 1&#x27;100}), rt::Status::ok);</span>
+<span id="L391"></span>
+<span id="L392">        rt::RateTelemetryMetadata metadata;</span>
+<span id="L393">        ASSERT_EQ(runtime.rate_telemetry_metadata(metadata), rt::Status::ok);</span>
+<span id="L394">        EXPECT_EQ(metadata.capacity, capacity);</span>
+<span id="L395">        EXPECT_EQ(metadata.next_sequence, 4u);</span>
+<span id="L396">        if (capacity == 0) {</span>
+<span id="L397">            EXPECT_EQ(metadata.records_emitted, 0u);</span>
+<span id="L398">            EXPECT_EQ(metadata.records_dropped, 4u);</span>
+<span id="L399">        } else {</span>
+<span id="L400">            EXPECT_EQ(metadata.records_emitted, 4u);</span>
+<span id="L401">            EXPECT_EQ(metadata.records_overwritten, 3u);</span>
+<span id="L402">        }</span>
+<span id="L403"></span>
+<span id="L404">        std::array&lt;rt::RateActionRecord, 4&gt; records{};</span>
+<span id="L405">        rt::RateTelemetryCursor cursor;</span>
+<span id="L406">        rt::RateTelemetryReadResult read;</span>
+<span id="L407">        ASSERT_EQ(runtime.read_rate_actions(cursor, records, read), rt::Status::ok);</span>
+<span id="L408">        EXPECT_EQ(read.lost_records, capacity == 0 ? 4u : 3u);</span>
+<span id="L409">        EXPECT_EQ(read.records_read, capacity);</span>
+<span id="L410">        if (capacity == 1) {</span>
+<span id="L411">            EXPECT_EQ(records[0].sequence, 3u);</span>
+<span id="L412">        }</span>
+<span id="L413">        const auto committed = cursor;</span>
+<span id="L414">        auto malformed = cursor;</span>
+<span id="L415">        malformed.schema_version = 2;</span>
+<span id="L416">        EXPECT_EQ(</span>
+<span id="L417">            runtime.read_rate_actions(malformed, records, read),</span>
+<span id="L418">            rt::Status::invalid_argument);</span>
+<span id="L419">        EXPECT_EQ(malformed.runtime_id, committed.runtime_id);</span>
+<span id="L420">        EXPECT_EQ(malformed.next_sequence, committed.next_sequence);</span>
+<span id="L421">        EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L422">    }</span>
+<span id="L423">}</span>
+<span id="L424"></span>
+<span id="L425">TEST(RateShedding, OptionalOrderIsCriticalityThenReverseRegistration) {</span>
+<span id="L426">    ManualClock clock;</span>
+<span id="L427">    clock.now = 10&#x27;000;</span>
+<span id="L428">    rt::Runtime runtime(clock);</span>
+<span id="L429">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L430">    ASSERT_EQ(runtime.set_rate_execution_policy({64, 9, 1, 1, 32}), rt::Status::ok);</span>
+<span id="L431">    std::array&lt;std::size_t, 4&gt; calls{};</span>
+<span id="L432">    std::array&lt;rt::PhaseHandle, 4&gt; phases{};</span>
+<span id="L433">    std::array&lt;rt::RateDomainHandle, 4&gt; domains{};</span>
+<span id="L434">    add_rate(runtime, &quot;mandatory&quot;, false, rt::RateCriticality::critical,</span>
+<span id="L435">             rt::RateLateAction::skip, calls[0], phases[0], domains[0]);</span>
+<span id="L436">    add_rate(runtime, &quot;optional-a&quot;, true, rt::RateCriticality::background,</span>
+<span id="L437">             rt::RateLateAction::skip, calls[1], phases[1], domains[1]);</span>
+<span id="L438">    add_rate(runtime, &quot;optional-b&quot;, true, rt::RateCriticality::background,</span>
+<span id="L439">             rt::RateLateAction::skip, calls[2], phases[2], domains[2]);</span>
+<span id="L440">    add_rate(runtime, &quot;optional-c&quot;, true, rt::RateCriticality::critical,</span>
+<span id="L441">             rt::RateLateAction::skip, calls[3], phases[3], domains[3]);</span>
+<span id="L442">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L443">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L444">    for (std::uint64_t step = 0; step &lt; 3; ++step) {</span>
+<span id="L445">        ASSERT_EQ(</span>
+<span id="L446">            runtime.step({step, 100ns, std::nullopt, 1&#x27;000 + step * 100}),</span>
+<span id="L447">            rt::Status::ok);</span>
+<span id="L448">    }</span>
+<span id="L449">    std::array&lt;rt::RateActionRecord, 32&gt; records{};</span>
+<span id="L450">    rt::RateTelemetryCursor cursor;</span>
+<span id="L451">    rt::RateTelemetryReadResult read;</span>
+<span id="L452">    ASSERT_EQ(runtime.read_rate_actions(cursor, records, read), rt::Status::ok);</span>
+<span id="L453">    std::vector&lt;std::uint32_t&gt; transitioned;</span>
+<span id="L454">    for (std::size_t index = 0; index &lt; read.records_read; ++index) {</span>
+<span id="L455">        if (records[index].transition == rt::RateTransitionId::shed) {</span>
+<span id="L456">            transitioned.push_back(records[index].transition_domain_registration_index);</span>
+<span id="L457">        }</span>
+<span id="L458">    }</span>
+<span id="L459">    ASSERT_EQ(transitioned.size(), 3u);</span>
+<span id="L460">    EXPECT_EQ(transitioned[0], 2u);</span>
+<span id="L461">    EXPECT_EQ(transitioned[1], 1u);</span>
+<span id="L462">    EXPECT_EQ(transitioned[2], 3u);</span>
+<span id="L463"></span>
+<span id="L464">    clock.now = 1&#x27;300;</span>
+<span id="L465">    for (std::uint64_t step = 3; step &lt; 6; ++step) {</span>
+<span id="L466">        ASSERT_EQ(</span>
+<span id="L467">            runtime.step({step, 100ns, std::nullopt, 1&#x27;000 + step * 100}),</span>
+<span id="L468">            rt::Status::ok);</span>
+<span id="L469">    }</span>
+<span id="L470">    ASSERT_EQ(runtime.read_rate_actions(cursor, records, read), rt::Status::ok);</span>
+<span id="L471">    std::vector&lt;std::uint32_t&gt; recovered;</span>
+<span id="L472">    for (std::size_t index = 0; index &lt; read.records_read; ++index) {</span>
+<span id="L473">        if (records[index].transition == rt::RateTransitionId::recover) {</span>
+<span id="L474">            recovered.push_back(records[index].transition_domain_registration_index);</span>
+<span id="L475">        }</span>
+<span id="L476">    }</span>
+<span id="L477">    ASSERT_EQ(recovered.size(), 3u);</span>
+<span id="L478">    EXPECT_EQ(recovered[0], 3u);</span>
+<span id="L479">    EXPECT_EQ(recovered[1], 1u);</span>
+<span id="L480">    EXPECT_EQ(recovered[2], 2u);</span>
+<span id="L481">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L482">}</span>
+<span id="L483"></span>
+<span id="L484">TEST(RateShedding, StreakResetAndOptionalLatenessNeverDriveTransitions) {</span>
+<span id="L485">    ManualClock clock;</span>
+<span id="L486">    rt::Runtime runtime(clock);</span>
+<span id="L487">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L488">    ASSERT_EQ(runtime.set_rate_execution_policy({16, 4, 2, 2, 16}), rt::Status::ok);</span>
+<span id="L489">    std::array&lt;std::size_t, 2&gt; calls{};</span>
+<span id="L490">    std::array&lt;rt::PhaseHandle, 2&gt; phases{};</span>
+<span id="L491">    std::array&lt;rt::RateDomainHandle, 2&gt; domains{};</span>
+<span id="L492">    ASSERT_EQ(runtime.register_callback(</span>
+<span id="L493">                  {&quot;mandatory&quot;, &amp;count_callback, &amp;calls[0]}, phases[0]),</span>
+<span id="L494">              rt::Status::ok);</span>
+<span id="L495">    ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L496">                  {&quot;mandatory&quot;, 100, 1, 100, 10,</span>
+<span id="L497">                   rt::RateCriticality::critical, false,</span>
+<span id="L498">                   rt::RateLateAction::skip, 0}, domains[0]),</span>
+<span id="L499">              rt::Status::ok);</span>
+<span id="L500">    ASSERT_EQ(runtime.bind_phase_to_rate_domain(phases[0], domains[0]), rt::Status::ok);</span>
+<span id="L501">    ASSERT_EQ(runtime.register_callback(</span>
+<span id="L502">                  {&quot;optional&quot;, &amp;count_callback, &amp;calls[1]}, phases[1]),</span>
+<span id="L503">              rt::Status::ok);</span>
+<span id="L504">    ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L505">                  {&quot;optional&quot;, 100, 1, 1, 10,</span>
+<span id="L506">                   rt::RateCriticality::background, true,</span>
+<span id="L507">                   rt::RateLateAction::skip, 0}, domains[1]),</span>
+<span id="L508">              rt::Status::ok);</span>
+<span id="L509">    ASSERT_EQ(runtime.bind_phase_to_rate_domain(phases[1], domains[1]), rt::Status::ok);</span>
+<span id="L510">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L511">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L512"></span>
+<span id="L513">    rt::StepResult result;</span>
+<span id="L514">    clock.now = 2&#x27;000;</span>
+<span id="L515">    ASSERT_EQ(runtime.step({0, 100ns, std::nullopt, 1&#x27;000}, &amp;result), rt::Status::ok);</span>
+<span id="L516">    EXPECT_EQ(result.rate.shed_transitions, 0u);</span>
+<span id="L517">    clock.now = 1&#x27;150;</span>
+<span id="L518">    ASSERT_EQ(runtime.step({1, 100ns, std::nullopt, 1&#x27;100}, &amp;result), rt::Status::ok);</span>
+<span id="L519">    EXPECT_EQ(result.rate.skipped_domain_releases, 1u);</span>
+<span id="L520">    EXPECT_EQ(result.rate.shed_transitions, 0u);</span>
+<span id="L521">    clock.now = 2&#x27;000;</span>
+<span id="L522">    ASSERT_EQ(runtime.step({2, 100ns, std::nullopt, 1&#x27;200}, &amp;result), rt::Status::ok);</span>
+<span id="L523">    EXPECT_EQ(result.rate.shed_transitions, 0u);</span>
+<span id="L524">    ASSERT_EQ(runtime.step({3, 100ns, std::nullopt, 1&#x27;300}, &amp;result), rt::Status::ok);</span>
+<span id="L525">    EXPECT_EQ(result.rate.shed_transitions, 1u);</span>
+<span id="L526">    EXPECT_EQ(result.rate.currently_shed_domains, 1u);</span>
+<span id="L527">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L528">}</span>
+<span id="L529"></span>
+<span id="L530">TEST(RateShedding, TerminalFailPreventsPolicyTransition) {</span>
+<span id="L531">    ManualClock clock;</span>
+<span id="L532">    clock.now = 2&#x27;000;</span>
+<span id="L533">    rt::Runtime runtime(clock);</span>
+<span id="L534">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L535">    ASSERT_EQ(runtime.set_rate_execution_policy({8, 3, 1, 1, 8}), rt::Status::ok);</span>
+<span id="L536">    std::array&lt;std::size_t, 2&gt; calls{};</span>
+<span id="L537">    std::array&lt;rt::PhaseHandle, 2&gt; phases{};</span>
+<span id="L538">    std::array&lt;rt::RateDomainHandle, 2&gt; domains{};</span>
+<span id="L539">    add_rate(runtime, &quot;mandatory&quot;, false, rt::RateCriticality::critical,</span>
+<span id="L540">             rt::RateLateAction::fail, calls[0], phases[0], domains[0]);</span>
+<span id="L541">    add_rate(runtime, &quot;optional&quot;, true, rt::RateCriticality::background,</span>
+<span id="L542">             rt::RateLateAction::skip, calls[1], phases[1], domains[1]);</span>
+<span id="L543">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L544">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L545">    rt::StepResult result;</span>
+<span id="L546">    EXPECT_EQ(</span>
+<span id="L547">        runtime.step({0, 100ns, std::nullopt, 1&#x27;000}, &amp;result),</span>
+<span id="L548">        rt::Status::callback_failed);</span>
+<span id="L549">    EXPECT_EQ(result.rate.failed_domain_releases, 1u);</span>
+<span id="L550">    EXPECT_EQ(result.rate.shed_transitions, 0u);</span>
+<span id="L551">    EXPECT_EQ(result.rate.currently_shed_domains, 0u);</span>
+<span id="L552">    std::array&lt;rt::RateActionRecord, 2&gt; records{};</span>
+<span id="L553">    rt::RateTelemetryCursor cursor;</span>
+<span id="L554">    rt::RateTelemetryReadResult read;</span>
+<span id="L555">    ASSERT_EQ(runtime.read_rate_actions(cursor, records, read), rt::Status::ok);</span>
+<span id="L556">    ASSERT_EQ(read.records_read, 1u);</span>
+<span id="L557">    EXPECT_EQ(records[0].action, rt::RateActionId::fail);</span>
+<span id="L558">    EXPECT_EQ(records[0].transition, rt::RateTransitionId::none);</span>
+<span id="L559">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L560">}</span>
+<span id="L561"></span>
+<span id="L562">TEST(RateShedding, LargeLateWindowAggregatesAfterBoundedTransitions) {</span>
+<span id="L563">    ManualClock clock;</span>
+<span id="L564">    clock.now = 10&#x27;000&#x27;000;</span>
+<span id="L565">    rt::Runtime runtime(clock);</span>
+<span id="L566">    std::size_t mandatory_calls = 0;</span>
+<span id="L567">    std::size_t optional_calls = 0;</span>
+<span id="L568">    configure_pair(runtime, 16, mandatory_calls, optional_calls);</span>
+<span id="L569">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L570">    rt::StepResult result;</span>
+<span id="L571">    ASSERT_EQ(</span>
+<span id="L572">        runtime.step({0, 1&#x27;000&#x27;000ns, std::nullopt, 1&#x27;000}, &amp;result),</span>
+<span id="L573">        rt::Status::ok);</span>
+<span id="L574">    EXPECT_EQ(result.rate.due_domain_releases, 20&#x27;000u);</span>
+<span id="L575">    EXPECT_EQ(result.rate.optional_due_domain_releases, 10&#x27;000u);</span>
+<span id="L576">    EXPECT_EQ(result.rate.skipped_domain_releases, 10&#x27;000u);</span>
+<span id="L577">    EXPECT_EQ(result.rate.shed_domain_releases, 10&#x27;000u);</span>
+<span id="L578">    EXPECT_EQ(result.rate.shed_transitions, 1u);</span>
+<span id="L579">    EXPECT_EQ(result.rate.currently_shed_domains, 1u);</span>
+<span id="L580">    EXPECT_EQ(mandatory_calls, 0u);</span>
+<span id="L581">    EXPECT_EQ(optional_calls, 0u);</span>
+<span id="L582"></span>
+<span id="L583">    std::array&lt;rt::RateActionRecord, 8&gt; records{};</span>
+<span id="L584">    rt::RateTelemetryCursor cursor;</span>
+<span id="L585">    rt::RateTelemetryReadResult read;</span>
+<span id="L586">    ASSERT_EQ(runtime.read_rate_actions(cursor, records, read), rt::Status::ok);</span>
+<span id="L587">    ASSERT_EQ(read.records_read, 4u);</span>
+<span id="L588">    EXPECT_EQ(records[2].release_count, 9&#x27;999u);</span>
+<span id="L589">    EXPECT_EQ(records[2].reference_record_count, 9&#x27;999u);</span>
+<span id="L590">    EXPECT_EQ(records[2].release_period_ns, 100u);</span>
+<span id="L591">    EXPECT_EQ(records[3].release_count, 9&#x27;999u);</span>
+<span id="L592">    EXPECT_EQ(records[3].action, rt::RateActionId::optional_shed);</span>
+<span id="L593">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L594">}</span>
+<span id="L595"></span>
+<span id="L596">TEST(RateShedding, LargeOptionalLatePrefixAggregatesBeforeShedThreshold) {</span>
+<span id="L597">    ManualClock clock;</span>
+<span id="L598">    clock.now = 10&#x27;000&#x27;000;</span>
+<span id="L599">    rt::Runtime runtime(clock);</span>
+<span id="L600">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L601">    ASSERT_EQ(</span>
+<span id="L602">        runtime.set_rate_execution_policy({16, 11, 2, 1, 16}),</span>
+<span id="L603">        rt::Status::ok);</span>
+<span id="L604">    std::array&lt;std::size_t, 2&gt; calls{};</span>
+<span id="L605">    std::array&lt;rt::PhaseHandle, 2&gt; phases{};</span>
+<span id="L606">    std::array&lt;rt::RateDomainHandle, 2&gt; domains{};</span>
+<span id="L607">    ASSERT_EQ(</span>
+<span id="L608">        runtime.register_callback(</span>
+<span id="L609">            {&quot;mandatory&quot;, &amp;count_callback, &amp;calls[0]}, phases[0]),</span>
+<span id="L610">        rt::Status::ok);</span>
+<span id="L611">    ASSERT_EQ(</span>
+<span id="L612">        runtime.register_rate_domain(</span>
+<span id="L613">            {&quot;mandatory&quot;, 1&#x27;000&#x27;000, 1, 50, 10,</span>
+<span id="L614">             rt::RateCriticality::critical, false,</span>
+<span id="L615">             rt::RateLateAction::skip, 0},</span>
+<span id="L616">            domains[0]),</span>
+<span id="L617">        rt::Status::ok);</span>
+<span id="L618">    ASSERT_EQ(</span>
+<span id="L619">        runtime.bind_phase_to_rate_domain(phases[0], domains[0]),</span>
+<span id="L620">        rt::Status::ok);</span>
+<span id="L621">    ASSERT_EQ(</span>
+<span id="L622">        runtime.register_callback(</span>
+<span id="L623">            {&quot;optional&quot;, &amp;count_callback, &amp;calls[1]}, phases[1]),</span>
+<span id="L624">        rt::Status::ok);</span>
+<span id="L625">    ASSERT_EQ(</span>
+<span id="L626">        runtime.register_rate_domain(</span>
+<span id="L627">            {&quot;optional&quot;, 100, 1, 50, 10,</span>
+<span id="L628">             rt::RateCriticality::background, true,</span>
+<span id="L629">             rt::RateLateAction::skip, 0},</span>
+<span id="L630">            domains[1]),</span>
+<span id="L631">        rt::Status::ok);</span>
+<span id="L632">    ASSERT_EQ(</span>
+<span id="L633">        runtime.bind_phase_to_rate_domain(phases[1], domains[1]),</span>
+<span id="L634">        rt::Status::ok);</span>
+<span id="L635">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L636">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L637"></span>
+<span id="L638">    rt::StepResult result;</span>
+<span id="L639">    ASSERT_EQ(</span>
+<span id="L640">        runtime.step({0, 1&#x27;000&#x27;000ns, std::nullopt, 1&#x27;000}, &amp;result),</span>
+<span id="L641">        rt::Status::ok);</span>
+<span id="L642">    EXPECT_EQ(result.rate.due_domain_releases, 10&#x27;001u);</span>
+<span id="L643">    EXPECT_EQ(result.rate.optional_due_domain_releases, 10&#x27;000u);</span>
+<span id="L644">    EXPECT_EQ(result.rate.skipped_domain_releases, 10&#x27;001u);</span>
+<span id="L645">    EXPECT_EQ(result.rate.shed_transitions, 0u);</span>
+<span id="L646">    EXPECT_EQ(result.rate.shed_domain_releases, 0u);</span>
+<span id="L647">    EXPECT_EQ(calls[0], 0u);</span>
+<span id="L648">    EXPECT_EQ(calls[1], 0u);</span>
+<span id="L649"></span>
+<span id="L650">    std::array&lt;rt::RateActionRecord, 4&gt; records{};</span>
+<span id="L651">    rt::RateTelemetryCursor cursor;</span>
+<span id="L652">    rt::RateTelemetryReadResult read;</span>
+<span id="L653">    ASSERT_EQ(runtime.read_rate_actions(cursor, records, read), rt::Status::ok);</span>
+<span id="L654">    ASSERT_EQ(read.records_read, 3u);</span>
+<span id="L655">    EXPECT_EQ(read.lost_records, 0u);</span>
+<span id="L656">    EXPECT_EQ(records[0].domain_registration_index, 0u);</span>
+<span id="L657">    EXPECT_EQ(records[0].release_count, 1u);</span>
+<span id="L658">    EXPECT_EQ(records[1].domain_registration_index, 1u);</span>
+<span id="L659">    EXPECT_EQ(records[1].release_count, 1u);</span>
+<span id="L660">    EXPECT_EQ(records[2].domain_registration_index, 1u);</span>
+<span id="L661">    EXPECT_EQ(records[2].first_domain_release_sequence, 1u);</span>
+<span id="L662">    EXPECT_EQ(records[2].release_count, 9&#x27;999u);</span>
+<span id="L663">    EXPECT_EQ(records[2].reference_record_count, 9&#x27;999u);</span>
+<span id="L664">    EXPECT_EQ(records[2].action, rt::RateActionId::skip);</span>
+<span id="L665">    EXPECT_EQ(records[2].reason, rt::RateActionReason::deadline_late);</span>
+<span id="L666">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L667">}</span>
+<span id="L668"></span>
+<span id="L669">TEST(RateShedding, PolicyAndOptionalChannelValidationAreTransactional) {</span>
+<span id="L670">    rt::Runtime malformed;</span>
+<span id="L671">    EXPECT_EQ(</span>
+<span id="L672">        malformed.set_rate_execution_policy({4, 0, 1, 1, 0}),</span>
+<span id="L673">        rt::Status::invalid_argument);</span>
+<span id="L674">    EXPECT_EQ(</span>
+<span id="L675">        malformed.set_rate_execution_policy(</span>
+<span id="L676">            {4, 1, rt::rate_policy_threshold_limit + 1u, 1, 0}),</span>
+<span id="L677">        rt::Status::invalid_argument);</span>
+<span id="L678">    EXPECT_EQ(</span>
+<span id="L679">        malformed.set_rate_execution_policy(</span>
+<span id="L680">            {4, 1, 1, 1, rt::rate_telemetry_capacity_limit + 1}),</span>
+<span id="L681">        rt::Status::invalid_argument);</span>
+<span id="L682"></span>
+<span id="L683">    ManualClock clock;</span>
+<span id="L684">    rt::Runtime runtime(clock);</span>
+<span id="L685">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L686">    ASSERT_EQ(runtime.set_rate_execution_policy({8, 1, 1, 1, 0}), rt::Status::ok);</span>
+<span id="L687">    std::size_t producer_calls = 0;</span>
+<span id="L688">    std::size_t consumer_calls = 0;</span>
+<span id="L689">    rt::PhaseHandle producer;</span>
+<span id="L690">    rt::PhaseHandle consumer;</span>
+<span id="L691">    rt::RateDomainHandle optional_domain;</span>
+<span id="L692">    rt::RateDomainHandle mandatory_domain;</span>
+<span id="L693">    add_rate(runtime, &quot;optional-producer&quot;, true, rt::RateCriticality::background,</span>
+<span id="L694">             rt::RateLateAction::hold, producer_calls, producer, optional_domain);</span>
+<span id="L695">    add_rate(runtime, &quot;mandatory-consumer&quot;, false, rt::RateCriticality::critical,</span>
+<span id="L696">             rt::RateLateAction::fail, consumer_calls, consumer, mandatory_domain);</span>
+<span id="L697">    const std::array initial{std::byte{1}};</span>
+<span id="L698">    rt::CrossRateChannelHandle channel;</span>
+<span id="L699">    ASSERT_EQ(</span>
+<span id="L700">        runtime.register_cross_rate_channel(</span>
+<span id="L701">            {&quot;forbidden-optional&quot;, producer, consumer, 1, initial}, channel),</span>
+<span id="L702">        rt::Status::ok);</span>
+<span id="L703">    EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L704">    EXPECT_FALSE(runtime.cross_rate_model_enabled());</span>
+<span id="L705">    EXPECT_EQ(producer_calls, 0u);</span>
+<span id="L706">    EXPECT_EQ(consumer_calls, 0u);</span>
+<span id="L707">}</span>
+<span id="L708"></span>
+<span id="L709">TEST(RateShedding, CheckpointRoundTripRestoresStreakAndShedState) {</span>
+<span id="L710">    ManualClock source_clock;</span>
+<span id="L711">    source_clock.now = 2&#x27;000;</span>
+<span id="L712">    rt::Runtime source(source_clock);</span>
+<span id="L713">    std::size_t source_mandatory = 0;</span>
+<span id="L714">    std::size_t source_optional = 0;</span>
+<span id="L715">    configure_pair(source, 4, source_mandatory, source_optional);</span>
+<span id="L716">    ASSERT_EQ(source.start(), rt::Status::ok);</span>
+<span id="L717">    ASSERT_EQ(source.step({0, 100ns, std::nullopt, 1&#x27;000}), rt::Status::ok);</span>
+<span id="L718">    ASSERT_EQ(source.stop(), rt::Status::ok);</span>
+<span id="L719">    std::size_t required = 0;</span>
+<span id="L720">    ASSERT_EQ(source.checkpoint_size(required), rt::Status::ok);</span>
+<span id="L721">    std::vector&lt;std::byte&gt; checkpoint(required);</span>
+<span id="L722">    rt::ArtifactWriteResult written;</span>
+<span id="L723">    ASSERT_EQ(source.write_checkpoint(0, checkpoint, written), rt::Status::ok);</span>
+<span id="L724">    checkpoint.resize(written.bytes_written);</span>
+<span id="L725"></span>
+<span id="L726">    ManualClock restored_clock;</span>
+<span id="L727">    restored_clock.now = 1&#x27;100;</span>
+<span id="L728">    rt::Runtime restored(restored_clock);</span>
+<span id="L729">    std::size_t restored_mandatory = 0;</span>
+<span id="L730">    std::size_t restored_optional = 0;</span>
+<span id="L731">    configure_pair(restored, 4, restored_mandatory, restored_optional);</span>
+<span id="L732"></span>
+<span id="L733">    rt::CheckpointMetadata metadata;</span>
+<span id="L734">    ASSERT_EQ(</span>
+<span id="L735">        rt::inspect_checkpoint_artifact(checkpoint, metadata),</span>
+<span id="L736">        rt::Status::ok);</span>
+<span id="L737">    rt::detail::CheckpointRecordCursor record_cursor;</span>
+<span id="L738">    rt::detail::CheckpointRecordView active_record;</span>
+<span id="L739">    ASSERT_TRUE(rt::detail::next_checkpoint_record(</span>
+<span id="L740">        checkpoint, metadata, record_cursor, active_record));</span>
+<span id="L741">    ASSERT_EQ(active_record.name, &quot;rtfw.rate-dispatch&quot;);</span>
+<span id="L742">    std::vector&lt;std::byte&gt; malformed_payload(</span>
+<span id="L743">        active_record.payload.begin(), active_record.payload.end());</span>
+<span id="L744">    ASSERT_EQ(malformed_payload.size(), 145u);</span>
+<span id="L745">    malformed_payload[144] = std::byte{0};</span>
+<span id="L746">    EncodedState malformed_state{</span>
+<span id="L747">        active_record.name, active_record.schema_version, malformed_payload};</span>
+<span id="L748">    std::vector&lt;std::byte&gt; semantic_corruption(checkpoint.size());</span>
+<span id="L749">    rt::ArtifactWriteResult malformed_write;</span>
+<span id="L750">    ASSERT_EQ(</span>
+<span id="L751">        rt::detail::encode_checkpoint_artifact(</span>
+<span id="L752">            metadata, 1, &amp;provide_encoded_state, &amp;malformed_state,</span>
+<span id="L753">            test_config().snapshot_max_bytes, semantic_corruption,</span>
+<span id="L754">            malformed_write),</span>
+<span id="L755">        rt::Status::ok);</span>
+<span id="L756">    semantic_corruption.resize(malformed_write.bytes_written);</span>
+<span id="L757">    ASSERT_EQ(</span>
+<span id="L758">        rt::inspect_checkpoint_artifact(semantic_corruption, metadata),</span>
+<span id="L759">        rt::Status::ok);</span>
+<span id="L760">    EXPECT_EQ(</span>
+<span id="L761">        restored.restore_checkpoint(semantic_corruption),</span>
+<span id="L762">        rt::Status::incompatible_artifact);</span>
+<span id="L763">    rt::RateCounterSnapshot unchanged;</span>
+<span id="L764">    ASSERT_EQ(restored.rate_counters_snapshot(unchanged), rt::Status::ok);</span>
+<span id="L765">    EXPECT_EQ(unchanged.values[16], 0u);</span>
+<span id="L766">    ASSERT_EQ(restored.restore_checkpoint(checkpoint), rt::Status::ok);</span>
+<span id="L767">    rt::RateCounterSnapshot before;</span>
+<span id="L768">    ASSERT_EQ(restored.rate_counters_snapshot(before), rt::Status::ok);</span>
+<span id="L769">    EXPECT_EQ(before.values[16], 1u);</span>
+<span id="L770">    EXPECT_EQ(before.values[11], 0u);</span>
+<span id="L771">    ASSERT_EQ(restored.start(), rt::Status::ok);</span>
+<span id="L772">    rt::StepResult result;</span>
+<span id="L773">    ASSERT_EQ(</span>
+<span id="L774">        restored.step({1, 100ns, std::nullopt, 1&#x27;100}, &amp;result),</span>
+<span id="L775">        rt::Status::ok);</span>
+<span id="L776">    EXPECT_EQ(result.rate.recovery_transitions, 1u);</span>
+<span id="L777">    EXPECT_EQ(result.rate.currently_shed_domains, 0u);</span>
+<span id="L778">    EXPECT_EQ(restored_optional, 1u);</span>
+<span id="L779">    EXPECT_EQ(restored.stop(), rt::Status::ok);</span>
+<span id="L780">}</span>
+<span id="L781"></span>
+<span id="L782">TEST(MemoryPlan, RateTelemetryIsInsideRuntimeControlExactlyOnce) {</span>
+<span id="L783">    ManualClock clock;</span>
+<span id="L784">    rt::Runtime runtime(clock);</span>
+<span id="L785">    std::size_t mandatory_calls = 0;</span>
+<span id="L786">    std::size_t optional_calls = 0;</span>
+<span id="L787">    configure_pair(runtime, 8, mandatory_calls, optional_calls);</span>
+<span id="L788">    rt::MemoryPlan plan;</span>
+<span id="L789">    ASSERT_TRUE(runtime.memory_plan(plan));</span>
+<span id="L790">    EXPECT_EQ(plan.optional_rate_domain_count, 1u);</span>
+<span id="L791">    EXPECT_EQ(plan.rate_telemetry_capacity, 8u);</span>
+<span id="L792">    EXPECT_GT(plan.rate_telemetry_slot_bytes, sizeof(rt::RateActionRecord));</span>
+<span id="L793">    EXPECT_EQ(</span>
+<span id="L794">        plan.rate_telemetry_storage_bytes,</span>
+<span id="L795">        plan.rate_telemetry_capacity * plan.rate_telemetry_slot_bytes);</span>
+<span id="L796">    EXPECT_GT(plan.rate_shedding_state_bytes, 0u);</span>
+<span id="L797">    EXPECT_GT(plan.rate_telemetry_counter_bytes, 0u);</span>
+<span id="L798">    EXPECT_LE(plan.rate_plan_bytes, plan.runtime_control_bytes);</span>
+<span id="L799">    EXPECT_EQ(</span>
+<span id="L800">        plan.planned_bytes,</span>
+<span id="L801">        plan.runtime_control_bytes + plan.executor_control_bytes +</span>
+<span id="L802">            plan.device_control_bytes + plan.phase_scratch_total_bytes +</span>
+<span id="L803">            plan.task_scratch_total_bytes + plan.trace_storage_bytes);</span>
+<span id="L804">}</span></pre></html>

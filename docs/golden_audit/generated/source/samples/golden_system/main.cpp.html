@@ -1,0 +1,257 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_system/main.cpp</title><h1>samples/golden_system/main.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;oracle.hpp&quot;</span>
+<span id="L2">#include &quot;peer.hpp&quot;</span>
+<span id="L3">#include &quot;replay.hpp&quot;</span>
+<span id="L4">#include &quot;session.hpp&quot;</span>
+<span id="L5">#include &quot;telemetry.hpp&quot;</span>
+<span id="L6">#include &lt;filesystem&gt;</span>
+<span id="L7">#include &lt;fstream&gt;</span>
+<span id="L8">#include &lt;iostream&gt;</span>
+<span id="L9">#include &lt;memory&gt;</span>
+<span id="L10">#include &lt;numeric&gt;</span>
+<span id="L11">namespace fs = std::filesystem;</span>
+<span id="L12">using namespace golden;</span>
+<span id="L13">struct Arguments {</span>
+<span id="L14">  Options scenario;</span>
+<span id="L15">  cil::Options peer;</span>
+<span id="L16">  fs::path output;</span>
+<span id="L17">};</span>
+<span id="L18">bool arguments(int argc, char **argv, Arguments &amp;a) {</span>
+<span id="L19">  for (int i = 1; i &lt; argc; ++i) {</span>
+<span id="L20">    std::string_view key = argv[i];</span>
+<span id="L21">    if (i + 1 &gt;= argc)</span>
+<span id="L22">      return false;</span>
+<span id="L23">    std::string_view value = argv[++i];</span>
+<span id="L24">    std::uint64_t number = 0;</span>
+<span id="L25">    if (key == &quot;--mode&quot;) {</span>
+<span id="L26">      if (value != &quot;native&quot; &amp;&amp; value != &quot;host&quot;)</span>
+<span id="L27">        return false;</span>
+<span id="L28">      a.scenario.host = value == &quot;host&quot;;</span>
+<span id="L29">    } else if (key == &quot;--output&quot;)</span>
+<span id="L30">      a.output = argv[i];</span>
+<span id="L31">    else if (key == &quot;--campaign&quot;) {</span>
+<span id="L32">      auto it = std::find(campaign_names.begin(), campaign_names.end(), value);</span>
+<span id="L33">      if (it == campaign_names.end())</span>
+<span id="L34">        return false;</span>
+<span id="L35">      a.scenario.campaign = static_cast&lt;Campaign&gt;(it - campaign_names.begin());</span>
+<span id="L36">    } else if (key == &quot;--peer&quot;) {</span>
+<span id="L37">      a.scenario.external = true;</span>
+<span id="L38">      a.peer.key = value;</span>
+<span id="L39">    } else {</span>
+<span id="L40">      if (!cil::number(value, number))</span>
+<span id="L41">        return false;</span>
+<span id="L42">      if (key == &quot;--count&quot;)</span>
+<span id="L43">        a.scenario.count = number;</span>
+<span id="L44">      else if (key == &quot;--ticks&quot;)</span>
+<span id="L45">        a.scenario.ticks = number;</span>
+<span id="L46">      else if (key == &quot;--workers&quot;)</span>
+<span id="L47">        a.scenario.workers = number;</span>
+<span id="L48">      else if (key == &quot;--grain&quot;)</span>
+<span id="L49">        a.scenario.grain = number;</span>
+<span id="L50">      else if (key == &quot;--generation&quot;)</span>
+<span id="L51">        a.peer.generation = number;</span>
+<span id="L52">      else if (key == &quot;--timeout-ms&quot;)</span>
+<span id="L53">        a.peer.timeout_ms = number;</span>
+<span id="L54">      else</span>
+<span id="L55">        return false;</span>
+<span id="L56">    }</span>
+<span id="L57">  }</span>
+<span id="L58">  return a.scenario.valid() &amp;&amp;</span>
+<span id="L59">         (!a.scenario.external ||</span>
+<span id="L60">          (cil::valid_key(a.peer.key) &amp;&amp; a.peer.generation &amp;&amp;</span>
+<span id="L61">           a.peer.timeout_ms &gt;= 100 &amp;&amp; a.peer.timeout_ms &lt;= 5000)) &amp;&amp;</span>
+<span id="L62">         !(a.scenario.external &amp;&amp; a.scenario.campaign == Campaign::overload);</span>
+<span id="L63">}</span>
+<span id="L64">bool write(const fs::path &amp;path, std::span&lt;const std::byte&gt; bytes) {</span>
+<span id="L65">  std::ofstream f(path, std::ios::binary);</span>
+<span id="L66">  f.write(reinterpret_cast&lt;const char *&gt;(bytes.data()),</span>
+<span id="L67">          static_cast&lt;std::streamsize&gt;(bytes.size()));</span>
+<span id="L68">  f.close();</span>
+<span id="L69">  return !f.fail();</span>
+<span id="L70">}</span>
+<span id="L71">int execute(const Arguments &amp;a) {</span>
+<span id="L72">  const auto o = a.scenario;</span>
+<span id="L73">#if defined(_WIN32)</span>
+<span id="L74">  const auto process_id = GetCurrentProcessId();</span>
+<span id="L75">#else</span>
+<span id="L76">  const auto process_id = getpid();</span>
+<span id="L77">#endif</span>
+<span id="L78">  const auto session_identity =</span>
+<span id="L79">      std::to_string(cil::now_ns()) + &quot;-&quot; + std::to_string(process_id);</span>
+<span id="L80">  auto memory = std::make_unique&lt;Memory&gt;();</span>
+<span id="L81">  auto jobs = std::make_unique&lt;Jobs&gt;();</span>
+<span id="L82">  if (o.host &amp;&amp; jobs-&gt;start(o.workers) != rt::Status::ok)</span>
+<span id="L83">    return 1;</span>
+<span id="L84">  auto s = std::make_unique&lt;Session&gt;(o, o.host ? jobs.get() : nullptr, *memory);</span>
+<span id="L85">  auto status = s-&gt;prepare();</span>
+<span id="L86">  if (status != rt::Status::ok) {</span>
+<span id="L87">    std::cerr &lt;&lt; &quot;prepare &quot; &lt;&lt; s-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L88">    return 1;</span>
+<span id="L89">  }</span>
+<span id="L90">  std::unique_ptr&lt;Peer&gt; peer;</span>
+<span id="L91">  if (o.external) {</span>
+<span id="L92">    peer = std::make_unique&lt;Peer&gt;(a.peer);</span>
+<span id="L93">    if (!peer-&gt;start())</span>
+<span id="L94">      return 2;</span>
+<span id="L95">  }</span>
+<span id="L96">  Replay replay(o.ticks, o.external);</span>
+<span id="L97">  if (!replay.begin(*s) || !s-&gt;controls())</span>
+<span id="L98">    return 1;</span>
+<span id="L99">  Oracle oracle(o);</span>
+<span id="L100">  Telemetry telemetry;</span>
+<span id="L101">  std::uint64_t prior_events = 0, prior_failures = 0;</span>
+<span id="L102">  std::array&lt;std::uint64_t, 3&gt; prior_actions{};</span>
+<span id="L103">  std::size_t recoveries = 0;</span>
+<span id="L104">  std::vector&lt;std::byte&gt; recovery;</span>
+<span id="L105">  for (std::size_t t = 0; t &lt; o.ticks; ++t) {</span>
+<span id="L106">    if (o.campaign == Campaign::overload &amp;&amp; t == 6) {</span>
+<span id="L107">      recovery = s-&gt;checkpoint(5);</span>
+<span id="L108">      if (recovery.empty() || s-&gt;step(t, true) != rt::Status::callback_failed ||</span>
+<span id="L109">          s-&gt;world.calls[0] != 6 ||</span>
+<span id="L110">          telemetry.drain(*s-&gt;runtime) != rt::Status::ok ||</span>
+<span id="L111">          telemetry.deadline_failures != 1)</span>
+<span id="L112">        return 1;</span>
+<span id="L113">      if (s-&gt;close() != rt::Status::ok)</span>
+<span id="L114">        return 1;</span>
+<span id="L115">      s.reset();</span>
+<span id="L116">      s = std::make_unique&lt;Session&gt;(o, o.host ? jobs.get() : nullptr, *memory);</span>
+<span id="L117">      if (s-&gt;prepare() != rt::Status::ok ||</span>
+<span id="L118">          s-&gt;runtime-&gt;restore_checkpoint(recovery) != rt::Status::ok ||</span>
+<span id="L119">          !s-&gt;world.decode())</span>
+<span id="L120">        return 1;</span>
+<span id="L121">      prior_events = telemetry.events;</span>
+<span id="L122">      prior_actions = telemetry.action_records;</span>
+<span id="L123">      prior_failures = telemetry.deadline_failures;</span>
+<span id="L124">      Telemetry resumed;</span>
+<span id="L125">      if (!resumed.resume(*s-&gt;runtime, telemetry))</span>
+<span id="L126">        return 1;</span>
+<span id="L127">      telemetry = resumed;</span>
+<span id="L128">      replay = Replay(o.ticks, false, 6);</span>
+<span id="L129">      replay.initial = s-&gt;checkpoint(5);</span>
+<span id="L130">      ++recoveries;</span>
+<span id="L131">    }</span>
+<span id="L132">    if (peer &amp;&amp; t % 3 == 0)</span>
+<span id="L133">      peer-&gt;exchange(t, s-&gt;world);</span>
+<span id="L134">    replay.record(*s, t);</span>
+<span id="L135">    status = s-&gt;step(t);</span>
+<span id="L136">    if (status != rt::Status::ok) {</span>
+<span id="L137">      std::cerr &lt;&lt; &quot;step &quot; &lt;&lt; t &lt;&lt; &#x27; &#x27; &lt;&lt; s-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L138">      return 1;</span>
+<span id="L139">    }</span>
+<span id="L140">    if (!oracle.step(t, s-&gt;world)) {</span>
+<span id="L141">      std::cerr &lt;&lt; &quot;oracle &quot; &lt;&lt; t &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L142">      return 1;</span>
+<span id="L143">    }</span>
+<span id="L144">    const auto trace_status = telemetry.drain(*s-&gt;runtime);</span>
+<span id="L145">    if (trace_status != rt::Status::ok) {</span>
+<span id="L146">      std::cerr &lt;&lt; &quot;telemetry tick=&quot; &lt;&lt; t &lt;&lt; &quot; stream=&quot; &lt;&lt; telemetry.last_stream</span>
+<span id="L147">                &lt;&lt; &quot; status=&quot; &lt;&lt; static_cast&lt;int&gt;(trace_status)</span>
+<span id="L148">                &lt;&lt; &quot; gaps=&quot; &lt;&lt; telemetry.action_gaps &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L149">      return 1;</span>
+<span id="L150">    }</span>
+<span id="L151">  }</span>
+<span id="L152">  const auto final = s-&gt;world.canonical;</span>
+<span id="L153">  const auto calls = s-&gt;world.calls;</span>
+<span id="L154">  const auto planned = s-&gt;plan.planned_bytes;</span>
+<span id="L155">  const auto callback_count =</span>
+<span id="L156">      std::accumulate(calls.begin(), calls.end(), std::uint64_t{0});</span>
+<span id="L157">  if (!recoveries &amp;&amp; !telemetry.metrics(*s-&gt;runtime, o.ticks, callback_count))</span>
+<span id="L158">    return 1;</span>
+<span id="L159">  rt::LiveControlMailboxInfo mailbox;</span>
+<span id="L160">  rt::LiveControlCommitInfo commit;</span>
+<span id="L161">  if (!s-&gt;runtime-&gt;live_control_mailbox_info(2601, mailbox) ||</span>
+<span id="L162">      !s-&gt;runtime-&gt;live_control_commit_info(commit))</span>
+<span id="L163">    return 1;</span>
+<span id="L164">  if (!replay.seal(*s) || !replay.verify(*s)) {</span>
+<span id="L165">    std::cerr &lt;&lt; &quot;replay &quot; &lt;&lt; s-&gt;runtime-&gt;last_error() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L166">    return 1;</span>
+<span id="L167">  }</span>
+<span id="L168">  if (s-&gt;close() != rt::Status::ok)</span>
+<span id="L169">    return 1;</span>
+<span id="L170">  s.reset();</span>
+<span id="L171">  if (o.host &amp;&amp; jobs-&gt;close() != rt::Status::ok)</span>
+<span id="L172">    return 1;</span>
+<span id="L173">  if (peer)</span>
+<span id="L174">    (void)peer-&gt;close();</span>
+<span id="L175">  const auto peer_result = peer ? peer-&gt;result : cil::Code::ok,</span>
+<span id="L176">             peer_cleanup = peer ? peer-&gt;cleanup : cil::Code::ok;</span>
+<span id="L177">  const auto sample_bytes =</span>
+<span id="L178">      sizeof(Session) + sizeof(Memory) + sizeof(Jobs) + sizeof(Oracle) +</span>
+<span id="L179">      sizeof(Replay) + sizeof(Telemetry) + 3 * sizeof(StateBytes) +</span>
+<span id="L180">      (peer ? sizeof(Peer) + sizeof(cil::Region) : 0) +</span>
+<span id="L181">      replay.initial.capacity() + replay.active.capacity() +</span>
+<span id="L182">      replay.trusted.capacity() +</span>
+<span id="L183">      replay.inputs.capacity() * sizeof(rt::ReplayInputRecord) +</span>
+<span id="L184">      replay.external.capacity() * 3073 + recovery.capacity();</span>
+<span id="L185">  if (sample_bytes &gt; fixed::sample_budget)</span>
+<span id="L186">    return 1;</span>
+<span id="L187">  if (!a.output.empty()) {</span>
+<span id="L188">    fs::create_directories(a.output);</span>
+<span id="L189">    if (!write(a.output / &quot;state.bin&quot;, final) ||</span>
+<span id="L190">        !write(a.output / &quot;checkpoint.bin&quot;, replay.initial) ||</span>
+<span id="L191">        !write(a.output / &quot;active.bin&quot;, replay.active) ||</span>
+<span id="L192">        !write(a.output / &quot;trusted.bin&quot;, replay.trusted))</span>
+<span id="L193">      return 1;</span>
+<span id="L194">    std::ofstream f(a.output / &quot;execution.json&quot;);</span>
+<span id="L195">    f &lt;&lt; &quot;{\&quot;schema\&quot;:1,\&quot;contract_sha256\&quot;:\&quot;&quot; &lt;&lt; fixed::contract_sha256</span>
+<span id="L196">      &lt;&lt; &quot;\&quot;,\&quot;mode\&quot;:\&quot;&quot; &lt;&lt; (o.host ? &quot;host&quot; : &quot;native&quot;)</span>
+<span id="L197">      &lt;&lt; &quot;\&quot;,\&quot;count\&quot;:&quot; &lt;&lt; o.count &lt;&lt; &quot;,\&quot;ticks\&quot;:&quot; &lt;&lt; o.ticks</span>
+<span id="L198">      &lt;&lt; &quot;,\&quot;workers\&quot;:&quot; &lt;&lt; o.workers &lt;&lt; &quot;,\&quot;grain\&quot;:&quot; &lt;&lt; o.grain</span>
+<span id="L199">      &lt;&lt; &quot;,\&quot;campaign\&quot;:\&quot;&quot;</span>
+<span id="L200">      &lt;&lt; campaign_names[static_cast&lt;std::size_t&gt;(o.campaign)]</span>
+<span id="L201">      &lt;&lt; &quot;\&quot;,\&quot;external\&quot;:&quot; &lt;&lt; (o.external ? &quot;true&quot; : &quot;false&quot;)</span>
+<span id="L202">      &lt;&lt; &quot;,\&quot;session_identity\&quot;:\&quot;&quot; &lt;&lt; session_identity &lt;&lt; &quot;\&quot;&quot;</span>
+<span id="L203">      &lt;&lt; &quot;,\&quot;runtime_id\&quot;:&quot; &lt;&lt; telemetry.runtime_id</span>
+<span id="L204">      &lt;&lt; &quot;,\&quot;runtime_planned_bytes\&quot;:&quot; &lt;&lt; planned</span>
+<span id="L205">      &lt;&lt; &quot;,\&quot;sample_owned_bytes\&quot;:&quot; &lt;&lt; sample_bytes &lt;&lt; &quot;,\&quot;phase_calls\&quot;:[&quot;;</span>
+<span id="L206">    for (std::size_t i = 0; i &lt; 8; ++i)</span>
+<span id="L207">      f &lt;&lt; (i ? &quot;,&quot; : &quot;&quot;) &lt;&lt; calls[i];</span>
+<span id="L208">    f &lt;&lt; &quot;],\&quot;oracle\&quot;:true,\&quot;trace_events\&quot;:&quot;</span>
+<span id="L209">      &lt;&lt; telemetry.events + prior_events &lt;&lt; &quot;,\&quot;trace_lost\&quot;:&quot; &lt;&lt; telemetry.lost</span>
+<span id="L210">      &lt;&lt; &quot;,\&quot;rate_actions\&quot;:&quot; &lt;&lt; prior_actions[0] + telemetry.action_records[0]</span>
+<span id="L211">      &lt;&lt; &quot;,\&quot;mixed_actions\&quot;:&quot; &lt;&lt; prior_actions[1] + telemetry.action_records[1]</span>
+<span id="L212">      &lt;&lt; &quot;,\&quot;control_actions\&quot;:&quot;</span>
+<span id="L213">      &lt;&lt; prior_actions[2] + telemetry.action_records[2]</span>
+<span id="L214">      &lt;&lt; &quot;,\&quot;action_gaps\&quot;:&quot; &lt;&lt; telemetry.action_gaps</span>
+<span id="L215">      &lt;&lt; &quot;,\&quot;deadline_failures\&quot;:&quot;</span>
+<span id="L216">      &lt;&lt; prior_failures + telemetry.deadline_failures</span>
+<span id="L217">      &lt;&lt; &quot;,\&quot;control_accepted\&quot;:&quot; &lt;&lt; mailbox.accepted</span>
+<span id="L218">      &lt;&lt; &quot;,\&quot;control_invalid\&quot;:&quot; &lt;&lt; mailbox.invalid</span>
+<span id="L219">      &lt;&lt; &quot;,\&quot;control_replaced\&quot;:&quot; &lt;&lt; commit.replaced</span>
+<span id="L220">      &lt;&lt; &quot;,\&quot;control_committed\&quot;:&quot; &lt;&lt; commit.committed</span>
+<span id="L221">      &lt;&lt; &quot;,\&quot;replay_frames\&quot;:&quot; &lt;&lt; replay.result.frames_replayed</span>
+<span id="L222">      &lt;&lt; &quot;,\&quot;replay_actions\&quot;:&quot; &lt;&lt; replay.result.actions_compared</span>
+<span id="L223">      &lt;&lt; &quot;,\&quot;replay_generations\&quot;:&quot; &lt;&lt; replay.result.generations_compared</span>
+<span id="L224">      &lt;&lt; &quot;,\&quot;recoveries\&quot;:&quot; &lt;&lt; recoveries</span>
+<span id="L225">      &lt;&lt; &quot;,\&quot;jobs_accepted\&quot;:&quot; &lt;&lt; jobs-&gt;accepted.load()</span>
+<span id="L226">      &lt;&lt; &quot;,\&quot;jobs_completed\&quot;:&quot; &lt;&lt; jobs-&gt;completed.load()</span>
+<span id="L227">      &lt;&lt; &quot;,\&quot;memory_acquired\&quot;:&quot; &lt;&lt; memory-&gt;acquisitions</span>
+<span id="L228">      &lt;&lt; &quot;,\&quot;memory_released\&quot;:&quot; &lt;&lt; memory-&gt;releases</span>
+<span id="L229">      &lt;&lt; &quot;,\&quot;cleanup\&quot;:true,\&quot;peer_status\&quot;:\&quot;&quot; &lt;&lt; cil::name(peer_result)</span>
+<span id="L230">      &lt;&lt; &quot;\&quot;,\&quot;peer_cleanup\&quot;:\&quot;&quot; &lt;&lt; cil::name(peer_cleanup)</span>
+<span id="L231">      &lt;&lt; &quot;\&quot;,\&quot;peer_responses\&quot;:&quot; &lt;&lt; (peer ? peer-&gt;responses : 0) &lt;&lt; &quot;}\n&quot;;</span>
+<span id="L232">    f.close();</span>
+<span id="L233">    if (f.fail())</span>
+<span id="L234">      return 1;</span>
+<span id="L235">  }</span>
+<span id="L236">  std::cout &lt;&lt; &quot;golden ticks=&quot; &lt;&lt; o.ticks &lt;&lt; &quot; callbacks=&quot; &lt;&lt; callback_count</span>
+<span id="L237">            &lt;&lt; &quot; replay=&quot; &lt;&lt; replay.result.frames_replayed</span>
+<span id="L238">            &lt;&lt; &quot; peer=&quot; &lt;&lt; cil::name(peer_result)</span>
+<span id="L239">            &lt;&lt; &quot; cleanup=&quot; &lt;&lt; cil::name(peer_cleanup) &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L240">  return peer_result == cil::Code::ok &amp;&amp; peer_cleanup == cil::Code::ok ? 0 : 2;</span>
+<span id="L241">}</span>
+<span id="L242">int main(int argc, char **argv) {</span>
+<span id="L243">  try {</span>
+<span id="L244">    Arguments a;</span>
+<span id="L245">    if (!arguments(argc, argv, a)) {</span>
+<span id="L246">      std::cerr &lt;&lt; &quot;usage: golden_system [--mode native|host] [--count 1..256] &quot;</span>
+<span id="L247">                   &quot;[--ticks 1..1024] [--workers 1..3] [--grain 1|4|16|64] &quot;</span>
+<span id="L248">                   &quot;[--campaign NAME] [--output DIRECTORY] [--peer NAME &quot;</span>
+<span id="L249">                   &quot;--generation N --timeout-ms N]\n&quot;;</span>
+<span id="L250">      return 2;</span>
+<span id="L251">    }</span>
+<span id="L252">    return execute(a);</span>
+<span id="L253">  } catch (const std::exception &amp;e) {</span>
+<span id="L254">    std::cerr &lt;&lt; e.what() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L255">    return 1;</span>
+<span id="L256">  }</span>
+<span id="L257">}</span></pre></html>

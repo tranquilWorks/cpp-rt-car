@@ -1,0 +1,830 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>rt/src/extension_registration.cpp</title><h1>rt/src/extension_registration.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;extension_registration.hpp&quot;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;cstring&gt;</span>
+<span id="L5">#include &lt;limits&gt;</span>
+<span id="L6"></span>
+<span id="L7">namespace {</span>
+<span id="L8"></span>
+<span id="L9">using Transaction = rt::detail::ExtensionRegistrationTransaction;</span>
+<span id="L10"></span>
+<span id="L11">template &lt;std::size_t N&gt;</span>
+<span id="L12">bool reserved_zero(const std::uint64_t (&amp;values)[N]) noexcept {</span>
+<span id="L13">    return std::all_of(</span>
+<span id="L14">        std::begin(values),</span>
+<span id="L15">        std::end(values),</span>
+<span id="L16">        [](std::uint64_t value) { return value == 0; });</span>
+<span id="L17">}</span>
+<span id="L18"></span>
+<span id="L19">bool valid_c_status(rtfw_status status) noexcept {</span>
+<span id="L20">    return status &lt;= RTFW_STATUS_OK &amp;&amp; status &gt;= RTFW_STATUS_INCOMPATIBLE_ABI;</span>
+<span id="L21">}</span>
+<span id="L22"></span>
+<span id="L23">bool valid_handle(</span>
+<span id="L24">    const rtfw_extension_handle_v1&amp; handle,</span>
+<span id="L25">    const Transaction&amp; transaction,</span>
+<span id="L26">    std::uint32_t expected_kind) noexcept {</span>
+<span id="L27">    if (handle.owner != transaction.owner ||</span>
+<span id="L28">        handle.generation != transaction.generation ||</span>
+<span id="L29">        handle.kind != expected_kind) {</span>
+<span id="L30">        return false;</span>
+<span id="L31">    }</span>
+<span id="L32">    switch (expected_kind) {</span>
+<span id="L33">    case RTFW_EXTENSION_HANDLE_PHASE:</span>
+<span id="L34">        return handle.slot &lt; transaction.phase_count;</span>
+<span id="L35">    case RTFW_EXTENSION_HANDLE_BACKEND:</span>
+<span id="L36">        return handle.slot &lt; transaction.backend_count;</span>
+<span id="L37">    case RTFW_EXTENSION_HANDLE_SERVICE:</span>
+<span id="L38">        return handle.slot &lt; transaction.service_count;</span>
+<span id="L39">    case RTFW_EXTENSION_HANDLE_RESOURCE:</span>
+<span id="L40">        return handle.slot &lt; transaction.resource_count;</span>
+<span id="L41">    default:</span>
+<span id="L42">        return false;</span>
+<span id="L43">    }</span>
+<span id="L44">}</span>
+<span id="L45"></span>
+<span id="L46">rtfw_status poison(Transaction&amp; transaction, rt::Status status) noexcept {</span>
+<span id="L47">    if (transaction.failure == rt::Status::ok) {</span>
+<span id="L48">        transaction.failure = status;</span>
+<span id="L49">    }</span>
+<span id="L50">    return static_cast&lt;rtfw_status&gt;(status);</span>
+<span id="L51">}</span>
+<span id="L52"></span>
+<span id="L53">void zero_handle(rtfw_extension_handle_v1* handle) noexcept {</span>
+<span id="L54">    if (handle) {</span>
+<span id="L55">        *handle = {};</span>
+<span id="L56">    }</span>
+<span id="L57">}</span>
+<span id="L58"></span>
+<span id="L59">rtfw_extension_handle_v1 make_handle(</span>
+<span id="L60">    const Transaction&amp; transaction,</span>
+<span id="L61">    std::uint32_t kind,</span>
+<span id="L62">    std::size_t slot) noexcept {</span>
+<span id="L63">    return {</span>
+<span id="L64">        transaction.owner,</span>
+<span id="L65">        kind,</span>
+<span id="L66">        static_cast&lt;std::uint32_t&gt;(slot),</span>
+<span id="L67">        transaction.generation,</span>
+<span id="L68">    };</span>
+<span id="L69">}</span>
+<span id="L70"></span>
+<span id="L71">bool valid_device_api(const rtfw_device_backend_api&amp; api) noexcept {</span>
+<span id="L72">    return api.struct_size &gt;= sizeof(rtfw_device_backend_api) &amp;&amp;</span>
+<span id="L73">           api.abi_version == RTFW_DEVICE_ABI_VERSION &amp;&amp; api.instance &amp;&amp;</span>
+<span id="L74">           api.get_capabilities &amp;&amp; api.initialize &amp;&amp; api.register_buffer &amp;&amp;</span>
+<span id="L75">           api.unregister_buffer &amp;&amp; api.submit &amp;&amp; api.poll &amp;&amp; api.cancel &amp;&amp;</span>
+<span id="L76">           api.get_health &amp;&amp; api.reset &amp;&amp; api.shutdown &amp;&amp;</span>
+<span id="L77">           reserved_zero(api.reserved);</span>
+<span id="L78">}</span>
+<span id="L79"></span>
+<span id="L80">bool valid_service_api(const rtfw_extension_service_api_v1&amp; api) noexcept {</span>
+<span id="L81">    return api.struct_size &gt;= RTFW_EXTENSION_SERVICE_API_V1_REQUIRED_SIZE &amp;&amp;</span>
+<span id="L82">           api.abi_version == RTFW_EXTENSION_ABI_VERSION &amp;&amp; api.instance &amp;&amp;</span>
+<span id="L83">           api.initialize &amp;&amp; api.request_stop &amp;&amp; api.quiesce &amp;&amp; api.shutdown &amp;&amp;</span>
+<span id="L84">           reserved_zero(api.reserved);</span>
+<span id="L85">}</span>
+<span id="L86"></span>
+<span id="L87">rtfw_status RTFW_EXTENSION_CALL stage_phase(</span>
+<span id="L88">    void* opaque,</span>
+<span id="L89">    const rtfw_extension_phase_v1* input,</span>
+<span id="L90">    rtfw_extension_handle_v1* output) {</span>
+<span id="L91">    zero_handle(output);</span>
+<span id="L92">    if (!opaque) {</span>
+<span id="L93">        return RTFW_STATUS_INVALID_ARGUMENT;</span>
+<span id="L94">    }</span>
+<span id="L95">    auto&amp; transaction = *static_cast&lt;Transaction*&gt;(opaque);</span>
+<span id="L96">    if (!input || !output ||</span>
+<span id="L97">        input-&gt;struct_size &lt; RTFW_EXTENSION_PHASE_V1_REQUIRED_SIZE ||</span>
+<span id="L98">        input-&gt;abi_version != RTFW_EXTENSION_ABI_VERSION ||</span>
+<span id="L99">        !rt::detail::valid_extension_identifier(</span>
+<span id="L100">            input-&gt;name, RTFW_EXTENSION_IDENTIFIER_CAPACITY) ||</span>
+<span id="L101">        !input-&gt;callback || !reserved_zero(input-&gt;reserved)) {</span>
+<span id="L102">        return poison(transaction, rt::Status::invalid_argument);</span>
+<span id="L103">    }</span>
+<span id="L104">    if (transaction.phase_count &gt;= transaction.phase_limit) {</span>
+<span id="L105">        return poison(transaction, rt::Status::capacity_exceeded);</span>
+<span id="L106">    }</span>
+<span id="L107">    auto copy = *input;</span>
+<span id="L108">    copy.struct_size = RTFW_EXTENSION_PHASE_V1_REQUIRED_SIZE;</span>
+<span id="L109">    const auto slot = transaction.phase_count++;</span>
+<span id="L110">    transaction.phases[slot] = copy;</span>
+<span id="L111">    *output = make_handle(</span>
+<span id="L112">        transaction, RTFW_EXTENSION_HANDLE_PHASE, slot);</span>
+<span id="L113">    return RTFW_STATUS_OK;</span>
+<span id="L114">}</span>
+<span id="L115"></span>
+<span id="L116">rtfw_status RTFW_EXTENSION_CALL stage_backend(</span>
+<span id="L117">    void* opaque,</span>
+<span id="L118">    const rtfw_extension_backend_v1* input,</span>
+<span id="L119">    rtfw_extension_handle_v1* output) {</span>
+<span id="L120">    zero_handle(output);</span>
+<span id="L121">    if (!opaque) {</span>
+<span id="L122">        return RTFW_STATUS_INVALID_ARGUMENT;</span>
+<span id="L123">    }</span>
+<span id="L124">    auto&amp; transaction = *static_cast&lt;Transaction*&gt;(opaque);</span>
+<span id="L125">    if (!input || !output ||</span>
+<span id="L126">        input-&gt;struct_size &lt; RTFW_EXTENSION_BACKEND_V1_REQUIRED_SIZE ||</span>
+<span id="L127">        input-&gt;abi_version != RTFW_EXTENSION_ABI_VERSION ||</span>
+<span id="L128">        !rt::detail::valid_extension_identifier(</span>
+<span id="L129">            input-&gt;name, RTFW_EXTENSION_IDENTIFIER_CAPACITY) ||</span>
+<span id="L130">        !valid_device_api(input-&gt;api) || !reserved_zero(input-&gt;reserved)) {</span>
+<span id="L131">        return poison(transaction, rt::Status::invalid_argument);</span>
+<span id="L132">    }</span>
+<span id="L133">    if (transaction.backend_count &gt;= transaction.backend_limit) {</span>
+<span id="L134">        return poison(transaction, rt::Status::capacity_exceeded);</span>
+<span id="L135">    }</span>
+<span id="L136">    auto copy = *input;</span>
+<span id="L137">    copy.struct_size = RTFW_EXTENSION_BACKEND_V1_REQUIRED_SIZE;</span>
+<span id="L138">    copy.api.struct_size = sizeof(rtfw_device_backend_api);</span>
+<span id="L139">    const auto slot = transaction.backend_count++;</span>
+<span id="L140">    transaction.backends[slot] = copy;</span>
+<span id="L141">    *output = make_handle(</span>
+<span id="L142">        transaction, RTFW_EXTENSION_HANDLE_BACKEND, slot);</span>
+<span id="L143">    return RTFW_STATUS_OK;</span>
+<span id="L144">}</span>
+<span id="L145"></span>
+<span id="L146">rtfw_status RTFW_EXTENSION_CALL stage_service(</span>
+<span id="L147">    void* opaque,</span>
+<span id="L148">    const rtfw_extension_service_v1* input,</span>
+<span id="L149">    rtfw_extension_handle_v1* output) {</span>
+<span id="L150">    zero_handle(output);</span>
+<span id="L151">    if (!opaque) {</span>
+<span id="L152">        return RTFW_STATUS_INVALID_ARGUMENT;</span>
+<span id="L153">    }</span>
+<span id="L154">    auto&amp; transaction = *static_cast&lt;Transaction*&gt;(opaque);</span>
+<span id="L155">    if (!input || !output ||</span>
+<span id="L156">        input-&gt;struct_size &lt; RTFW_EXTENSION_SERVICE_V1_REQUIRED_SIZE ||</span>
+<span id="L157">        input-&gt;abi_version != RTFW_EXTENSION_ABI_VERSION ||</span>
+<span id="L158">        !rt::detail::valid_extension_identifier(</span>
+<span id="L159">            input-&gt;name, RTFW_EXTENSION_IDENTIFIER_CAPACITY) ||</span>
+<span id="L160">        !rt::detail::valid_extension_identifier(</span>
+<span id="L161">            input-&gt;interface_name, RTFW_EXTENSION_IDENTIFIER_CAPACITY) ||</span>
+<span id="L162">        input-&gt;interface_version == 0 || input-&gt;reserved0 != 0 ||</span>
+<span id="L163">        !valid_service_api(input-&gt;api) || !reserved_zero(input-&gt;reserved)) {</span>
+<span id="L164">        return poison(transaction, rt::Status::invalid_argument);</span>
+<span id="L165">    }</span>
+<span id="L166">    if (transaction.service_count &gt;= RTFW_EXTENSION_SERVICE_CAPACITY) {</span>
+<span id="L167">        return poison(transaction, rt::Status::capacity_exceeded);</span>
+<span id="L168">    }</span>
+<span id="L169">    auto copy = *input;</span>
+<span id="L170">    copy.struct_size = RTFW_EXTENSION_SERVICE_V1_REQUIRED_SIZE;</span>
+<span id="L171">    copy.api.struct_size = RTFW_EXTENSION_SERVICE_API_V1_REQUIRED_SIZE;</span>
+<span id="L172">    const auto slot = transaction.service_count++;</span>
+<span id="L173">    transaction.services[slot] = copy;</span>
+<span id="L174">    *output = make_handle(</span>
+<span id="L175">        transaction, RTFW_EXTENSION_HANDLE_SERVICE, slot);</span>
+<span id="L176">    return RTFW_STATUS_OK;</span>
+<span id="L177">}</span>
+<span id="L178"></span>
+<span id="L179">rtfw_status RTFW_EXTENSION_CALL stage_resource(</span>
+<span id="L180">    void* opaque,</span>
+<span id="L181">    const rtfw_extension_resource_v1* input,</span>
+<span id="L182">    rtfw_extension_handle_v1* output) {</span>
+<span id="L183">    zero_handle(output);</span>
+<span id="L184">    if (!opaque) {</span>
+<span id="L185">        return RTFW_STATUS_INVALID_ARGUMENT;</span>
+<span id="L186">    }</span>
+<span id="L187">    auto&amp; transaction = *static_cast&lt;Transaction*&gt;(opaque);</span>
+<span id="L188">    if (!input || !output ||</span>
+<span id="L189">        input-&gt;struct_size &lt; RTFW_EXTENSION_RESOURCE_V1_REQUIRED_SIZE ||</span>
+<span id="L190">        input-&gt;abi_version != RTFW_EXTENSION_ABI_VERSION ||</span>
+<span id="L191">        !rt::detail::valid_extension_identifier(</span>
+<span id="L192">            input-&gt;name, RTFW_EXTENSION_IDENTIFIER_CAPACITY) ||</span>
+<span id="L193">        !reserved_zero(input-&gt;reserved)) {</span>
+<span id="L194">        return poison(transaction, rt::Status::invalid_argument);</span>
+<span id="L195">    }</span>
+<span id="L196">    if (transaction.resource_count &gt;= RTFW_EXTENSION_RESOURCE_CAPACITY) {</span>
+<span id="L197">        return poison(transaction, rt::Status::capacity_exceeded);</span>
+<span id="L198">    }</span>
+<span id="L199">    auto copy = *input;</span>
+<span id="L200">    copy.struct_size = RTFW_EXTENSION_RESOURCE_V1_REQUIRED_SIZE;</span>
+<span id="L201">    const auto slot = transaction.resource_count++;</span>
+<span id="L202">    transaction.resources[slot] = copy;</span>
+<span id="L203">    *output = make_handle(</span>
+<span id="L204">        transaction, RTFW_EXTENSION_HANDLE_RESOURCE, slot);</span>
+<span id="L205">    return RTFW_STATUS_OK;</span>
+<span id="L206">}</span>
+<span id="L207"></span>
+<span id="L208">rtfw_status RTFW_EXTENSION_CALL stage_relationship(</span>
+<span id="L209">    void* opaque,</span>
+<span id="L210">    const rtfw_extension_relationship_v1* input) {</span>
+<span id="L211">    if (!opaque) {</span>
+<span id="L212">        return RTFW_STATUS_INVALID_ARGUMENT;</span>
+<span id="L213">    }</span>
+<span id="L214">    auto&amp; transaction = *static_cast&lt;Transaction*&gt;(opaque);</span>
+<span id="L215">    if (!input ||</span>
+<span id="L216">        input-&gt;struct_size &lt; RTFW_EXTENSION_RELATIONSHIP_V1_REQUIRED_SIZE ||</span>
+<span id="L217">        input-&gt;abi_version != RTFW_EXTENSION_ABI_VERSION ||</span>
+<span id="L218">        !reserved_zero(input-&gt;reserved)) {</span>
+<span id="L219">        return poison(transaction, rt::Status::invalid_argument);</span>
+<span id="L220">    }</span>
+<span id="L221">    if (transaction.relationship_count &gt;=</span>
+<span id="L222">        RTFW_EXTENSION_RELATIONSHIP_CAPACITY) {</span>
+<span id="L223">        return poison(transaction, rt::Status::capacity_exceeded);</span>
+<span id="L224">    }</span>
+<span id="L225">    bool valid = false;</span>
+<span id="L226">    switch (input-&gt;kind) {</span>
+<span id="L227">    case RTFW_EXTENSION_RELATIONSHIP_PHASE_DEPENDENCY:</span>
+<span id="L228">        valid = input-&gt;access == RTFW_EXTENSION_RESOURCE_ACCESS_NONE &amp;&amp;</span>
+<span id="L229">            valid_handle(</span>
+<span id="L230">                input-&gt;first, transaction, RTFW_EXTENSION_HANDLE_PHASE) &amp;&amp;</span>
+<span id="L231">            valid_handle(</span>
+<span id="L232">                input-&gt;second, transaction, RTFW_EXTENSION_HANDLE_PHASE) &amp;&amp;</span>
+<span id="L233">            input-&gt;first.slot != input-&gt;second.slot;</span>
+<span id="L234">        break;</span>
+<span id="L235">    case RTFW_EXTENSION_RELATIONSHIP_PHASE_RESOURCE:</span>
+<span id="L236">        valid = (input-&gt;access == RTFW_EXTENSION_RESOURCE_ACCESS_READ ||</span>
+<span id="L237">                 input-&gt;access == RTFW_EXTENSION_RESOURCE_ACCESS_WRITE) &amp;&amp;</span>
+<span id="L238">            valid_handle(</span>
+<span id="L239">                input-&gt;first, transaction, RTFW_EXTENSION_HANDLE_PHASE) &amp;&amp;</span>
+<span id="L240">            valid_handle(</span>
+<span id="L241">                input-&gt;second, transaction, RTFW_EXTENSION_HANDLE_RESOURCE);</span>
+<span id="L242">        break;</span>
+<span id="L243">    case RTFW_EXTENSION_RELATIONSHIP_SERVICE_BACKEND:</span>
+<span id="L244">        valid = input-&gt;access == RTFW_EXTENSION_RESOURCE_ACCESS_NONE &amp;&amp;</span>
+<span id="L245">            valid_handle(</span>
+<span id="L246">                input-&gt;first, transaction, RTFW_EXTENSION_HANDLE_SERVICE) &amp;&amp;</span>
+<span id="L247">            valid_handle(</span>
+<span id="L248">                input-&gt;second, transaction, RTFW_EXTENSION_HANDLE_BACKEND);</span>
+<span id="L249">        break;</span>
+<span id="L250">    default:</span>
+<span id="L251">        break;</span>
+<span id="L252">    }</span>
+<span id="L253">    if (!valid) {</span>
+<span id="L254">        return poison(transaction, rt::Status::invalid_argument);</span>
+<span id="L255">    }</span>
+<span id="L256">    for (std::size_t index = 0;</span>
+<span id="L257">         index &lt; transaction.relationship_count; ++index) {</span>
+<span id="L258">        const auto&amp; existing = transaction.relationships[index];</span>
+<span id="L259">        if (existing.kind == input-&gt;kind &amp;&amp; existing.access == input-&gt;access &amp;&amp;</span>
+<span id="L260">            existing.first.owner == input-&gt;first.owner &amp;&amp;</span>
+<span id="L261">            existing.first.kind == input-&gt;first.kind &amp;&amp;</span>
+<span id="L262">            existing.first.slot == input-&gt;first.slot &amp;&amp;</span>
+<span id="L263">            existing.first.generation == input-&gt;first.generation &amp;&amp;</span>
+<span id="L264">            existing.second.owner == input-&gt;second.owner &amp;&amp;</span>
+<span id="L265">            existing.second.kind == input-&gt;second.kind &amp;&amp;</span>
+<span id="L266">            existing.second.slot == input-&gt;second.slot &amp;&amp;</span>
+<span id="L267">            existing.second.generation == input-&gt;second.generation) {</span>
+<span id="L268">            return poison(transaction, rt::Status::invalid_argument);</span>
+<span id="L269">        }</span>
+<span id="L270">    }</span>
+<span id="L271">    auto copy = *input;</span>
+<span id="L272">    copy.struct_size = RTFW_EXTENSION_RELATIONSHIP_V1_REQUIRED_SIZE;</span>
+<span id="L273">    transaction.relationships[transaction.relationship_count++] = copy;</span>
+<span id="L274">    return RTFW_STATUS_OK;</span>
+<span id="L275">}</span>
+<span id="L276"></span>
+<span id="L277">class ActiveCall {</span>
+<span id="L278">public:</span>
+<span id="L279">    ActiveCall(</span>
+<span id="L280">        std::atomic&lt;bool&gt;&amp; admission,</span>
+<span id="L281">        std::atomic&lt;std::uint32_t&gt;&amp; count) noexcept</span>
+<span id="L282">        : admission_(admission), count_(count) {</span>
+<span id="L283">        if (!admission_.load(std::memory_order_acquire)) {</span>
+<span id="L284">            return;</span>
+<span id="L285">        }</span>
+<span id="L286">        count_.fetch_add(1, std::memory_order_acq_rel);</span>
+<span id="L287">        active_ = admission_.load(std::memory_order_acquire);</span>
+<span id="L288">        if (!active_) {</span>
+<span id="L289">            count_.fetch_sub(1, std::memory_order_acq_rel);</span>
+<span id="L290">        }</span>
+<span id="L291">    }</span>
+<span id="L292"></span>
+<span id="L293">    ~ActiveCall() {</span>
+<span id="L294">        if (active_) {</span>
+<span id="L295">            count_.fetch_sub(1, std::memory_order_acq_rel);</span>
+<span id="L296">        }</span>
+<span id="L297">    }</span>
+<span id="L298"></span>
+<span id="L299">    [[nodiscard]] bool active() const noexcept { return active_; }</span>
+<span id="L300"></span>
+<span id="L301">private:</span>
+<span id="L302">    std::atomic&lt;bool&gt;&amp; admission_;</span>
+<span id="L303">    std::atomic&lt;std::uint32_t&gt;&amp; count_;</span>
+<span id="L304">    bool active_ = false;</span>
+<span id="L305">};</span>
+<span id="L306"></span>
+<span id="L307">} // namespace</span>
+<span id="L308"></span>
+<span id="L309">namespace rt::detail {</span>
+<span id="L310"></span>
+<span id="L311">bool valid_extension_identifier(</span>
+<span id="L312">    const char* value,</span>
+<span id="L313">    std::size_t capacity) noexcept {</span>
+<span id="L314">    if (!value || capacity == 0) {</span>
+<span id="L315">        return false;</span>
+<span id="L316">    }</span>
+<span id="L317">    std::size_t length = 0;</span>
+<span id="L318">    while (length &lt; capacity &amp;&amp; value[length] != &#x27;\0&#x27;) {</span>
+<span id="L319">        const unsigned char c = static_cast&lt;unsigned char&gt;(value[length]);</span>
+<span id="L320">        const bool valid = (c &gt;= &#x27;A&#x27; &amp;&amp; c &lt;= &#x27;Z&#x27;) ||</span>
+<span id="L321">            (c &gt;= &#x27;a&#x27; &amp;&amp; c &lt;= &#x27;z&#x27;) || (c &gt;= &#x27;0&#x27; &amp;&amp; c &lt;= &#x27;9&#x27;) ||</span>
+<span id="L322">            c == &#x27;.&#x27; || c == &#x27;_&#x27; || c == &#x27;:&#x27; || c == &#x27;/&#x27; || c == &#x27;@&#x27; ||</span>
+<span id="L323">            c == &#x27;-&#x27;;</span>
+<span id="L324">        if (!valid) {</span>
+<span id="L325">            return false;</span>
+<span id="L326">        }</span>
+<span id="L327">        ++length;</span>
+<span id="L328">    }</span>
+<span id="L329">    if (length == 0 || length == capacity) {</span>
+<span id="L330">        return false;</span>
+<span id="L331">    }</span>
+<span id="L332">    for (std::size_t index = length + 1; index &lt; capacity; ++index) {</span>
+<span id="L333">        if (value[index] != &#x27;\0&#x27;) {</span>
+<span id="L334">            return false;</span>
+<span id="L335">        }</span>
+<span id="L336">    }</span>
+<span id="L337">    return true;</span>
+<span id="L338">}</span>
+<span id="L339"></span>
+<span id="L340">Status status_from_extension(rtfw_status status) noexcept {</span>
+<span id="L341">    return valid_c_status(status)</span>
+<span id="L342">        ? static_cast&lt;Status&gt;(status)</span>
+<span id="L343">        : Status::internal_error;</span>
+<span id="L344">}</span>
+<span id="L345"></span>
+<span id="L346">Status invoke_extension_entry(</span>
+<span id="L347">    rtfw_extension_entry_fn_v1 entry,</span>
+<span id="L348">    std::uint32_t owner,</span>
+<span id="L349">    std::uint32_t generation,</span>
+<span id="L350">    std::size_t phase_capacity,</span>
+<span id="L351">    std::size_t backend_capacity,</span>
+<span id="L352">    ExtensionRegistrationTransaction&amp; transaction) noexcept {</span>
+<span id="L353">    transaction = {};</span>
+<span id="L354">    transaction.owner = owner;</span>
+<span id="L355">    transaction.generation = generation;</span>
+<span id="L356">    transaction.phase_limit = std::min&lt;std::size_t&gt;(</span>
+<span id="L357">        phase_capacity, RTFW_EXTENSION_PHASE_CAPACITY);</span>
+<span id="L358">    transaction.backend_limit = std::min&lt;std::size_t&gt;(</span>
+<span id="L359">        backend_capacity, RTFW_EXTENSION_BACKEND_CAPACITY);</span>
+<span id="L360">    transaction.descriptor.struct_size =</span>
+<span id="L361">        RTFW_EXTENSION_DESCRIPTOR_V1_REQUIRED_SIZE;</span>
+<span id="L362"></span>
+<span id="L363">    rtfw_extension_host_api_v1 host{};</span>
+<span id="L364">    host.struct_size = RTFW_EXTENSION_HOST_API_V1_REQUIRED_SIZE;</span>
+<span id="L365">    host.current_abi_version = RTFW_EXTENSION_ABI_VERSION;</span>
+<span id="L366">    host.min_compatible_abi_version =</span>
+<span id="L367">        RTFW_EXTENSION_ABI_MIN_COMPATIBLE_VERSION;</span>
+<span id="L368">    host.context = &amp;transaction;</span>
+<span id="L369">    host.phase_capacity = transaction.phase_limit;</span>
+<span id="L370">    host.backend_capacity = transaction.backend_limit;</span>
+<span id="L371">    host.service_capacity = RTFW_EXTENSION_SERVICE_CAPACITY;</span>
+<span id="L372">    host.resource_capacity = RTFW_EXTENSION_RESOURCE_CAPACITY;</span>
+<span id="L373">    host.relationship_capacity = RTFW_EXTENSION_RELATIONSHIP_CAPACITY;</span>
+<span id="L374">    host.stage_phase = &amp;stage_phase;</span>
+<span id="L375">    host.stage_backend = &amp;stage_backend;</span>
+<span id="L376">    host.stage_service = &amp;stage_service;</span>
+<span id="L377">    host.stage_resource = &amp;stage_resource;</span>
+<span id="L378">    host.stage_relationship = &amp;stage_relationship;</span>
+<span id="L379"></span>
+<span id="L380">    if (!entry) {</span>
+<span id="L381">        return Status::invalid_argument;</span>
+<span id="L382">    }</span>
+<span id="L383">    rtfw_status result = RTFW_STATUS_INTERNAL_ERROR;</span>
+<span id="L384">    try {</span>
+<span id="L385">        result = entry(&amp;host, &amp;transaction.descriptor);</span>
+<span id="L386">    } catch (...) {</span>
+<span id="L387">        transaction.failure = Status::callback_failed;</span>
+<span id="L388">        return transaction.failure;</span>
+<span id="L389">    }</span>
+<span id="L390">    if (transaction.failure != Status::ok) {</span>
+<span id="L391">        return transaction.failure;</span>
+<span id="L392">    }</span>
+<span id="L393">    if (!valid_c_status(result) || result != RTFW_STATUS_OK) {</span>
+<span id="L394">        return result == RTFW_STATUS_OK</span>
+<span id="L395">            ? Status::internal_error</span>
+<span id="L396">            : status_from_extension(result);</span>
+<span id="L397">    }</span>
+<span id="L398">    const auto&amp; descriptor = transaction.descriptor;</span>
+<span id="L399">    const auto lower = std::max(</span>
+<span id="L400">        host.min_compatible_abi_version,</span>
+<span id="L401">        descriptor.min_compatible_abi_version);</span>
+<span id="L402">    const auto upper = std::min(</span>
+<span id="L403">        host.current_abi_version,</span>
+<span id="L404">        descriptor.current_abi_version);</span>
+<span id="L405">    if (descriptor.struct_size &lt; RTFW_EXTENSION_DESCRIPTOR_V1_REQUIRED_SIZE ||</span>
+<span id="L406">        descriptor.current_abi_version == 0 ||</span>
+<span id="L407">        descriptor.min_compatible_abi_version == 0 ||</span>
+<span id="L408">        descriptor.min_compatible_abi_version &gt;</span>
+<span id="L409">            descriptor.current_abi_version ||</span>
+<span id="L410">        descriptor.reserved0 != 0 ||</span>
+<span id="L411">        !valid_extension_identifier(</span>
+<span id="L412">            descriptor.name, RTFW_EXTENSION_IDENTIFIER_CAPACITY) ||</span>
+<span id="L413">        !valid_extension_identifier(</span>
+<span id="L414">            descriptor.version, RTFW_EXTENSION_IDENTIFIER_CAPACITY) ||</span>
+<span id="L415">        !reserved_zero(descriptor.reserved) ||</span>
+<span id="L416">        descriptor.phase_count != transaction.phase_count ||</span>
+<span id="L417">        descriptor.backend_count != transaction.backend_count ||</span>
+<span id="L418">        descriptor.service_count != transaction.service_count ||</span>
+<span id="L419">        descriptor.resource_count != transaction.resource_count ||</span>
+<span id="L420">        descriptor.relationship_count != transaction.relationship_count) {</span>
+<span id="L421">        return Status::invalid_argument;</span>
+<span id="L422">    }</span>
+<span id="L423">    if (lower &gt; upper || upper != RTFW_EXTENSION_ABI_VERSION) {</span>
+<span id="L424">        return Status::incompatible_abi;</span>
+<span id="L425">    }</span>
+<span id="L426">    return Status::ok;</span>
+<span id="L427">}</span>
+<span id="L428"></span>
+<span id="L429">CallbackResult ExtensionPhaseOwner::invoke(</span>
+<span id="L430">    void* opaque,</span>
+<span id="L431">    const CallbackContext&amp; context) noexcept {</span>
+<span id="L432">    auto&amp; self = *static_cast&lt;ExtensionPhaseOwner*&gt;(opaque);</span>
+<span id="L433">    ActiveCall call(self.admission, self.active_calls);</span>
+<span id="L434">    if (!call.active() || !self.callback) {</span>
+<span id="L435">        return CallbackResult::error;</span>
+<span id="L436">    }</span>
+<span id="L437">    rtfw_callback_context c_context{};</span>
+<span id="L438">    c_context.struct_size = sizeof(c_context);</span>
+<span id="L439">    c_context.numerical_mode =</span>
+<span id="L440">        context.numerics.mode() == NumericalMode::fused_multiply_add</span>
+<span id="L441">        ? RTFW_NUMERICAL_FUSED_MULTIPLY_ADD</span>
+<span id="L442">        : RTFW_NUMERICAL_PRECISE;</span>
+<span id="L443">    c_context.degradation_level = context.degradation_level;</span>
+<span id="L444">    c_context.frame_index = context.frame.frame_index;</span>
+<span id="L445">    c_context.delta_ns = context.frame.delta.count();</span>
+<span id="L446">    c_context.has_deadline = context.frame.deadline_ns ? 1u : 0u;</span>
+<span id="L447">    c_context.deadline_ns = context.frame.deadline_ns.value_or(0);</span>
+<span id="L448">    c_context.scratch = context.scratch.data();</span>
+<span id="L449">    c_context.scratch_bytes = context.scratch.size();</span>
+<span id="L450">    c_context.tasks =</span>
+<span id="L451">        reinterpret_cast&lt;const rtfw_task_context*&gt;(&amp;context.tasks);</span>
+<span id="L452">    try {</span>
+<span id="L453">        return self.callback(self.user_data, &amp;c_context) == RTFW_CALLBACK_OK</span>
+<span id="L454">            ? CallbackResult::ok</span>
+<span id="L455">            : CallbackResult::error;</span>
+<span id="L456">    } catch (...) {</span>
+<span id="L457">        return CallbackResult::error;</span>
+<span id="L458">    }</span>
+<span id="L459">}</span>
+<span id="L460"></span>
+<span id="L461">void ExtensionPhaseOwner::close() noexcept {</span>
+<span id="L462">    admission.store(false, std::memory_order_release);</span>
+<span id="L463">}</span>
+<span id="L464"></span>
+<span id="L465">void ExtensionPhaseOwner::open() noexcept {</span>
+<span id="L466">    admission.store(true, std::memory_order_release);</span>
+<span id="L467">}</span>
+<span id="L468"></span>
+<span id="L469">void ExtensionPhaseOwner::clear() noexcept {</span>
+<span id="L470">    callback = nullptr;</span>
+<span id="L471">    user_data = nullptr;</span>
+<span id="L472">}</span>
+<span id="L473"></span>
+<span id="L474">void ExtensionBackendOwner::initialize_from(</span>
+<span id="L475">    const rtfw_device_backend_api&amp; api) noexcept {</span>
+<span id="L476">    borrowed = api;</span>
+<span id="L477">    borrowed.struct_size = sizeof(borrowed);</span>
+<span id="L478">    forwarding = {};</span>
+<span id="L479">    forwarding.struct_size = sizeof(forwarding);</span>
+<span id="L480">    forwarding.abi_version = RTFW_DEVICE_ABI_VERSION;</span>
+<span id="L481">    forwarding.instance = this;</span>
+<span id="L482">    forwarding.get_capabilities = &amp;get_capabilities;</span>
+<span id="L483">    forwarding.initialize = &amp;initialize;</span>
+<span id="L484">    forwarding.register_buffer = &amp;register_buffer;</span>
+<span id="L485">    forwarding.unregister_buffer = &amp;unregister_buffer;</span>
+<span id="L486">    forwarding.submit = &amp;submit;</span>
+<span id="L487">    forwarding.poll = &amp;poll;</span>
+<span id="L488">    forwarding.cancel = &amp;cancel;</span>
+<span id="L489">    forwarding.get_health = &amp;get_health;</span>
+<span id="L490">    forwarding.reset = &amp;reset;</span>
+<span id="L491">    forwarding.shutdown = &amp;shutdown;</span>
+<span id="L492">    admission.store(true, std::memory_order_release);</span>
+<span id="L493">    released.store(true, std::memory_order_release);</span>
+<span id="L494">}</span>
+<span id="L495"></span>
+<span id="L496">void ExtensionBackendOwner::close() noexcept {</span>
+<span id="L497">    admission.store(false, std::memory_order_release);</span>
+<span id="L498">}</span>
+<span id="L499"></span>
+<span id="L500">void ExtensionBackendOwner::open() noexcept {</span>
+<span id="L501">    admission.store(true, std::memory_order_release);</span>
+<span id="L502">}</span>
+<span id="L503"></span>
+<span id="L504">void ExtensionBackendOwner::clear() noexcept {</span>
+<span id="L505">    borrowed = {};</span>
+<span id="L506">    forwarding = {};</span>
+<span id="L507">}</span>
+<span id="L508"></span>
+<span id="L509">#define RTFW_FORWARD_BACKEND_BODY(member, ...)                                  \</span>
+<span id="L510">    auto&amp; forward_self = *static_cast&lt;ExtensionBackendOwner*&gt;(opaque);          \</span>
+<span id="L511">    forward_self.active_calls.fetch_add(1, std::memory_order_acq_rel);          \</span>
+<span id="L512">    rtfw_device_status result = RTFW_DEVICE_STATUS_INTERNAL_ERROR;              \</span>
+<span id="L513">    try {                                                                        \</span>
+<span id="L514">        if (forward_self.borrowed.member) {                                      \</span>
+<span id="L515">            result = forward_self.borrowed.member(                               \</span>
+<span id="L516">                forward_self.borrowed.instance, __VA_ARGS__);                    \</span>
+<span id="L517">        }                                                                        \</span>
+<span id="L518">    } catch (...) {                                                              \</span>
+<span id="L519">        result = RTFW_DEVICE_STATUS_INTERNAL_ERROR;                              \</span>
+<span id="L520">    }                                                                            \</span>
+<span id="L521">    forward_self.active_calls.fetch_sub(1, std::memory_order_acq_rel);           \</span>
+<span id="L522">    return result</span>
+<span id="L523"></span>
+<span id="L524">rtfw_device_status ExtensionBackendOwner::get_capabilities(</span>
+<span id="L525">    void* opaque, rtfw_device_capabilities* capabilities) noexcept {</span>
+<span id="L526">    RTFW_FORWARD_BACKEND_BODY(get_capabilities, capabilities);</span>
+<span id="L527">}</span>
+<span id="L528"></span>
+<span id="L529">rtfw_device_status ExtensionBackendOwner::initialize(</span>
+<span id="L530">    void* opaque, const rtfw_device_init_config* config) noexcept {</span>
+<span id="L531">    auto&amp; self = *static_cast&lt;ExtensionBackendOwner*&gt;(opaque);</span>
+<span id="L532">    if (!self.admission.load(std::memory_order_acquire)) {</span>
+<span id="L533">        return RTFW_DEVICE_STATUS_INVALID_STATE;</span>
+<span id="L534">    }</span>
+<span id="L535">    self.released.store(false, std::memory_order_release);</span>
+<span id="L536">    RTFW_FORWARD_BACKEND_BODY(initialize, config);</span>
+<span id="L537">}</span>
+<span id="L538"></span>
+<span id="L539">rtfw_device_status ExtensionBackendOwner::register_buffer(</span>
+<span id="L540">    void* opaque,</span>
+<span id="L541">    const rtfw_device_buffer_registration* registration,</span>
+<span id="L542">    uint64_t* token) noexcept {</span>
+<span id="L543">    auto&amp; self = *static_cast&lt;ExtensionBackendOwner*&gt;(opaque);</span>
+<span id="L544">    if (!self.admission.load(std::memory_order_acquire)) {</span>
+<span id="L545">        return RTFW_DEVICE_STATUS_INVALID_STATE;</span>
+<span id="L546">    }</span>
+<span id="L547">    RTFW_FORWARD_BACKEND_BODY(register_buffer, registration, token);</span>
+<span id="L548">}</span>
+<span id="L549"></span>
+<span id="L550">rtfw_device_status ExtensionBackendOwner::unregister_buffer(</span>
+<span id="L551">    void* opaque, uint64_t token) noexcept {</span>
+<span id="L552">    RTFW_FORWARD_BACKEND_BODY(unregister_buffer, token);</span>
+<span id="L553">}</span>
+<span id="L554"></span>
+<span id="L555">rtfw_device_status ExtensionBackendOwner::submit(</span>
+<span id="L556">    void* opaque, const rtfw_device_submission* submission) noexcept {</span>
+<span id="L557">    auto&amp; self = *static_cast&lt;ExtensionBackendOwner*&gt;(opaque);</span>
+<span id="L558">    if (!self.admission.load(std::memory_order_acquire)) {</span>
+<span id="L559">        return RTFW_DEVICE_STATUS_INVALID_STATE;</span>
+<span id="L560">    }</span>
+<span id="L561">    RTFW_FORWARD_BACKEND_BODY(submit, submission);</span>
+<span id="L562">}</span>
+<span id="L563"></span>
+<span id="L564">rtfw_device_status ExtensionBackendOwner::poll(</span>
+<span id="L565">    void* opaque,</span>
+<span id="L566">    rtfw_device_completion* completions,</span>
+<span id="L567">    uint64_t capacity,</span>
+<span id="L568">    uint64_t* count) noexcept {</span>
+<span id="L569">    RTFW_FORWARD_BACKEND_BODY(poll, completions, capacity, count);</span>
+<span id="L570">}</span>
+<span id="L571"></span>
+<span id="L572">rtfw_device_status ExtensionBackendOwner::cancel(</span>
+<span id="L573">    void* opaque, uint64_t submission) noexcept {</span>
+<span id="L574">    RTFW_FORWARD_BACKEND_BODY(cancel, submission);</span>
+<span id="L575">}</span>
+<span id="L576"></span>
+<span id="L577">rtfw_device_status ExtensionBackendOwner::get_health(</span>
+<span id="L578">    void* opaque, rtfw_device_health* health) noexcept {</span>
+<span id="L579">    RTFW_FORWARD_BACKEND_BODY(get_health, health);</span>
+<span id="L580">}</span>
+<span id="L581"></span>
+<span id="L582">rtfw_device_status ExtensionBackendOwner::reset(void* opaque) noexcept {</span>
+<span id="L583">    auto&amp; self = *static_cast&lt;ExtensionBackendOwner*&gt;(opaque);</span>
+<span id="L584">    self.active_calls.fetch_add(1, std::memory_order_acq_rel);</span>
+<span id="L585">    rtfw_device_status result = RTFW_DEVICE_STATUS_INTERNAL_ERROR;</span>
+<span id="L586">    try {</span>
+<span id="L587">        if (self.borrowed.reset) {</span>
+<span id="L588">            result = self.borrowed.reset(self.borrowed.instance);</span>
+<span id="L589">        }</span>
+<span id="L590">    } catch (...) {</span>
+<span id="L591">        result = RTFW_DEVICE_STATUS_INTERNAL_ERROR;</span>
+<span id="L592">    }</span>
+<span id="L593">    self.active_calls.fetch_sub(1, std::memory_order_acq_rel);</span>
+<span id="L594">    return result;</span>
+<span id="L595">}</span>
+<span id="L596"></span>
+<span id="L597">rtfw_device_status ExtensionBackendOwner::shutdown(void* opaque) noexcept {</span>
+<span id="L598">    auto&amp; self = *static_cast&lt;ExtensionBackendOwner*&gt;(opaque);</span>
+<span id="L599">    self.active_calls.fetch_add(1, std::memory_order_acq_rel);</span>
+<span id="L600">    rtfw_device_status result = RTFW_DEVICE_STATUS_INTERNAL_ERROR;</span>
+<span id="L601">    try {</span>
+<span id="L602">        if (self.borrowed.shutdown) {</span>
+<span id="L603">            result = self.borrowed.shutdown(self.borrowed.instance);</span>
+<span id="L604">        }</span>
+<span id="L605">    } catch (...) {</span>
+<span id="L606">        result = RTFW_DEVICE_STATUS_INTERNAL_ERROR;</span>
+<span id="L607">    }</span>
+<span id="L608">    if (result == RTFW_DEVICE_STATUS_OK ||</span>
+<span id="L609">        result == RTFW_DEVICE_STATUS_INVALID_STATE) {</span>
+<span id="L610">        self.released.store(true, std::memory_order_release);</span>
+<span id="L611">    }</span>
+<span id="L612">    self.active_calls.fetch_sub(1, std::memory_order_acq_rel);</span>
+<span id="L613">    return result;</span>
+<span id="L614">}</span>
+<span id="L615"></span>
+<span id="L616">#undef RTFW_FORWARD_BACKEND_BODY</span>
+<span id="L617"></span>
+<span id="L618">void ExtensionServiceOwner::initialize_from(</span>
+<span id="L619">    const rtfw_extension_service_api_v1&amp; source) noexcept {</span>
+<span id="L620">    api = source;</span>
+<span id="L621">    api.struct_size = RTFW_EXTENSION_SERVICE_API_V1_REQUIRED_SIZE;</span>
+<span id="L622">    admission.store(true, std::memory_order_release);</span>
+<span id="L623">    initialized.store(false, std::memory_order_release);</span>
+<span id="L624">    stop_requested.store(false, std::memory_order_release);</span>
+<span id="L625">    quiesced.store(false, std::memory_order_release);</span>
+<span id="L626">    released.store(true, std::memory_order_release);</span>
+<span id="L627">}</span>
+<span id="L628"></span>
+<span id="L629">void ExtensionServiceOwner::open() noexcept {</span>
+<span id="L630">    admission.store(true, std::memory_order_release);</span>
+<span id="L631">}</span>
+<span id="L632">Status ExtensionServiceOwner::call_initialize() noexcept {</span>
+<span id="L633">    if (initialized.load(std::memory_order_acquire)) {</span>
+<span id="L634">        return Status::ok;</span>
+<span id="L635">    }</span>
+<span id="L636">    stop_requested.store(false, std::memory_order_release);</span>
+<span id="L637">    quiesced.store(false, std::memory_order_release);</span>
+<span id="L638">    released.store(false, std::memory_order_release);</span>
+<span id="L639">    active_calls.fetch_add(1, std::memory_order_acq_rel);</span>
+<span id="L640">    rtfw_status result = RTFW_STATUS_INTERNAL_ERROR;</span>
+<span id="L641">    try {</span>
+<span id="L642">        result = api.initialize(api.instance);</span>
+<span id="L643">    } catch (...) {</span>
+<span id="L644">        result = RTFW_STATUS_CALLBACK_FAILED;</span>
+<span id="L645">    }</span>
+<span id="L646">    active_calls.fetch_sub(1, std::memory_order_acq_rel);</span>
+<span id="L647">    const auto status = status_from_extension(result);</span>
+<span id="L648">    if (status == Status::ok) {</span>
+<span id="L649">        initialized.store(true, std::memory_order_release);</span>
+<span id="L650">    }</span>
+<span id="L651">    return status;</span>
+<span id="L652">}</span>
+<span id="L653"></span>
+<span id="L654">Status ExtensionServiceOwner::call_request_stop() noexcept {</span>
+<span id="L655">    if (released.load(std::memory_order_acquire)) {</span>
+<span id="L656">        return Status::ok;</span>
+<span id="L657">    }</span>
+<span id="L658">    if (stop_requested.load(std::memory_order_acquire)) {</span>
+<span id="L659">        return Status::ok;</span>
+<span id="L660">    }</span>
+<span id="L661">    active_calls.fetch_add(1, std::memory_order_acq_rel);</span>
+<span id="L662">    rtfw_status result = RTFW_STATUS_INTERNAL_ERROR;</span>
+<span id="L663">    try {</span>
+<span id="L664">        result = api.request_stop(api.instance);</span>
+<span id="L665">    } catch (...) {</span>
+<span id="L666">        result = RTFW_STATUS_CALLBACK_FAILED;</span>
+<span id="L667">    }</span>
+<span id="L668">    active_calls.fetch_sub(1, std::memory_order_acq_rel);</span>
+<span id="L669">    const auto status = status_from_extension(result);</span>
+<span id="L670">    if (status == Status::ok) {</span>
+<span id="L671">        stop_requested.store(true, std::memory_order_release);</span>
+<span id="L672">    }</span>
+<span id="L673">    return status;</span>
+<span id="L674">}</span>
+<span id="L675"></span>
+<span id="L676">Status ExtensionServiceOwner::call_quiesce() noexcept {</span>
+<span id="L677">    if (quiesced.load(std::memory_order_acquire) ||</span>
+<span id="L678">        released.load(std::memory_order_acquire)) {</span>
+<span id="L679">        return Status::ok;</span>
+<span id="L680">    }</span>
+<span id="L681">    active_calls.fetch_add(1, std::memory_order_acq_rel);</span>
+<span id="L682">    rtfw_status result = RTFW_STATUS_INTERNAL_ERROR;</span>
+<span id="L683">    try {</span>
+<span id="L684">        result = api.quiesce(api.instance);</span>
+<span id="L685">    } catch (...) {</span>
+<span id="L686">        result = RTFW_STATUS_CALLBACK_FAILED;</span>
+<span id="L687">    }</span>
+<span id="L688">    active_calls.fetch_sub(1, std::memory_order_acq_rel);</span>
+<span id="L689">    const auto status = status_from_extension(result);</span>
+<span id="L690">    if (status == Status::ok) {</span>
+<span id="L691">        quiesced.store(true, std::memory_order_release);</span>
+<span id="L692">    }</span>
+<span id="L693">    return status;</span>
+<span id="L694">}</span>
+<span id="L695"></span>
+<span id="L696">Status ExtensionServiceOwner::call_shutdown() noexcept {</span>
+<span id="L697">    if (released.load(std::memory_order_acquire)) {</span>
+<span id="L698">        return Status::ok;</span>
+<span id="L699">    }</span>
+<span id="L700">    active_calls.fetch_add(1, std::memory_order_acq_rel);</span>
+<span id="L701">    rtfw_status result = RTFW_STATUS_INTERNAL_ERROR;</span>
+<span id="L702">    try {</span>
+<span id="L703">        result = api.shutdown(api.instance);</span>
+<span id="L704">    } catch (...) {</span>
+<span id="L705">        result = RTFW_STATUS_CALLBACK_FAILED;</span>
+<span id="L706">    }</span>
+<span id="L707">    active_calls.fetch_sub(1, std::memory_order_acq_rel);</span>
+<span id="L708">    const auto status = status_from_extension(result);</span>
+<span id="L709">    if (status == Status::ok) {</span>
+<span id="L710">        released.store(true, std::memory_order_release);</span>
+<span id="L711">        initialized.store(false, std::memory_order_release);</span>
+<span id="L712">    }</span>
+<span id="L713">    return status;</span>
+<span id="L714">}</span>
+<span id="L715"></span>
+<span id="L716">Status ExtensionServiceOwner::call_status(</span>
+<span id="L717">    rtfw_extension_service_status_v1&amp; output) noexcept {</span>
+<span id="L718">    const auto initial = output;</span>
+<span id="L719">    ActiveCall call(admission, active_calls);</span>
+<span id="L720">    if (!call.active() || !api.status) {</span>
+<span id="L721">        return Status::invalid_state;</span>
+<span id="L722">    }</span>
+<span id="L723">    rtfw_extension_service_status_v1 candidate{};</span>
+<span id="L724">    candidate.struct_size = RTFW_EXTENSION_SERVICE_STATUS_V1_REQUIRED_SIZE;</span>
+<span id="L725">    rtfw_status result = RTFW_STATUS_INTERNAL_ERROR;</span>
+<span id="L726">    try {</span>
+<span id="L727">        result = api.status(api.instance, &amp;candidate);</span>
+<span id="L728">    } catch (...) {</span>
+<span id="L729">        result = RTFW_STATUS_CALLBACK_FAILED;</span>
+<span id="L730">    }</span>
+<span id="L731">    const auto status = status_from_extension(result);</span>
+<span id="L732">    if (status != Status::ok ||</span>
+<span id="L733">        candidate.struct_size &lt; RTFW_EXTENSION_SERVICE_STATUS_V1_REQUIRED_SIZE ||</span>
+<span id="L734">        candidate.abi_version != RTFW_EXTENSION_ABI_VERSION ||</span>
+<span id="L735">        candidate.healthy &gt; 1 || candidate.reserved0 != 0 ||</span>
+<span id="L736">        candidate.reserved1 != 0 || !valid_c_status(candidate.status) ||</span>
+<span id="L737">        !reserved_zero(candidate.reserved)) {</span>
+<span id="L738">        output = initial;</span>
+<span id="L739">        return status == Status::ok ? Status::invalid_argument : status;</span>
+<span id="L740">    }</span>
+<span id="L741">    output = candidate;</span>
+<span id="L742">    return Status::ok;</span>
+<span id="L743">}</span>
+<span id="L744"></span>
+<span id="L745">void ExtensionServiceOwner::close() noexcept {</span>
+<span id="L746">    admission.store(false, std::memory_order_release);</span>
+<span id="L747">}</span>
+<span id="L748"></span>
+<span id="L749">void ExtensionServiceOwner::clear() noexcept {</span>
+<span id="L750">    api = {};</span>
+<span id="L751">}</span>
+<span id="L752"></span>
+<span id="L753">void ExtensionRegistrationRecord::close_admission() noexcept {</span>
+<span id="L754">    for (std::size_t index = 0; index &lt; phase_count; ++index) {</span>
+<span id="L755">        phases[index].close();</span>
+<span id="L756">    }</span>
+<span id="L757">    for (std::size_t index = 0; index &lt; backend_count; ++index) {</span>
+<span id="L758">        backends[index].close();</span>
+<span id="L759">    }</span>
+<span id="L760">    for (std::size_t index = 0; index &lt; service_count; ++index) {</span>
+<span id="L761">        services[index].close();</span>
+<span id="L762">    }</span>
+<span id="L763">}</span>
+<span id="L764"></span>
+<span id="L765">void ExtensionRegistrationRecord::open_admission() noexcept {</span>
+<span id="L766">    for (std::size_t index = 0; index &lt; phase_count; ++index) {</span>
+<span id="L767">        phases[index].open();</span>
+<span id="L768">    }</span>
+<span id="L769">    for (std::size_t index = 0; index &lt; backend_count; ++index) {</span>
+<span id="L770">        backends[index].open();</span>
+<span id="L771">    }</span>
+<span id="L772">    for (std::size_t index = 0; index &lt; service_count; ++index) {</span>
+<span id="L773">        services[index].open();</span>
+<span id="L774">    }</span>
+<span id="L775">}</span>
+<span id="L776"></span>
+<span id="L777">bool ExtensionRegistrationRecord::callbacks_quiescent() const noexcept {</span>
+<span id="L778">    for (std::size_t index = 0; index &lt; phase_count; ++index) {</span>
+<span id="L779">        if (phases[index].active_calls.load(std::memory_order_acquire) != 0) {</span>
+<span id="L780">            return false;</span>
+<span id="L781">        }</span>
+<span id="L782">    }</span>
+<span id="L783">    for (std::size_t index = 0; index &lt; backend_count; ++index) {</span>
+<span id="L784">        if (backends[index].active_calls.load(std::memory_order_acquire) != 0) {</span>
+<span id="L785">            return false;</span>
+<span id="L786">        }</span>
+<span id="L787">    }</span>
+<span id="L788">    for (std::size_t index = 0; index &lt; service_count; ++index) {</span>
+<span id="L789">        if (services[index].active_calls.load(std::memory_order_acquire) != 0) {</span>
+<span id="L790">            return false;</span>
+<span id="L791">        }</span>
+<span id="L792">    }</span>
+<span id="L793">    return true;</span>
+<span id="L794">}</span>
+<span id="L795"></span>
+<span id="L796">bool ExtensionRegistrationRecord::backends_released() const noexcept {</span>
+<span id="L797">    for (std::size_t index = 0; index &lt; backend_count; ++index) {</span>
+<span id="L798">        if (!backends[index].released.load(std::memory_order_acquire)) {</span>
+<span id="L799">            return false;</span>
+<span id="L800">        }</span>
+<span id="L801">    }</span>
+<span id="L802">    return true;</span>
+<span id="L803">}</span>
+<span id="L804"></span>
+<span id="L805">bool ExtensionRegistrationRecord::services_released() const noexcept {</span>
+<span id="L806">    for (std::size_t index = 0; index &lt; service_count; ++index) {</span>
+<span id="L807">        if (!services[index].released.load(std::memory_order_acquire)) {</span>
+<span id="L808">            return false;</span>
+<span id="L809">        }</span>
+<span id="L810">    }</span>
+<span id="L811">    return true;</span>
+<span id="L812">}</span>
+<span id="L813"></span>
+<span id="L814">void ExtensionRegistrationRecord::clear_borrowed() noexcept {</span>
+<span id="L815">    for (std::size_t index = 0; index &lt; phase_count; ++index) {</span>
+<span id="L816">        phases[index].clear();</span>
+<span id="L817">        phase_descriptors[index].callback = nullptr;</span>
+<span id="L818">        phase_descriptors[index].user_data = nullptr;</span>
+<span id="L819">    }</span>
+<span id="L820">    for (std::size_t index = 0; index &lt; backend_count; ++index) {</span>
+<span id="L821">        backends[index].clear();</span>
+<span id="L822">        backend_descriptors[index].api = {};</span>
+<span id="L823">    }</span>
+<span id="L824">    for (std::size_t index = 0; index &lt; service_count; ++index) {</span>
+<span id="L825">        services[index].clear();</span>
+<span id="L826">        service_descriptors[index].api = {};</span>
+<span id="L827">    }</span>
+<span id="L828">}</span>
+<span id="L829"></span>
+<span id="L830">} // namespace rt::detail</span></pre></html>

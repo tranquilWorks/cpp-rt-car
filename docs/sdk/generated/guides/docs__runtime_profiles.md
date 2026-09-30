@@ -33,7 +33,7 @@ This is a C++ source API. Stable C ABI v8 and the device ABI are unchanged in
 
 ## Schema and compatibility
 
-[`tools/autotune/config.schema.json`](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/tools/autotune/config.schema.json) is
+[`tools/autotune/config.schema.json`](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/tools/autotune/config.schema.json) is
 the authoring schema. A profile contains:
 
 - `schema_version`: profile envelope schema, currently `1`;
@@ -100,6 +100,6 @@ perform those lifecycle operations explicitly.
   recommendation or hardware qualification record.
 
 Generate profiles through
-[`tools/autotune/make_config.py`](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/tools/autotune/make_config.py). The
+[`tools/autotune/make_config.py`](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/tools/autotune/make_config.py). The
 production factor space intentionally exposes only supported runtime knobs:
 `worker_count`, `executor_policy`, and `executor_queue_capacity`.

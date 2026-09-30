@@ -1,0 +1,343 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_live_control_active_replay.cpp</title><h1>tests/test_live_control_active_replay.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;array&gt;</span>
+<span id="L4">#include &lt;atomic&gt;</span>
+<span id="L5">#include &lt;chrono&gt;</span>
+<span id="L6">#include &lt;cstddef&gt;</span>
+<span id="L7">#include &lt;cstdint&gt;</span>
+<span id="L8">#include &lt;limits&gt;</span>
+<span id="L9">#include &lt;thread&gt;</span>
+<span id="L10">#include &lt;vector&gt;</span>
+<span id="L11"></span>
+<span id="L12">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L13"></span>
+<span id="L14">namespace {</span>
+<span id="L15"></span>
+<span id="L16">struct ReplayClock final : rt::RuntimeClock {</span>
+<span id="L17">    std::atomic&lt;std::uint64_t&gt; now{1&#x27;000};</span>
+<span id="L18">    std::uint64_t now_ns() noexcept override { return now.load(); }</span>
+<span id="L19">};</span>
+<span id="L20"></span>
+<span id="L21">struct ReplayWork {</span>
+<span id="L22">    std::array&lt;std::byte, 8&gt; state{};</span>
+<span id="L23">    std::array&lt;std::uint64_t, 8&gt; generations{};</span>
+<span id="L24">    std::size_t calls = 0;</span>
+<span id="L25">    std::size_t mailboxes = 1;</span>
+<span id="L26">    bool corrupt_state = false;</span>
+<span id="L27"></span>
+<span id="L28">    static rt::CallbackResult callback(</span>
+<span id="L29">        void* opaque, const rt::CallbackContext&amp; context) {</span>
+<span id="L30">        auto&amp; work = *static_cast&lt;ReplayWork*&gt;(opaque);</span>
+<span id="L31">        if (!context.live_control ||</span>
+<span id="L32">            context.live_control-&gt;records.size() != work.mailboxes ||</span>
+<span id="L33">            work.calls == work.generations.size()) {</span>
+<span id="L34">            return rt::CallbackResult::error;</span>
+<span id="L35">        }</span>
+<span id="L36">        for (const auto&amp; record : context.live_control-&gt;records) {</span>
+<span id="L37">            if (record.payload.size() != 8 || record.payload[0] !=</span>
+<span id="L38">                    static_cast&lt;std::byte&gt;(context.frame.frame_index)) {</span>
+<span id="L39">                return rt::CallbackResult::error;</span>
+<span id="L40">            }</span>
+<span id="L41">        }</span>
+<span id="L42">        work.state[0] = static_cast&lt;std::byte&gt;(</span>
+<span id="L43">            std::to_integer&lt;unsigned&gt;(work.state[0]) +</span>
+<span id="L44">            static_cast&lt;unsigned&gt;(context.frame.frame_index) +</span>
+<span id="L45">            (work.corrupt_state ? 1u : 0u));</span>
+<span id="L46">        work.generations[work.calls++] =</span>
+<span id="L47">            context.live_control-&gt;generation_identity;</span>
+<span id="L48">        return rt::CallbackResult::ok;</span>
+<span id="L49">    }</span>
+<span id="L50">};</span>
+<span id="L51"></span>
+<span id="L52">rt::CallbackResult no_input(void*, const rt::ReplayInputView&amp;) {</span>
+<span id="L53">    return rt::CallbackResult::ok;</span>
+<span id="L54">}</span>
+<span id="L55"></span>
+<span id="L56">// Own callback storage and the clock until checked stop, including on a failed</span>
+<span id="L57">// assertion. No worker can outlive either borrowed object.</span>
+<span id="L58">struct Scenario {</span>
+<span id="L59">    ReplayClock clock;</span>
+<span id="L60">    ReplayWork work;</span>
+<span id="L61">    rt::Runtime runtime{clock};</span>
+<span id="L62">    ~Scenario() {</span>
+<span id="L63">        if (runtime.state() == rt::RuntimeState::running &amp;&amp;</span>
+<span id="L64">            runtime.stop() != rt::Status::ok) {</span>
+<span id="L65">            std::terminate();</span>
+<span id="L66">        }</span>
+<span id="L67">    }</span>
+<span id="L68">};</span>
+<span id="L69"></span>
+<span id="L70">void check_round_trip(std::uint32_t frames, std::uint32_t capacity,</span>
+<span id="L71">                      std::uint32_t mailboxes, bool rate_target,</span>
+<span id="L72">                      bool corrupt_application = false, bool lossless = false,</span>
+<span id="L73">                      bool replaced = false, bool rejected = false) {</span>
+<span id="L74">    Scenario scenario;</span>
+<span id="L75">    auto&amp; runtime = scenario.runtime;</span>
+<span id="L76">    auto&amp; work = scenario.work;</span>
+<span id="L77">    work.mailboxes = mailboxes;</span>
+<span id="L78">    rt::RuntimeConfig config;</span>
+<span id="L79">    config.callback_capacity = 2;</span>
+<span id="L80">    config.worker_count = 1;</span>
+<span id="L81">    config.executor_queue_capacity = 8;</span>
+<span id="L82">    config.task_scratch_slots = 8;</span>
+<span id="L83">    config.trace_capacity = 0;</span>
+<span id="L84">    ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L85">    ASSERT_EQ(runtime.set_rate_execution_policy({16, 1, 1, 1, 64}),</span>
+<span id="L86">              rt::Status::ok);</span>
+<span id="L87">    ASSERT_EQ(runtime.set_mixed_rate_closure_policy(</span>
+<span id="L88">                  {1, 256, 256, 131072, 16,</span>
+<span id="L89">                   rt::MixedRateOverflowPolicy::overwrite_committed,</span>
+<span id="L90">                   true, true, {}}), rt::Status::ok);</span>
+<span id="L91">    rt::LiveControlPolicy policy;</span>
+<span id="L92">    policy.policy_identity = 1;</span>
+<span id="L93">    policy.mailbox_capacity = mailboxes;</span>
+<span id="L94">    policy.producer_capacity = mailboxes;</span>
+<span id="L95">    policy.record_capacity = capacity * mailboxes;</span>
+<span id="L96">    policy.payload_bytes_per_record = 8;</span>
+<span id="L97">    policy.total_payload_storage_bytes = policy.record_capacity * 8;</span>
+<span id="L98">    ASSERT_EQ(runtime.set_live_control_policy(policy), rt::Status::ok);</span>
+<span id="L99">    for (std::uint32_t index = 0; index &lt; mailboxes; ++index) {</span>
+<span id="L100">        rt::LiveControlMailboxRegistration mailbox;</span>
+<span id="L101">        mailbox.mailbox_identity = index + 1;</span>
+<span id="L102">        mailbox.record_capacity = capacity;</span>
+<span id="L103">        mailbox.payload_bytes_per_record = 8;</span>
+<span id="L104">        ASSERT_EQ(runtime.register_live_control_mailbox(mailbox), rt::Status::ok);</span>
+<span id="L105">        rt::LiveControlProducerRegistration producer;</span>
+<span id="L106">        producer.mailbox_identity = index + 1;</span>
+<span id="L107">        producer.producer_identity = index + 1;</span>
+<span id="L108">        ASSERT_EQ(runtime.register_live_control_producer(producer), rt::Status::ok);</span>
+<span id="L109">    }</span>
+<span id="L110">    rt::LiveControlClosurePolicy closure;</span>
+<span id="L111">    closure.policy_identity = 1;</span>
+<span id="L112">    closure.action_capacity = 256;</span>
+<span id="L113">    closure.retained_generation_capacity = 16;</span>
+<span id="L114">    closure.retained_record_capacity = 32;</span>
+<span id="L115">    closure.retained_payload_bytes = 256;</span>
+<span id="L116">    closure.replay_record_capacity = 256;</span>
+<span id="L117">    closure.replay_max_bytes = 131072;</span>
+<span id="L118">    closure.replay_enabled = true;</span>
+<span id="L119">    ASSERT_EQ(runtime.set_live_control_closure_policy(closure), rt::Status::ok);</span>
+<span id="L120">    if (lossless) {</span>
+<span id="L121">        rt::LiveControlReplayRetentionPolicy retention;</span>
+<span id="L122">        retention.policy_identity = 77;</span>
+<span id="L123">        retention.admission_capacity = 128;</span>
+<span id="L124">        retention.payload_capacity_bytes = 1024;</span>
+<span id="L125">        ASSERT_EQ(runtime.set_live_control_replay_retention_policy(retention),</span>
+<span id="L126">                  rt::Status::ok);</span>
+<span id="L127">    }</span>
+<span id="L128">    rt::PhaseHandle phase;</span>
+<span id="L129">    rt::RateDomainHandle domain;</span>
+<span id="L130">    ASSERT_EQ(runtime.register_callback({&quot;work&quot;, ReplayWork::callback, &amp;work},</span>
+<span id="L131">                                        phase), rt::Status::ok);</span>
+<span id="L132">    ASSERT_EQ(runtime.register_rate_domain({&quot;rate&quot;, 100, 1, 100, 1}, domain),</span>
+<span id="L133">              rt::Status::ok);</span>
+<span id="L134">    ASSERT_EQ(runtime.bind_phase_to_rate_domain(phase, domain), rt::Status::ok);</span>
+<span id="L135">    // Extend the reference supercycle so each tested rate target is explicit.</span>
+<span id="L136">    rt::RateDomainHandle anchor;</span>
+<span id="L137">    ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L138">                  {&quot;anchor&quot;, frames * 100u, 1, frames * 100u, 1}, anchor),</span>
+<span id="L139">              rt::Status::ok);</span>
+<span id="L140">    rt::PhaseHandle anchor_phase;</span>
+<span id="L141">    ASSERT_EQ(runtime.register_callback(</span>
+<span id="L142">                  {&quot;anchor-work&quot;, [](void*, const rt::CallbackContext&amp;) {</span>
+<span id="L143">                      return rt::CallbackResult::ok;</span>
+<span id="L144">                  }, nullptr}, anchor_phase), rt::Status::ok);</span>
+<span id="L145">    ASSERT_EQ(runtime.bind_phase_to_rate_domain(anchor_phase, anchor), rt::Status::ok);</span>
+<span id="L146">    ASSERT_EQ(runtime.register_state({&quot;state&quot;, 1, work.state}), rt::Status::ok);</span>
+<span id="L147">    ASSERT_EQ(runtime.finalize(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L148">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L149">    std::size_t size = 0;</span>
+<span id="L150">    ASSERT_EQ(runtime.checkpoint_size(size), rt::Status::ok);</span>
+<span id="L151">    std::vector&lt;std::byte&gt; checkpoint(size);</span>
+<span id="L152">    rt::ArtifactWriteResult written;</span>
+<span id="L153">    ASSERT_EQ(runtime.write_checkpoint(0, checkpoint, written), rt::Status::ok);</span>
+<span id="L154">    std::array&lt;rt::LiveControlProducerHandle, 2&gt; handles{};</span>
+<span id="L155">    for (std::uint32_t index = 0; index &lt; mailboxes; ++index) {</span>
+<span id="L156">        ASSERT_EQ(runtime.live_control_producer_handle(index + 1, index + 1,</span>
+<span id="L157">                                                       handles[index]),</span>
+<span id="L158">                  rt::Status::ok);</span>
+<span id="L159">    }</span>
+<span id="L160">    std::vector&lt;rt::ReplayInputRecord&gt; inputs(frames);</span>
+<span id="L161">    for (std::uint32_t frame = 1; frame &lt;= frames; ++frame) {</span>
+<span id="L162">        std::array&lt;std::byte, 8&gt; payload{};</span>
+<span id="L163">        payload[0] = static_cast&lt;std::byte&gt;(frame);</span>
+<span id="L164">        for (std::uint32_t index = 0; index &lt; mailboxes; ++index) {</span>
+<span id="L165">            const auto&amp; handle = handles[index];</span>
+<span id="L166">            rt::LiveControlUpdateRecord update;</span>
+<span id="L167">            update.runtime_id = handle.runtime_id;</span>
+<span id="L168">            update.configuration_generation = handle.configuration_generation;</span>
+<span id="L169">            update.mailbox_identity = handle.mailbox_identity;</span>
+<span id="L170">            update.producer_identity = handle.producer_identity;</span>
+<span id="L171">            update.producer_sequence = frame;</span>
+<span id="L172">            update.target_frame_index = frame;</span>
+<span id="L173">            update.payload_bytes = 8;</span>
+<span id="L174">            update.payload_digest = rt::live_control_payload_digest(payload);</span>
+<span id="L175">            if (rate_target) {</span>
+<span id="L176">                rt::ReferenceRelease release;</span>
+<span id="L177">                const auto reference = frame == 1 ? 0u : frame;</span>
+<span id="L178">                ASSERT_TRUE(runtime.reference_release_at(reference, release));</span>
+<span id="L179">                update.target_kind = rt::LiveControlTargetKind::rate_release;</span>
+<span id="L180">                update.target_frame_index = std::numeric_limits&lt;std::uint64_t&gt;::max();</span>
+<span id="L181">                update.reference_release_index = reference;</span>
+<span id="L182">                update.rate_domain_registration_index =</span>
+<span id="L183">                    static_cast&lt;std::uint32_t&gt;(release.domain_registration_index);</span>
+<span id="L184">                update.phase_index = release.phase.index();</span>
+<span id="L185">                update.rate_substep_ordinal = release.substep_ordinal;</span>
+<span id="L186">                update.rate_release_sequence = release.domain_release_sequence;</span>
+<span id="L187">            }</span>
+<span id="L188">            rt::LiveControlAdmissionResult admission;</span>
+<span id="L189">            if (replaced) {</span>
+<span id="L190">                payload[0] = static_cast&lt;std::byte&gt;(frame + 100);</span>
+<span id="L191">                update.producer_sequence = 2 * frame - 1;</span>
+<span id="L192">                update.payload_digest = rt::live_control_payload_digest(payload);</span>
+<span id="L193">                ASSERT_EQ(runtime.stage_live_control_update(handle, update, payload,</span>
+<span id="L194">                                                            admission),</span>
+<span id="L195">                          rt::Status::ok);</span>
+<span id="L196">                ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L197">                payload[0] = static_cast&lt;std::byte&gt;(frame);</span>
+<span id="L198">                update.producer_sequence = 2 * frame;</span>
+<span id="L199">                update.payload_digest = rt::live_control_payload_digest(payload);</span>
+<span id="L200">            }</span>
+<span id="L201">            if (rejected) {</span>
+<span id="L202">                update.payload_digest ^= 1;</span>
+<span id="L203">                ASSERT_EQ(runtime.stage_live_control_update(handle, update, payload,</span>
+<span id="L204">                                                            admission),</span>
+<span id="L205">                          rt::Status::ok);</span>
+<span id="L206">                ASSERT_EQ(admission, rt::LiveControlAdmissionResult::invalid);</span>
+<span id="L207">                update.payload_digest ^= 1;</span>
+<span id="L208">            }</span>
+<span id="L209">            ASSERT_EQ(runtime.stage_live_control_update(handle, update, payload,</span>
+<span id="L210">                                                         admission), rt::Status::ok);</span>
+<span id="L211">            ASSERT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L212">        }</span>
+<span id="L213">        inputs[frame - 1] = {{frame, std::chrono::nanoseconds{100},</span>
+<span id="L214">                              std::nullopt, 1&#x27;000 + (frame - 1) * 100u}, 1, {}};</span>
+<span id="L215">        ASSERT_EQ(runtime.step(inputs[frame - 1].frame), rt::Status::ok);</span>
+<span id="L216">    }</span>
+<span id="L217">    const auto expected_state = static_cast&lt;std::byte&gt;(frames * (frames + 1) / 2);</span>
+<span id="L218">    ASSERT_EQ(work.state[0], expected_state);</span>
+<span id="L219">    const auto expected_generations = work.generations;</span>
+<span id="L220">    std::vector&lt;std::byte&gt; active(131072), artifact(131072);</span>
+<span id="L221">    ASSERT_EQ(runtime.write_active_replay_artifact(checkpoint, inputs, active,</span>
+<span id="L222">                                                   written), rt::Status::ok);</span>
+<span id="L223">    active.resize(written.bytes_written);</span>
+<span id="L224">    ASSERT_EQ(runtime.write_live_control_replay_artifact(</span>
+<span id="L225">                  checkpoint, active, rt::LiveControlNestedArtifactKind::active_replay,</span>
+<span id="L226">                  artifact, written), rt::Status::ok);</span>
+<span id="L227">    artifact.resize(written.bytes_written);</span>
+<span id="L228">    rt::LiveControlReplayMetadata metadata;</span>
+<span id="L229">    ASSERT_EQ(rt::inspect_live_control_replay_artifact(artifact, metadata), rt::Status::ok);</span>
+<span id="L230"></span>
+<span id="L231">    // Bad extents and checksums must be rejected before any callback or restore.</span>
+<span id="L232">    auto corrupt = artifact;</span>
+<span id="L233">    corrupt.back() ^= std::byte{1};</span>
+<span id="L234">    for (auto bytes : {std::span&lt;const std::byte&gt;(corrupt),</span>
+<span id="L235">                       std::span&lt;const std::byte&gt;(artifact).first(artifact.size() - 1)}) {</span>
+<span id="L236">        EXPECT_NE(runtime.replay_live_control(bytes, no_input, nullptr), rt::Status::ok);</span>
+<span id="L237">        EXPECT_EQ(work.state[0], expected_state);</span>
+<span id="L238">        EXPECT_EQ(work.calls, frames);</span>
+<span id="L239">    }</span>
+<span id="L240">    if (!lossless &amp;&amp; (replaced || rejected)) {</span>
+<span id="L241">        EXPECT_EQ(runtime.replay_live_control(artifact, no_input, nullptr),</span>
+<span id="L242">                  rt::Status::incompatible_artifact);</span>
+<span id="L243">        EXPECT_EQ(work.state[0], expected_state);</span>
+<span id="L244">        EXPECT_EQ(work.calls, frames);</span>
+<span id="L245">        return;</span>
+<span id="L246">    }</span>
+<span id="L247">    EXPECT_EQ(metadata.schema_version, lossless ? 2u : 1u);</span>
+<span id="L248">    for (unsigned repeat = 0; repeat &lt; 2; ++repeat) {</span>
+<span id="L249">        work.calls = 0;</span>
+<span id="L250">        work.generations = {};</span>
+<span id="L251">        work.corrupt_state = corrupt_application;</span>
+<span id="L252">        rt::LiveControlReplayResult result;</span>
+<span id="L253">        const auto status = runtime.replay_live_control(artifact, no_input, nullptr,</span>
+<span id="L254">                                                        &amp;result);</span>
+<span id="L255">        if (corrupt_application) {</span>
+<span id="L256">            EXPECT_NE(status, rt::Status::ok);</span>
+<span id="L257">            break;</span>
+<span id="L258">        }</span>
+<span id="L259">        ASSERT_EQ(status, rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L260">        EXPECT_EQ(work.state[0], expected_state);</span>
+<span id="L261">        EXPECT_EQ(work.calls, frames);</span>
+<span id="L262">        EXPECT_EQ(work.generations, expected_generations);</span>
+<span id="L263">        EXPECT_EQ(result.frames_replayed, frames);</span>
+<span id="L264">        EXPECT_EQ(result.generations_compared, frames);</span>
+<span id="L265">        EXPECT_EQ(result.actions_compared, metadata.action_record_count);</span>
+<span id="L266">        rt::LiveControlCommitInfo commit;</span>
+<span id="L267">        ASSERT_TRUE(runtime.live_control_commit_info(commit));</span>
+<span id="L268">        EXPECT_EQ(commit.committed, frames * mailboxes);</span>
+<span id="L269">        EXPECT_EQ(commit.staged_occupancy, 0u);</span>
+<span id="L270">        for (std::uint32_t index = 0; index &lt; mailboxes; ++index) {</span>
+<span id="L271">            rt::LiveControlMailboxInfo info;</span>
+<span id="L272">            ASSERT_TRUE(runtime.live_control_mailbox_info(index + 1, info));</span>
+<span id="L273">            const auto admissions = frames * (replaced ? 2u : 1u);</span>
+<span id="L274">            EXPECT_EQ(info.accepted, admissions);</span>
+<span id="L275">            EXPECT_EQ(info.invalid, rejected ? frames : 0u);</span>
+<span id="L276">            EXPECT_EQ(info.next_mailbox_sequence, admissions + 1);</span>
+<span id="L277">            EXPECT_EQ(info.occupancy, 0u);</span>
+<span id="L278">            // Latest records retain their status and copied bytes after replay.</span>
+<span id="L279">            rt::LiveControlRecordStatusInfo record;</span>
+<span id="L280">            ASSERT_TRUE(</span>
+<span id="L281">                runtime.live_control_record_status(index + 1, admissions, record));</span>
+<span id="L282">            EXPECT_EQ(record.status, rt::LiveControlRecordStatus::committed);</span>
+<span id="L283">            std::array&lt;std::byte, 8&gt; payload{};</span>
+<span id="L284">            ASSERT_EQ(runtime.copy_live_control_payload(index + 1, admissions, payload),</span>
+<span id="L285">                      rt::Status::ok);</span>
+<span id="L286">            EXPECT_EQ(payload[0], static_cast&lt;std::byte&gt;(frames));</span>
+<span id="L287">        }</span>
+<span id="L288">    }</span>
+<span id="L289">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L290">}</span>
+<span id="L291"></span>
+<span id="L292">} // namespace</span>
+<span id="L293"></span>
+<span id="L294">TEST(LiveControlActiveReplay, HostTwoAndEightFramesPreserveCanonicalState) {</span>
+<span id="L295">    check_round_trip(2, 8, 1, false);</span>
+<span id="L296">    check_round_trip(8, 8, 1, false);</span>
+<span id="L297">}</span>
+<span id="L298"></span>
+<span id="L299">TEST(LiveControlActiveReplay, ReclaimsOnlyAfterFreeSlotsAreExhausted) {</span>
+<span id="L300">    check_round_trip(8, 2, 1, false);</span>
+<span id="L301">}</span>
+<span id="L302"></span>
+<span id="L303">TEST(LiveControlActiveReplay, MultipleMailboxesAndCompiledRateTargets) {</span>
+<span id="L304">    check_round_trip(2, 8, 2, true);</span>
+<span id="L305">    check_round_trip(8, 8, 2, true);</span>
+<span id="L306">}</span>
+<span id="L307"></span>
+<span id="L308">TEST(LiveControlActiveReplay, FinalApplicationStateDivergenceStillFails) {</span>
+<span id="L309">    check_round_trip(2, 8, 1, false, true);</span>
+<span id="L310">}</span>
+<span id="L311"></span>
+<span id="L312">TEST(LiveControlActiveReplay, ConcurrentRuntimeInstancesAreIsolated) {</span>
+<span id="L313">    std::thread first([] { check_round_trip(8, 8, 1, false); });</span>
+<span id="L314">    std::thread second([] { check_round_trip(8, 2, 2, true); });</span>
+<span id="L315">    first.join();</span>
+<span id="L316">    second.join();</span>
+<span id="L317">}</span>
+<span id="L318"></span>
+<span id="L319">TEST(LiveControlActiveReplay, LosslessReplacementsAndRejectionsPreserveAllState) {</span>
+<span id="L320">    for (auto frames : {2u, 8u}) {</span>
+<span id="L321">        for (bool rate : {false, true}) {</span>
+<span id="L322">            check_round_trip(frames, 2, 2, rate, false, true, true, true);</span>
+<span id="L323">        }</span>
+<span id="L324">    }</span>
+<span id="L325">}</span>
+<span id="L326"></span>
+<span id="L327">TEST(LiveControlActiveReplay, LosslessApplicationDivergenceStillFails) {</span>
+<span id="L328">    check_round_trip(2, 4, 2, false, true, true, true, true);</span>
+<span id="L329">}</span>
+<span id="L330"></span>
+<span id="L331">TEST(LiveControlActiveReplay, IncompleteV1HistoriesRejectBeforeRestore) {</span>
+<span id="L332">    check_round_trip(2, 4, 1, false, false, false, true, false);</span>
+<span id="L333">    check_round_trip(2, 4, 1, true, false, false, false, true);</span>
+<span id="L334">}</span>
+<span id="L335"></span>
+<span id="L336">TEST(LiveControlActiveReplay, ConcurrentLosslessInstancesRemainIsolated) {</span>
+<span id="L337">    std::thread first(</span>
+<span id="L338">        [] { check_round_trip(8, 2, 2, false, false, true, true, true); });</span>
+<span id="L339">    std::thread second(</span>
+<span id="L340">        [] { check_round_trip(8, 4, 1, true, false, true, true, true); });</span>
+<span id="L341">    first.join();</span>
+<span id="L342">    second.join();</span>
+<span id="L343">}</span></pre></html>

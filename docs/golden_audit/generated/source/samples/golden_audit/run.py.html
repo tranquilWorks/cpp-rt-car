@@ -1,0 +1,247 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_audit/run.py</title><h1>samples/golden_audit/run.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#!/usr/bin/env python3</span>
+<span id="L2">&quot;&quot;&quot;Build/run or independently revalidate the installed golden-system audit.&quot;&quot;&quot;</span>
+<span id="L3">import argparse</span>
+<span id="L4">import json</span>
+<span id="L5">from pathlib import Path</span>
+<span id="L6">import subprocess</span>
+<span id="L7">import sys</span>
+<span id="L8">import time</span>
+<span id="L9">import traceback</span>
+<span id="L10">import catalog</span>
+<span id="L11"></span>
+<span id="L12">HERE = Path(__file__).resolve().parent</span>
+<span id="L13">SHOWCASE = HERE.parent / &#x27;golden_showcase&#x27;</span>
+<span id="L14">sys.path.insert(0, str(SHOWCASE))</span>
+<span id="L15">import artifacts as a</span>
+<span id="L16">import run as showcase</span>
+<span id="L17">import report</span>
+<span id="L18"></span>
+<span id="L19">NAMES = (&#x27;golden_showcase&#x27;, &#x27;golden_experiment&#x27;, &#x27;golden_telemetry_loss&#x27;,</span>
+<span id="L20">         &#x27;golden_system&#x27;, &#x27;golden_cuda&#x27;, &#x27;golden_xdma&#x27;, &#x27;golden_controller&#x27;)</span>
+<span id="L21"></span>
+<span id="L22"></span>
+<span id="L23">def matrix(cycles):</span>
+<span id="L24">    catalog.require(type(cycles) is int and 2 &lt;= cycles &lt;= 32, &#x27;cycles must be 2..32&#x27;)</span>
+<span id="L25">    result = []</span>
+<span id="L26">    variants = [(&#x27;cpu&#x27;, &#x27;golden_system&#x27;, None), (&#x27;cuda-kernel&#x27;, &#x27;golden_cuda&#x27;, &#x27;kernel&#x27;),</span>
+<span id="L27">                (&#x27;cuda-graph&#x27;, &#x27;golden_cuda&#x27;, &#x27;graph&#x27;), (&#x27;xdma&#x27;, &#x27;golden_xdma&#x27;, &#x27;cpu&#x27;),</span>
+<span id="L28">                (&#x27;combined-kernel&#x27;, &#x27;golden_xdma&#x27;, &#x27;kernel&#x27;), (&#x27;combined-graph&#x27;, &#x27;golden_xdma&#x27;, &#x27;graph&#x27;)]</span>
+<span id="L29">    for cycle in range(cycles):</span>
+<span id="L30">        for variant, executable, dispatch in variants:</span>
+<span id="L31">            for mode in (&#x27;native&#x27;, &#x27;host&#x27;, &#x27;external&#x27;):</span>
+<span id="L32">                result.append(dict(id=f&#x27;{cycle:02d}-{variant}-{mode}&#x27;, cycle=cycle,</span>
+<span id="L33">                    variant=variant, executable=executable, dispatch=dispatch, mode=mode,</span>
+<span id="L34">                    campaign=&#x27;nominal&#x27;, fault=&#x27;none&#x27;, workers=1 + cycle % 3,</span>
+<span id="L35">                    grain=(1, 4, 16, 64)[cycle % 4], count=16, ticks=24))</span>
+<span id="L36">        for fault in (&#x27;underflow&#x27;, &#x27;overrun&#x27;, &#x27;device_loss&#x27;, &#x27;reset_failure&#x27;, &#x27;stop_failure&#x27;):</span>
+<span id="L37">            result.append(dict(id=f&#x27;{cycle:02d}-fault-{fault}&#x27;, cycle=cycle,</span>
+<span id="L38">                variant=&#x27;combined-graph&#x27;, executable=&#x27;golden_xdma&#x27;, dispatch=&#x27;graph&#x27;,</span>
+<span id="L39">                mode=&#x27;host&#x27; if cycle % 2 else &#x27;native&#x27;, campaign=&#x27;nominal&#x27;, fault=fault,</span>
+<span id="L40">                workers=2, grain=4, count=16, ticks=24))</span>
+<span id="L41">        result.append(dict(id=f&#x27;{cycle:02d}-fault-overload&#x27;, cycle=cycle, variant=&#x27;cpu&#x27;,</span>
+<span id="L42">            executable=&#x27;golden_system&#x27;, dispatch=None, mode=&#x27;native&#x27;, campaign=&#x27;overload&#x27;,</span>
+<span id="L43">            fault=&#x27;none&#x27;, workers=2, grain=4, count=16, ticks=24))</span>
+<span id="L44">    return result</span>
+<span id="L45"></span>
+<span id="L46"></span>
+<span id="L47">def file_hashes(directory):</span>
+<span id="L48">    paths = list(directory.rglob(&#x27;*&#x27;))</span>
+<span id="L49">    catalog.require(not directory.is_symlink() and not any(p.is_symlink() for p in paths),</span>
+<span id="L50">                    &#x27;symlink evidence is not admitted&#x27;)</span>
+<span id="L51">    return {p.relative_to(directory).as_posix(): catalog.sha(p.read_bytes())</span>
+<span id="L52">            for p in sorted(paths) if p.is_file()}</span>
+<span id="L53"></span>
+<span id="L54"></span>
+<span id="L55">def source_binding(provenance, manual):</span>
+<span id="L56">    audit = catalog.load(provenance)</span>
+<span id="L57">    catalog.require(set(audit) == {&#x27;schema&#x27;, &#x27;source_commit&#x27;, &#x27;source_tree&#x27;, &#x27;dirty&#x27;, &#x27;files&#x27;}</span>
+<span id="L58">                    and audit[&#x27;schema&#x27;] == 1 and type(audit[&#x27;dirty&#x27;]) is bool, &#x27;audit provenance schema&#x27;)</span>
+<span id="L59">    actual = {p.name: catalog.sha(p.read_bytes()) for p in HERE.iterdir()</span>
+<span id="L60">              if p.is_file() and p.name != &#x27;provenance.json&#x27;}</span>
+<span id="L61">    catalog.require(audit[&#x27;files&#x27;] == actual, &#x27;audit runner source inventory/digests&#x27;)</span>
+<span id="L62">    shared = a.provenance(SHOWCASE / &#x27;provenance.json&#x27;)</span>
+<span id="L63">    catalog.require(all(audit[k] == shared[k] for k in (&#x27;source_commit&#x27;, &#x27;source_tree&#x27;, &#x27;dirty&#x27;)),</span>
+<span id="L64">                    &#x27;audit/showcase source identity mismatch&#x27;)</span>
+<span id="L65">    inventory = catalog.verify_bundle(manual)</span>
+<span id="L66">    for path, digest in inventory[&#x27;sources&#x27;].items():</span>
+<span id="L67">        parts = Path(path).parts</span>
+<span id="L68">        if len(parts) &gt;= 3 and parts[0] == &#x27;samples&#x27; and parts[1] in a.FOLDERS:</span>
+<span id="L69">            catalog.require(catalog.sha((HERE.parent / Path(*parts[1:])).read_bytes()) == digest,</span>
+<span id="L70">                            &#x27;manual and installed sample source differ: &#x27; + path)</span>
+<span id="L71">    return dict(audit=audit, shared=shared,</span>
+<span id="L72">                manual_sha256=catalog.sha((manual / &#x27;inventory.json&#x27;).read_bytes()))</span>
+<span id="L73"></span>
+<span id="L74"></span>
+<span id="L75">def inspect(path, row):</span>
+<span id="L76">    if row[&#x27;executable&#x27;] == &#x27;golden_system&#x27;:</span>
+<span id="L77">        value = a.cpu.inspect(path)</span>
+<span id="L78">    else:</span>
+<span id="L79">        variant = &#x27;sim_cuda&#x27; if row[&#x27;executable&#x27;] == &#x27;golden_cuda&#x27; else &#x27;sim_xdma&#x27; if row[&#x27;dispatch&#x27;] == &#x27;cpu&#x27; else &#x27;sim_combined&#x27;</span>
+<span id="L80">        value = a.variant_inspect(path, variant)</span>
+<span id="L81">    for key in (&#x27;count&#x27;, &#x27;ticks&#x27;, &#x27;workers&#x27;, &#x27;grain&#x27;, &#x27;campaign&#x27;):</span>
+<span id="L82">        catalog.require(value[key] == row[key], &#x27;soak configuration differs: &#x27; + key)</span>
+<span id="L83">    catalog.require(value[&#x27;mode&#x27;] == (&#x27;native&#x27; if row[&#x27;mode&#x27;] == &#x27;external&#x27; else row[&#x27;mode&#x27;])</span>
+<span id="L84">                    and value[&#x27;external&#x27;] == (row[&#x27;mode&#x27;] == &#x27;external&#x27;), &#x27;soak executor/peer selection&#x27;)</span>
+<span id="L85">    catalog.require(value[&#x27;peer_status&#x27;] == value[&#x27;peer_cleanup&#x27;] == &#x27;ok&#x27;, &#x27;failed peer lifecycle&#x27;)</span>
+<span id="L86">    if row[&#x27;mode&#x27;] == &#x27;external&#x27;:</span>
+<span id="L87">        catalog.require(value[&#x27;peer_responses&#x27;] == 8, &#x27;actual controller response count&#x27;)</span>
+<span id="L88">    if row[&#x27;executable&#x27;] != &#x27;golden_system&#x27;:</span>
+<span id="L89">        catalog.require(value[&#x27;dispatch&#x27;] == row[&#x27;dispatch&#x27;] and value[&#x27;fault&#x27;] == row[&#x27;fault&#x27;],</span>
+<span id="L90">                        &#x27;soak dispatch/fault differs&#x27;)</span>
+<span id="L91">    return value</span>
+<span id="L92"></span>
+<span id="L93"></span>
+<span id="L94">def verify(directory, build, configuration, provenance, manual, publish=False):</span>
+<span id="L95">    source = source_binding(provenance, manual)</span>
+<span id="L96">    execution = catalog.load(directory / &#x27;execution.json&#x27;)</span>
+<span id="L97">    expected = matrix(execution[&#x27;cycles&#x27;])</span>
+<span id="L98">    catalog.require(execution[&#x27;schema&#x27;] == 1 and execution[&#x27;source&#x27;] == source and</span>
+<span id="L99">                    execution[&#x27;plan&#x27;] == expected, &#x27;execution source/plan identity&#x27;)</span>
+<span id="L100">    binaries = {n: showcase.executable(build, n, configuration) for n in NAMES}</span>
+<span id="L101">    binary_hashes = {n: catalog.sha(p.read_bytes()) for n, p in binaries.items()}</span>
+<span id="L102">    catalog.require(execution[&#x27;binaries&#x27;] == binary_hashes, &#x27;changed executable bytes&#x27;)</span>
+<span id="L103">    catalog.require(execution[&#x27;clock&#x27;] in (&#x27;fake&#x27;, &#x27;steady&#x27;) and execution[&#x27;completed&#x27;] is True,</span>
+<span id="L104">                    &#x27;incomplete execution&#x27;)</span>
+<span id="L105">    records = execution[&#x27;records&#x27;]</span>
+<span id="L106">    catalog.require([r[&#x27;id&#x27;] for r in records] == [&#x27;showcase&#x27;] + [r[&#x27;id&#x27;] for r in expected],</span>
+<span id="L107">                    &#x27;missing/duplicate/reordered execution record&#x27;)</span>
+<span id="L108">    catalog.require(all(r[&#x27;status&#x27;] == &#x27;completed&#x27; and type(r[&#x27;elapsed_ns&#x27;]) is int and r[&#x27;elapsed_ns&#x27;] &gt; 0</span>
+<span id="L109">                        for r in records), &#x27;failed/incomplete execution record&#x27;)</span>
+<span id="L110">    top = {&#x27;execution.json&#x27;, &#x27;showcase&#x27;, &#x27;runs&#x27;, &#x27;logs&#x27;} | ({&#x27;soak.json&#x27;} if not publish else set())</span>
+<span id="L111">    catalog.require({p.name for p in directory.iterdir()} == top, &#x27;unexpected or missing audit artifact&#x27;)</span>
+<span id="L112">    catalog.require({p.name for p in (directory / &#x27;runs&#x27;).iterdir()} == {r[&#x27;id&#x27;] for r in expected},</span>
+<span id="L113">                    &#x27;omitted/extra soak run&#x27;)</span>
+<span id="L114">    catalog.require({p.name for p in (directory / &#x27;logs&#x27;).iterdir()} == {r[&#x27;id&#x27;] + &#x27;.log&#x27; for r in records},</span>
+<span id="L115">                    &#x27;missing/extra execution log&#x27;)</span>
+<span id="L116">    coverage = report.validate(directory / &#x27;showcase&#x27;, SHOWCASE / &#x27;provenance.json&#x27;, binaries=binaries)</span>
+<span id="L117">    catalog.require(catalog.load(directory / &#x27;showcase/inputs.json&#x27;)[&#x27;clock&#x27;] == execution[&#x27;clock&#x27;],</span>
+<span id="L118">                    &#x27;showcase clock mismatch&#x27;)</span>
+<span id="L119">    observations = []</span>
+<span id="L120">    for row in expected:</span>
+<span id="L121">        path = directory / &#x27;runs&#x27; / row[&#x27;id&#x27;]</span>
+<span id="L122">        value = inspect(path, row)</span>
+<span id="L123">        observations.append(dict(id=row[&#x27;id&#x27;], observation=value, files=file_hashes(path)))</span>
+<span id="L124">    raw = {k: v for k, v in file_hashes(directory).items() if k != &#x27;soak.json&#x27;}</span>
+<span id="L125">    result = dict(schema=1, batch=&#x27;M26-06&#x27;, status=&#x27;PASS&#x27;, source=source, binaries=binary_hashes,</span>
+<span id="L126">                  cycles=execution[&#x27;cycles&#x27;], nominal_runs=18 * execution[&#x27;cycles&#x27;],</span>
+<span id="L127">                  fault_runs=6 * execution[&#x27;cycles&#x27;], nominal_logical_ticks=18 * 24 * execution[&#x27;cycles&#x27;],</span>
+<span id="L128">                  wall_elapsed_ns=execution[&#x27;wall_elapsed_ns&#x27;], showcase=coverage,</span>
+<span id="L129">                  observations=observations, files=raw,</span>
+<span id="L130">                  claim=&#x27;bounded portable regression soak; not physical or long-duration endurance&#x27;,</span>
+<span id="L131">                  physical=&#x27;NOT_RUN&#x27;, rt=&#x27;NOT_RUN&#x27;, human_acceptance=&#x27;NOT_RUN&#x27;,</span>
+<span id="L132">                  controlled_performance=&#x27;NOT_RUN&#x27;, unreal=&#x27;NOT_RUN&#x27;, release=&#x27;NOT_RUN&#x27;)</span>
+<span id="L133">    catalog.require(type(result[&#x27;wall_elapsed_ns&#x27;]) is int and result[&#x27;wall_elapsed_ns&#x27;] &gt; 0 and</span>
+<span id="L134">                    result[&#x27;wall_elapsed_ns&#x27;] &gt;= sum(r[&#x27;elapsed_ns&#x27;] for r in records), &#x27;wall duration accounting&#x27;)</span>
+<span id="L135">    if publish:</span>
+<span id="L136">        catalog.require(not (directory / &#x27;soak.json&#x27;).exists(), &#x27;soak result already exists&#x27;)</span>
+<span id="L137">        (directory / &#x27;soak.json&#x27;).write_bytes(catalog.encoded(result))</span>
+<span id="L138">    else:</span>
+<span id="L139">        catalog.require(catalog.load(directory / &#x27;soak.json&#x27;) == result, &#x27;fabricated or stale soak result&#x27;)</span>
+<span id="L140">    return result</span>
+<span id="L141"></span>
+<span id="L142"></span>
+<span id="L143">def execute(output, build, configuration, provenance, manual, cycles, clock):</span>
+<span id="L144">    plan = matrix(cycles)</span>
+<span id="L145">    source = source_binding(provenance, manual)</span>
+<span id="L146">    binaries = {n: showcase.executable(build, n, configuration) for n in NAMES}</span>
+<span id="L147">    catalog.require(not output.exists(), &#x27;output already exists&#x27;)</span>
+<span id="L148">    output.mkdir(parents=True)</span>
+<span id="L149">    (output / &#x27;logs&#x27;).mkdir()</span>
+<span id="L150">    (output / &#x27;runs&#x27;).mkdir()</span>
+<span id="L151">    execution = dict(schema=1, cycles=cycles, clock=clock, source=source, plan=plan,</span>
+<span id="L152">        binaries={n: catalog.sha(p.read_bytes()) for n, p in binaries.items()},</span>
+<span id="L153">        records=[], completed=False, wall_elapsed_ns=0)</span>
+<span id="L154">    start = time.monotonic_ns()</span>
+<span id="L155">    def save():</span>
+<span id="L156">        execution[&#x27;wall_elapsed_ns&#x27;] = time.monotonic_ns() - start</span>
+<span id="L157">        (output / &#x27;execution.json&#x27;).write_bytes(catalog.encoded(execution))</span>
+<span id="L158">    def perform(name, action):</span>
+<span id="L159">        record = dict(id=name, status=&#x27;running&#x27;, elapsed_ns=0)</span>
+<span id="L160">        execution[&#x27;records&#x27;].append(record); save()</span>
+<span id="L161">        began = time.monotonic_ns()</span>
+<span id="L162">        with (output / &#x27;logs&#x27; / (name + &#x27;.log&#x27;)).open(&#x27;w&#x27;, encoding=&#x27;utf-8&#x27;) as log:</span>
+<span id="L163">            try:</span>
+<span id="L164">                action(log)</span>
+<span id="L165">                record[&#x27;status&#x27;] = &#x27;completed&#x27;</span>
+<span id="L166">            except BaseException:</span>
+<span id="L167">                record[&#x27;status&#x27;] = &#x27;failed&#x27;</span>
+<span id="L168">                traceback.print_exc(file=log)</span>
+<span id="L169">                raise</span>
+<span id="L170">            finally:</span>
+<span id="L171">                record[&#x27;elapsed_ns&#x27;] = time.monotonic_ns() - began; save()</span>
+<span id="L172">        print(&#x27;completed&#x27;, name, flush=True)</span>
+<span id="L173">    def command(argv, log, timeout):</span>
+<span id="L174">        log.write(json.dumps(list(map(str, argv))) + &#x27;\n&#x27;); log.flush()</span>
+<span id="L175">        subprocess.run(list(map(str, argv)), stdout=log, stderr=subprocess.STDOUT,</span>
+<span id="L176">                       timeout=timeout, check=True)</span>
+<span id="L177">    perform(&#x27;showcase&#x27;, lambda log: command([sys.executable, SHOWCASE / &#x27;run.py&#x27;,</span>
+<span id="L178">        &#x27;--binaries-build&#x27;, build, &#x27;--provenance&#x27;, SHOWCASE / &#x27;provenance.json&#x27;,</span>
+<span id="L179">        &#x27;--output&#x27;, output / &#x27;showcase&#x27;, &#x27;--clock&#x27;, clock,</span>
+<span id="L180">        *([&#x27;--config&#x27;, configuration] if configuration else [])], log, 900))</span>
+<span id="L181">    pair = a.module(&#x27;golden_audit_pair&#x27;, HERE.parent / &#x27;golden_system/run.py&#x27;).pair</span>
+<span id="L182">    for row in plan:</span>
+<span id="L183">        path = output / &#x27;runs&#x27; / row[&#x27;id&#x27;]</span>
+<span id="L184">        extra = [&#x27;--count&#x27;, row[&#x27;count&#x27;], &#x27;--ticks&#x27;, row[&#x27;ticks&#x27;], &#x27;--workers&#x27;, row[&#x27;workers&#x27;],</span>
+<span id="L185">                 &#x27;--grain&#x27;, row[&#x27;grain&#x27;], &#x27;--campaign&#x27;, row[&#x27;campaign&#x27;]]</span>
+<span id="L186">        if row[&#x27;dispatch&#x27;]:</span>
+<span id="L187">            extra += [&#x27;--dispatch&#x27;, row[&#x27;dispatch&#x27;], &#x27;--fault&#x27;, row[&#x27;fault&#x27;]]</span>
+<span id="L188">        def action(log):</span>
+<span id="L189">            if row[&#x27;mode&#x27;] == &#x27;external&#x27;:</span>
+<span id="L190">                h, peer, ho, po = pair(binaries[row[&#x27;executable&#x27;]], binaries[&#x27;golden_controller&#x27;],</span>
+<span id="L191">                                     path, extra=extra)</span>
+<span id="L192">                log.write(ho + po)</span>
+<span id="L193">                catalog.require(h == peer == 0, &#x27;external child failure&#x27;)</span>
+<span id="L194">            else:</span>
+<span id="L195">                command([binaries[row[&#x27;executable&#x27;]], &#x27;--mode&#x27;, row[&#x27;mode&#x27;], &#x27;--output&#x27;, path, *extra], log, 120)</span>
+<span id="L196">            inspect(path, row)</span>
+<span id="L197">        perform(row[&#x27;id&#x27;], action)</span>
+<span id="L198">    catalog.require(source_binding(provenance, manual) == source and</span>
+<span id="L199">                    execution[&#x27;binaries&#x27;] == {n: catalog.sha(p.read_bytes()) for n, p in binaries.items()},</span>
+<span id="L200">                    &#x27;source or executable changed during execution&#x27;)</span>
+<span id="L201">    execution[&#x27;completed&#x27;] = True; save()</span>
+<span id="L202">    return verify(output, build, configuration, provenance, manual, publish=True)</span>
+<span id="L203"></span>
+<span id="L204"></span>
+<span id="L205">def main():</span>
+<span id="L206">    parser = argparse.ArgumentParser(description=__doc__)</span>
+<span id="L207">    parser.add_argument(&#x27;--prefix&#x27;, type=Path)</span>
+<span id="L208">    parser.add_argument(&#x27;--build&#x27;, type=Path, default=HERE / &#x27;build&#x27;)</span>
+<span id="L209">    parser.add_argument(&#x27;--binaries-build&#x27;, type=Path)</span>
+<span id="L210">    parser.add_argument(&#x27;--config&#x27;)</span>
+<span id="L211">    parser.add_argument(&#x27;--output&#x27;, type=Path)</span>
+<span id="L212">    parser.add_argument(&#x27;--verify&#x27;, type=Path)</span>
+<span id="L213">    parser.add_argument(&#x27;--cycles&#x27;, type=int, default=16)</span>
+<span id="L214">    parser.add_argument(&#x27;--clock&#x27;, choices=(&#x27;fake&#x27;, &#x27;steady&#x27;), default=&#x27;steady&#x27;)</span>
+<span id="L215">    parser.add_argument(&#x27;--provenance&#x27;, type=Path, default=HERE / &#x27;provenance.json&#x27;)</span>
+<span id="L216">    parser.add_argument(&#x27;--manual&#x27;, type=Path, default=HERE.parents[1] / &#x27;golden_audit&#x27;)</span>
+<span id="L217">    args = parser.parse_args()</span>
+<span id="L218">    try:</span>
+<span id="L219">        catalog.require(bool(args.output) != bool(args.verify), &#x27;select exactly one of --output or --verify&#x27;)</span>
+<span id="L220">        matrix(args.cycles)</span>
+<span id="L221">        build = args.binaries_build</span>
+<span id="L222">        if args.verify:</span>
+<span id="L223">            catalog.require(build is not None, &#x27;--verify requires --binaries-build&#x27;)</span>
+<span id="L224">        elif build is None:</span>
+<span id="L225">            catalog.require(args.prefix is not None, &#x27;--prefix is required to build the installed source kit&#x27;)</span>
+<span id="L226">            args.config = args.config or &#x27;Release&#x27;</span>
+<span id="L227">            showcase.command([&#x27;cmake&#x27;, &#x27;-S&#x27;, SHOWCASE, &#x27;-B&#x27;, args.build,</span>
+<span id="L228">                              &#x27;-DCMAKE_BUILD_TYPE=&#x27; + args.config,</span>
+<span id="L229">                              &#x27;-DCMAKE_EXPORT_COMPILE_COMMANDS=ON&#x27;,</span>
+<span id="L230">                              &#x27;-DCMAKE_PREFIX_PATH=&#x27; + str(args.prefix.resolve())])</span>
+<span id="L231">            showcase.command([&#x27;cmake&#x27;, &#x27;--build&#x27;, args.build, &#x27;--config&#x27;, args.config, &#x27;--parallel&#x27;, &#x27;2&#x27;])</span>
+<span id="L232">            build = args.build</span>
+<span id="L233">        if args.verify:</span>
+<span id="L234">            value = verify(args.verify.resolve(), build.resolve(), args.config,</span>
+<span id="L235">                           args.provenance.resolve(), args.manual.resolve())</span>
+<span id="L236">        else:</span>
+<span id="L237">            value = execute(args.output.resolve(), build.resolve(), args.config,</span>
+<span id="L238">                            args.provenance.resolve(), args.manual.resolve(), args.cycles, args.clock)</span>
+<span id="L239">        print(&#x27;PASS M26-06 installed audit and bounded soak:&#x27;, value[&#x27;nominal_runs&#x27;],</span>
+<span id="L240">              &#x27;nominal runs,&#x27;, value[&#x27;fault_runs&#x27;], &#x27;fault runs;&#x27;,</span>
+<span id="L241">              value[&#x27;wall_elapsed_ns&#x27;] / 1e9, &#x27;wall seconds&#x27;)</span>
+<span id="L242">    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as error:</span>
+<span id="L243">        parser.exit(1, str(error) + &#x27;\n&#x27;)</span>
+<span id="L244"></span>
+<span id="L245"></span>
+<span id="L246">if __name__ == &#x27;__main__&#x27;:</span>
+<span id="L247">    main()</span></pre></html>

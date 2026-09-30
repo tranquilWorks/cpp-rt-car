@@ -1,0 +1,260 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>rt/src/mixed_rate_actions.cpp</title><h1>rt/src/mixed_rate_actions.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;mixed_rate_actions.hpp&quot;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;bit&gt;</span>
+<span id="L4">#include &lt;new&gt;</span>
+<span id="L5">#include &lt;stdexcept&gt;</span>
+<span id="L6"></span>
+<span id="L7">namespace rt::detail {</span>
+<span id="L8">namespace {</span>
+<span id="L9"></span>
+<span id="L10">template &lt;typename Enum&gt;</span>
+<span id="L11">[[nodiscard]] constexpr bool between(</span>
+<span id="L12">    Enum value,</span>
+<span id="L13">    Enum first,</span>
+<span id="L14">    Enum last) noexcept {</span>
+<span id="L15">    return value &gt;= first &amp;&amp; value &lt;= last;</span>
+<span id="L16">}</span>
+<span id="L17"></span>
+<span id="L18">[[nodiscard]] bool reserved_zero(</span>
+<span id="L19">    const MixedRateActionRecord&amp; record) noexcept {</span>
+<span id="L20">    for (const auto byte : record.reserved) {</span>
+<span id="L21">        if (byte != std::byte{0}) {</span>
+<span id="L22">            return false;</span>
+<span id="L23">        }</span>
+<span id="L24">    }</span>
+<span id="L25">    return true;</span>
+<span id="L26">}</span>
+<span id="L27"></span>
+<span id="L28">[[nodiscard]] constexpr bool status_valid(std::int32_t value) noexcept {</span>
+<span id="L29">    return value &lt;= static_cast&lt;std::int32_t&gt;(Status::ok) &amp;&amp;</span>
+<span id="L30">        value &gt;= static_cast&lt;std::int32_t&gt;(Status::incompatible_abi);</span>
+<span id="L31">}</span>
+<span id="L32"></span>
+<span id="L33">[[nodiscard]] bool action_shape_valid(</span>
+<span id="L34">    const MixedRateActionRecord&amp; record) noexcept {</span>
+<span id="L35">    const auto phase_unspecified =</span>
+<span id="L36">        record.phase_index == std::numeric_limits&lt;std::uint32_t&gt;::max();</span>
+<span id="L37">    const auto domain_unspecified =</span>
+<span id="L38">        record.rate_domain_registration_index ==</span>
+<span id="L39">            std::numeric_limits&lt;std::uint32_t&gt;::max();</span>
+<span id="L40">    const auto is_rate =</span>
+<span id="L41">        record.action &gt;= MixedRateActionId::rate_execute &amp;&amp;</span>
+<span id="L42">        record.action &lt;= MixedRateActionId::rate_recover;</span>
+<span id="L43">    if (is_rate) {</span>
+<span id="L44">        return record.stage == MixedRateActionStage::decision &amp;&amp;</span>
+<span id="L45">            phase_unspecified &amp;&amp; !domain_unspecified &amp;&amp;</span>
+<span id="L46">            record.backend_identity == 0 &amp;&amp;</span>
+<span id="L47">            record.freshness == MixedRateSampleFreshness::not_applicable &amp;&amp;</span>
+<span id="L48">            record.safety_state == MixedRateSafetyState::not_applicable &amp;&amp;</span>
+<span id="L49">            record.shed == (record.action == MixedRateActionId::rate_shed) &amp;&amp;</span>
+<span id="L50">            (!record.held || record.action == MixedRateActionId::rate_hold) &amp;&amp;</span>
+<span id="L51">            !record.substituted;</span>
+<span id="L52">    }</span>
+<span id="L53">    switch (record.action) {</span>
+<span id="L54">    case MixedRateActionId::device_terminal:</span>
+<span id="L55">        return !phase_unspecified &amp;&amp; !domain_unspecified &amp;&amp;</span>
+<span id="L56">            record.backend_identity != 0 &amp;&amp;</span>
+<span id="L57">            (record.stage == MixedRateActionStage::terminal ||</span>
+<span id="L58">             record.stage == MixedRateActionStage::quarantined) &amp;&amp;</span>
+<span id="L59">            !record.shed;</span>
+<span id="L60">    case MixedRateActionId::sampled_publish:</span>
+<span id="L61">        return !phase_unspecified &amp;&amp; !domain_unspecified &amp;&amp;</span>
+<span id="L62">            record.timeline_identity != 0 &amp;&amp;</span>
+<span id="L63">            (record.stage == MixedRateActionStage::published ||</span>
+<span id="L64">             record.stage == MixedRateActionStage::terminal) &amp;&amp;</span>
+<span id="L65">            !record.shed;</span>
+<span id="L66">    case MixedRateActionId::sampled_select:</span>
+<span id="L67">        return !phase_unspecified &amp;&amp; !domain_unspecified &amp;&amp;</span>
+<span id="L68">            record.timeline_identity != 0 &amp;&amp;</span>
+<span id="L69">            (record.stage == MixedRateActionStage::selected ||</span>
+<span id="L70">             record.stage == MixedRateActionStage::terminal) &amp;&amp;</span>
+<span id="L71">            !record.shed;</span>
+<span id="L72">    case MixedRateActionId::safe_transition:</span>
+<span id="L73">        return !phase_unspecified &amp;&amp; !domain_unspecified &amp;&amp;</span>
+<span id="L74">            record.backend_identity != 0 &amp;&amp; record.timeline_identity != 0 &amp;&amp;</span>
+<span id="L75">            (record.stage == MixedRateActionStage::acknowledged ||</span>
+<span id="L76">             record.stage == MixedRateActionStage::terminal) &amp;&amp;</span>
+<span id="L77">            record.freshness == MixedRateSampleFreshness::substituted &amp;&amp;</span>
+<span id="L78">            record.substituted &amp;&amp;</span>
+<span id="L79">            record.safety_state != MixedRateSafetyState::not_applicable &amp;&amp;</span>
+<span id="L80">            !record.shed;</span>
+<span id="L81">    case MixedRateActionId::watchdog_transition:</span>
+<span id="L82">        return phase_unspecified &amp;&amp;</span>
+<span id="L83">            record.stage == MixedRateActionStage::terminal &amp;&amp;</span>
+<span id="L84">            record.reason == MixedRateActionReason::watchdog &amp;&amp;</span>
+<span id="L85">            !record.shed;</span>
+<span id="L86">    case MixedRateActionId::runtime_stop:</span>
+<span id="L87">        return phase_unspecified &amp;&amp; domain_unspecified &amp;&amp;</span>
+<span id="L88">            record.stage == MixedRateActionStage::terminal &amp;&amp;</span>
+<span id="L89">            (record.reason == MixedRateActionReason::normal ||</span>
+<span id="L90">             record.reason == MixedRateActionReason::cleanup_pending) &amp;&amp;</span>
+<span id="L91">            !record.shed;</span>
+<span id="L92">    case MixedRateActionId::rate_execute:</span>
+<span id="L93">    case MixedRateActionId::rate_skip:</span>
+<span id="L94">    case MixedRateActionId::rate_hold:</span>
+<span id="L95">    case MixedRateActionId::rate_shed:</span>
+<span id="L96">    case MixedRateActionId::rate_recover:</span>
+<span id="L97">        break;</span>
+<span id="L98">    }</span>
+<span id="L99">    return false;</span>
+<span id="L100">}</span>
+<span id="L101"></span>
+<span id="L102">} // namespace</span>
+<span id="L103"></span>
+<span id="L104">bool mixed_rate_action_valid(</span>
+<span id="L105">    const MixedRateActionRecord&amp; record) noexcept {</span>
+<span id="L106">    return record.schema_version == mixed_rate_action_schema_version &amp;&amp;</span>
+<span id="L107">        record.record_size == sizeof(MixedRateActionRecord) &amp;&amp;</span>
+<span id="L108">        record.runtime_id != 0 &amp;&amp; record.host_policy_version != 0 &amp;&amp;</span>
+<span id="L109">        between(</span>
+<span id="L110">            record.action,</span>
+<span id="L111">            MixedRateActionId::rate_execute,</span>
+<span id="L112">            MixedRateActionId::runtime_stop) &amp;&amp;</span>
+<span id="L113">        between(</span>
+<span id="L114">            record.reason,</span>
+<span id="L115">            MixedRateActionReason::normal,</span>
+<span id="L116">            MixedRateActionReason::cleanup_pending) &amp;&amp;</span>
+<span id="L117">        between(</span>
+<span id="L118">            record.stage,</span>
+<span id="L119">            MixedRateActionStage::decision,</span>
+<span id="L120">            MixedRateActionStage::quarantined) &amp;&amp;</span>
+<span id="L121">        between(</span>
+<span id="L122">            record.freshness,</span>
+<span id="L123">            MixedRateSampleFreshness::not_applicable,</span>
+<span id="L124">            MixedRateSampleFreshness::substituted) &amp;&amp;</span>
+<span id="L125">        between(</span>
+<span id="L126">            record.safety_state,</span>
+<span id="L127">            MixedRateSafetyState::not_applicable,</span>
+<span id="L128">            MixedRateSafetyState::shutdown_acknowledged) &amp;&amp;</span>
+<span id="L129">        status_valid(record.terminal_status) &amp;&amp;</span>
+<span id="L130">        record.degradation_before &lt;= record.degradation_after &amp;&amp;</span>
+<span id="L131">        (!record.substituted ||</span>
+<span id="L132">         record.freshness == MixedRateSampleFreshness::substituted) &amp;&amp;</span>
+<span id="L133">        action_shape_valid(record) &amp;&amp;</span>
+<span id="L134">        reserved_zero(record);</span>
+<span id="L135">}</span>
+<span id="L136"></span>
+<span id="L137">MixedRateActionRing::MixedRateActionRing(std::size_t capacity)</span>
+<span id="L138">    : capacity_(capacity) {</span>
+<span id="L139">    if (capacity &gt; mixed_rate_action_capacity_limit ||</span>
+<span id="L140">        capacity &gt; std::numeric_limits&lt;std::size_t&gt;::max() / sizeof(Slot)) {</span>
+<span id="L141">        throw std::invalid_argument(&quot;mixed-rate action capacity is invalid&quot;);</span>
+<span id="L142">    }</span>
+<span id="L143">    storage_.allocate(capacity * sizeof(Slot), alignof(Slot));</span>
+<span id="L144">    slots_ = reinterpret_cast&lt;Slot*&gt;(storage_.data());</span>
+<span id="L145">    for (std::size_t index = 0; index &lt; capacity_; ++index) {</span>
+<span id="L146">        ::new (static_cast&lt;void*&gt;(slots_ + index)) Slot{};</span>
+<span id="L147">    }</span>
+<span id="L148">}</span>
+<span id="L149"></span>
+<span id="L150">MixedRateActionRing::~MixedRateActionRing() {</span>
+<span id="L151">    for (std::size_t index = capacity_; index != 0; --index) {</span>
+<span id="L152">        slots_[index - 1].~Slot();</span>
+<span id="L153">    }</span>
+<span id="L154">}</span>
+<span id="L155"></span>
+<span id="L156">bool MixedRateActionRing::emit(</span>
+<span id="L157">    MixedRateActionRecord record,</span>
+<span id="L158">    std::uint64_t* assigned_sequence) noexcept {</span>
+<span id="L159">    auto sequence = next_sequence_.load(std::memory_order_relaxed);</span>
+<span id="L160">    while (sequence != std::numeric_limits&lt;std::uint64_t&gt;::max() &amp;&amp;</span>
+<span id="L161">           !next_sequence_.compare_exchange_weak(</span>
+<span id="L162">               sequence,</span>
+<span id="L163">               sequence + 1,</span>
+<span id="L164">               std::memory_order_relaxed,</span>
+<span id="L165">               std::memory_order_relaxed)) {</span>
+<span id="L166">    }</span>
+<span id="L167">    if (assigned_sequence) {</span>
+<span id="L168">        *assigned_sequence = sequence;</span>
+<span id="L169">    }</span>
+<span id="L170">    if (sequence == std::numeric_limits&lt;std::uint64_t&gt;::max()) {</span>
+<span id="L171">        dropped_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L172">        return false;</span>
+<span id="L173">    }</span>
+<span id="L174">    record.sequence = sequence;</span>
+<span id="L175">    if (!mixed_rate_action_valid(record) || capacity_ == 0) {</span>
+<span id="L176">        dropped_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L177">        return false;</span>
+<span id="L178">    }</span>
+<span id="L179">    auto&amp; slot = slots_[static_cast&lt;std::size_t&gt;(</span>
+<span id="L180">        sequence % static_cast&lt;std::uint64_t&gt;(capacity_))];</span>
+<span id="L181">    if (slot.writer.test_and_set(std::memory_order_acquire)) {</span>
+<span id="L182">        dropped_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L183">        return false;</span>
+<span id="L184">    }</span>
+<span id="L185">    const auto previous = slot.committed_sequence.exchange(</span>
+<span id="L186">        invalid_sequence, std::memory_order_acq_rel);</span>
+<span id="L187">    const auto words =</span>
+<span id="L188">        std::bit_cast&lt;std::array&lt;std::uint64_t, word_count&gt;&gt;(record);</span>
+<span id="L189">    for (std::size_t index = 0; index &lt; words.size(); ++index) {</span>
+<span id="L190">        slot.words[index].store(words[index], std::memory_order_relaxed);</span>
+<span id="L191">    }</span>
+<span id="L192">    slot.committed_sequence.store(sequence, std::memory_order_release);</span>
+<span id="L193">    slot.writer.clear(std::memory_order_release);</span>
+<span id="L194">    emitted_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L195">    if (previous != invalid_sequence) {</span>
+<span id="L196">        overwritten_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L197">    }</span>
+<span id="L198">    return true;</span>
+<span id="L199">}</span>
+<span id="L200"></span>
+<span id="L201">bool MixedRateActionRing::read_sequence(</span>
+<span id="L202">    std::uint64_t sequence,</span>
+<span id="L203">    MixedRateActionRecord&amp; record) const noexcept {</span>
+<span id="L204">    record = {};</span>
+<span id="L205">    if (capacity_ == 0) {</span>
+<span id="L206">        return false;</span>
+<span id="L207">    }</span>
+<span id="L208">    const auto&amp; slot = slots_[static_cast&lt;std::size_t&gt;(</span>
+<span id="L209">        sequence % static_cast&lt;std::uint64_t&gt;(capacity_))];</span>
+<span id="L210">    if (slot.committed_sequence.load(std::memory_order_acquire) != sequence) {</span>
+<span id="L211">        return false;</span>
+<span id="L212">    }</span>
+<span id="L213">    std::array&lt;std::uint64_t, word_count&gt; words{};</span>
+<span id="L214">    for (std::size_t index = 0; index &lt; words.size(); ++index) {</span>
+<span id="L215">        words[index] = slot.words[index].load(std::memory_order_relaxed);</span>
+<span id="L216">    }</span>
+<span id="L217">    const auto candidate = std::bit_cast&lt;MixedRateActionRecord&gt;(words);</span>
+<span id="L218">    if (slot.committed_sequence.load(std::memory_order_acquire) != sequence ||</span>
+<span id="L219">        candidate.sequence != sequence || !mixed_rate_action_valid(candidate)) {</span>
+<span id="L220">        return false;</span>
+<span id="L221">    }</span>
+<span id="L222">    record = candidate;</span>
+<span id="L223">    return true;</span>
+<span id="L224">}</span>
+<span id="L225"></span>
+<span id="L226">std::uint64_t MixedRateActionRing::oldest_sequence(</span>
+<span id="L227">    std::uint64_t end_sequence) const noexcept {</span>
+<span id="L228">    const auto capacity = static_cast&lt;std::uint64_t&gt;(capacity_);</span>
+<span id="L229">    return end_sequence &gt; capacity ? end_sequence - capacity : 0;</span>
+<span id="L230">}</span>
+<span id="L231"></span>
+<span id="L232">bool MixedRateActionRing::gap_free(</span>
+<span id="L233">    std::uint64_t first_sequence,</span>
+<span id="L234">    std::uint64_t count) const noexcept {</span>
+<span id="L235">    if (count &gt; std::numeric_limits&lt;std::uint64_t&gt;::max() - first_sequence) {</span>
+<span id="L236">        return false;</span>
+<span id="L237">    }</span>
+<span id="L238">    MixedRateActionRecord record;</span>
+<span id="L239">    for (std::uint64_t offset = 0; offset &lt; count; ++offset) {</span>
+<span id="L240">        if (!read_sequence(first_sequence + offset, record)) {</span>
+<span id="L241">            return false;</span>
+<span id="L242">        }</span>
+<span id="L243">    }</span>
+<span id="L244">    return true;</span>
+<span id="L245">}</span>
+<span id="L246"></span>
+<span id="L247">void MixedRateActionRing::restore_sequence(</span>
+<span id="L248">    std::uint64_t next_sequence) noexcept {</span>
+<span id="L249">    for (std::size_t index = 0; index &lt; capacity_; ++index) {</span>
+<span id="L250">        auto&amp; slot = slots_[index];</span>
+<span id="L251">        slot.committed_sequence.store(invalid_sequence, std::memory_order_release);</span>
+<span id="L252">        slot.writer.clear(std::memory_order_release);</span>
+<span id="L253">    }</span>
+<span id="L254">    next_sequence_.store(next_sequence, std::memory_order_release);</span>
+<span id="L255">    emitted_.store(0, std::memory_order_release);</span>
+<span id="L256">    overwritten_.store(0, std::memory_order_release);</span>
+<span id="L257">    dropped_.store(0, std::memory_order_release);</span>
+<span id="L258">}</span>
+<span id="L259"></span>
+<span id="L260">} // namespace rt::detail</span></pre></html>

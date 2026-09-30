@@ -1,0 +1,610 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>rt/src/mixed_rate_replay.cpp</title><h1>rt/src/mixed_rate_replay.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;mixed_rate_replay.hpp&quot;</span>
+<span id="L2"></span>
+<span id="L3">#include &quot;mixed_rate_actions.hpp&quot;</span>
+<span id="L4"></span>
+<span id="L5">#include &lt;algorithm&gt;</span>
+<span id="L6">#include &lt;array&gt;</span>
+<span id="L7">#include &lt;cstring&gt;</span>
+<span id="L8">#include &lt;limits&gt;</span>
+<span id="L9"></span>
+<span id="L10">namespace rt::detail {</span>
+<span id="L11">namespace {</span>
+<span id="L12"></span>
+<span id="L13">constexpr std::uint64_t kMagic = 0x3152414d57465452ull; // RTFWMAR1</span>
+<span id="L14">constexpr std::uint64_t kFnvOffset = 14695981039346656037ull;</span>
+<span id="L15">constexpr std::uint64_t kFnvPrime = 1099511628211ull;</span>
+<span id="L16">constexpr std::uint32_t kInputDeadline = 1u;</span>
+<span id="L17">constexpr std::uint32_t kInputNominal = 2u;</span>
+<span id="L18"></span>
+<span id="L19">[[nodiscard]] bool add_size(</span>
+<span id="L20">    std::size_t left,</span>
+<span id="L21">    std::size_t right,</span>
+<span id="L22">    std::size_t&amp; result) noexcept {</span>
+<span id="L23">    if (right &gt; std::numeric_limits&lt;std::size_t&gt;::max() - left) {</span>
+<span id="L24">        return false;</span>
+<span id="L25">    }</span>
+<span id="L26">    result = left + right;</span>
+<span id="L27">    return true;</span>
+<span id="L28">}</span>
+<span id="L29"></span>
+<span id="L30">[[nodiscard]] bool multiply_size(</span>
+<span id="L31">    std::size_t left,</span>
+<span id="L32">    std::size_t right,</span>
+<span id="L33">    std::size_t&amp; result) noexcept {</span>
+<span id="L34">    if (left != 0 &amp;&amp; right &gt; std::numeric_limits&lt;std::size_t&gt;::max() / left) {</span>
+<span id="L35">        return false;</span>
+<span id="L36">    }</span>
+<span id="L37">    result = left * right;</span>
+<span id="L38">    return true;</span>
+<span id="L39">}</span>
+<span id="L40"></span>
+<span id="L41">void hash_bytes(</span>
+<span id="L42">    std::uint64_t&amp; hash,</span>
+<span id="L43">    std::span&lt;const std::byte&gt; bytes) noexcept {</span>
+<span id="L44">    for (const auto byte : bytes) {</span>
+<span id="L45">        hash ^= static_cast&lt;std::uint8_t&gt;(byte);</span>
+<span id="L46">        hash *= kFnvPrime;</span>
+<span id="L47">    }</span>
+<span id="L48">}</span>
+<span id="L49"></span>
+<span id="L50">[[nodiscard]] std::uint64_t checksum(</span>
+<span id="L51">    std::span&lt;const std::byte&gt; bytes) noexcept {</span>
+<span id="L52">    auto hash = kFnvOffset;</span>
+<span id="L53">    hash_bytes(hash, bytes);</span>
+<span id="L54">    return hash;</span>
+<span id="L55">}</span>
+<span id="L56"></span>
+<span id="L57">[[nodiscard]] std::uint64_t artifact_checksum(</span>
+<span id="L58">    std::span&lt;const std::byte&gt; bytes) noexcept {</span>
+<span id="L59">    auto hash = kFnvOffset;</span>
+<span id="L60">    hash_bytes(hash, bytes.first(24));</span>
+<span id="L61">    const std::array&lt;std::byte, 8&gt; zero{};</span>
+<span id="L62">    hash_bytes(hash, zero);</span>
+<span id="L63">    hash_bytes(hash, bytes.subspan(32));</span>
+<span id="L64">    return hash;</span>
+<span id="L65">}</span>
+<span id="L66"></span>
+<span id="L67">[[nodiscard]] bool store_u32(</span>
+<span id="L68">    std::span&lt;std::byte&gt; bytes,</span>
+<span id="L69">    std::size_t offset,</span>
+<span id="L70">    std::uint32_t value) noexcept {</span>
+<span id="L71">    if (offset &gt; bytes.size() || bytes.size() - offset &lt; 4) {</span>
+<span id="L72">        return false;</span>
+<span id="L73">    }</span>
+<span id="L74">    for (std::size_t index = 0; index &lt; 4; ++index) {</span>
+<span id="L75">        bytes[offset + index] = static_cast&lt;std::byte&gt;(value &gt;&gt; (8u * index));</span>
+<span id="L76">    }</span>
+<span id="L77">    return true;</span>
+<span id="L78">}</span>
+<span id="L79"></span>
+<span id="L80">[[nodiscard]] bool store_u64(</span>
+<span id="L81">    std::span&lt;std::byte&gt; bytes,</span>
+<span id="L82">    std::size_t offset,</span>
+<span id="L83">    std::uint64_t value) noexcept {</span>
+<span id="L84">    if (offset &gt; bytes.size() || bytes.size() - offset &lt; 8) {</span>
+<span id="L85">        return false;</span>
+<span id="L86">    }</span>
+<span id="L87">    for (std::size_t index = 0; index &lt; 8; ++index) {</span>
+<span id="L88">        bytes[offset + index] = static_cast&lt;std::byte&gt;(value &gt;&gt; (8u * index));</span>
+<span id="L89">    }</span>
+<span id="L90">    return true;</span>
+<span id="L91">}</span>
+<span id="L92"></span>
+<span id="L93">[[nodiscard]] bool load_u32(</span>
+<span id="L94">    std::span&lt;const std::byte&gt; bytes,</span>
+<span id="L95">    std::size_t offset,</span>
+<span id="L96">    std::uint32_t&amp; value) noexcept {</span>
+<span id="L97">    value = 0;</span>
+<span id="L98">    if (offset &gt; bytes.size() || bytes.size() - offset &lt; 4) {</span>
+<span id="L99">        return false;</span>
+<span id="L100">    }</span>
+<span id="L101">    for (std::size_t index = 0; index &lt; 4; ++index) {</span>
+<span id="L102">        value |= static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L103">            static_cast&lt;std::uint8_t&gt;(bytes[offset + index])) &lt;&lt; (8u * index);</span>
+<span id="L104">    }</span>
+<span id="L105">    return true;</span>
+<span id="L106">}</span>
+<span id="L107"></span>
+<span id="L108">[[nodiscard]] bool load_u64(</span>
+<span id="L109">    std::span&lt;const std::byte&gt; bytes,</span>
+<span id="L110">    std::size_t offset,</span>
+<span id="L111">    std::uint64_t&amp; value) noexcept {</span>
+<span id="L112">    value = 0;</span>
+<span id="L113">    if (offset &gt; bytes.size() || bytes.size() - offset &lt; 8) {</span>
+<span id="L114">        return false;</span>
+<span id="L115">    }</span>
+<span id="L116">    for (std::size_t index = 0; index &lt; 8; ++index) {</span>
+<span id="L117">        value |= static_cast&lt;std::uint64_t&gt;(</span>
+<span id="L118">            static_cast&lt;std::uint8_t&gt;(bytes[offset + index])) &lt;&lt; (8u * index);</span>
+<span id="L119">    }</span>
+<span id="L120">    return true;</span>
+<span id="L121">}</span>
+<span id="L122"></span>
+<span id="L123">[[nodiscard]] bool zero_range(</span>
+<span id="L124">    std::span&lt;const std::byte&gt; bytes,</span>
+<span id="L125">    std::size_t begin,</span>
+<span id="L126">    std::size_t end) noexcept {</span>
+<span id="L127">    if (begin &gt; end || end &gt; bytes.size()) {</span>
+<span id="L128">        return false;</span>
+<span id="L129">    }</span>
+<span id="L130">    for (std::size_t index = begin; index &lt; end; ++index) {</span>
+<span id="L131">        if (bytes[index] != std::byte{0}) {</span>
+<span id="L132">            return false;</span>
+<span id="L133">        }</span>
+<span id="L134">    }</span>
+<span id="L135">    return true;</span>
+<span id="L136">}</span>
+<span id="L137"></span>
+<span id="L138">[[nodiscard]] bool identifier_valid(</span>
+<span id="L139">    const std::array&lt;char, replay_identifier_capacity&gt;&amp; value) noexcept {</span>
+<span id="L140">    const auto terminator = std::find(value.begin(), value.end(), &#x27;\0&#x27;);</span>
+<span id="L141">    return terminator != value.begin() &amp;&amp; terminator != value.end();</span>
+<span id="L142">}</span>
+<span id="L143"></span>
+<span id="L144">[[nodiscard]] bool decode_input_at(</span>
+<span id="L145">    const ActiveReplayArtifactView&amp; view,</span>
+<span id="L146">    std::size_t wanted,</span>
+<span id="L147">    ReplayInputView* output,</span>
+<span id="L148">    std::size_t* next_offset) noexcept {</span>
+<span id="L149">    if (wanted &gt;= view.metadata.input_record_count) {</span>
+<span id="L150">        return false;</span>
+<span id="L151">    }</span>
+<span id="L152">    std::size_t descriptor_bytes = 0;</span>
+<span id="L153">    std::size_t descriptor_offset = 0;</span>
+<span id="L154">    std::size_t descriptor_end = 0;</span>
+<span id="L155">    if (!multiply_size(</span>
+<span id="L156">            view.metadata.input_record_count,</span>
+<span id="L157">            active_replay_input_header_size,</span>
+<span id="L158">            descriptor_bytes) ||</span>
+<span id="L159">        !multiply_size(</span>
+<span id="L160">            wanted, active_replay_input_header_size, descriptor_offset) ||</span>
+<span id="L161">        !add_size(view.input_offset, descriptor_offset, descriptor_offset) ||</span>
+<span id="L162">        !add_size(view.input_offset, descriptor_bytes, descriptor_end) ||</span>
+<span id="L163">        descriptor_end &gt; view.action_offset ||</span>
+<span id="L164">        descriptor_offset &gt; descriptor_end ||</span>
+<span id="L165">        descriptor_end - descriptor_offset &lt; active_replay_input_header_size) {</span>
+<span id="L166">        return false;</span>
+<span id="L167">    }</span>
+<span id="L168">    const auto header = view.artifact.subspan(</span>
+<span id="L169">        descriptor_offset, active_replay_input_header_size);</span>
+<span id="L170">    std::uint64_t frame = 0;</span>
+<span id="L171">    std::uint64_t delta = 0;</span>
+<span id="L172">    std::uint64_t deadline = 0;</span>
+<span id="L173">    std::uint64_t nominal = 0;</span>
+<span id="L174">    std::uint32_t input_type = 0;</span>
+<span id="L175">    std::uint32_t flags = 0;</span>
+<span id="L176">    std::uint64_t payload_size_u64 = 0;</span>
+<span id="L177">    std::uint64_t payload_checksum = 0;</span>
+<span id="L178">    std::uint64_t record_checksum = 0;</span>
+<span id="L179">    std::uint64_t payload_offset_u64 = 0;</span>
+<span id="L180">    if (!load_u64(header, 0, frame) || !load_u64(header, 8, delta) ||</span>
+<span id="L181">        !load_u64(header, 16, deadline) ||</span>
+<span id="L182">        !load_u64(header, 24, nominal) ||</span>
+<span id="L183">        !load_u32(header, 32, input_type) ||</span>
+<span id="L184">        !load_u32(header, 36, flags) ||</span>
+<span id="L185">        !load_u64(header, 40, payload_size_u64) ||</span>
+<span id="L186">        !load_u64(header, 48, payload_checksum) ||</span>
+<span id="L187">        !load_u64(header, 56, record_checksum) ||</span>
+<span id="L188">        !load_u64(header, 64, payload_offset_u64) ||</span>
+<span id="L189">        (flags &amp; ~(kInputDeadline | kInputNominal)) != 0 ||</span>
+<span id="L190">        (flags &amp; kInputNominal) == 0 || delta == 0 ||</span>
+<span id="L191">        payload_size_u64 &gt; std::numeric_limits&lt;std::size_t&gt;::max() ||</span>
+<span id="L192">        payload_offset_u64 &gt; std::numeric_limits&lt;std::size_t&gt;::max() ||</span>
+<span id="L193">        !zero_range(header, 72, active_replay_input_header_size)) {</span>
+<span id="L194">        return false;</span>
+<span id="L195">    }</span>
+<span id="L196">    const auto payload_size = static_cast&lt;std::size_t&gt;(payload_size_u64);</span>
+<span id="L197">    const auto payload_offset = static_cast&lt;std::size_t&gt;(payload_offset_u64);</span>
+<span id="L198">    std::size_t end = 0;</span>
+<span id="L199">    if (payload_offset &lt; descriptor_end ||</span>
+<span id="L200">        !add_size(payload_offset, payload_size, end) ||</span>
+<span id="L201">        end &gt; view.action_offset) {</span>
+<span id="L202">        return false;</span>
+<span id="L203">    }</span>
+<span id="L204">    const auto payload = view.artifact.subspan(payload_offset, payload_size);</span>
+<span id="L205">    auto hash = kFnvOffset;</span>
+<span id="L206">    hash_bytes(hash, header.first(56));</span>
+<span id="L207">    const std::array&lt;std::byte, 8&gt; zero{};</span>
+<span id="L208">    hash_bytes(hash, zero);</span>
+<span id="L209">    hash_bytes(hash, header.subspan(64));</span>
+<span id="L210">    hash_bytes(hash, payload);</span>
+<span id="L211">    if (checksum(payload) != payload_checksum || hash != record_checksum ||</span>
+<span id="L212">        ((flags &amp; kInputDeadline) == 0 &amp;&amp; deadline != 0)) {</span>
+<span id="L213">        return false;</span>
+<span id="L214">    }</span>
+<span id="L215">    if (output) {</span>
+<span id="L216">        output-&gt;frame.frame_index = frame;</span>
+<span id="L217">        output-&gt;frame.delta = std::chrono::nanoseconds(delta);</span>
+<span id="L218">        output-&gt;frame.deadline_ns = (flags &amp; kInputDeadline) != 0</span>
+<span id="L219">            ? std::optional&lt;std::uint64_t&gt;{deadline}</span>
+<span id="L220">            : std::nullopt;</span>
+<span id="L221">        output-&gt;frame.nominal_release_ns = nominal;</span>
+<span id="L222">        output-&gt;input_type = input_type;</span>
+<span id="L223">        output-&gt;payload = payload;</span>
+<span id="L224">    }</span>
+<span id="L225">    if (next_offset) {</span>
+<span id="L226">        *next_offset = end;</span>
+<span id="L227">    }</span>
+<span id="L228">    return true;</span>
+<span id="L229">}</span>
+<span id="L230"></span>
+<span id="L231">} // namespace</span>
+<span id="L232"></span>
+<span id="L233">Status encode_active_replay_artifact(</span>
+<span id="L234">    ActiveReplayMetadata metadata,</span>
+<span id="L235">    std::span&lt;const std::byte&gt; checkpoint,</span>
+<span id="L236">    std::span&lt;const ReplayInputRecord&gt; inputs,</span>
+<span id="L237">    std::uint64_t first_action_sequence,</span>
+<span id="L238">    std::size_t action_count,</span>
+<span id="L239">    MixedRateActionReader reader,</span>
+<span id="L240">    void* reader_context,</span>
+<span id="L241">    std::size_t maximum_bytes,</span>
+<span id="L242">    std::span&lt;std::byte&gt; output,</span>
+<span id="L243">    ArtifactWriteResult&amp; result) noexcept {</span>
+<span id="L244">    result = {};</span>
+<span id="L245">    if (maximum_bytes == 0 || maximum_bytes &gt; active_replay_absolute_max_bytes ||</span>
+<span id="L246">        inputs.empty() || inputs.size() &gt; active_replay_record_capacity_limit ||</span>
+<span id="L247">        action_count &gt; active_replay_record_capacity_limit ||</span>
+<span id="L248">        (action_count != 0 &amp;&amp; !reader) || metadata.host_policy_version == 0 ||</span>
+<span id="L249">        !identifier_valid(metadata.build_id) ||</span>
+<span id="L250">        !identifier_valid(metadata.workload_id)) {</span>
+<span id="L251">        return Status::invalid_argument;</span>
+<span id="L252">    }</span>
+<span id="L253">    CheckpointMetadata checkpoint_metadata;</span>
+<span id="L254">    if (inspect_checkpoint_artifact(checkpoint, checkpoint_metadata) != Status::ok) {</span>
+<span id="L255">        return Status::invalid_artifact;</span>
+<span id="L256">    }</span>
+<span id="L257">    std::size_t descriptor_bytes = 0;</span>
+<span id="L258">    std::size_t input_bytes = 0;</span>
+<span id="L259">    std::uint64_t input_payload_bytes = 0;</span>
+<span id="L260">    std::uint64_t previous_frame = 0;</span>
+<span id="L261">    for (std::size_t index = 0; index &lt; inputs.size(); ++index) {</span>
+<span id="L262">        const auto&amp; input = inputs[index];</span>
+<span id="L263">        if (input.frame.delta.count() &lt;= 0 ||</span>
+<span id="L264">            !input.frame.nominal_release_ns ||</span>
+<span id="L265">            (index != 0 &amp;&amp; input.frame.frame_index &lt;= previous_frame) ||</span>
+<span id="L266">            input.payload.size() &gt;</span>
+<span id="L267">                std::numeric_limits&lt;std::uint64_t&gt;::max() - input_payload_bytes ||</span>
+<span id="L268">            !add_size(input_bytes, input.payload.size(), input_bytes)) {</span>
+<span id="L269">            return Status::invalid_argument;</span>
+<span id="L270">        }</span>
+<span id="L271">        input_payload_bytes += input.payload.size();</span>
+<span id="L272">        previous_frame = input.frame.frame_index;</span>
+<span id="L273">    }</span>
+<span id="L274">    if (!multiply_size(</span>
+<span id="L275">            inputs.size(), active_replay_input_header_size, descriptor_bytes) ||</span>
+<span id="L276">        !add_size(input_bytes, descriptor_bytes, input_bytes)) {</span>
+<span id="L277">        return Status::capacity_exceeded;</span>
+<span id="L278">    }</span>
+<span id="L279">    std::size_t action_bytes = 0;</span>
+<span id="L280">    std::size_t total = 0;</span>
+<span id="L281">    if (!multiply_size(action_count, active_replay_action_bytes, action_bytes) ||</span>
+<span id="L282">        !add_size(active_replay_header_size, checkpoint.size(), total) ||</span>
+<span id="L283">        !add_size(total, input_bytes, total) ||</span>
+<span id="L284">        !add_size(total, action_bytes, total) || total &gt; maximum_bytes) {</span>
+<span id="L285">        return Status::capacity_exceeded;</span>
+<span id="L286">    }</span>
+<span id="L287">    result.required_bytes = total;</span>
+<span id="L288">    if (output.size() &lt; total) {</span>
+<span id="L289">        return Status::capacity_exceeded;</span>
+<span id="L290">    }</span>
+<span id="L291">    auto bytes = output.first(total);</span>
+<span id="L292">    std::fill(bytes.begin(), bytes.end(), std::byte{0});</span>
+<span id="L293">    const auto checkpoint_offset = active_replay_header_size;</span>
+<span id="L294">    const auto input_offset = checkpoint_offset + checkpoint.size();</span>
+<span id="L295">    const auto action_offset = input_offset + input_bytes;</span>
+<span id="L296">    metadata.schema_version = active_replay_schema_version;</span>
+<span id="L297">    metadata.header_size = active_replay_header_size;</span>
+<span id="L298">    metadata.total_bytes = total;</span>
+<span id="L299">    metadata.checkpoint_frame_index = checkpoint_metadata.checkpoint_frame_index;</span>
+<span id="L300">    metadata.first_frame_index = inputs.front().frame.frame_index;</span>
+<span id="L301">    metadata.last_frame_index = inputs.back().frame.frame_index;</span>
+<span id="L302">    metadata.checkpoint_bytes = checkpoint.size();</span>
+<span id="L303">    metadata.input_payload_bytes = input_payload_bytes;</span>
+<span id="L304">    metadata.first_action_sequence = first_action_sequence;</span>
+<span id="L305">    metadata.last_action_sequence = action_count == 0</span>
+<span id="L306">        ? first_action_sequence</span>
+<span id="L307">        : first_action_sequence + action_count - 1;</span>
+<span id="L308">    metadata.input_record_count = static_cast&lt;std::uint32_t&gt;(inputs.size());</span>
+<span id="L309">    metadata.action_record_count = static_cast&lt;std::uint32_t&gt;(action_count);</span>
+<span id="L310">    if ((action_count != 0 &amp;&amp;</span>
+<span id="L311">         metadata.last_action_sequence &lt; first_action_sequence) ||</span>
+<span id="L312">        !store_u64(bytes, 0, kMagic) ||</span>
+<span id="L313">        !store_u32(bytes, 8, active_replay_schema_version) ||</span>
+<span id="L314">        !store_u32(bytes, 12, active_replay_header_size) ||</span>
+<span id="L315">        !store_u64(bytes, 16, total) || !store_u64(bytes, 32, metadata.runtime_id) ||</span>
+<span id="L316">        !store_u64(bytes, 40, metadata.config_id) ||</span>
+<span id="L317">        !store_u64(bytes, 48, metadata.replay_id) ||</span>
+<span id="L318">        !store_u64(bytes, 56, metadata.graph_id) ||</span>
+<span id="L319">        !store_u64(bytes, 64, metadata.state_schema_id) ||</span>
+<span id="L320">        !store_u64(bytes, 72, metadata.host_policy_version) ||</span>
+<span id="L321">        !store_u64(bytes, 80, metadata.checkpoint_frame_index) ||</span>
+<span id="L322">        !store_u64(bytes, 88, metadata.first_frame_index) ||</span>
+<span id="L323">        !store_u64(bytes, 96, metadata.last_frame_index) ||</span>
+<span id="L324">        !store_u64(bytes, 104, metadata.nominal_epoch_ns) ||</span>
+<span id="L325">        !store_u64(bytes, 112, metadata.final_state_hash) ||</span>
+<span id="L326">        !store_u64(bytes, 120, checkpoint_offset) ||</span>
+<span id="L327">        !store_u64(bytes, 128, checkpoint.size()) ||</span>
+<span id="L328">        !store_u64(bytes, 136, checksum(checkpoint)) ||</span>
+<span id="L329">        !store_u64(bytes, 144, input_offset) ||</span>
+<span id="L330">        !store_u32(bytes, 152, metadata.input_record_count) ||</span>
+<span id="L331">        !store_u32(bytes, 156, active_replay_input_header_size) ||</span>
+<span id="L332">        !store_u64(bytes, 160, input_payload_bytes) ||</span>
+<span id="L333">        !store_u64(bytes, 168, action_offset) ||</span>
+<span id="L334">        !store_u32(bytes, 176, metadata.action_record_count) ||</span>
+<span id="L335">        !store_u32(bytes, 180, active_replay_action_bytes) ||</span>
+<span id="L336">        !store_u64(bytes, 184, metadata.first_action_sequence) ||</span>
+<span id="L337">        !store_u64(bytes, 192, metadata.last_action_sequence) ||</span>
+<span id="L338">        !store_u32(bytes, 200, static_cast&lt;std::uint32_t&gt;(metadata.determinism_tier))) {</span>
+<span id="L339">        return Status::internal_error;</span>
+<span id="L340">    }</span>
+<span id="L341">    std::memcpy(bytes.data() + 224, metadata.build_id.data(), metadata.build_id.size());</span>
+<span id="L342">    std::memcpy(bytes.data() + 288, metadata.workload_id.data(), metadata.workload_id.size());</span>
+<span id="L343">    std::copy(checkpoint.begin(), checkpoint.end(), bytes.begin() + checkpoint_offset);</span>
+<span id="L344">    auto payload_cursor = input_offset + descriptor_bytes;</span>
+<span id="L345">    for (std::size_t index = 0; index &lt; inputs.size(); ++index) {</span>
+<span id="L346">        const auto&amp; input = inputs[index];</span>
+<span id="L347">        const auto descriptor_offset =</span>
+<span id="L348">            input_offset + index * active_replay_input_header_size;</span>
+<span id="L349">        auto header = bytes.subspan(</span>
+<span id="L350">            descriptor_offset, active_replay_input_header_size);</span>
+<span id="L351">        const auto flags = kInputNominal |</span>
+<span id="L352">            (input.frame.deadline_ns ? kInputDeadline : 0u);</span>
+<span id="L353">        (void)store_u64(header, 0, input.frame.frame_index);</span>
+<span id="L354">        (void)store_u64(header, 8, static_cast&lt;std::uint64_t&gt;(input.frame.delta.count()));</span>
+<span id="L355">        (void)store_u64(header, 16, input.frame.deadline_ns.value_or(0));</span>
+<span id="L356">        (void)store_u64(header, 24, *input.frame.nominal_release_ns);</span>
+<span id="L357">        (void)store_u32(header, 32, input.input_type);</span>
+<span id="L358">        (void)store_u32(header, 36, flags);</span>
+<span id="L359">        (void)store_u64(header, 40, input.payload.size());</span>
+<span id="L360">        (void)store_u64(header, 48, checksum(input.payload));</span>
+<span id="L361">        (void)store_u64(header, 64, payload_cursor);</span>
+<span id="L362">        std::copy(</span>
+<span id="L363">            input.payload.begin(), input.payload.end(),</span>
+<span id="L364">            bytes.begin() + static_cast&lt;std::ptrdiff_t&gt;(payload_cursor));</span>
+<span id="L365">        auto hash = kFnvOffset;</span>
+<span id="L366">        hash_bytes(hash, std::span&lt;const std::byte&gt;(header).first(56));</span>
+<span id="L367">        const std::array&lt;std::byte, 8&gt; zero{};</span>
+<span id="L368">        hash_bytes(hash, zero);</span>
+<span id="L369">        hash_bytes(hash, std::span&lt;const std::byte&gt;(header).subspan(64));</span>
+<span id="L370">        hash_bytes(hash, input.payload);</span>
+<span id="L371">        (void)store_u64(header, 56, hash);</span>
+<span id="L372">        payload_cursor += input.payload.size();</span>
+<span id="L373">    }</span>
+<span id="L374">    for (std::size_t index = 0; index &lt; action_count; ++index) {</span>
+<span id="L375">        MixedRateActionRecord action;</span>
+<span id="L376">        const auto sequence = first_action_sequence + index;</span>
+<span id="L377">        if (!reader(reader_context, sequence, action) ||</span>
+<span id="L378">            action.sequence != sequence || !mixed_rate_action_valid(action)) {</span>
+<span id="L379">            std::fill(bytes.begin(), bytes.end(), std::byte{0});</span>
+<span id="L380">            return Status::invalid_artifact;</span>
+<span id="L381">        }</span>
+<span id="L382">        const auto offset = action_offset + index * active_replay_action_bytes;</span>
+<span id="L383">        const auto action_bytes_span = std::as_bytes(std::span(&amp;action, 1));</span>
+<span id="L384">        std::copy(</span>
+<span id="L385">            action_bytes_span.begin(), action_bytes_span.end(),</span>
+<span id="L386">            bytes.begin() + static_cast&lt;std::ptrdiff_t&gt;(offset));</span>
+<span id="L387">        (void)store_u64(bytes, offset + sizeof(action), checksum(action_bytes_span));</span>
+<span id="L388">    }</span>
+<span id="L389">    const auto whole = artifact_checksum(std::span&lt;const std::byte&gt;(bytes));</span>
+<span id="L390">    (void)store_u64(bytes, 24, whole);</span>
+<span id="L391">    result.bytes_written = total;</span>
+<span id="L392">    result.checksum = whole;</span>
+<span id="L393">    return Status::ok;</span>
+<span id="L394">}</span>
+<span id="L395"></span>
+<span id="L396">Status parse_active_replay_artifact(</span>
+<span id="L397">    std::span&lt;const std::byte&gt; artifact,</span>
+<span id="L398">    std::size_t maximum_bytes,</span>
+<span id="L399">    ActiveReplayArtifactView&amp; view) noexcept {</span>
+<span id="L400">    view = {};</span>
+<span id="L401">    if (maximum_bytes == 0 || maximum_bytes &gt; active_replay_absolute_max_bytes ||</span>
+<span id="L402">        artifact.size() &lt; active_replay_header_size || artifact.size() &gt; maximum_bytes) {</span>
+<span id="L403">        return Status::invalid_artifact;</span>
+<span id="L404">    }</span>
+<span id="L405">    std::uint64_t magic = 0;</span>
+<span id="L406">    std::uint32_t schema = 0;</span>
+<span id="L407">    std::uint32_t header_size = 0;</span>
+<span id="L408">    std::uint64_t total = 0;</span>
+<span id="L409">    std::uint64_t whole = 0;</span>
+<span id="L410">    std::uint64_t checkpoint_offset_u64 = 0;</span>
+<span id="L411">    std::uint64_t checkpoint_bytes_u64 = 0;</span>
+<span id="L412">    std::uint64_t checkpoint_checksum = 0;</span>
+<span id="L413">    std::uint64_t input_offset_u64 = 0;</span>
+<span id="L414">    std::uint32_t input_count = 0;</span>
+<span id="L415">    std::uint32_t input_header_size = 0;</span>
+<span id="L416">    std::uint64_t action_offset_u64 = 0;</span>
+<span id="L417">    std::uint32_t action_count = 0;</span>
+<span id="L418">    std::uint32_t action_record_size = 0;</span>
+<span id="L419">    std::uint32_t determinism = 0;</span>
+<span id="L420">    if (!load_u64(artifact, 0, magic) || !load_u32(artifact, 8, schema) ||</span>
+<span id="L421">        !load_u32(artifact, 12, header_size) || !load_u64(artifact, 16, total) ||</span>
+<span id="L422">        !load_u64(artifact, 24, whole) ||</span>
+<span id="L423">        !load_u64(artifact, 120, checkpoint_offset_u64) ||</span>
+<span id="L424">        !load_u64(artifact, 128, checkpoint_bytes_u64) ||</span>
+<span id="L425">        !load_u64(artifact, 136, checkpoint_checksum) ||</span>
+<span id="L426">        !load_u64(artifact, 144, input_offset_u64) ||</span>
+<span id="L427">        !load_u32(artifact, 152, input_count) ||</span>
+<span id="L428">        !load_u32(artifact, 156, input_header_size) ||</span>
+<span id="L429">        !load_u64(artifact, 168, action_offset_u64) ||</span>
+<span id="L430">        !load_u32(artifact, 176, action_count) ||</span>
+<span id="L431">        !load_u32(artifact, 180, action_record_size) ||</span>
+<span id="L432">        !load_u32(artifact, 200, determinism) || magic != kMagic ||</span>
+<span id="L433">        schema != active_replay_schema_version ||</span>
+<span id="L434">        header_size != active_replay_header_size || total != artifact.size() ||</span>
+<span id="L435">        whole != artifact_checksum(artifact) || input_count == 0 ||</span>
+<span id="L436">        input_count &gt; active_replay_record_capacity_limit ||</span>
+<span id="L437">        action_count &gt; active_replay_record_capacity_limit ||</span>
+<span id="L438">        input_header_size != active_replay_input_header_size ||</span>
+<span id="L439">        action_record_size != active_replay_action_bytes ||</span>
+<span id="L440">        checkpoint_offset_u64 != active_replay_header_size ||</span>
+<span id="L441">        checkpoint_offset_u64 &gt; std::numeric_limits&lt;std::size_t&gt;::max() ||</span>
+<span id="L442">        checkpoint_bytes_u64 &gt; std::numeric_limits&lt;std::size_t&gt;::max() ||</span>
+<span id="L443">        input_offset_u64 &gt; std::numeric_limits&lt;std::size_t&gt;::max() ||</span>
+<span id="L444">        action_offset_u64 &gt; std::numeric_limits&lt;std::size_t&gt;::max() ||</span>
+<span id="L445">        !zero_range(artifact, 204, 224) || !zero_range(artifact, 352, 384)) {</span>
+<span id="L446">        return Status::invalid_artifact;</span>
+<span id="L447">    }</span>
+<span id="L448">    const auto checkpoint_offset = static_cast&lt;std::size_t&gt;(checkpoint_offset_u64);</span>
+<span id="L449">    const auto checkpoint_bytes = static_cast&lt;std::size_t&gt;(checkpoint_bytes_u64);</span>
+<span id="L450">    const auto input_offset = static_cast&lt;std::size_t&gt;(input_offset_u64);</span>
+<span id="L451">    const auto action_offset = static_cast&lt;std::size_t&gt;(action_offset_u64);</span>
+<span id="L452">    std::size_t checkpoint_end = 0;</span>
+<span id="L453">    std::size_t action_bytes = 0;</span>
+<span id="L454">    std::size_t action_end = 0;</span>
+<span id="L455">    if (!add_size(checkpoint_offset, checkpoint_bytes, checkpoint_end) ||</span>
+<span id="L456">        checkpoint_end != input_offset || input_offset &gt; action_offset ||</span>
+<span id="L457">        !multiply_size(action_count, active_replay_action_bytes, action_bytes) ||</span>
+<span id="L458">        !add_size(action_offset, action_bytes, action_end) ||</span>
+<span id="L459">        action_end != artifact.size()) {</span>
+<span id="L460">        return Status::invalid_artifact;</span>
+<span id="L461">    }</span>
+<span id="L462">    const auto checkpoint = artifact.subspan(checkpoint_offset, checkpoint_bytes);</span>
+<span id="L463">    CheckpointMetadata checkpoint_metadata;</span>
+<span id="L464">    if (checksum(checkpoint) != checkpoint_checksum ||</span>
+<span id="L465">        inspect_checkpoint_artifact(checkpoint, checkpoint_metadata) != Status::ok) {</span>
+<span id="L466">        return Status::invalid_artifact;</span>
+<span id="L467">    }</span>
+<span id="L468">    ActiveReplayMetadata metadata;</span>
+<span id="L469">    metadata.schema_version = schema;</span>
+<span id="L470">    metadata.header_size = header_size;</span>
+<span id="L471">    metadata.total_bytes = total;</span>
+<span id="L472">    metadata.artifact_checksum = whole;</span>
+<span id="L473">    (void)load_u64(artifact, 32, metadata.runtime_id);</span>
+<span id="L474">    (void)load_u64(artifact, 40, metadata.config_id);</span>
+<span id="L475">    (void)load_u64(artifact, 48, metadata.replay_id);</span>
+<span id="L476">    (void)load_u64(artifact, 56, metadata.graph_id);</span>
+<span id="L477">    (void)load_u64(artifact, 64, metadata.state_schema_id);</span>
+<span id="L478">    (void)load_u64(artifact, 72, metadata.host_policy_version);</span>
+<span id="L479">    (void)load_u64(artifact, 80, metadata.checkpoint_frame_index);</span>
+<span id="L480">    (void)load_u64(artifact, 88, metadata.first_frame_index);</span>
+<span id="L481">    (void)load_u64(artifact, 96, metadata.last_frame_index);</span>
+<span id="L482">    (void)load_u64(artifact, 104, metadata.nominal_epoch_ns);</span>
+<span id="L483">    (void)load_u64(artifact, 112, metadata.final_state_hash);</span>
+<span id="L484">    metadata.checkpoint_bytes = checkpoint_bytes;</span>
+<span id="L485">    (void)load_u64(artifact, 160, metadata.input_payload_bytes);</span>
+<span id="L486">    (void)load_u64(artifact, 184, metadata.first_action_sequence);</span>
+<span id="L487">    (void)load_u64(artifact, 192, metadata.last_action_sequence);</span>
+<span id="L488">    metadata.input_record_count = input_count;</span>
+<span id="L489">    metadata.action_record_count = action_count;</span>
+<span id="L490">    metadata.determinism_tier = static_cast&lt;DeterminismTier&gt;(determinism);</span>
+<span id="L491">    std::memcpy(metadata.build_id.data(), artifact.data() + 224, metadata.build_id.size());</span>
+<span id="L492">    std::memcpy(metadata.workload_id.data(), artifact.data() + 288, metadata.workload_id.size());</span>
+<span id="L493">    if (metadata.host_policy_version == 0 ||</span>
+<span id="L494">        metadata.checkpoint_frame_index != checkpoint_metadata.checkpoint_frame_index ||</span>
+<span id="L495">        metadata.replay_id != checkpoint_metadata.replay_id ||</span>
+<span id="L496">        metadata.graph_id != checkpoint_metadata.graph_id ||</span>
+<span id="L497">        metadata.state_schema_id != checkpoint_metadata.state_schema_id ||</span>
+<span id="L498">        metadata.determinism_tier != checkpoint_metadata.determinism_tier ||</span>
+<span id="L499">        !identifier_valid(metadata.build_id) || !identifier_valid(metadata.workload_id) ||</span>
+<span id="L500">        metadata.workload_id != checkpoint_metadata.workload_id ||</span>
+<span id="L501">        (action_count != 0 &amp;&amp;</span>
+<span id="L502">         (metadata.last_action_sequence &lt; metadata.first_action_sequence ||</span>
+<span id="L503">          metadata.last_action_sequence - metadata.first_action_sequence + 1 != action_count)) ||</span>
+<span id="L504">        (action_count == 0 &amp;&amp;</span>
+<span id="L505">         metadata.last_action_sequence != metadata.first_action_sequence)) {</span>
+<span id="L506">        return Status::incompatible_artifact;</span>
+<span id="L507">    }</span>
+<span id="L508">    view.metadata = metadata;</span>
+<span id="L509">    view.artifact = artifact;</span>
+<span id="L510">    view.checkpoint = checkpoint;</span>
+<span id="L511">    view.input_offset = input_offset;</span>
+<span id="L512">    view.action_offset = action_offset;</span>
+<span id="L513">    std::size_t descriptor_bytes = 0;</span>
+<span id="L514">    std::size_t next = 0;</span>
+<span id="L515">    if (!multiply_size(</span>
+<span id="L516">            input_count, active_replay_input_header_size, descriptor_bytes) ||</span>
+<span id="L517">        !add_size(input_offset, descriptor_bytes, next) ||</span>
+<span id="L518">        next &gt; action_offset) {</span>
+<span id="L519">        view = {};</span>
+<span id="L520">        return Status::invalid_artifact;</span>
+<span id="L521">    }</span>
+<span id="L522">    ReplayInputView input;</span>
+<span id="L523">    std::uint64_t previous_frame = 0;</span>
+<span id="L524">    std::uint64_t payload_total = 0;</span>
+<span id="L525">    for (std::size_t index = 0; index &lt; input_count; ++index) {</span>
+<span id="L526">        std::size_t payload_end = 0;</span>
+<span id="L527">        if (!decode_input_at(view, index, &amp;input, &amp;payload_end) ||</span>
+<span id="L528">            input.payload.data() != artifact.data() + next ||</span>
+<span id="L529">            (index != 0 &amp;&amp; input.frame.frame_index &lt;= previous_frame) ||</span>
+<span id="L530">            input.payload.size() &gt; std::numeric_limits&lt;std::uint64_t&gt;::max() - payload_total) {</span>
+<span id="L531">            view = {};</span>
+<span id="L532">            return Status::invalid_artifact;</span>
+<span id="L533">        }</span>
+<span id="L534">        payload_total += input.payload.size();</span>
+<span id="L535">        previous_frame = input.frame.frame_index;</span>
+<span id="L536">        next = payload_end;</span>
+<span id="L537">    }</span>
+<span id="L538">    if (next != action_offset || payload_total != metadata.input_payload_bytes ||</span>
+<span id="L539">        input.frame.frame_index != metadata.last_frame_index) {</span>
+<span id="L540">        view = {};</span>
+<span id="L541">        return Status::invalid_artifact;</span>
+<span id="L542">    }</span>
+<span id="L543">    ReplayInputView first_input;</span>
+<span id="L544">    if (!decode_input_at(view, 0, &amp;first_input, nullptr) ||</span>
+<span id="L545">        first_input.frame.frame_index != metadata.first_frame_index) {</span>
+<span id="L546">        view = {};</span>
+<span id="L547">        return Status::invalid_artifact;</span>
+<span id="L548">    }</span>
+<span id="L549">    for (std::size_t index = 0; index &lt; action_count; ++index) {</span>
+<span id="L550">        MixedRateActionRecord action;</span>
+<span id="L551">        if (!active_replay_action_at(view, index, action) ||</span>
+<span id="L552">            action.sequence != metadata.first_action_sequence + index ||</span>
+<span id="L553">            action.host_policy_version != metadata.host_policy_version ||</span>
+<span id="L554">            action.runtime_id != metadata.runtime_id ||</span>
+<span id="L555">            action.frame_index &lt; metadata.first_frame_index ||</span>
+<span id="L556">            action.frame_index &gt; metadata.last_frame_index) {</span>
+<span id="L557">            view = {};</span>
+<span id="L558">            return Status::invalid_artifact;</span>
+<span id="L559">        }</span>
+<span id="L560">    }</span>
+<span id="L561">    return Status::ok;</span>
+<span id="L562">}</span>
+<span id="L563"></span>
+<span id="L564">bool active_replay_input_at(</span>
+<span id="L565">    const ActiveReplayArtifactView&amp; view,</span>
+<span id="L566">    std::size_t index,</span>
+<span id="L567">    ReplayInputView&amp; input) noexcept {</span>
+<span id="L568">    input = {};</span>
+<span id="L569">    return index &lt; view.metadata.input_record_count &amp;&amp;</span>
+<span id="L570">        decode_input_at(view, index, &amp;input, nullptr);</span>
+<span id="L571">}</span>
+<span id="L572"></span>
+<span id="L573">bool active_replay_action_at(</span>
+<span id="L574">    const ActiveReplayArtifactView&amp; view,</span>
+<span id="L575">    std::size_t index,</span>
+<span id="L576">    MixedRateActionRecord&amp; action) noexcept {</span>
+<span id="L577">    action = {};</span>
+<span id="L578">    if (index &gt;= view.metadata.action_record_count) {</span>
+<span id="L579">        return false;</span>
+<span id="L580">    }</span>
+<span id="L581">    const auto offset = view.action_offset + index * active_replay_action_bytes;</span>
+<span id="L582">    if (offset &gt; view.artifact.size() ||</span>
+<span id="L583">        view.artifact.size() - offset &lt; active_replay_action_bytes) {</span>
+<span id="L584">        return false;</span>
+<span id="L585">    }</span>
+<span id="L586">    std::memcpy(&amp;action, view.artifact.data() + offset, sizeof(action));</span>
+<span id="L587">    std::uint64_t expected = 0;</span>
+<span id="L588">    const auto record_bytes = view.artifact.subspan(offset, sizeof(action));</span>
+<span id="L589">    return load_u64(view.artifact, offset + sizeof(action), expected) &amp;&amp;</span>
+<span id="L590">        checksum(record_bytes) == expected &amp;&amp; mixed_rate_action_valid(action);</span>
+<span id="L591">}</span>
+<span id="L592"></span>
+<span id="L593">} // namespace rt::detail</span>
+<span id="L594"></span>
+<span id="L595">namespace rt {</span>
+<span id="L596"></span>
+<span id="L597">Status inspect_active_replay_artifact(</span>
+<span id="L598">    std::span&lt;const std::byte&gt; artifact,</span>
+<span id="L599">    ActiveReplayMetadata&amp; metadata) noexcept {</span>
+<span id="L600">    metadata = {};</span>
+<span id="L601">    detail::ActiveReplayArtifactView view;</span>
+<span id="L602">    const auto status = detail::parse_active_replay_artifact(</span>
+<span id="L603">        artifact, active_replay_absolute_max_bytes, view);</span>
+<span id="L604">    if (status == Status::ok) {</span>
+<span id="L605">        metadata = view.metadata;</span>
+<span id="L606">    }</span>
+<span id="L607">    return status;</span>
+<span id="L608">}</span>
+<span id="L609"></span>
+<span id="L610">} // namespace rt</span></pre></html>

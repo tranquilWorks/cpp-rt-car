@@ -1,0 +1,203 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/cuda_physics/scenario.hpp</title><h1>samples/cuda_physics/scenario.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;model.hpp&quot;</span>
+<span id="L3">#include &lt;rt/cuda_backend.hpp&gt;</span>
+<span id="L4">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L5">#include &lt;atomic&gt;</span>
+<span id="L6">#include &lt;chrono&gt;</span>
+<span id="L7">#include &lt;cstring&gt;</span>
+<span id="L8">#include &lt;memory&gt;</span>
+<span id="L9"></span>
+<span id="L10">namespace rtfw::cuda_physics {</span>
+<span id="L11">struct Session {</span>
+<span id="L12">    rt::CudaDriverApi driver{};</span>
+<span id="L13">    rt::CudaContext context{};</span>
+<span id="L14">    rt::CudaStream stream{};</span>
+<span id="L15">    rt::CudaFunction function{};</span>
+<span id="L16">};</span>
+<span id="L17">// Session resources must outlive this owner and successful checked stop.</span>
+<span id="L18">class Scenario {</span>
+<span id="L19">public:</span>
+<span id="L20">    Scenario(const Options&amp; options, const Session&amp; session)</span>
+<span id="L21">        : options_(options), streams_{session.stream},</span>
+<span id="L22">          backend_(session.driver, backend_config(session)), function_(session.function) {}</span>
+<span id="L23">    Scenario(const Scenario&amp;) = delete;</span>
+<span id="L24">    Scenario&amp; operator=(const Scenario&amp;) = delete;</span>
+<span id="L25">    ~Scenario() { if (stop() != rt::Status::ok) std::terminate(); }</span>
+<span id="L26"></span>
+<span id="L27">    rt::Status prepare() noexcept {</span>
+<span id="L28">        if (!options_.valid() || !function_ || !streams_[0]) return rt::Status::invalid_argument;</span>
+<span id="L29">        auto seed = options_.seed;</span>
+<span id="L30">        for (std::uint32_t i = 0; i &lt; options_.count; ++i)</span>
+<span id="L31">            state_[i] = initial_[i] = initial_particle(seed);</span>
+<span id="L32">        rt::RuntimeConfig config;</span>
+<span id="L33">        config.worker_count = options_.workers;</span>
+<span id="L34">        config.callback_capacity = 3;</span>
+<span id="L35">        config.device_backend_capacity = 1;</span>
+<span id="L36">        config.device_buffer_capacity = 1;</span>
+<span id="L37">        config.device_outstanding_capacity = 1;</span>
+<span id="L38">        config.device_completion_batch = 1;</span>
+<span id="L39">        config.memory_budget_bytes = 128 * 1024 * 1024;</span>
+<span id="L40">        config.scratch_bytes = 4096;</span>
+<span id="L41">        config.trace_capacity = 128;</span>
+<span id="L42">        config.executor_queue_capacity = 16;</span>
+<span id="L43">        config.task_scratch_bytes = 256;</span>
+<span id="L44">        config.task_scratch_slots = 16;</span>
+<span id="L45">        auto s = runtime_.configure(config);</span>
+<span id="L46">        if (s != rt::Status::ok) return s;</span>
+<span id="L47">        std::uint64_t kernel{};</span>
+<span id="L48">        if (backend_.register_kernel(function_, kernel) != RTFW_DEVICE_STATUS_OK)</span>
+<span id="L49">            return rt::Status::device_error;</span>
+<span id="L50">        s = runtime_.register_device_backend(backend_.hal_v2_registration(&quot;physics.cuda&quot;), backend_handle_);</span>
+<span id="L51">        if (s != rt::Status::ok) return s;</span>
+<span id="L52">        rt::DeviceMemoryDomainHandle domain;</span>
+<span id="L53">        rt::HalV2MemoryDomain descriptor;</span>
+<span id="L54">        if (!runtime_.device_memory_domain_at(backend_handle_, 1, domain, descriptor))</span>
+<span id="L55">            return rt::Status::device_error;</span>
+<span id="L56">        auto bytes = std::as_writable_bytes(std::span(state_.data(), options_.count));</span>
+<span id="L57">        rt::DeviceBufferHandle buffer;</span>
+<span id="L58">        s = runtime_.register_device_buffer(</span>
+<span id="L59">            {&quot;physics.state&quot;, backend_handle_, domain, bytes, {}, bytes.size(),</span>
+<span id="L60">             rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L61">             RTFW_DEVICE_BUFFER_HOST_READ | RTFW_DEVICE_BUFFER_HOST_WRITE |</span>
+<span id="L62">             RTFW_DEVICE_BUFFER_DEVICE_READ | RTFW_DEVICE_BUFFER_DEVICE_WRITE,</span>
+<span id="L63">             rt::HalV2MemoryCoherency::staged_copy,</span>
+<span id="L64">             rt::hal_v2_memory_sync_copy_to_device | rt::hal_v2_memory_sync_copy_from_device}, buffer);</span>
+<span id="L65">        if (s != rt::Status::ok) return s;</span>
+<span id="L66">        s = runtime_.register_device_timeline({&quot;physics.done&quot;, backend_handle_, 0}, timeline_);</span>
+<span id="L67">        if (s != rt::Status::ok) return s;</span>
+<span id="L68">        rt::HalV2BufferReference reference;</span>
+<span id="L69">        reference.buffer_token = buffer.value;</span>
+<span id="L70">        reference.bytes = bytes.size();</span>
+<span id="L71">        reference.access = RTFW_DEVICE_ACCESS_READ_WRITE;</span>
+<span id="L72">        batch_.command_count = 3;</span>
+<span id="L73">        batch_.signal_count = 1;</span>
+<span id="L74">        batch_.signals[0].timeline_handle = timeline_.value;</span>
+<span id="L75">        auto&amp; upload = batch_.commands[0];</span>
+<span id="L76">        upload.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::copy);</span>
+<span id="L77">        upload.operation = static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryOperation::copy_to_device);</span>
+<span id="L78">        upload.source = reference; upload.source.access = RTFW_DEVICE_ACCESS_READ;</span>
+<span id="L79">        upload.destination = reference; upload.destination.access = RTFW_DEVICE_ACCESS_WRITE;</span>
+<span id="L80">        auto&amp; launch = batch_.commands[1];</span>
+<span id="L81">        launch.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::dispatch);</span>
+<span id="L82">        launch.opcode = rt::cuda_device_opcode_launch_kernel;</span>
+<span id="L83">        launch.buffer_count = 1; launch.buffers[0] = reference;</span>
+<span id="L84">        rt::CudaKernelLaunch args;</span>
+<span id="L85">        args.kernel_token = kernel;</span>
+<span id="L86">        args.block_x = 128;</span>
+<span id="L87">        args.grid_x = (options_.count + 127)/128;</span>
+<span id="L88">        if (!rt::cuda_kernel_add_buffer_argument(args, 0) ||</span>
+<span id="L89">            !rt::cuda_kernel_add_scalar_argument(args, options_.count)) return rt::Status::internal_error;</span>
+<span id="L90">        launch.payload_size = sizeof(args);</span>
+<span id="L91">        std::memcpy(launch.payload.data(), &amp;args, sizeof(args));</span>
+<span id="L92">        batch_.commands[2] = upload;</span>
+<span id="L93">        batch_.commands[2].operation = static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryOperation::copy_from_device);</span>
+<span id="L94">        rt::PhaseHandle prepare_phase, device_phase, validate_phase;</span>
+<span id="L95">        s = runtime_.register_callback({&quot;physics.prepare&quot;, &amp;prepare_frame, this}, prepare_phase);</span>
+<span id="L96">        if (s != rt::Status::ok) return s;</span>
+<span id="L97">        s = runtime_.register_device_batch_phase(</span>
+<span id="L98">            {&quot;physics.integrate&quot;, backend_handle_, &amp;provide, this, batch_}, device_phase);</span>
+<span id="L99">        if (s != rt::Status::ok) return s;</span>
+<span id="L100">        s = runtime_.register_callback({&quot;physics.validate&quot;, &amp;validate, this}, validate_phase);</span>
+<span id="L101">        if (s != rt::Status::ok) return s;</span>
+<span id="L102">        s = runtime_.add_dependency(prepare_phase, device_phase);</span>
+<span id="L103">        if (s != rt::Status::ok) return s;</span>
+<span id="L104">        s = runtime_.add_dependency(device_phase, validate_phase);</span>
+<span id="L105">        if (s != rt::Status::ok) return s;</span>
+<span id="L106">        rt::ResourceHandle resource;</span>
+<span id="L107">        s = runtime_.register_resource(&quot;physics.state&quot;, resource);</span>
+<span id="L108">        if (s != rt::Status::ok) return s;</span>
+<span id="L109">        s = runtime_.declare_resource_access(device_phase, resource, rt::ResourceAccess::write);</span>
+<span id="L110">        if (s != rt::Status::ok) return s;</span>
+<span id="L111">        s = runtime_.declare_resource_access(validate_phase, resource, rt::ResourceAccess::read);</span>
+<span id="L112">        return s == rt::Status::ok ? runtime_.finalize() : s;</span>
+<span id="L113">    }</span>
+<span id="L114">    rt::Status start() noexcept { return runtime_.start(); }</span>
+<span id="L115">    rt::Status step() noexcept {</span>
+<span id="L116">        if (failed_) return rt::Status::invalid_state;</span>
+<span id="L117">        if (completed_ &gt;= options_.steps) return rt::Status::invalid_argument;</span>
+<span id="L118">        const auto s = runtime_.step({completed_+1, std::chrono::nanoseconds(3&#x27;906&#x27;250), std::nullopt});</span>
+<span id="L119">        needs_reset_ = s == rt::Status::device_reset_required;</span>
+<span id="L120">        failed_ = s != rt::Status::ok;</span>
+<span id="L121">        if (s == rt::Status::ok) {</span>
+<span id="L122">            rt::DeviceTimelineInfo info;</span>
+<span id="L123">            if (!runtime_.device_timeline_at(backend_handle_, 0, info) ||</span>
+<span id="L124">                info.completed_value != completed_+1 || info.last_accepted_value != completed_+1)</span>
+<span id="L125">                return rt::Status::internal_error;</span>
+<span id="L126">            ++completed_;</span>
+<span id="L127">        }</span>
+<span id="L128">        return s;</span>
+<span id="L129">    }</span>
+<span id="L130">    rt::Status run() noexcept {</span>
+<span id="L131">        while (completed_ &lt; options_.steps) {</span>
+<span id="L132">            const auto s = step();</span>
+<span id="L133">            if (s != rt::Status::ok) return s;</span>
+<span id="L134">        }</span>
+<span id="L135">        return rt::Status::ok;</span>
+<span id="L136">    }</span>
+<span id="L137">    rt::Status stop() noexcept {</span>
+<span id="L138">        // A rejected CUDA launch/copy can leave vendor work quarantined.</span>
+<span id="L139">        // Settle it through the public host-control reset before unregistering</span>
+<span id="L140">        // buffers. A failed reset retains ownership and can be retried.</span>
+<span id="L141">        if (needs_reset_) {</span>
+<span id="L142">            const auto reset = runtime_.reset_device(backend_handle_);</span>
+<span id="L143">            if (reset != rt::Status::ok) return reset;</span>
+<span id="L144">            needs_reset_ = false;</span>
+<span id="L145">        }</span>
+<span id="L146">        // No device ownership is acquired before start/finalize. Failed start</span>
+<span id="L147">        // retains finalized state so checked stop still retries live cleanup.</span>
+<span id="L148">        return runtime_.state() == rt::RuntimeState::configuring ? rt::Status::ok : runtime_.stop();</span>
+<span id="L149">    }</span>
+<span id="L150">    std::string_view error() const noexcept { return runtime_.last_error(); }</span>
+<span id="L151">    std::uint64_t completed() const noexcept { return completed_; }</span>
+<span id="L152">    std::uint64_t publications() const noexcept { return publications_.load(); }</span>
+<span id="L153">    std::uint64_t preparations() const noexcept { return preparations_.load(); }</span>
+<span id="L154">    std::uint64_t submissions() const noexcept { return submissions_.load(); }</span>
+<span id="L155">    const Particle&amp; particle(std::size_t i) const { return state_.at(i); }</span>
+<span id="L156">private:</span>
+<span id="L157">    rt::CudaBackendConfig backend_config(const Session&amp; session) const noexcept {</span>
+<span id="L158">        rt::CudaBackendConfig c;</span>
+<span id="L159">        c.context = session.context; c.streams = streams_;</span>
+<span id="L160">        c.queue_capacity = 1; c.buffer_capacity = 1; c.kernel_capacity = 1;</span>
+<span id="L161">        return c;</span>
+<span id="L162">    }</span>
+<span id="L163">    static rt::CallbackResult prepare_frame(void* p, const rt::CallbackContext&amp; c) noexcept {</span>
+<span id="L164">        auto&amp; self = *static_cast&lt;Scenario*&gt;(p);</span>
+<span id="L165">        if (c.frame.frame_index != self.completed_+1) return rt::CallbackResult::error;</span>
+<span id="L166">        self.preparations_.fetch_add(1);</span>
+<span id="L167">        return rt::CallbackResult::ok;</span>
+<span id="L168">    }</span>
+<span id="L169">    static rt::CallbackResult provide(void* p, const rt::DeviceCallbackContext&amp; c,</span>
+<span id="L170">                                     rt::DeviceCommandBatch&amp; batch) noexcept {</span>
+<span id="L171">        auto&amp; self = *static_cast&lt;Scenario*&gt;(p);</span>
+<span id="L172">        batch = self.batch_;</span>
+<span id="L173">        batch.timeout_ns = 5&#x27;000&#x27;000&#x27;000ULL;</span>
+<span id="L174">        batch.signals[0].value = c.frame.frame_index;</span>
+<span id="L175">        self.submissions_.fetch_add(1);</span>
+<span id="L176">        return rt::CallbackResult::ok;</span>
+<span id="L177">    }</span>
+<span id="L178">    static rt::CallbackResult validate(void* p, const rt::CallbackContext&amp; c) noexcept {</span>
+<span id="L179">        auto&amp; self = *static_cast&lt;Scenario*&gt;(p);</span>
+<span id="L180">        if (c.frame.frame_index &gt; self.options_.steps) return rt::CallbackResult::error;</span>
+<span id="L181">        for (std::uint32_t i = 0; i &lt; self.options_.count; ++i)</span>
+<span id="L182">            if (!matches_oracle(self.state_[i], self.initial_[i],</span>
+<span id="L183">                                static_cast&lt;std::uint32_t&gt;(c.frame.frame_index)))</span>
+<span id="L184">                return rt::CallbackResult::error;</span>
+<span id="L185">        self.publications_.fetch_add(1);</span>
+<span id="L186">        return rt::CallbackResult::ok;</span>
+<span id="L187">    }</span>
+<span id="L188">    Options options_;</span>
+<span id="L189">    std::array&lt;rt::CudaStream, 1&gt; streams_;</span>
+<span id="L190">    std::array&lt;Particle, max_particles&gt; initial_{}, state_{};</span>
+<span id="L191">    rt::CudaDeviceBackend backend_;</span>
+<span id="L192">    rt::CudaFunction function_;</span>
+<span id="L193">    rt::Runtime runtime_;</span>
+<span id="L194">    rt::DeviceBackendHandle backend_handle_;</span>
+<span id="L195">    rt::DeviceTimelineHandle timeline_;</span>
+<span id="L196">    rt::DeviceCommandBatch batch_;</span>
+<span id="L197">    std::uint64_t completed_{};</span>
+<span id="L198">    bool needs_reset_{};</span>
+<span id="L199">    bool failed_{};</span>
+<span id="L200">    std::atomic&lt;std::uint64_t&gt; publications_{}, preparations_{}, submissions_{};</span>
+<span id="L201">};</span>
+<span id="L202">static_assert(sizeof(Scenario) &lt; 32 * 1024 * 1024);</span>
+<span id="L203">} // namespace rtfw::cuda_physics</span></pre></html>

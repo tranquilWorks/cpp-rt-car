@@ -1,0 +1,458 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tools/provenance.py</title><h1>tools/provenance.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#!/usr/bin/env python3</span>
+<span id="L2">&quot;&quot;&quot;Create unsigned candidate provenance and verify offline DSSE fixtures.&quot;&quot;&quot;</span>
+<span id="L3"></span>
+<span id="L4">from __future__ import annotations</span>
+<span id="L5"></span>
+<span id="L6">import argparse</span>
+<span id="L7">import base64</span>
+<span id="L8">import hashlib</span>
+<span id="L9">import json</span>
+<span id="L10">import pathlib</span>
+<span id="L11">import re</span>
+<span id="L12">import sys</span>
+<span id="L13">from typing import Any</span>
+<span id="L14"></span>
+<span id="L15"></span>
+<span id="L16">MAX_JSON_BYTES = 4 * 1024 * 1024</span>
+<span id="L17">MAX_ARTIFACT_BYTES = 8 * 1024 * 1024 * 1024</span>
+<span id="L18">SHA256_DIGEST_INFO_PREFIX = bytes.fromhex(</span>
+<span id="L19">    &quot;3031300d060960864801650304020105000420&quot;</span>
+<span id="L20">)</span>
+<span id="L21"></span>
+<span id="L22"></span>
+<span id="L23">class DuplicateKeyError(ValueError):</span>
+<span id="L24">    pass</span>
+<span id="L25"></span>
+<span id="L26"></span>
+<span id="L27">def reject_duplicates(pairs: list[tuple[str, Any]]) -&gt; dict[str, Any]:</span>
+<span id="L28">    output: dict[str, Any] = {}</span>
+<span id="L29">    for key, value in pairs:</span>
+<span id="L30">        if key in output:</span>
+<span id="L31">            raise DuplicateKeyError(f&quot;duplicate JSON key: {key}&quot;)</span>
+<span id="L32">        output[key] = value</span>
+<span id="L33">    return output</span>
+<span id="L34"></span>
+<span id="L35"></span>
+<span id="L36">def strict_json(path: pathlib.Path, *, maximum: int = MAX_JSON_BYTES) -&gt; Any:</span>
+<span id="L37">    if path.is_symlink() or not path.is_file():</span>
+<span id="L38">        raise ValueError(f&quot;not a regular file: {path}&quot;)</span>
+<span id="L39">    if path.stat().st_size &gt; maximum:</span>
+<span id="L40">        raise ValueError(f&quot;JSON input exceeds {maximum} bytes: {path}&quot;)</span>
+<span id="L41">    try:</span>
+<span id="L42">        return json.loads(</span>
+<span id="L43">            path.read_text(encoding=&quot;utf-8&quot;),</span>
+<span id="L44">            object_pairs_hook=reject_duplicates,</span>
+<span id="L45">        )</span>
+<span id="L46">    except (OSError, UnicodeError, json.JSONDecodeError) as exc:</span>
+<span id="L47">        raise ValueError(f&quot;cannot parse {path}: {exc}&quot;) from exc</span>
+<span id="L48"></span>
+<span id="L49"></span>
+<span id="L50">def canonical_json(value: Any) -&gt; bytes:</span>
+<span id="L51">    return json.dumps(</span>
+<span id="L52">        value,</span>
+<span id="L53">        sort_keys=True,</span>
+<span id="L54">        separators=(&quot;,&quot;, &quot;:&quot;),</span>
+<span id="L55">        ensure_ascii=False,</span>
+<span id="L56">    ).encode(&quot;utf-8&quot;)</span>
+<span id="L57"></span>
+<span id="L58"></span>
+<span id="L59">def sha256(path: pathlib.Path) -&gt; str:</span>
+<span id="L60">    if path.is_symlink() or not path.is_file():</span>
+<span id="L61">        raise ValueError(f&quot;not a regular file: {path}&quot;)</span>
+<span id="L62">    if path.stat().st_size &gt; MAX_ARTIFACT_BYTES:</span>
+<span id="L63">        raise ValueError(f&quot;artifact exceeds byte limit: {path}&quot;)</span>
+<span id="L64">    digest = hashlib.sha256()</span>
+<span id="L65">    with path.open(&quot;rb&quot;) as stream:</span>
+<span id="L66">        for chunk in iter(lambda: stream.read(1024 * 1024), b&quot;&quot;):</span>
+<span id="L67">            digest.update(chunk)</span>
+<span id="L68">    return digest.hexdigest()</span>
+<span id="L69"></span>
+<span id="L70"></span>
+<span id="L71">def validated_commit(value: str) -&gt; str:</span>
+<span id="L72">    normalized = value.lower()</span>
+<span id="L73">    if re.fullmatch(r&quot;[0-9a-f]{40}&quot;, normalized) is None:</span>
+<span id="L74">        raise ValueError(&quot;source commit must be a complete 40-character Git SHA&quot;)</span>
+<span id="L75">    return normalized</span>
+<span id="L76"></span>
+<span id="L77"></span>
+<span id="L78">def validated_tree(value: str) -&gt; str:</span>
+<span id="L79">    normalized = value.lower()</span>
+<span id="L80">    if re.fullmatch(r&quot;[0-9a-f]{40,64}&quot;, normalized) is None:</span>
+<span id="L81">        raise ValueError(&quot;source tree identity must be a complete Git object ID&quot;)</span>
+<span id="L82">    return normalized</span>
+<span id="L83"></span>
+<span id="L84"></span>
+<span id="L85">def load_policy(path: pathlib.Path) -&gt; dict[str, Any]:</span>
+<span id="L86">    value = strict_json(path)</span>
+<span id="L87">    if not isinstance(value, dict) or value.get(&quot;schema_version&quot;) != 1:</span>
+<span id="L88">        raise ValueError(&quot;portable assurance policy schema_version must be 1&quot;)</span>
+<span id="L89">    for key in (</span>
+<span id="L90">        &quot;project&quot;,</span>
+<span id="L91">        &quot;version&quot;,</span>
+<span id="L92">        &quot;source_repository&quot;,</span>
+<span id="L93">        &quot;predicate_type&quot;,</span>
+<span id="L94">        &quot;builder_policy&quot;,</span>
+<span id="L95">        &quot;build&quot;,</span>
+<span id="L96">        &quot;artifacts&quot;,</span>
+<span id="L97">        &quot;signed_fixture&quot;,</span>
+<span id="L98">    ):</span>
+<span id="L99">        if key not in value:</span>
+<span id="L100">            raise ValueError(f&quot;portable assurance policy lacks {key}&quot;)</span>
+<span id="L101">    return value</span>
+<span id="L102"></span>
+<span id="L103"></span>
+<span id="L104">def dependency_records(path: pathlib.Path) -&gt; list[dict[str, Any]]:</span>
+<span id="L105">    value = strict_json(path)</span>
+<span id="L106">    dependencies = value.get(&quot;dependencies&quot;) if isinstance(value, dict) else None</span>
+<span id="L107">    if not isinstance(dependencies, dict) or not dependencies:</span>
+<span id="L108">        raise ValueError(&quot;dependency policy must contain dependencies&quot;)</span>
+<span id="L109">    records = []</span>
+<span id="L110">    for name, record in sorted(dependencies.items()):</span>
+<span id="L111">        if not isinstance(record, dict):</span>
+<span id="L112">            raise ValueError(f&quot;dependency {name} must be an object&quot;)</span>
+<span id="L113">        identity = (</span>
+<span id="L114">            record.get(&quot;submodule_commit&quot;)</span>
+<span id="L115">            or record.get(&quot;commit&quot;)</span>
+<span id="L116">            or record.get(&quot;builtin_baseline&quot;)</span>
+<span id="L117">        )</span>
+<span id="L118">        if not isinstance(identity, str) or re.fullmatch(</span>
+<span id="L119">            r&quot;[0-9a-f]{40}&quot;, identity</span>
+<span id="L120">        ) is None:</span>
+<span id="L121">            raise ValueError(f&quot;dependency {name} lacks a complete identity&quot;)</span>
+<span id="L122">        records.append(</span>
+<span id="L123">            {</span>
+<span id="L124">                &quot;name&quot;: name,</span>
+<span id="L125">                &quot;identity&quot;: identity,</span>
+<span id="L126">                &quot;purpose&quot;: record.get(&quot;purpose&quot;),</span>
+<span id="L127">                &quot;license&quot;: record.get(&quot;license&quot;),</span>
+<span id="L128">            }</span>
+<span id="L129">        )</span>
+<span id="L130">    return records</span>
+<span id="L131"></span>
+<span id="L132"></span>
+<span id="L133">def artifact_subjects(</span>
+<span id="L134">    artifact_dir: pathlib.Path,</span>
+<span id="L135">    policy: dict[str, Any],</span>
+<span id="L136">) -&gt; list[dict[str, Any]]:</span>
+<span id="L137">    artifact_policy = policy[&quot;artifacts&quot;]</span>
+<span id="L138">    archive_suffix = artifact_policy[&quot;archive_suffix&quot;]</span>
+<span id="L139">    checksum_suffix = artifact_policy[&quot;checksum_suffix&quot;]</span>
+<span id="L140">    sbom_name = artifact_policy[&quot;sbom&quot;]</span>
+<span id="L141">    candidates = [</span>
+<span id="L142">        path</span>
+<span id="L143">        for path in artifact_dir.iterdir()</span>
+<span id="L144">        if path.is_file() and not path.is_symlink()</span>
+<span id="L145">    ]</span>
+<span id="L146">    archives = [path for path in candidates if path.name.endswith(archive_suffix)]</span>
+<span id="L147">    checksums = [path for path in candidates if path.name.endswith(checksum_suffix)]</span>
+<span id="L148">    sbom = artifact_dir / sbom_name</span>
+<span id="L149">    if len(archives) != 1 or len(checksums) != 1:</span>
+<span id="L150">        raise ValueError(&quot;expected exactly one package archive and checksum&quot;)</span>
+<span id="L151">    if checksums[0].name != archives[0].name + &quot;.sha256&quot;:</span>
+<span id="L152">        raise ValueError(&quot;checksum does not name the package archive&quot;)</span>
+<span id="L153">    if sbom.is_symlink() or not sbom.is_file():</span>
+<span id="L154">        raise ValueError(&quot;candidate SBOM is missing or not regular&quot;)</span>
+<span id="L155">    return [</span>
+<span id="L156">        {&quot;name&quot;: path.name, &quot;digest&quot;: {&quot;sha256&quot;: sha256(path)}}</span>
+<span id="L157">        for path in sorted((archives[0], checksums[0], sbom), key=lambda p: p.name)</span>
+<span id="L158">    ]</span>
+<span id="L159"></span>
+<span id="L160"></span>
+<span id="L161">def create_statement(</span>
+<span id="L162">    artifact_dir: pathlib.Path,</span>
+<span id="L163">    policy: dict[str, Any],</span>
+<span id="L164">    dependency_policy: pathlib.Path,</span>
+<span id="L165">    source_commit: str,</span>
+<span id="L166">    source_tree: str,</span>
+<span id="L167">    source_tree_state: str,</span>
+<span id="L168">    compiler: str,</span>
+<span id="L169">    cmake: str,</span>
+<span id="L170">) -&gt; dict[str, Any]:</span>
+<span id="L171">    if source_tree_state not in {&quot;clean&quot;, &quot;dirty&quot;}:</span>
+<span id="L172">        raise ValueError(&quot;source tree state must be clean or dirty&quot;)</span>
+<span id="L173">    return {</span>
+<span id="L174">        &quot;_type&quot;: &quot;https://in-toto.io/Statement/v1&quot;,</span>
+<span id="L175">        &quot;subject&quot;: artifact_subjects(artifact_dir, policy),</span>
+<span id="L176">        &quot;predicateType&quot;: policy[&quot;predicate_type&quot;],</span>
+<span id="L177">        &quot;predicate&quot;: {</span>
+<span id="L178">            &quot;authentication&quot;: False,</span>
+<span id="L179">            &quot;verificationOnly&quot;: True,</span>
+<span id="L180">            &quot;project&quot;: policy[&quot;project&quot;],</span>
+<span id="L181">            &quot;version&quot;: policy[&quot;version&quot;],</span>
+<span id="L182">            &quot;source&quot;: {</span>
+<span id="L183">                &quot;repository&quot;: policy[&quot;source_repository&quot;],</span>
+<span id="L184">                &quot;commit&quot;: validated_commit(source_commit),</span>
+<span id="L185">                &quot;tree&quot;: validated_tree(source_tree),</span>
+<span id="L186">                &quot;treeState&quot;: source_tree_state,</span>
+<span id="L187">            },</span>
+<span id="L188">            &quot;builder&quot;: {</span>
+<span id="L189">                &quot;policy&quot;: policy[&quot;builder_policy&quot;],</span>
+<span id="L190">                &quot;compiler&quot;: compiler,</span>
+<span id="L191">                &quot;cmake&quot;: cmake,</span>
+<span id="L192">            },</span>
+<span id="L193">            &quot;parameters&quot;: policy[&quot;build&quot;],</span>
+<span id="L194">            &quot;dependencies&quot;: dependency_records(dependency_policy),</span>
+<span id="L195">        },</span>
+<span id="L196">    }</span>
+<span id="L197"></span>
+<span id="L198"></span>
+<span id="L199">def write_new(path: pathlib.Path, value: Any) -&gt; None:</span>
+<span id="L200">    if path.exists() or path.is_symlink():</span>
+<span id="L201">        raise ValueError(f&quot;output already exists: {path}&quot;)</span>
+<span id="L202">    path.parent.mkdir(parents=True, exist_ok=True)</span>
+<span id="L203">    temporary = path.with_name(path.name + &quot;.tmp&quot;)</span>
+<span id="L204">    try:</span>
+<span id="L205">        temporary.write_bytes(canonical_json(value) + b&quot;\n&quot;)</span>
+<span id="L206">        temporary.replace(path)</span>
+<span id="L207">    except Exception:</span>
+<span id="L208">        if temporary.exists() and not temporary.is_symlink():</span>
+<span id="L209">            temporary.unlink()</span>
+<span id="L210">        raise</span>
+<span id="L211"></span>
+<span id="L212"></span>
+<span id="L213">def manifest_entries(path: pathlib.Path) -&gt; dict[str, dict[str, Any]]:</span>
+<span id="L214">    value = strict_json(path)</span>
+<span id="L215">    entries = value.get(&quot;artifacts&quot;) if isinstance(value, dict) else None</span>
+<span id="L216">    if not isinstance(entries, list):</span>
+<span id="L217">        raise ValueError(&quot;release manifest lacks artifacts&quot;)</span>
+<span id="L218">    output: dict[str, dict[str, Any]] = {}</span>
+<span id="L219">    for entry in entries:</span>
+<span id="L220">        if not isinstance(entry, dict) or not isinstance(entry.get(&quot;path&quot;), str):</span>
+<span id="L221">            raise ValueError(&quot;release manifest contains malformed artifact&quot;)</span>
+<span id="L222">        name = entry[&quot;path&quot;]</span>
+<span id="L223">        if name in output:</span>
+<span id="L224">            raise ValueError(&quot;release manifest contains a duplicate artifact&quot;)</span>
+<span id="L225">        output[name] = entry</span>
+<span id="L226">    return output</span>
+<span id="L227"></span>
+<span id="L228"></span>
+<span id="L229">def verify_statement(</span>
+<span id="L230">    statement_path: pathlib.Path,</span>
+<span id="L231">    artifact_dir: pathlib.Path,</span>
+<span id="L232">    manifest_path: pathlib.Path,</span>
+<span id="L233">    policy: dict[str, Any],</span>
+<span id="L234">    dependency_policy: pathlib.Path,</span>
+<span id="L235">    source_commit: str,</span>
+<span id="L236">    source_tree: str,</span>
+<span id="L237">    source_tree_state: str,</span>
+<span id="L238">    compiler: str,</span>
+<span id="L239">    cmake: str,</span>
+<span id="L240">) -&gt; dict[str, Any]:</span>
+<span id="L241">    statement = strict_json(statement_path)</span>
+<span id="L242">    if canonical_json(statement) + b&quot;\n&quot; != statement_path.read_bytes():</span>
+<span id="L243">        raise ValueError(&quot;provenance statement is not canonical JSON&quot;)</span>
+<span id="L244">    expected = create_statement(</span>
+<span id="L245">        artifact_dir,</span>
+<span id="L246">        policy,</span>
+<span id="L247">        dependency_policy,</span>
+<span id="L248">        source_commit,</span>
+<span id="L249">        source_tree,</span>
+<span id="L250">        source_tree_state,</span>
+<span id="L251">        compiler,</span>
+<span id="L252">        cmake,</span>
+<span id="L253">    )</span>
+<span id="L254">    if statement != expected:</span>
+<span id="L255">        raise ValueError(&quot;provenance statement does not match exact policy/input bytes&quot;)</span>
+<span id="L256">    entries = manifest_entries(manifest_path)</span>
+<span id="L257">    record = entries.get(statement_path.name)</span>
+<span id="L258">    if record is None:</span>
+<span id="L259">        raise ValueError(&quot;final manifest does not cover the provenance statement&quot;)</span>
+<span id="L260">    if record.get(&quot;sha256&quot;) != sha256(statement_path):</span>
+<span id="L261">        raise ValueError(&quot;manifest provenance digest mismatch&quot;)</span>
+<span id="L262">    if record.get(&quot;size_bytes&quot;) != statement_path.stat().st_size:</span>
+<span id="L263">        raise ValueError(&quot;manifest provenance size mismatch&quot;)</span>
+<span id="L264">    return {</span>
+<span id="L265">        &quot;schema_version&quot;: 1,</span>
+<span id="L266">        &quot;content_verified&quot;: True,</span>
+<span id="L267">        &quot;authentication&quot;: False,</span>
+<span id="L268">        &quot;signed_target&quot;: False,</span>
+<span id="L269">        &quot;source_commit&quot;: validated_commit(source_commit),</span>
+<span id="L270">    }</span>
+<span id="L271"></span>
+<span id="L272"></span>
+<span id="L273">def dsse_pae(payload_type: bytes, payload: bytes) -&gt; bytes:</span>
+<span id="L274">    return (</span>
+<span id="L275">        b&quot;DSSEv1 &quot;</span>
+<span id="L276">        + str(len(payload_type)).encode(&quot;ascii&quot;)</span>
+<span id="L277">        + b&quot; &quot;</span>
+<span id="L278">        + payload_type</span>
+<span id="L279">        + b&quot; &quot;</span>
+<span id="L280">        + str(len(payload)).encode(&quot;ascii&quot;)</span>
+<span id="L281">        + b&quot; &quot;</span>
+<span id="L282">        + payload</span>
+<span id="L283">    )</span>
+<span id="L284"></span>
+<span id="L285"></span>
+<span id="L286">def rsa_pkcs1v15_sha256_verify(</span>
+<span id="L287">    message: bytes,</span>
+<span id="L288">    signature: bytes,</span>
+<span id="L289">    modulus: int,</span>
+<span id="L290">    exponent: int,</span>
+<span id="L291">) -&gt; bool:</span>
+<span id="L292">    if modulus &lt;= 0 or exponent &lt;= 1:</span>
+<span id="L293">        return False</span>
+<span id="L294">    size = (modulus.bit_length() + 7) // 8</span>
+<span id="L295">    if len(signature) != size:</span>
+<span id="L296">        return False</span>
+<span id="L297">    encoded = pow(int.from_bytes(signature, &quot;big&quot;), exponent, modulus).to_bytes(</span>
+<span id="L298">        size, &quot;big&quot;</span>
+<span id="L299">    )</span>
+<span id="L300">    digest_info = SHA256_DIGEST_INFO_PREFIX + hashlib.sha256(message).digest()</span>
+<span id="L301">    padding_size = size - len(digest_info) - 3</span>
+<span id="L302">    if padding_size &lt; 8:</span>
+<span id="L303">        return False</span>
+<span id="L304">    expected = b&quot;\x00\x01&quot; + b&quot;\xff&quot; * padding_size + b&quot;\x00&quot; + digest_info</span>
+<span id="L305">    return encoded == expected</span>
+<span id="L306"></span>
+<span id="L307"></span>
+<span id="L308">def decode_base64(value: Any, label: str) -&gt; bytes:</span>
+<span id="L309">    if not isinstance(value, str):</span>
+<span id="L310">        raise ValueError(f&quot;{label} must be base64 text&quot;)</span>
+<span id="L311">    try:</span>
+<span id="L312">        return base64.b64decode(value, validate=True)</span>
+<span id="L313">    except ValueError as exc:</span>
+<span id="L314">        raise ValueError(f&quot;{label} is invalid base64&quot;) from exc</span>
+<span id="L315"></span>
+<span id="L316"></span>
+<span id="L317">def verify_fixture(root: pathlib.Path, policy: dict[str, Any]) -&gt; dict[str, Any]:</span>
+<span id="L318">    expected = policy[&quot;signed_fixture&quot;]</span>
+<span id="L319">    artifact = root / expected[&quot;artifact&quot;]</span>
+<span id="L320">    envelope_path = root / expected[&quot;envelope&quot;]</span>
+<span id="L321">    trust_path = root / expected[&quot;trust&quot;]</span>
+<span id="L322">    envelope = strict_json(envelope_path)</span>
+<span id="L323">    trust = strict_json(trust_path)</span>
+<span id="L324">    if not isinstance(envelope, dict) or set(envelope) != {</span>
+<span id="L325">        &quot;payloadType&quot;, &quot;payload&quot;, &quot;signatures&quot;</span>
+<span id="L326">    }:</span>
+<span id="L327">        raise ValueError(&quot;DSSE envelope has an unexpected shape&quot;)</span>
+<span id="L328">    if envelope[&quot;payloadType&quot;] != expected[&quot;payload_type&quot;]:</span>
+<span id="L329">        raise ValueError(&quot;DSSE payload type mismatch&quot;)</span>
+<span id="L330">    signatures = envelope[&quot;signatures&quot;]</span>
+<span id="L331">    if not isinstance(signatures, list) or len(signatures) != 1:</span>
+<span id="L332">        raise ValueError(&quot;DSSE fixture must contain exactly one signature&quot;)</span>
+<span id="L333">    signature_record = signatures[0]</span>
+<span id="L334">    if not isinstance(signature_record, dict) or set(signature_record) != {</span>
+<span id="L335">        &quot;keyid&quot;, &quot;sig&quot;</span>
+<span id="L336">    }:</span>
+<span id="L337">        raise ValueError(&quot;DSSE signature record is malformed&quot;)</span>
+<span id="L338">    if signature_record[&quot;keyid&quot;] != expected[&quot;key_id&quot;]:</span>
+<span id="L339">        raise ValueError(&quot;DSSE key identity mismatch&quot;)</span>
+<span id="L340">    if not isinstance(trust, dict) or trust.get(&quot;key_id&quot;) != expected[&quot;key_id&quot;]:</span>
+<span id="L341">        raise ValueError(&quot;public trust identity mismatch&quot;)</span>
+<span id="L342">    if trust.get(&quot;algorithm&quot;) != &quot;RSASSA-PKCS1-v1_5-SHA256&quot;:</span>
+<span id="L343">        raise ValueError(&quot;unsupported public trust algorithm&quot;)</span>
+<span id="L344">    try:</span>
+<span id="L345">        modulus = int(trust[&quot;modulus_hex&quot;], 16)</span>
+<span id="L346">        exponent = int(trust[&quot;exponent&quot;])</span>
+<span id="L347">    except (KeyError, TypeError, ValueError) as exc:</span>
+<span id="L348">        raise ValueError(&quot;public trust material is malformed&quot;) from exc</span>
+<span id="L349">    payload = decode_base64(envelope[&quot;payload&quot;], &quot;DSSE payload&quot;)</span>
+<span id="L350">    signature = decode_base64(signature_record[&quot;sig&quot;], &quot;DSSE signature&quot;)</span>
+<span id="L351">    payload_type = envelope[&quot;payloadType&quot;].encode(&quot;utf-8&quot;)</span>
+<span id="L352">    if not rsa_pkcs1v15_sha256_verify(</span>
+<span id="L353">        dsse_pae(payload_type, payload), signature, modulus, exponent</span>
+<span id="L354">    ):</span>
+<span id="L355">        raise ValueError(&quot;DSSE cryptographic signature verification failed&quot;)</span>
+<span id="L356">    try:</span>
+<span id="L357">        statement = json.loads(</span>
+<span id="L358">            payload.decode(&quot;utf-8&quot;), object_pairs_hook=reject_duplicates</span>
+<span id="L359">        )</span>
+<span id="L360">    except (UnicodeError, json.JSONDecodeError) as exc:</span>
+<span id="L361">        raise ValueError(f&quot;DSSE payload is not strict JSON: {exc}&quot;) from exc</span>
+<span id="L362">    if canonical_json(statement) != payload:</span>
+<span id="L363">        raise ValueError(&quot;DSSE payload is not canonical JSON&quot;)</span>
+<span id="L364">    if statement.get(&quot;_type&quot;) != &quot;https://in-toto.io/Statement/v1&quot;:</span>
+<span id="L365">        raise ValueError(&quot;fixture is not an in-toto Statement v1&quot;)</span>
+<span id="L366">    if statement.get(&quot;predicateType&quot;) != expected[&quot;predicate_type&quot;]:</span>
+<span id="L367">        raise ValueError(&quot;fixture predicate type mismatch&quot;)</span>
+<span id="L368">    subjects = statement.get(&quot;subject&quot;)</span>
+<span id="L369">    if not isinstance(subjects, list) or len(subjects) != 1:</span>
+<span id="L370">        raise ValueError(&quot;fixture must have exactly one subject&quot;)</span>
+<span id="L371">    if subjects[0] != {</span>
+<span id="L372">        &quot;name&quot;: artifact.name,</span>
+<span id="L373">        &quot;digest&quot;: {&quot;sha256&quot;: sha256(artifact)},</span>
+<span id="L374">    }:</span>
+<span id="L375">        raise ValueError(&quot;fixture artifact subject mismatch&quot;)</span>
+<span id="L376">    if sha256(artifact) != expected[&quot;artifact_sha256&quot;]:</span>
+<span id="L377">        raise ValueError(&quot;fixture artifact policy digest mismatch&quot;)</span>
+<span id="L378">    try:</span>
+<span id="L379">        parameters = statement[&quot;predicate&quot;][&quot;buildDefinition&quot;][&quot;externalParameters&quot;]</span>
+<span id="L380">    except (KeyError, TypeError) as exc:</span>
+<span id="L381">        raise ValueError(&quot;fixture predicate identity is missing&quot;) from exc</span>
+<span id="L382">    for key in (&quot;repository&quot;, &quot;source_digest&quot;, &quot;ref&quot;, &quot;workflow&quot;, &quot;issuer&quot;):</span>
+<span id="L383">        if parameters.get(key) != expected[key]:</span>
+<span id="L384">            raise ValueError(f&quot;fixture {key} identity mismatch&quot;)</span>
+<span id="L385">    return {</span>
+<span id="L386">        &quot;schema_version&quot;: 1,</span>
+<span id="L387">        &quot;cryptographic_fixture_verified&quot;: True,</span>
+<span id="L388">        &quot;target_authenticated&quot;: False,</span>
+<span id="L389">        &quot;current_revocation_checked&quot;: False,</span>
+<span id="L390">        &quot;key_id&quot;: expected[&quot;key_id&quot;],</span>
+<span id="L391">    }</span>
+<span id="L392"></span>
+<span id="L393"></span>
+<span id="L394">def add_common(parser: argparse.ArgumentParser) -&gt; None:</span>
+<span id="L395">    parser.add_argument(&quot;--artifact-dir&quot;, type=pathlib.Path, required=True)</span>
+<span id="L396">    parser.add_argument(&quot;--policy&quot;, type=pathlib.Path, required=True)</span>
+<span id="L397">    parser.add_argument(&quot;--dependency-policy&quot;, type=pathlib.Path, required=True)</span>
+<span id="L398">    parser.add_argument(&quot;--source-commit&quot;, required=True)</span>
+<span id="L399">    parser.add_argument(&quot;--source-tree&quot;, required=True)</span>
+<span id="L400">    parser.add_argument(&quot;--source-tree-state&quot;, choices=(&quot;clean&quot;, &quot;dirty&quot;), required=True)</span>
+<span id="L401">    parser.add_argument(&quot;--compiler&quot;, required=True)</span>
+<span id="L402">    parser.add_argument(&quot;--cmake&quot;, required=True)</span>
+<span id="L403"></span>
+<span id="L404"></span>
+<span id="L405">def main(argv: list[str] | None = None) -&gt; int:</span>
+<span id="L406">    parser = argparse.ArgumentParser()</span>
+<span id="L407">    subparsers = parser.add_subparsers(dest=&quot;command&quot;, required=True)</span>
+<span id="L408">    create = subparsers.add_parser(&quot;create&quot;)</span>
+<span id="L409">    add_common(create)</span>
+<span id="L410">    create.add_argument(&quot;--output&quot;, type=pathlib.Path, required=True)</span>
+<span id="L411">    verify = subparsers.add_parser(&quot;verify&quot;)</span>
+<span id="L412">    add_common(verify)</span>
+<span id="L413">    verify.add_argument(&quot;--statement&quot;, type=pathlib.Path, required=True)</span>
+<span id="L414">    verify.add_argument(&quot;--manifest&quot;, type=pathlib.Path, required=True)</span>
+<span id="L415">    fixture = subparsers.add_parser(&quot;verify-fixture&quot;)</span>
+<span id="L416">    fixture.add_argument(&quot;--repo-root&quot;, type=pathlib.Path, required=True)</span>
+<span id="L417">    fixture.add_argument(&quot;--policy&quot;, type=pathlib.Path, required=True)</span>
+<span id="L418">    args = parser.parse_args(argv)</span>
+<span id="L419"></span>
+<span id="L420">    try:</span>
+<span id="L421">        policy = load_policy(args.policy)</span>
+<span id="L422">        if args.command == &quot;verify-fixture&quot;:</span>
+<span id="L423">            result = verify_fixture(args.repo_root.resolve(strict=True), policy)</span>
+<span id="L424">        elif args.command == &quot;create&quot;:</span>
+<span id="L425">            statement = create_statement(</span>
+<span id="L426">                args.artifact_dir.resolve(strict=True),</span>
+<span id="L427">                policy,</span>
+<span id="L428">                args.dependency_policy.resolve(strict=True),</span>
+<span id="L429">                args.source_commit,</span>
+<span id="L430">                args.source_tree,</span>
+<span id="L431">                args.source_tree_state,</span>
+<span id="L432">                args.compiler,</span>
+<span id="L433">                args.cmake,</span>
+<span id="L434">            )</span>
+<span id="L435">            write_new(args.output.resolve(strict=False), statement)</span>
+<span id="L436">            result = {&quot;created&quot;: True, &quot;authentication&quot;: False}</span>
+<span id="L437">        else:</span>
+<span id="L438">            result = verify_statement(</span>
+<span id="L439">                args.statement.resolve(strict=True),</span>
+<span id="L440">                args.artifact_dir.resolve(strict=True),</span>
+<span id="L441">                args.manifest.resolve(strict=True),</span>
+<span id="L442">                policy,</span>
+<span id="L443">                args.dependency_policy.resolve(strict=True),</span>
+<span id="L444">                args.source_commit,</span>
+<span id="L445">                args.source_tree,</span>
+<span id="L446">                args.source_tree_state,</span>
+<span id="L447">                args.compiler,</span>
+<span id="L448">                args.cmake,</span>
+<span id="L449">            )</span>
+<span id="L450">        print(json.dumps(result, sort_keys=True))</span>
+<span id="L451">        return 0</span>
+<span id="L452">    except (OSError, UnicodeError, ValueError) as exc:</span>
+<span id="L453">        print(f&quot;Provenance verification failed: {exc}&quot;, file=sys.stderr)</span>
+<span id="L454">        return 1</span>
+<span id="L455"></span>
+<span id="L456"></span>
+<span id="L457">if __name__ == &quot;__main__&quot;:</span>
+<span id="L458">    raise SystemExit(main())</span></pre></html>

@@ -74,7 +74,7 @@ thread-stack guarantee.
 
 Compiler/FMA/MSVC, sanitizers, static analysis, relocated/embedded consumers and
 ABI checks are required. Retained commands, outcomes and failures are in
-[batch evidence](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/evidence/M24-03-2026-09-27.md); final hosted/merge identities are
+[batch evidence](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/evidence/M24-03-2026-09-27.md); final hosted/merge identities are
 recorded in its PR. Physical GPU execution, controlled timing, independent human
 review and qualification remain separate. M24-04 still owns benchmark/profiler
 integration and the capability matrix's 90% overall / 100% critical coverage gate.

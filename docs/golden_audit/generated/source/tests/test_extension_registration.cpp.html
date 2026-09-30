@@ -1,0 +1,874 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_extension_registration.cpp</title><h1>tests/test_extension_registration.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;array&gt;</span>
+<span id="L5">#include &lt;chrono&gt;</span>
+<span id="L6">#include &lt;cstddef&gt;</span>
+<span id="L7">#include &lt;cstdint&gt;</span>
+<span id="L8">#include &lt;cstring&gt;</span>
+<span id="L9">#include &lt;stdexcept&gt;</span>
+<span id="L10">#include &lt;vector&gt;</span>
+<span id="L11"></span>
+<span id="L12">#include &lt;rt/extension_abi.h&gt;</span>
+<span id="L13">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L14"></span>
+<span id="L15">extern &quot;C&quot; rtfw_status RTFW_EXTENSION_CALL rtfw_extension_entry_v1(</span>
+<span id="L16">    const rtfw_extension_host_api_v1*, rtfw_extension_descriptor_v1*);</span>
+<span id="L17">extern &quot;C&quot; rtfw_status RTFW_EXTENSION_CALL rtfw_extension_bad_entry_v1(</span>
+<span id="L18">    const rtfw_extension_host_api_v1*, rtfw_extension_descriptor_v1*);</span>
+<span id="L19">extern &quot;C&quot; std::uint32_t rtfw_extension_fixture_calls(void);</span>
+<span id="L20">extern &quot;C&quot; void rtfw_extension_fixture_reset(void);</span>
+<span id="L21"></span>
+<span id="L22">namespace {</span>
+<span id="L23"></span>
+<span id="L24">enum Event : std::uint32_t {</span>
+<span id="L25">    service_one_initialize = 1,</span>
+<span id="L26">    service_two_initialize,</span>
+<span id="L27">    backend_initialize_event,</span>
+<span id="L28">    phase_execute,</span>
+<span id="L29">    service_one_stop,</span>
+<span id="L30">    service_two_stop,</span>
+<span id="L31">    backend_shutdown_event,</span>
+<span id="L32">    service_two_quiesce,</span>
+<span id="L33">    service_two_shutdown,</span>
+<span id="L34">    service_one_quiesce,</span>
+<span id="L35">    service_one_shutdown,</span>
+<span id="L36">    service_status,</span>
+<span id="L37">};</span>
+<span id="L38"></span>
+<span id="L39">struct FixtureState;</span>
+<span id="L40"></span>
+<span id="L41">struct ServiceInstance {</span>
+<span id="L42">    FixtureState* fixture = nullptr;</span>
+<span id="L43">    std::uint32_t id = 0;</span>
+<span id="L44">    bool initialized = false;</span>
+<span id="L45">};</span>
+<span id="L46"></span>
+<span id="L47">struct FixtureState {</span>
+<span id="L48">    std::array&lt;std::uint32_t, 32&gt; events{};</span>
+<span id="L49">    std::size_t event_count = 0;</span>
+<span id="L50">    std::uint32_t phase_calls = 0;</span>
+<span id="L51">    bool backend_initialized = false;</span>
+<span id="L52">    bool malformed_service_status = false;</span>
+<span id="L53">    std::uint32_t shutdown_failures = 0;</span>
+<span id="L54">    std::uint32_t service_shutdown_failures = 0;</span>
+<span id="L55">    std::uint32_t initialize_failures = 0;</span>
+<span id="L56">    std::uint32_t request_stop_failures = 0;</span>
+<span id="L57">    ServiceInstance first{this, 1, false};</span>
+<span id="L58">    ServiceInstance second{this, 2, false};</span>
+<span id="L59"></span>
+<span id="L60">    void push(std::uint32_t event) noexcept {</span>
+<span id="L61">        if (event_count &lt; events.size()) {</span>
+<span id="L62">            events[event_count++] = event;</span>
+<span id="L63">        }</span>
+<span id="L64">    }</span>
+<span id="L65">};</span>
+<span id="L66"></span>
+<span id="L67">thread_local FixtureState* entry_state = nullptr;</span>
+<span id="L68">thread_local std::uint32_t malformed_mode = 0;</span>
+<span id="L69">thread_local rtfw_extension_handle_v1 retired_provisional{};</span>
+<span id="L70"></span>
+<span id="L71">void set_name(char* output, const char* value) {</span>
+<span id="L72">    const auto size = std::min&lt;std::size_t&gt;(</span>
+<span id="L73">        std::strlen(value), RTFW_EXTENSION_IDENTIFIER_CAPACITY - 1);</span>
+<span id="L74">    std::memset(output, 0, RTFW_EXTENSION_IDENTIFIER_CAPACITY);</span>
+<span id="L75">    std::memcpy(output, value, size);</span>
+<span id="L76">}</span>
+<span id="L77"></span>
+<span id="L78">rtfw_callback_result phase_callback(</span>
+<span id="L79">    void* opaque,</span>
+<span id="L80">    const rtfw_callback_context* context) {</span>
+<span id="L81">    auto&amp; state = *static_cast&lt;FixtureState*&gt;(opaque);</span>
+<span id="L82">    if (!context || context-&gt;struct_size != sizeof(*context) ||</span>
+<span id="L83">        context-&gt;scratch == nullptr || context-&gt;tasks == nullptr) {</span>
+<span id="L84">        return RTFW_CALLBACK_ERROR;</span>
+<span id="L85">    }</span>
+<span id="L86">    ++state.phase_calls;</span>
+<span id="L87">    state.push(phase_execute);</span>
+<span id="L88">    return RTFW_CALLBACK_OK;</span>
+<span id="L89">}</span>
+<span id="L90"></span>
+<span id="L91">rtfw_status RTFW_EXTENSION_CALL service_initialize(void* opaque) {</span>
+<span id="L92">    auto&amp; service = *static_cast&lt;ServiceInstance*&gt;(opaque);</span>
+<span id="L93">    if (service.id == 1 &amp;&amp; service.fixture-&gt;initialize_failures != 0) {</span>
+<span id="L94">        --service.fixture-&gt;initialize_failures;</span>
+<span id="L95">        return RTFW_STATUS_CALLBACK_FAILED;</span>
+<span id="L96">    }</span>
+<span id="L97">    service.initialized = true;</span>
+<span id="L98">    service.fixture-&gt;push(</span>
+<span id="L99">        service.id == 1 ? service_one_initialize : service_two_initialize);</span>
+<span id="L100">    return RTFW_STATUS_OK;</span>
+<span id="L101">}</span>
+<span id="L102"></span>
+<span id="L103">rtfw_status RTFW_EXTENSION_CALL service_request_stop(void* opaque) {</span>
+<span id="L104">    auto&amp; service = *static_cast&lt;ServiceInstance*&gt;(opaque);</span>
+<span id="L105">    service.fixture-&gt;push(</span>
+<span id="L106">        service.id == 1 ? service_one_stop : service_two_stop);</span>
+<span id="L107">    if (service.id == 1 &amp;&amp; service.fixture-&gt;request_stop_failures != 0) {</span>
+<span id="L108">        --service.fixture-&gt;request_stop_failures;</span>
+<span id="L109">        return RTFW_STATUS_CALLBACK_FAILED;</span>
+<span id="L110">    }</span>
+<span id="L111">    return RTFW_STATUS_OK;</span>
+<span id="L112">}</span>
+<span id="L113"></span>
+<span id="L114">rtfw_status RTFW_EXTENSION_CALL service_quiesce(void* opaque) {</span>
+<span id="L115">    auto&amp; service = *static_cast&lt;ServiceInstance*&gt;(opaque);</span>
+<span id="L116">    service.fixture-&gt;push(</span>
+<span id="L117">        service.id == 1 ? service_one_quiesce : service_two_quiesce);</span>
+<span id="L118">    return RTFW_STATUS_OK;</span>
+<span id="L119">}</span>
+<span id="L120"></span>
+<span id="L121">rtfw_status RTFW_EXTENSION_CALL service_shutdown(void* opaque) {</span>
+<span id="L122">    auto&amp; service = *static_cast&lt;ServiceInstance*&gt;(opaque);</span>
+<span id="L123">    service.fixture-&gt;push(</span>
+<span id="L124">        service.id == 1 ? service_one_shutdown : service_two_shutdown);</span>
+<span id="L125">    if (service.id == 2 &amp;&amp; service.fixture-&gt;service_shutdown_failures != 0) {</span>
+<span id="L126">        --service.fixture-&gt;service_shutdown_failures;</span>
+<span id="L127">        return RTFW_STATUS_INVALID_STATE;</span>
+<span id="L128">    }</span>
+<span id="L129">    service.initialized = false;</span>
+<span id="L130">    return RTFW_STATUS_OK;</span>
+<span id="L131">}</span>
+<span id="L132"></span>
+<span id="L133">rtfw_status RTFW_EXTENSION_CALL service_get_status(</span>
+<span id="L134">    void* opaque,</span>
+<span id="L135">    rtfw_extension_service_status_v1* output) {</span>
+<span id="L136">    auto&amp; service = *static_cast&lt;ServiceInstance*&gt;(opaque);</span>
+<span id="L137">    service.fixture-&gt;push(service_status);</span>
+<span id="L138">    const auto requested_size = output-&gt;struct_size;</span>
+<span id="L139">    *output = {};</span>
+<span id="L140">    output-&gt;struct_size = requested_size;</span>
+<span id="L141">    output-&gt;abi_version = RTFW_EXTENSION_ABI_VERSION;</span>
+<span id="L142">    output-&gt;healthy = service.initialized ? 1u : 0u;</span>
+<span id="L143">    output-&gt;status = RTFW_STATUS_OK;</span>
+<span id="L144">    output-&gt;observed_value = service.id;</span>
+<span id="L145">    if (service.fixture-&gt;malformed_service_status) {</span>
+<span id="L146">        output-&gt;reserved[0] = 1;</span>
+<span id="L147">    }</span>
+<span id="L148">    return RTFW_STATUS_OK;</span>
+<span id="L149">}</span>
+<span id="L150"></span>
+<span id="L151">rtfw_device_status backend_capabilities(</span>
+<span id="L152">    void* opaque,</span>
+<span id="L153">    rtfw_device_capabilities* output) {</span>
+<span id="L154">    if (!opaque || !output || output-&gt;struct_size &lt; sizeof(*output)) {</span>
+<span id="L155">        return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L156">    }</span>
+<span id="L157">    *output = {};</span>
+<span id="L158">    output-&gt;struct_size = sizeof(*output);</span>
+<span id="L159">    output-&gt;abi_version = RTFW_DEVICE_ABI_VERSION;</span>
+<span id="L160">    output-&gt;max_in_flight = 4;</span>
+<span id="L161">    output-&gt;max_registered_buffers = 4;</span>
+<span id="L162">    output-&gt;max_buffer_bytes = 4096;</span>
+<span id="L163">    output-&gt;inline_payload_capacity = RTFW_DEVICE_INLINE_PAYLOAD_CAPACITY;</span>
+<span id="L164">    output-&gt;buffer_ref_capacity = RTFW_DEVICE_BUFFER_REF_CAPACITY;</span>
+<span id="L165">    output-&gt;supports_reset = 1;</span>
+<span id="L166">    output-&gt;deterministic_mock = 1;</span>
+<span id="L167">    set_name(output-&gt;backend_id, &quot;extension.device.v1&quot;);</span>
+<span id="L168">    return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L169">}</span>
+<span id="L170"></span>
+<span id="L171">rtfw_device_status backend_initialize(</span>
+<span id="L172">    void* opaque,</span>
+<span id="L173">    const rtfw_device_init_config*) {</span>
+<span id="L174">    auto&amp; state = *static_cast&lt;FixtureState*&gt;(opaque);</span>
+<span id="L175">    state.backend_initialized = true;</span>
+<span id="L176">    state.push(backend_initialize_event);</span>
+<span id="L177">    return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L178">}</span>
+<span id="L179"></span>
+<span id="L180">rtfw_device_status backend_register_buffer(</span>
+<span id="L181">    void*, const rtfw_device_buffer_registration*, std::uint64_t*) {</span>
+<span id="L182">    return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L183">}</span>
+<span id="L184"></span>
+<span id="L185">rtfw_device_status backend_unregister_buffer(void*, std::uint64_t) {</span>
+<span id="L186">    return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L187">}</span>
+<span id="L188"></span>
+<span id="L189">rtfw_device_status backend_submit(void*, const rtfw_device_submission*) {</span>
+<span id="L190">    return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L191">}</span>
+<span id="L192"></span>
+<span id="L193">rtfw_device_status backend_poll(</span>
+<span id="L194">    void*, rtfw_device_completion*, std::uint64_t, std::uint64_t* count) {</span>
+<span id="L195">    if (!count) {</span>
+<span id="L196">        return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L197">    }</span>
+<span id="L198">    *count = 0;</span>
+<span id="L199">    return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L200">}</span>
+<span id="L201"></span>
+<span id="L202">rtfw_device_status backend_cancel(void*, std::uint64_t) {</span>
+<span id="L203">    return RTFW_DEVICE_STATUS_CANCELED;</span>
+<span id="L204">}</span>
+<span id="L205"></span>
+<span id="L206">rtfw_device_status backend_health(void*, rtfw_device_health* output) {</span>
+<span id="L207">    if (!output || output-&gt;struct_size &lt; sizeof(*output)) {</span>
+<span id="L208">        return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L209">    }</span>
+<span id="L210">    const auto size = output-&gt;struct_size;</span>
+<span id="L211">    *output = {};</span>
+<span id="L212">    output-&gt;struct_size = size;</span>
+<span id="L213">    output-&gt;state = RTFW_DEVICE_HEALTH_HEALTHY;</span>
+<span id="L214">    output-&gt;last_status = RTFW_DEVICE_STATUS_OK;</span>
+<span id="L215">    return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L216">}</span>
+<span id="L217"></span>
+<span id="L218">rtfw_device_status backend_reset(void*) {</span>
+<span id="L219">    return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L220">}</span>
+<span id="L221"></span>
+<span id="L222">rtfw_device_status backend_shutdown(void* opaque) {</span>
+<span id="L223">    auto&amp; state = *static_cast&lt;FixtureState*&gt;(opaque);</span>
+<span id="L224">    state.push(backend_shutdown_event);</span>
+<span id="L225">    if (state.shutdown_failures != 0) {</span>
+<span id="L226">        --state.shutdown_failures;</span>
+<span id="L227">        return RTFW_DEVICE_STATUS_RESET_REQUIRED;</span>
+<span id="L228">    }</span>
+<span id="L229">    state.backend_initialized = false;</span>
+<span id="L230">    return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L231">}</span>
+<span id="L232"></span>
+<span id="L233">rtfw_extension_service_v1 make_service(</span>
+<span id="L234">    const char* name,</span>
+<span id="L235">    ServiceInstance&amp; instance) {</span>
+<span id="L236">    rtfw_extension_service_v1 service{};</span>
+<span id="L237">    service.struct_size = RTFW_EXTENSION_SERVICE_V1_REQUIRED_SIZE;</span>
+<span id="L238">    service.abi_version = RTFW_EXTENSION_ABI_VERSION;</span>
+<span id="L239">    set_name(service.name, name);</span>
+<span id="L240">    set_name(service.interface_name, &quot;test.control&quot;);</span>
+<span id="L241">    service.interface_version = 3;</span>
+<span id="L242">    service.api.struct_size = RTFW_EXTENSION_SERVICE_API_V1_REQUIRED_SIZE;</span>
+<span id="L243">    service.api.abi_version = RTFW_EXTENSION_ABI_VERSION;</span>
+<span id="L244">    service.api.instance = &amp;instance;</span>
+<span id="L245">    service.api.initialize = &amp;service_initialize;</span>
+<span id="L246">    service.api.request_stop = &amp;service_request_stop;</span>
+<span id="L247">    service.api.quiesce = &amp;service_quiesce;</span>
+<span id="L248">    service.api.shutdown = &amp;service_shutdown;</span>
+<span id="L249">    service.api.status = &amp;service_get_status;</span>
+<span id="L250">    return service;</span>
+<span id="L251">}</span>
+<span id="L252"></span>
+<span id="L253">rtfw_device_backend_api make_backend(FixtureState&amp; state) {</span>
+<span id="L254">    rtfw_device_backend_api api{};</span>
+<span id="L255">    api.struct_size = sizeof(api);</span>
+<span id="L256">    api.abi_version = RTFW_DEVICE_ABI_VERSION;</span>
+<span id="L257">    api.instance = &amp;state;</span>
+<span id="L258">    api.get_capabilities = &amp;backend_capabilities;</span>
+<span id="L259">    api.initialize = &amp;backend_initialize;</span>
+<span id="L260">    api.register_buffer = &amp;backend_register_buffer;</span>
+<span id="L261">    api.unregister_buffer = &amp;backend_unregister_buffer;</span>
+<span id="L262">    api.submit = &amp;backend_submit;</span>
+<span id="L263">    api.poll = &amp;backend_poll;</span>
+<span id="L264">    api.cancel = &amp;backend_cancel;</span>
+<span id="L265">    api.get_health = &amp;backend_health;</span>
+<span id="L266">    api.reset = &amp;backend_reset;</span>
+<span id="L267">    api.shutdown = &amp;backend_shutdown;</span>
+<span id="L268">    return api;</span>
+<span id="L269">}</span>
+<span id="L270"></span>
+<span id="L271">extern &quot;C&quot; rtfw_status RTFW_EXTENSION_CALL full_entry(</span>
+<span id="L272">    const rtfw_extension_host_api_v1* host,</span>
+<span id="L273">    rtfw_extension_descriptor_v1* descriptor) {</span>
+<span id="L274">    auto&amp; state = *entry_state;</span>
+<span id="L275">    rtfw_extension_phase_v1 phase{};</span>
+<span id="L276">    phase.struct_size = RTFW_EXTENSION_PHASE_V1_REQUIRED_SIZE + 64;</span>
+<span id="L277">    phase.abi_version = RTFW_EXTENSION_ABI_VERSION;</span>
+<span id="L278">    set_name(phase.name, &quot;extension.phase&quot;);</span>
+<span id="L279">    phase.callback = &amp;phase_callback;</span>
+<span id="L280">    phase.user_data = &amp;state;</span>
+<span id="L281">    rtfw_extension_backend_v1 backend{};</span>
+<span id="L282">    backend.struct_size = RTFW_EXTENSION_BACKEND_V1_REQUIRED_SIZE;</span>
+<span id="L283">    backend.abi_version = RTFW_EXTENSION_ABI_VERSION;</span>
+<span id="L284">    set_name(backend.name, &quot;extension.backend&quot;);</span>
+<span id="L285">    backend.api = make_backend(state);</span>
+<span id="L286">    auto first = make_service(&quot;extension.service.one&quot;, state.first);</span>
+<span id="L287">    auto second = make_service(&quot;extension.service.two&quot;, state.second);</span>
+<span id="L288">    rtfw_extension_resource_v1 resource{};</span>
+<span id="L289">    resource.struct_size = RTFW_EXTENSION_RESOURCE_V1_REQUIRED_SIZE;</span>
+<span id="L290">    resource.abi_version = RTFW_EXTENSION_ABI_VERSION;</span>
+<span id="L291">    set_name(resource.name, &quot;extension.resource&quot;);</span>
+<span id="L292">    rtfw_extension_handle_v1 phase_handle{};</span>
+<span id="L293">    rtfw_extension_handle_v1 backend_handle{};</span>
+<span id="L294">    rtfw_extension_handle_v1 first_handle{};</span>
+<span id="L295">    rtfw_extension_handle_v1 second_handle{};</span>
+<span id="L296">    rtfw_extension_handle_v1 resource_handle{};</span>
+<span id="L297">    if (host-&gt;stage_phase(host-&gt;context, &amp;phase, &amp;phase_handle) ||</span>
+<span id="L298">        host-&gt;stage_backend(host-&gt;context, &amp;backend, &amp;backend_handle) ||</span>
+<span id="L299">        host-&gt;stage_service(host-&gt;context, &amp;first, &amp;first_handle) ||</span>
+<span id="L300">        host-&gt;stage_service(host-&gt;context, &amp;second, &amp;second_handle) ||</span>
+<span id="L301">        host-&gt;stage_resource(host-&gt;context, &amp;resource, &amp;resource_handle)) {</span>
+<span id="L302">        return RTFW_STATUS_INVALID_ARGUMENT;</span>
+<span id="L303">    }</span>
+<span id="L304">    rtfw_extension_relationship_v1 relation{};</span>
+<span id="L305">    relation.struct_size = RTFW_EXTENSION_RELATIONSHIP_V1_REQUIRED_SIZE;</span>
+<span id="L306">    relation.abi_version = RTFW_EXTENSION_ABI_VERSION;</span>
+<span id="L307">    relation.kind = RTFW_EXTENSION_RELATIONSHIP_PHASE_RESOURCE;</span>
+<span id="L308">    relation.access = RTFW_EXTENSION_RESOURCE_ACCESS_WRITE;</span>
+<span id="L309">    relation.first = phase_handle;</span>
+<span id="L310">    relation.second = resource_handle;</span>
+<span id="L311">    if (host-&gt;stage_relationship(host-&gt;context, &amp;relation)) {</span>
+<span id="L312">        return RTFW_STATUS_INVALID_ARGUMENT;</span>
+<span id="L313">    }</span>
+<span id="L314">    relation = {};</span>
+<span id="L315">    relation.struct_size = RTFW_EXTENSION_RELATIONSHIP_V1_REQUIRED_SIZE;</span>
+<span id="L316">    relation.abi_version = RTFW_EXTENSION_ABI_VERSION;</span>
+<span id="L317">    relation.kind = RTFW_EXTENSION_RELATIONSHIP_SERVICE_BACKEND;</span>
+<span id="L318">    relation.first = first_handle;</span>
+<span id="L319">    relation.second = backend_handle;</span>
+<span id="L320">    if (host-&gt;stage_relationship(host-&gt;context, &amp;relation)) {</span>
+<span id="L321">        return RTFW_STATUS_INVALID_ARGUMENT;</span>
+<span id="L322">    }</span>
+<span id="L323">    *descriptor = {};</span>
+<span id="L324">    descriptor-&gt;struct_size = RTFW_EXTENSION_DESCRIPTOR_V1_REQUIRED_SIZE + 32;</span>
+<span id="L325">    descriptor-&gt;current_abi_version = 2;</span>
+<span id="L326">    descriptor-&gt;min_compatible_abi_version = 1;</span>
+<span id="L327">    set_name(descriptor-&gt;name, &quot;extension.full&quot;);</span>
+<span id="L328">    set_name(descriptor-&gt;version, &quot;2.4.0&quot;);</span>
+<span id="L329">    descriptor-&gt;phase_count = 1;</span>
+<span id="L330">    descriptor-&gt;backend_count = 1;</span>
+<span id="L331">    descriptor-&gt;service_count = 2;</span>
+<span id="L332">    descriptor-&gt;resource_count = 1;</span>
+<span id="L333">    descriptor-&gt;relationship_count = 2;</span>
+<span id="L334">    return RTFW_STATUS_OK;</span>
+<span id="L335">}</span>
+<span id="L336"></span>
+<span id="L337">rtfw_status RTFW_EXTENSION_CALL throwing_entry(</span>
+<span id="L338">    const rtfw_extension_host_api_v1*, rtfw_extension_descriptor_v1*) {</span>
+<span id="L339">    throw std::runtime_error(&quot;extension exception&quot;);</span>
+<span id="L340">}</span>
+<span id="L341"></span>
+<span id="L342">extern &quot;C&quot; rtfw_status RTFW_EXTENSION_CALL malformed_entry(</span>
+<span id="L343">    const rtfw_extension_host_api_v1* host,</span>
+<span id="L344">    rtfw_extension_descriptor_v1* descriptor) {</span>
+<span id="L345">    *descriptor = {};</span>
+<span id="L346">    descriptor-&gt;struct_size = RTFW_EXTENSION_DESCRIPTOR_V1_REQUIRED_SIZE;</span>
+<span id="L347">    descriptor-&gt;current_abi_version = 1;</span>
+<span id="L348">    descriptor-&gt;min_compatible_abi_version = 1;</span>
+<span id="L349">    set_name(descriptor-&gt;name, &quot;malformed.extension&quot;);</span>
+<span id="L350">    set_name(descriptor-&gt;version, &quot;1&quot;);</span>
+<span id="L351">    if (malformed_mode == 1) {</span>
+<span id="L352">        descriptor-&gt;current_abi_version = 2;</span>
+<span id="L353">        descriptor-&gt;min_compatible_abi_version = 2;</span>
+<span id="L354">    } else if (malformed_mode == 2) {</span>
+<span id="L355">        descriptor-&gt;reserved[0] = 1;</span>
+<span id="L356">    } else if (malformed_mode == 3) {</span>
+<span id="L357">        descriptor-&gt;name[1] = &#x27;\0&#x27;;</span>
+<span id="L358">        descriptor-&gt;name[2] = &#x27;x&#x27;;</span>
+<span id="L359">    } else if (malformed_mode == 4) {</span>
+<span id="L360">        descriptor-&gt;phase_count = UINT64_MAX;</span>
+<span id="L361">    } else if (malformed_mode == 5) {</span>
+<span id="L362">        rtfw_extension_phase_v1 phase{};</span>
+<span id="L363">        rtfw_extension_handle_v1 handle{};</span>
+<span id="L364">        phase.struct_size = RTFW_EXTENSION_PHASE_V1_REQUIRED_SIZE;</span>
+<span id="L365">        phase.abi_version = 1;</span>
+<span id="L366">        set_name(phase.name, &quot;null.callback&quot;);</span>
+<span id="L367">        (void)host-&gt;stage_phase(host-&gt;context, &amp;phase, &amp;handle);</span>
+<span id="L368">    } else if (malformed_mode == 6) {</span>
+<span id="L369">        descriptor-&gt;struct_size = UINT32_MAX;</span>
+<span id="L370">        descriptor-&gt;current_abi_version = 0;</span>
+<span id="L371">    } else if (malformed_mode == 7) {</span>
+<span id="L372">        return static_cast&lt;rtfw_status&gt;(-999);</span>
+<span id="L373">    }</span>
+<span id="L374">    return RTFW_STATUS_OK;</span>
+<span id="L375">}</span>
+<span id="L376"></span>
+<span id="L377">extern &quot;C&quot; rtfw_status RTFW_EXTENSION_CALL retire_provisional_entry(</span>
+<span id="L378">    const rtfw_extension_host_api_v1* host,</span>
+<span id="L379">    rtfw_extension_descriptor_v1* descriptor) {</span>
+<span id="L380">    rtfw_extension_phase_v1 phase{};</span>
+<span id="L381">    phase.struct_size = RTFW_EXTENSION_PHASE_V1_REQUIRED_SIZE;</span>
+<span id="L382">    phase.abi_version = 1;</span>
+<span id="L383">    set_name(phase.name, &quot;retired.phase&quot;);</span>
+<span id="L384">    phase.callback = &amp;phase_callback;</span>
+<span id="L385">    phase.user_data = entry_state;</span>
+<span id="L386">    if (host-&gt;stage_phase(</span>
+<span id="L387">            host-&gt;context, &amp;phase, &amp;retired_provisional) != RTFW_STATUS_OK) {</span>
+<span id="L388">        return RTFW_STATUS_INVALID_ARGUMENT;</span>
+<span id="L389">    }</span>
+<span id="L390">    descriptor-&gt;struct_size = 1;</span>
+<span id="L391">    return RTFW_STATUS_OK;</span>
+<span id="L392">}</span>
+<span id="L393"></span>
+<span id="L394">extern &quot;C&quot; rtfw_status RTFW_EXTENSION_CALL reuse_provisional_entry(</span>
+<span id="L395">    const rtfw_extension_host_api_v1* host,</span>
+<span id="L396">    rtfw_extension_descriptor_v1* descriptor) {</span>
+<span id="L397">    rtfw_extension_resource_v1 resource{};</span>
+<span id="L398">    resource.struct_size = RTFW_EXTENSION_RESOURCE_V1_REQUIRED_SIZE;</span>
+<span id="L399">    resource.abi_version = 1;</span>
+<span id="L400">    set_name(resource.name, &quot;fresh.resource&quot;);</span>
+<span id="L401">    rtfw_extension_handle_v1 resource_handle{};</span>
+<span id="L402">    if (host-&gt;stage_resource(</span>
+<span id="L403">            host-&gt;context, &amp;resource, &amp;resource_handle) != RTFW_STATUS_OK) {</span>
+<span id="L404">        return RTFW_STATUS_INVALID_ARGUMENT;</span>
+<span id="L405">    }</span>
+<span id="L406">    rtfw_extension_relationship_v1 relation{};</span>
+<span id="L407">    relation.struct_size = RTFW_EXTENSION_RELATIONSHIP_V1_REQUIRED_SIZE;</span>
+<span id="L408">    relation.abi_version = 1;</span>
+<span id="L409">    relation.kind = RTFW_EXTENSION_RELATIONSHIP_PHASE_RESOURCE;</span>
+<span id="L410">    relation.access = RTFW_EXTENSION_RESOURCE_ACCESS_READ;</span>
+<span id="L411">    relation.first = retired_provisional;</span>
+<span id="L412">    relation.second = resource_handle;</span>
+<span id="L413">    (void)host-&gt;stage_relationship(host-&gt;context, &amp;relation);</span>
+<span id="L414">    *descriptor = {};</span>
+<span id="L415">    descriptor-&gt;struct_size = RTFW_EXTENSION_DESCRIPTOR_V1_REQUIRED_SIZE;</span>
+<span id="L416">    descriptor-&gt;current_abi_version = 1;</span>
+<span id="L417">    descriptor-&gt;min_compatible_abi_version = 1;</span>
+<span id="L418">    set_name(descriptor-&gt;name, &quot;reuse.provisional&quot;);</span>
+<span id="L419">    set_name(descriptor-&gt;version, &quot;1&quot;);</span>
+<span id="L420">    descriptor-&gt;resource_count = 1;</span>
+<span id="L421">    return RTFW_STATUS_OK;</span>
+<span id="L422">}</span>
+<span id="L423"></span>
+<span id="L424">rt::RuntimeConfig test_config() {</span>
+<span id="L425">    rt::RuntimeConfig config;</span>
+<span id="L426">    config.callback_capacity = 4;</span>
+<span id="L427">    config.worker_count = 1;</span>
+<span id="L428">    config.executor_queue_capacity = 8;</span>
+<span id="L429">    config.task_scratch_slots = 8;</span>
+<span id="L430">    config.scratch_bytes = 128;</span>
+<span id="L431">    config.trace_capacity = 32;</span>
+<span id="L432">    config.device_backend_capacity = 2;</span>
+<span id="L433">    config.device_outstanding_capacity = 4;</span>
+<span id="L434">    config.device_completion_batch = 2;</span>
+<span id="L435">    return config;</span>
+<span id="L436">}</span>
+<span id="L437"></span>
+<span id="L438">rt::CallbackResult cpp_phase(void*, const rt::CallbackContext&amp;) {</span>
+<span id="L439">    return rt::CallbackResult::ok;</span>
+<span id="L440">}</span>
+<span id="L441"></span>
+<span id="L442">struct IdentityAndMemory {</span>
+<span id="L443">    std::uint64_t config_id = 0;</span>
+<span id="L444">    std::uint64_t graph_id = 0;</span>
+<span id="L445">    std::uint64_t replay_id = 0;</span>
+<span id="L446">    rt::MemoryPlan memory{};</span>
+<span id="L447">};</span>
+<span id="L448"></span>
+<span id="L449">IdentityAndMemory capture_identity(</span>
+<span id="L450">    rtfw_extension_entry_fn_v1 entry,</span>
+<span id="L451">    FixtureState* state = nullptr) {</span>
+<span id="L452">    if (state) {</span>
+<span id="L453">        entry_state = state;</span>
+<span id="L454">    }</span>
+<span id="L455">    rt::Runtime runtime;</span>
+<span id="L456">    EXPECT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L457">    if (entry) {</span>
+<span id="L458">        rt::ExtensionHandle extension;</span>
+<span id="L459">        EXPECT_EQ(runtime.register_extension(entry, extension), rt::Status::ok);</span>
+<span id="L460">    }</span>
+<span id="L461">    EXPECT_EQ(runtime.finalize(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L462">    IdentityAndMemory result;</span>
+<span id="L463">    EXPECT_TRUE(runtime.memory_plan(result.memory));</span>
+<span id="L464">    rt::ObservabilityMetadata observability;</span>
+<span id="L465">    EXPECT_EQ(</span>
+<span id="L466">        runtime.observability_metadata(observability),</span>
+<span id="L467">        rt::Status::ok);</span>
+<span id="L468">    result.config_id = observability.config_id;</span>
+<span id="L469">    std::size_t bytes = 0;</span>
+<span id="L470">    EXPECT_EQ(runtime.checkpoint_size(bytes), rt::Status::ok);</span>
+<span id="L471">    std::vector&lt;std::byte&gt; checkpoint(bytes);</span>
+<span id="L472">    rt::ArtifactWriteResult write;</span>
+<span id="L473">    EXPECT_EQ(runtime.write_checkpoint(0, checkpoint, write), rt::Status::ok);</span>
+<span id="L474">    rt::CheckpointMetadata metadata;</span>
+<span id="L475">    EXPECT_EQ(</span>
+<span id="L476">        rt::inspect_checkpoint_artifact(checkpoint, metadata),</span>
+<span id="L477">        rt::Status::ok);</span>
+<span id="L478">    result.graph_id = metadata.graph_id;</span>
+<span id="L479">    result.replay_id = metadata.replay_id;</span>
+<span id="L480">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L481">    return result;</span>
+<span id="L482">}</span>
+<span id="L483"></span>
+<span id="L484">} // namespace</span>
+<span id="L485"></span>
+<span id="L486">TEST(ExtensionAbi, VersionOneLayoutsAndConstantsAreFixed) {</span>
+<span id="L487">    EXPECT_EQ(RTFW_EXTENSION_ABI_VERSION, 1u);</span>
+<span id="L488">    EXPECT_EQ(RTFW_EXTENSION_ABI_MIN_COMPATIBLE_VERSION, 1u);</span>
+<span id="L489">    EXPECT_STREQ(RTFW_EXTENSION_ENTRY_SYMBOL_V1, &quot;rtfw_extension_entry_v1&quot;);</span>
+<span id="L490">    EXPECT_EQ(sizeof(rtfw_extension_handle_v1), 16u);</span>
+<span id="L491">    EXPECT_EQ(sizeof(rtfw_extension_phase_v1), 120u);</span>
+<span id="L492">    EXPECT_EQ(sizeof(rtfw_extension_backend_v1), 264u);</span>
+<span id="L493">    EXPECT_EQ(sizeof(rtfw_extension_service_status_v1), 64u);</span>
+<span id="L494">    EXPECT_EQ(sizeof(rtfw_extension_service_api_v1), 88u);</span>
+<span id="L495">    EXPECT_EQ(sizeof(rtfw_extension_service_v1), 264u);</span>
+<span id="L496">    EXPECT_EQ(sizeof(rtfw_extension_resource_v1), 104u);</span>
+<span id="L497">    EXPECT_EQ(sizeof(rtfw_extension_relationship_v1), 80u);</span>
+<span id="L498">    EXPECT_EQ(sizeof(rtfw_extension_host_api_v1), 136u);</span>
+<span id="L499">    EXPECT_EQ(sizeof(rtfw_extension_descriptor_v1), 216u);</span>
+<span id="L500">    EXPECT_EQ(alignof(rtfw_extension_handle_v1), 4u);</span>
+<span id="L501">    EXPECT_EQ(alignof(rtfw_extension_phase_v1), 8u);</span>
+<span id="L502">    EXPECT_EQ(alignof(rtfw_extension_backend_v1), 8u);</span>
+<span id="L503">    EXPECT_EQ(alignof(rtfw_extension_service_status_v1), 8u);</span>
+<span id="L504">    EXPECT_EQ(alignof(rtfw_extension_service_api_v1), 8u);</span>
+<span id="L505">    EXPECT_EQ(alignof(rtfw_extension_service_v1), 8u);</span>
+<span id="L506">    EXPECT_EQ(alignof(rtfw_extension_resource_v1), 8u);</span>
+<span id="L507">    EXPECT_EQ(alignof(rtfw_extension_relationship_v1), 8u);</span>
+<span id="L508">    EXPECT_EQ(alignof(rtfw_extension_host_api_v1), 8u);</span>
+<span id="L509">    EXPECT_EQ(alignof(rtfw_extension_descriptor_v1), 8u);</span>
+<span id="L510">    EXPECT_EQ(offsetof(rtfw_extension_handle_v1, generation), 12u);</span>
+<span id="L511">    EXPECT_EQ(offsetof(rtfw_extension_phase_v1, callback), 72u);</span>
+<span id="L512">    EXPECT_EQ(offsetof(rtfw_extension_backend_v1, api), 72u);</span>
+<span id="L513">    EXPECT_EQ(offsetof(rtfw_extension_service_status_v1, observed_value), 24u);</span>
+<span id="L514">    EXPECT_EQ(offsetof(rtfw_extension_service_api_v1, initialize), 16u);</span>
+<span id="L515">    EXPECT_EQ(offsetof(rtfw_extension_service_v1, api), 144u);</span>
+<span id="L516">    EXPECT_EQ(offsetof(rtfw_extension_resource_v1, reserved), 72u);</span>
+<span id="L517">    EXPECT_EQ(offsetof(rtfw_extension_relationship_v1, second), 32u);</span>
+<span id="L518">    EXPECT_EQ(offsetof(rtfw_extension_host_api_v1, stage_phase), 64u);</span>
+<span id="L519">    EXPECT_EQ(offsetof(rtfw_extension_descriptor_v1, phase_count), 144u);</span>
+<span id="L520">}</span>
+<span id="L521"></span>
+<span id="L522">TEST(ExtensionRegistration, CFixtureUsesDirectEntryAndOrdinaryGraph) {</span>
+<span id="L523">    rtfw_extension_fixture_reset();</span>
+<span id="L524">    rt::Runtime runtime;</span>
+<span id="L525">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L526">    rt::ExtensionHandle handle;</span>
+<span id="L527">    ASSERT_EQ(</span>
+<span id="L528">        runtime.register_extension(&amp;rtfw_extension_entry_v1, handle),</span>
+<span id="L529">        rt::Status::ok);</span>
+<span id="L530">    EXPECT_TRUE(handle.valid());</span>
+<span id="L531">    EXPECT_EQ(runtime.extension_count(), 1u);</span>
+<span id="L532">    EXPECT_EQ(runtime.callback_count(), 1u);</span>
+<span id="L533">    ASSERT_EQ(runtime.finalize(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L534">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L535">    ASSERT_EQ(</span>
+<span id="L536">        runtime.step(rt::HostFrameContext{</span>
+<span id="L537">            9, std::chrono::milliseconds(1), std::nullopt}),</span>
+<span id="L538">        rt::Status::ok);</span>
+<span id="L539">    EXPECT_EQ(rtfw_extension_fixture_calls(), 1u);</span>
+<span id="L540">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L541">    bool ready = false;</span>
+<span id="L542">    ASSERT_EQ(runtime.detach_extension(handle, ready), rt::Status::ok);</span>
+<span id="L543">    EXPECT_TRUE(ready);</span>
+<span id="L544">}</span>
+<span id="L545"></span>
+<span id="L546">TEST(ExtensionRegistration, MalformedLateOutputAndExceptionAreAtomic) {</span>
+<span id="L547">    rt::Runtime runtime;</span>
+<span id="L548">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L549">    rt::ExtensionHandle output{7, RTFW_EXTENSION_HANDLE_EXTENSION, 8, 9};</span>
+<span id="L550">    EXPECT_EQ(</span>
+<span id="L551">        runtime.register_extension(&amp;rtfw_extension_bad_entry_v1, output),</span>
+<span id="L552">        rt::Status::invalid_argument);</span>
+<span id="L553">    EXPECT_FALSE(output.valid());</span>
+<span id="L554">    EXPECT_EQ(runtime.extension_count(), 0u);</span>
+<span id="L555">    EXPECT_EQ(runtime.callback_count(), 0u);</span>
+<span id="L556">    EXPECT_EQ(</span>
+<span id="L557">        runtime.register_extension(&amp;throwing_entry, output),</span>
+<span id="L558">        rt::Status::callback_failed);</span>
+<span id="L559">    EXPECT_EQ(runtime.extension_count(), 0u);</span>
+<span id="L560">    EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L561">    EXPECT_EQ(</span>
+<span id="L562">        runtime.register_extension(&amp;rtfw_extension_entry_v1, output),</span>
+<span id="L563">        rt::Status::ok);</span>
+<span id="L564">}</span>
+<span id="L565"></span>
+<span id="L566">TEST(ExtensionRegistration, NegotiationAndMalformedRecordsFailClosed) {</span>
+<span id="L567">    rt::Runtime runtime;</span>
+<span id="L568">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L569">    rt::ExtensionHandle output;</span>
+<span id="L570">    EXPECT_EQ(</span>
+<span id="L571">        runtime.register_extension(nullptr, output),</span>
+<span id="L572">        rt::Status::invalid_argument);</span>
+<span id="L573">    for (malformed_mode = 1; malformed_mode &lt;= 7; ++malformed_mode) {</span>
+<span id="L574">        const auto expected = malformed_mode == 1</span>
+<span id="L575">            ? rt::Status::incompatible_abi</span>
+<span id="L576">            : malformed_mode == 7</span>
+<span id="L577">                ? rt::Status::internal_error</span>
+<span id="L578">                : rt::Status::invalid_argument;</span>
+<span id="L579">        EXPECT_EQ(runtime.register_extension(&amp;malformed_entry, output), expected)</span>
+<span id="L580">            &lt;&lt; malformed_mode;</span>
+<span id="L581">        EXPECT_FALSE(output.valid());</span>
+<span id="L582">        EXPECT_EQ(runtime.extension_count(), 0u);</span>
+<span id="L583">        EXPECT_EQ(runtime.callback_count(), 0u);</span>
+<span id="L584">    }</span>
+<span id="L585">}</span>
+<span id="L586"></span>
+<span id="L587">TEST(ExtensionRegistration, FailedProvisionalGenerationCannotBeReused) {</span>
+<span id="L588">    FixtureState state;</span>
+<span id="L589">    entry_state = &amp;state;</span>
+<span id="L590">    rt::Runtime runtime;</span>
+<span id="L591">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L592">    rt::ExtensionHandle output;</span>
+<span id="L593">    EXPECT_EQ(</span>
+<span id="L594">        runtime.register_extension(&amp;retire_provisional_entry, output),</span>
+<span id="L595">        rt::Status::invalid_argument);</span>
+<span id="L596">    ASSERT_NE(retired_provisional.generation, 0u);</span>
+<span id="L597">    EXPECT_EQ(</span>
+<span id="L598">        runtime.register_extension(&amp;reuse_provisional_entry, output),</span>
+<span id="L599">        rt::Status::invalid_argument);</span>
+<span id="L600">    EXPECT_EQ(runtime.extension_count(), 0u);</span>
+<span id="L601">    EXPECT_EQ(runtime.callback_count(), 0u);</span>
+<span id="L602">    EXPECT_EQ(</span>
+<span id="L603">        runtime.register_extension(&amp;rtfw_extension_entry_v1, output),</span>
+<span id="L604">        rt::Status::ok);</span>
+<span id="L605">    EXPECT_GT(output.generation, retired_provisional.generation);</span>
+<span id="L606">}</span>
+<span id="L607"></span>
+<span id="L608">TEST(ExtensionRegistration, ExistingNameAndCapacityConflictsStayAtomic) {</span>
+<span id="L609">    {</span>
+<span id="L610">        rt::Runtime runtime;</span>
+<span id="L611">        auto config = test_config();</span>
+<span id="L612">        config.callback_capacity = 1;</span>
+<span id="L613">        ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L614">        ASSERT_EQ(</span>
+<span id="L615">            runtime.register_callback({&quot;existing&quot;, &amp;cpp_phase, nullptr}),</span>
+<span id="L616">            rt::Status::ok);</span>
+<span id="L617">        rt::ExtensionHandle output;</span>
+<span id="L618">        EXPECT_EQ(</span>
+<span id="L619">            runtime.register_extension(&amp;rtfw_extension_entry_v1, output),</span>
+<span id="L620">            rt::Status::capacity_exceeded);</span>
+<span id="L621">        EXPECT_EQ(runtime.callback_count(), 1u);</span>
+<span id="L622">        EXPECT_EQ(runtime.extension_count(), 0u);</span>
+<span id="L623">    }</span>
+<span id="L624">    {</span>
+<span id="L625">        rt::Runtime runtime;</span>
+<span id="L626">        ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L627">        ASSERT_EQ(</span>
+<span id="L628">            runtime.register_callback({&quot;c.phase&quot;, &amp;cpp_phase, nullptr}),</span>
+<span id="L629">            rt::Status::ok);</span>
+<span id="L630">        rt::ExtensionHandle output;</span>
+<span id="L631">        EXPECT_EQ(</span>
+<span id="L632">            runtime.register_extension(&amp;rtfw_extension_entry_v1, output),</span>
+<span id="L633">            rt::Status::invalid_argument);</span>
+<span id="L634">        EXPECT_EQ(runtime.callback_count(), 1u);</span>
+<span id="L635">        EXPECT_EQ(runtime.extension_count(), 0u);</span>
+<span id="L636">    }</span>
+<span id="L637">}</span>
+<span id="L638"></span>
+<span id="L639">TEST(ExtensionLifecycle, ServicesBackendsRetryDetachAndStaleHandles) {</span>
+<span id="L640">    FixtureState state;</span>
+<span id="L641">    state.shutdown_failures = 1;</span>
+<span id="L642">    entry_state = &amp;state;</span>
+<span id="L643">    rt::Runtime runtime;</span>
+<span id="L644">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L645">    rt::ExtensionHandle handle;</span>
+<span id="L646">    ASSERT_EQ(runtime.register_extension(&amp;full_entry, handle), rt::Status::ok);</span>
+<span id="L647">    rt::ExtensionInfo info;</span>
+<span id="L648">    ASSERT_EQ(runtime.extension_info(handle, info), rt::Status::ok);</span>
+<span id="L649">    EXPECT_EQ(info.negotiated_abi_version, 1u);</span>
+<span id="L650">    EXPECT_EQ(info.phase_count, 1u);</span>
+<span id="L651">    EXPECT_EQ(info.backend_count, 1u);</span>
+<span id="L652">    EXPECT_EQ(info.service_count, 2u);</span>
+<span id="L653">    EXPECT_EQ(info.relationship_count, 2u);</span>
+<span id="L654">    ASSERT_EQ(runtime.finalize(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L655">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L656">    ASSERT_GE(state.event_count, 3u);</span>
+<span id="L657">    EXPECT_EQ(state.events[0], service_one_initialize);</span>
+<span id="L658">    EXPECT_EQ(state.events[1], service_two_initialize);</span>
+<span id="L659">    EXPECT_EQ(state.events[2], backend_initialize_event);</span>
+<span id="L660">    rtfw_extension_service_status_v1 service_status{};</span>
+<span id="L661">    ASSERT_EQ(</span>
+<span id="L662">        runtime.extension_service_status(handle, 0, service_status),</span>
+<span id="L663">        rt::Status::ok);</span>
+<span id="L664">    EXPECT_EQ(service_status.healthy, 1u);</span>
+<span id="L665">    EXPECT_EQ(service_status.observed_value, 1u);</span>
+<span id="L666">    state.malformed_service_status = true;</span>
+<span id="L667">    service_status.observed_value = 77;</span>
+<span id="L668">    EXPECT_EQ(</span>
+<span id="L669">        runtime.extension_service_status(handle, 0, service_status),</span>
+<span id="L670">        rt::Status::invalid_argument);</span>
+<span id="L671">    EXPECT_EQ(service_status.observed_value, 77u);</span>
+<span id="L672">    state.malformed_service_status = false;</span>
+<span id="L673">    ASSERT_EQ(</span>
+<span id="L674">        runtime.step(rt::HostFrameContext{</span>
+<span id="L675">            1, std::chrono::milliseconds(1), std::nullopt}),</span>
+<span id="L676">        rt::Status::ok);</span>
+<span id="L677">    EXPECT_EQ(state.phase_calls, 1u);</span>
+<span id="L678"></span>
+<span id="L679">    EXPECT_EQ(runtime.stop(), rt::Status::device_reset_required);</span>
+<span id="L680">    ASSERT_EQ(runtime.extension_info(handle, info), rt::Status::ok);</span>
+<span id="L681">    EXPECT_EQ(info.state, rt::ExtensionLifecycleState::cleanup_pending);</span>
+<span id="L682">    EXPECT_FALSE(info.unload_ready);</span>
+<span id="L683">    bool ready = true;</span>
+<span id="L684">    EXPECT_EQ(</span>
+<span id="L685">        runtime.detach_extension(handle, ready),</span>
+<span id="L686">        rt::Status::invalid_state);</span>
+<span id="L687">    EXPECT_TRUE(ready);</span>
+<span id="L688">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L689">    ASSERT_EQ(runtime.detach_extension(handle, ready), rt::Status::ok);</span>
+<span id="L690">    EXPECT_TRUE(ready);</span>
+<span id="L691">    const auto retired = info.generation + 1;</span>
+<span id="L692">    ASSERT_TRUE(runtime.extension_at(0, info));</span>
+<span id="L693">    EXPECT_EQ(info.state, rt::ExtensionLifecycleState::detached);</span>
+<span id="L694">    EXPECT_EQ(info.generation, retired);</span>
+<span id="L695">    EXPECT_TRUE(info.unload_ready);</span>
+<span id="L696">    rt::ExtensionInfo unchanged = info;</span>
+<span id="L697">    EXPECT_EQ(</span>
+<span id="L698">        runtime.extension_info(handle, unchanged),</span>
+<span id="L699">        rt::Status::invalid_handle);</span>
+<span id="L700">    EXPECT_EQ(unchanged.generation, info.generation);</span>
+<span id="L701">    ready = false;</span>
+<span id="L702">    EXPECT_EQ(</span>
+<span id="L703">        runtime.detach_extension(handle, ready),</span>
+<span id="L704">        rt::Status::invalid_handle);</span>
+<span id="L705">    EXPECT_FALSE(ready);</span>
+<span id="L706"></span>
+<span id="L707">    ASSERT_GE(state.event_count, 11u);</span>
+<span id="L708">    EXPECT_LT(</span>
+<span id="L709">        std::find(</span>
+<span id="L710">            state.events.begin(), state.events.end(), backend_shutdown_event),</span>
+<span id="L711">        std::find(</span>
+<span id="L712">            state.events.begin(), state.events.end(), service_one_quiesce));</span>
+<span id="L713">    EXPECT_LT(</span>
+<span id="L714">        std::find(</span>
+<span id="L715">            state.events.begin(), state.events.end(), service_two_shutdown),</span>
+<span id="L716">        std::find(</span>
+<span id="L717">            state.events.begin(), state.events.end(), service_one_quiesce));</span>
+<span id="L718">}</span>
+<span id="L719"></span>
+<span id="L720">TEST(ExtensionLifecycle, OwnersAndGenerationsAreRuntimeLocal) {</span>
+<span id="L721">    FixtureState first_state;</span>
+<span id="L722">    FixtureState second_state;</span>
+<span id="L723">    rt::Runtime first;</span>
+<span id="L724">    rt::Runtime second;</span>
+<span id="L725">    ASSERT_EQ(first.configure(test_config()), rt::Status::ok);</span>
+<span id="L726">    ASSERT_EQ(second.configure(test_config()), rt::Status::ok);</span>
+<span id="L727">    rt::ExtensionHandle first_handle;</span>
+<span id="L728">    rt::ExtensionHandle second_handle;</span>
+<span id="L729">    entry_state = &amp;first_state;</span>
+<span id="L730">    ASSERT_EQ(first.register_extension(&amp;full_entry, first_handle), rt::Status::ok);</span>
+<span id="L731">    entry_state = &amp;second_state;</span>
+<span id="L732">    ASSERT_EQ(</span>
+<span id="L733">        second.register_extension(&amp;full_entry, second_handle), rt::Status::ok);</span>
+<span id="L734">    EXPECT_NE(first_handle.owner, second_handle.owner);</span>
+<span id="L735">    rt::ExtensionInfo sentinel;</span>
+<span id="L736">    sentinel.generation = 99;</span>
+<span id="L737">    EXPECT_EQ(</span>
+<span id="L738">        first.extension_info(second_handle, sentinel),</span>
+<span id="L739">        rt::Status::invalid_handle);</span>
+<span id="L740">    EXPECT_EQ(sentinel.generation, 99u);</span>
+<span id="L741">    auto wrong_kind = first_handle;</span>
+<span id="L742">    wrong_kind.kind = RTFW_EXTENSION_HANDLE_SERVICE;</span>
+<span id="L743">    EXPECT_EQ(</span>
+<span id="L744">        first.extension_info(wrong_kind, sentinel),</span>
+<span id="L745">        rt::Status::invalid_handle);</span>
+<span id="L746">    EXPECT_EQ(sentinel.generation, 99u);</span>
+<span id="L747">    ASSERT_EQ(first.finalize(), rt::Status::ok) &lt;&lt; first.last_error();</span>
+<span id="L748">    ASSERT_EQ(second.finalize(), rt::Status::ok) &lt;&lt; second.last_error();</span>
+<span id="L749">    ASSERT_EQ(first.stop(), rt::Status::ok);</span>
+<span id="L750">    ASSERT_EQ(second.stop(), rt::Status::ok);</span>
+<span id="L751">}</span>
+<span id="L752"></span>
+<span id="L753">TEST(ExtensionLifecycle, ServiceStartupFailureRollsBackAndRecovers) {</span>
+<span id="L754">    FixtureState state;</span>
+<span id="L755">    state.initialize_failures = 1;</span>
+<span id="L756">    entry_state = &amp;state;</span>
+<span id="L757">    rt::Runtime runtime;</span>
+<span id="L758">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L759">    rt::ExtensionHandle handle;</span>
+<span id="L760">    ASSERT_EQ(runtime.register_extension(&amp;full_entry, handle), rt::Status::ok);</span>
+<span id="L761">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L762">    EXPECT_EQ(runtime.start(), rt::Status::callback_failed);</span>
+<span id="L763">    EXPECT_EQ(runtime.state(), rt::RuntimeState::finalized);</span>
+<span id="L764">    ASSERT_EQ(runtime.start(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L765">    EXPECT_TRUE(state.first.initialized);</span>
+<span id="L766">    EXPECT_TRUE(state.second.initialized);</span>
+<span id="L767">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L768">}</span>
+<span id="L769"></span>
+<span id="L770">TEST(ExtensionLifecycle, RequestStopFailureRetainsFirstErrorAndRetriesOwner) {</span>
+<span id="L771">    FixtureState state;</span>
+<span id="L772">    state.request_stop_failures = 1;</span>
+<span id="L773">    entry_state = &amp;state;</span>
+<span id="L774">    rt::Runtime runtime;</span>
+<span id="L775">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L776">    rt::ExtensionHandle handle;</span>
+<span id="L777">    ASSERT_EQ(runtime.register_extension(&amp;full_entry, handle), rt::Status::ok);</span>
+<span id="L778">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L779">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L780">    EXPECT_EQ(runtime.stop(), rt::Status::callback_failed);</span>
+<span id="L781">    rt::ExtensionInfo info;</span>
+<span id="L782">    ASSERT_EQ(runtime.extension_info(handle, info), rt::Status::ok);</span>
+<span id="L783">    EXPECT_EQ(info.state, rt::ExtensionLifecycleState::cleanup_pending);</span>
+<span id="L784">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L785">    EXPECT_EQ(</span>
+<span id="L786">        std::count(</span>
+<span id="L787">            state.events.begin(), state.events.end(), service_two_stop),</span>
+<span id="L788">        1);</span>
+<span id="L789">    EXPECT_EQ(</span>
+<span id="L790">        std::count(</span>
+<span id="L791">            state.events.begin(), state.events.end(), service_one_stop),</span>
+<span id="L792">        2);</span>
+<span id="L793">}</span>
+<span id="L794"></span>
+<span id="L795">TEST(ExtensionLifecycle, ServiceShutdownFailureRetriesOnlyUnresolvedOwner) {</span>
+<span id="L796">    FixtureState state;</span>
+<span id="L797">    state.service_shutdown_failures = 1;</span>
+<span id="L798">    entry_state = &amp;state;</span>
+<span id="L799">    rt::Runtime runtime;</span>
+<span id="L800">    ASSERT_EQ(runtime.configure(test_config()), rt::Status::ok);</span>
+<span id="L801">    rt::ExtensionHandle handle;</span>
+<span id="L802">    ASSERT_EQ(runtime.register_extension(&amp;full_entry, handle), rt::Status::ok);</span>
+<span id="L803">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L804">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L805"></span>
+<span id="L806">    EXPECT_EQ(runtime.stop(), rt::Status::invalid_state);</span>
+<span id="L807">    rt::ExtensionInfo info;</span>
+<span id="L808">    ASSERT_EQ(runtime.extension_info(handle, info), rt::Status::ok);</span>
+<span id="L809">    EXPECT_EQ(info.state, rt::ExtensionLifecycleState::cleanup_pending);</span>
+<span id="L810">    EXPECT_FALSE(info.unload_ready);</span>
+<span id="L811">    EXPECT_EQ(</span>
+<span id="L812">        std::count(</span>
+<span id="L813">            state.events.begin(), state.events.end(), service_two_quiesce),</span>
+<span id="L814">        1);</span>
+<span id="L815">    EXPECT_EQ(</span>
+<span id="L816">        std::count(</span>
+<span id="L817">            state.events.begin(), state.events.end(), service_two_shutdown),</span>
+<span id="L818">        1);</span>
+<span id="L819">    EXPECT_EQ(</span>
+<span id="L820">        std::count(</span>
+<span id="L821">            state.events.begin(), state.events.end(), service_one_shutdown),</span>
+<span id="L822">        1);</span>
+<span id="L823"></span>
+<span id="L824">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L825">    EXPECT_EQ(</span>
+<span id="L826">        std::count(</span>
+<span id="L827">            state.events.begin(), state.events.end(), service_two_quiesce),</span>
+<span id="L828">        1);</span>
+<span id="L829">    EXPECT_EQ(</span>
+<span id="L830">        std::count(</span>
+<span id="L831">            state.events.begin(), state.events.end(), service_two_shutdown),</span>
+<span id="L832">        2);</span>
+<span id="L833">    EXPECT_EQ(</span>
+<span id="L834">        std::count(</span>
+<span id="L835">            state.events.begin(), state.events.end(), service_one_shutdown),</span>
+<span id="L836">        1);</span>
+<span id="L837">}</span>
+<span id="L838"></span>
+<span id="L839">TEST(MemoryPlan, ExtensionStorageIsAccountedInExistingControlRows) {</span>
+<span id="L840">    FixtureState state;</span>
+<span id="L841">    const auto base = capture_identity(nullptr);</span>
+<span id="L842">    const auto phase = capture_identity(&amp;rtfw_extension_entry_v1);</span>
+<span id="L843">    const auto full = capture_identity(&amp;full_entry, &amp;state);</span>
+<span id="L844">    EXPECT_GT(phase.memory.runtime_control_bytes,</span>
+<span id="L845">              base.memory.runtime_control_bytes);</span>
+<span id="L846">    EXPECT_EQ(phase.memory.device_control_bytes,</span>
+<span id="L847">              base.memory.device_control_bytes);</span>
+<span id="L848">    EXPECT_GT(full.memory.runtime_control_bytes,</span>
+<span id="L849">              phase.memory.runtime_control_bytes);</span>
+<span id="L850">    EXPECT_GT(full.memory.device_control_bytes,</span>
+<span id="L851">              base.memory.device_control_bytes);</span>
+<span id="L852">    EXPECT_EQ(</span>
+<span id="L853">        full.memory.planned_bytes,</span>
+<span id="L854">        full.memory.runtime_control_bytes +</span>
+<span id="L855">            full.memory.executor_control_bytes +</span>
+<span id="L856">            full.memory.device_control_bytes +</span>
+<span id="L857">            full.memory.phase_scratch_total_bytes +</span>
+<span id="L858">            full.memory.task_scratch_total_bytes +</span>
+<span id="L859">            full.memory.trace_storage_bytes);</span>
+<span id="L860">}</span>
+<span id="L861"></span>
+<span id="L862">TEST(DeterminismReplay, ExtensionSemanticsParticipateWithoutPointers) {</span>
+<span id="L863">    FixtureState first_state;</span>
+<span id="L864">    FixtureState second_state;</span>
+<span id="L865">    const auto base = capture_identity(nullptr);</span>
+<span id="L866">    const auto first = capture_identity(&amp;full_entry, &amp;first_state);</span>
+<span id="L867">    const auto second = capture_identity(&amp;full_entry, &amp;second_state);</span>
+<span id="L868">    EXPECT_NE(first.config_id, base.config_id);</span>
+<span id="L869">    EXPECT_NE(first.graph_id, base.graph_id);</span>
+<span id="L870">    EXPECT_NE(first.replay_id, base.replay_id);</span>
+<span id="L871">    EXPECT_EQ(first.config_id, second.config_id);</span>
+<span id="L872">    EXPECT_EQ(first.graph_id, second.graph_id);</span>
+<span id="L873">    EXPECT_EQ(first.replay_id, second.replay_id);</span>
+<span id="L874">}</span></pre></html>

@@ -124,7 +124,7 @@ Passing this preflight does not establish RT2. It does not validate BIOS and
 power settings, IRQ placement, driver/device behavior, PCIe topology, thermal
 behavior, workload bounds, or measured deadline distributions. Those remain
 deployment qualification requirements in the
-[product contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/product_contract.md).
+[product contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/product_contract.md).
 
 ## M15 policy application
 
@@ -135,7 +135,7 @@ NUMA CPU selection, stack/guard, bounded name, and wait behavior without
 mutation. Startup applies and reads back runtime-owned lanes before a shared
 gate commits. The caller frame is read back only; host-adapter and vendor lanes
 remain external and verify-only. Strict unsupported or mismatched policy fails
-closed before callbacks. See [the policy contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/cpu_memory_policy.md).
+closed before callbacks. See [the policy contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/cpu_memory_policy.md).
 
 M15-03 adds a process-local resident-memory transaction after preflight and
 before the thread gate. Exactly phase scratch, task scratch, and trace storage

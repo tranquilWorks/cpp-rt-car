@@ -1,0 +1,4094 @@
+{
+  "entries": [
+    {
+      "contract": {
+        "budget_ns": 3000000,
+        "default_releases": 24,
+        "id": "plant",
+        "period_ticks": 1
+      },
+      "explanation": "plant uses the frozen period and budget below, registered in fixed domain order. The six-tick repeating horizon has 27 phase references; 24 default logical ticks produce the declared release counts. Budgets are admission inputs, not measured WCET.",
+      "id": "rates/plant",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "budget_ns": 1000000,
+        "default_releases": 12,
+        "id": "sensor",
+        "period_ticks": 2
+      },
+      "explanation": "sensor uses the frozen period and budget below, registered in fixed domain order. The six-tick repeating horizon has 27 phase references; 24 default logical ticks produce the declared release counts. Budgets are admission inputs, not measured WCET.",
+      "id": "rates/sensor",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "budget_ns": 1000000,
+        "default_releases": 8,
+        "id": "controller",
+        "period_ticks": 3
+      },
+      "explanation": "controller uses the frozen period and budget below, registered in fixed domain order. The six-tick repeating horizon has 27 phase references; 24 default logical ticks produce the declared release counts. Budgets are admission inputs, not measured WCET.",
+      "id": "rates/controller",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "budget_ns": 1000000,
+        "default_releases": 8,
+        "id": "actuator",
+        "period_ticks": 3
+      },
+      "explanation": "actuator uses the frozen period and budget below, registered in fixed domain order. The six-tick repeating horizon has 27 phase references; 24 default logical ticks produce the declared release counts. Budgets are admission inputs, not measured WCET.",
+      "id": "rates/actuator",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "budget_ns": 1000000,
+        "default_releases": 4,
+        "id": "observe",
+        "period_ticks": 6
+      },
+      "explanation": "observe uses the frozen period and budget below, registered in fixed domain order. The six-tick repeating horizon has 27 phase references; 24 default logical ticks produce the declared release counts. Budgets are admission inputs, not measured WCET.",
+      "id": "rates/observe",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "default_calls": 24,
+        "id": "input",
+        "kind": "cpu",
+        "rate": "plant",
+        "reads": [],
+        "writes": [
+          "command"
+        ]
+      },
+      "explanation": "Input selects the previous acknowledged actuator sample, applies copied controls and latches command arrays before physics. The feedback channel is delayed sample-and-hold, not a cyclic graph edge.",
+      "id": "phases/input",
+      "sources": [
+        {
+          "anchor": "    case 0:",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_xdma/session.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "default_calls": 24,
+        "id": "physics",
+        "kind": "cpu_or_cuda",
+        "rate": "plant",
+        "reads": [
+          "command"
+        ],
+        "writes": [
+          "plant"
+        ]
+      },
+      "explanation": "Physics dispatches nested bounded CPU tasks or the CUDA owner. Integer velocity then position update matches the independent full-state oracle. CUDA changes this phase only; publication waits for terminal completion.",
+      "id": "phases/physics",
+      "sources": [
+        {
+          "anchor": "    case 1:",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_xdma/session.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_cuda/physics.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "default_calls": 24,
+        "id": "stage",
+        "kind": "cpu",
+        "rate": "plant",
+        "reads": [
+          "plant"
+        ],
+        "writes": [
+          "stage"
+        ]
+      },
+      "explanation": "Stage serializes complete position/velocity into fixed host-visible channel frames. The combined pipeline uses explicit host staging; device-local timelines do not establish peer DMA.",
+      "id": "phases/stage",
+      "sources": [
+        {
+          "anchor": "    case 2:",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_xdma/session.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "default_calls": 12,
+        "id": "sensor",
+        "kind": "cpu_or_xdma",
+        "rate": "sensor",
+        "reads": [],
+        "writes": [
+          "sensor"
+        ]
+      },
+      "explanation": "Sensor copies and validates the selected sample and applies the latched calibration. The XDMA variant consumes native backend sampled input with exact sequence, age and completion identity.",
+      "id": "phases/sensor",
+      "sources": [
+        {
+          "anchor": "    case 3:",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_xdma/session.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "default_calls": 8,
+        "id": "controller",
+        "kind": "cpu",
+        "rate": "controller",
+        "reads": [],
+        "writes": [
+          "controller"
+        ]
+      },
+      "explanation": "Controller computes bounded integer gain times velocity error, clamps acceleration to four and publishes a fixed command. An external controller runs in a separate process and supplies a copied snapshot; callbacks do no transport I/O.",
+      "id": "phases/controller",
+      "sources": [
+        {
+          "anchor": "    case 4:",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_xdma/session.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "default_calls": 8,
+        "id": "actuator",
+        "kind": "cpu_or_xdma",
+        "rate": "actuator",
+        "reads": [],
+        "writes": [
+          "actuator"
+        ]
+      },
+      "explanation": "Actuator encodes the command, with explicit zero effort on absent input. XDMA sampled output is safe only after an actual terminal acknowledgement; acceptance of submission alone is insufficient.",
+      "id": "phases/actuator",
+      "sources": [
+        {
+          "anchor": "    case 5:",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_xdma/session.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "default_calls": 4,
+        "id": "aggregate",
+        "kind": "cpu",
+        "rate": "observe",
+        "reads": [],
+        "writes": [
+          "aggregate"
+        ]
+      },
+      "explanation": "Aggregate sums each position/velocity axis from its selected channel snapshot into six int64 values. It does not read another active rate domain's live arrays.",
+      "id": "phases/aggregate",
+      "sources": [
+        {
+          "anchor": "    case 6:",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_xdma/session.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "default_calls": 4,
+        "id": "telemetry",
+        "kind": "cpu",
+        "rate": "observe",
+        "reads": [
+          "aggregate"
+        ],
+        "writes": []
+      },
+      "explanation": "Telemetry records bounded phase observations. Host code drains trace, rate and control streams after settled steps and writes evidence off lane. Exact loss invalidates the sample replay gate.",
+      "id": "phases/telemetry",
+      "sources": [
+        {
+          "anchor": "    case 7:",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_xdma/session.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "calibration_identity": 1,
+        "capacity_payload_bytes": 6144,
+        "clock_domain_identity": 1,
+        "consumer": "sensor",
+        "device_rule": "M21 sampled descriptor only with exactly one device endpoint; CPU uses cross-rate bytes/metadata, no fake HAL qualification",
+        "device_timeout_ns": 8000000,
+        "elements_per_entity": 6,
+        "encoding": "signed_int32_le",
+        "frame_header_bytes": 120,
+        "id": "plant_sensor",
+        "identity": 26001,
+        "initial": "zero",
+        "max_age_ticks": 2,
+        "offset": [
+          0,
+          1
+        ],
+        "overrun": "fail_release",
+        "payload_layout": "Fixed 256 entities; field then axis then entity, signed int32 LE; inactive tail zero; sensor field order position then velocity, command field acceleration. Initial plant/sensor frame is zero, actuator_input initial frame is seeded M24 acceleration; safe output payload always zero.",
+        "producer": "stage",
+        "ring_slots": 4,
+        "safe": "zero_effort_or_zero_sensor; startup/failure/shutdown outputs require terminal acknowledgement",
+        "sample_interval_ns": 10000000,
+        "samples_per_frame": 1,
+        "scale": [
+          1,
+          1
+        ],
+        "sequence_start": 1,
+        "stale": "substitute_initial",
+        "timestamp": "Runtime logical ns on CPU; backend domain/completion ns for device frames, correlated explicitly; never compare uncorrelated clocks",
+        "trigger_identity": 1,
+        "underrun": "substitute_safe",
+        "units_identity": 26001
+      },
+      "explanation": "plant_sensor transports canonical fixed payloads through sample-and-hold selection. The record below fixes identity, units, age, frame sizes and four-slot capacity. CPU application headers and public sampled headers are both 120 bytes with different semantics; adapters explicitly encode them. plant_aggregate stays a CPU channel.",
+      "id": "channels/plant_sensor",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "// Derived platform ownership primitives from the unchanged M25-04 kit.",
+          "path": "samples/golden_system/channel.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/io.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/codec.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "calibration_identity": 1,
+        "capacity_payload_bytes": 6144,
+        "clock_domain_identity": 1,
+        "consumer": "controller",
+        "device_rule": "M21 sampled descriptor only with exactly one device endpoint; CPU uses cross-rate bytes/metadata, no fake HAL qualification",
+        "device_timeout_ns": 8000000,
+        "elements_per_entity": 6,
+        "encoding": "signed_int32_le",
+        "frame_header_bytes": 120,
+        "id": "sensor_controller",
+        "identity": 26002,
+        "initial": "zero",
+        "max_age_ticks": 3,
+        "offset": [
+          0,
+          1
+        ],
+        "overrun": "fail_release",
+        "payload_layout": "Fixed 256 entities; field then axis then entity, signed int32 LE; inactive tail zero; sensor field order position then velocity, command field acceleration. Initial plant/sensor frame is zero, actuator_input initial frame is seeded M24 acceleration; safe output payload always zero.",
+        "producer": "sensor",
+        "ring_slots": 4,
+        "safe": "zero_effort_or_zero_sensor; startup/failure/shutdown outputs require terminal acknowledgement",
+        "sample_interval_ns": 10000000,
+        "samples_per_frame": 1,
+        "scale": [
+          1,
+          1
+        ],
+        "sequence_start": 1,
+        "stale": "substitute_initial",
+        "timestamp": "Runtime logical ns on CPU; backend domain/completion ns for device frames, correlated explicitly; never compare uncorrelated clocks",
+        "trigger_identity": 1,
+        "underrun": "substitute_safe",
+        "units_identity": 26001
+      },
+      "explanation": "sensor_controller transports canonical fixed payloads through sample-and-hold selection. The record below fixes identity, units, age, frame sizes and four-slot capacity. CPU application headers and public sampled headers are both 120 bytes with different semantics; adapters explicitly encode them. plant_aggregate stays a CPU channel.",
+      "id": "channels/sensor_controller",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "// Derived platform ownership primitives from the unchanged M25-04 kit.",
+          "path": "samples/golden_system/channel.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/io.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/codec.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "calibration_identity": 1,
+        "capacity_payload_bytes": 3072,
+        "clock_domain_identity": 1,
+        "consumer": "actuator",
+        "device_rule": "M21 sampled descriptor only with exactly one device endpoint; CPU uses cross-rate bytes/metadata, no fake HAL qualification",
+        "device_timeout_ns": 8000000,
+        "elements_per_entity": 3,
+        "encoding": "signed_int32_le",
+        "frame_header_bytes": 120,
+        "id": "controller_actuator",
+        "identity": 26003,
+        "initial": "zero",
+        "max_age_ticks": 3,
+        "offset": [
+          0,
+          1
+        ],
+        "overrun": "fail_release",
+        "payload_layout": "Fixed 256 entities; field then axis then entity, signed int32 LE; inactive tail zero; sensor field order position then velocity, command field acceleration. Initial plant/sensor frame is zero, actuator_input initial frame is seeded M24 acceleration; safe output payload always zero.",
+        "producer": "controller",
+        "ring_slots": 4,
+        "safe": "zero_effort_or_zero_sensor; startup/failure/shutdown outputs require terminal acknowledgement",
+        "sample_interval_ns": 10000000,
+        "samples_per_frame": 1,
+        "scale": [
+          1,
+          1
+        ],
+        "sequence_start": 1,
+        "stale": "substitute_initial",
+        "timestamp": "Runtime logical ns on CPU; backend domain/completion ns for device frames, correlated explicitly; never compare uncorrelated clocks",
+        "trigger_identity": 1,
+        "underrun": "substitute_safe",
+        "units_identity": 26002
+      },
+      "explanation": "controller_actuator transports canonical fixed payloads through sample-and-hold selection. The record below fixes identity, units, age, frame sizes and four-slot capacity. CPU application headers and public sampled headers are both 120 bytes with different semantics; adapters explicitly encode them. plant_aggregate stays a CPU channel.",
+      "id": "channels/controller_actuator",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "// Derived platform ownership primitives from the unchanged M25-04 kit.",
+          "path": "samples/golden_system/channel.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/io.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/codec.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "calibration_identity": 1,
+        "capacity_payload_bytes": 3072,
+        "clock_domain_identity": 1,
+        "consumer": "input",
+        "device_rule": "M21 sampled descriptor only with exactly one device endpoint; CPU uses cross-rate bytes/metadata, no fake HAL qualification",
+        "device_timeout_ns": 8000000,
+        "elements_per_entity": 3,
+        "encoding": "signed_int32_le",
+        "frame_header_bytes": 120,
+        "id": "actuator_input",
+        "identity": 26004,
+        "initial": "initial_acceleration",
+        "max_age_ticks": 3,
+        "offset": [
+          0,
+          1
+        ],
+        "overrun": "fail_release",
+        "payload_layout": "Fixed 256 entities; field then axis then entity, signed int32 LE; inactive tail zero; sensor field order position then velocity, command field acceleration. Initial plant/sensor frame is zero, actuator_input initial frame is seeded M24 acceleration; safe output payload always zero.",
+        "producer": "actuator",
+        "ring_slots": 4,
+        "safe": "zero_effort_or_zero_sensor; startup/failure/shutdown outputs require terminal acknowledgement",
+        "sample_interval_ns": 10000000,
+        "samples_per_frame": 1,
+        "scale": [
+          1,
+          1
+        ],
+        "sequence_start": 1,
+        "stale": "substitute_initial",
+        "timestamp": "Runtime logical ns on CPU; backend domain/completion ns for device frames, correlated explicitly; never compare uncorrelated clocks",
+        "trigger_identity": 1,
+        "underrun": "substitute_safe",
+        "units_identity": 26002
+      },
+      "explanation": "actuator_input transports canonical fixed payloads through sample-and-hold selection. The record below fixes identity, units, age, frame sizes and four-slot capacity. CPU application headers and public sampled headers are both 120 bytes with different semantics; adapters explicitly encode them. plant_aggregate stays a CPU channel.",
+      "id": "channels/actuator_input",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "// Derived platform ownership primitives from the unchanged M25-04 kit.",
+          "path": "samples/golden_system/channel.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/io.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/codec.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "calibration_identity": 1,
+        "capacity_payload_bytes": 6144,
+        "clock_domain_identity": 1,
+        "consumer": "aggregate",
+        "device_rule": "M21 sampled descriptor only with exactly one device endpoint; CPU uses cross-rate bytes/metadata, no fake HAL qualification",
+        "device_timeout_ns": 8000000,
+        "elements_per_entity": 6,
+        "encoding": "signed_int32_le",
+        "frame_header_bytes": 120,
+        "id": "plant_aggregate",
+        "identity": 26005,
+        "initial": "zero",
+        "max_age_ticks": 6,
+        "offset": [
+          0,
+          1
+        ],
+        "overrun": "fail_release",
+        "payload_layout": "Fixed 256 entities; field then axis then entity, signed int32 LE; inactive tail zero; sensor field order position then velocity, command field acceleration. Initial plant/sensor frame is zero, actuator_input initial frame is seeded M24 acceleration; safe output payload always zero.",
+        "producer": "stage",
+        "ring_slots": 4,
+        "safe": "zero_effort_or_zero_sensor; startup/failure/shutdown outputs require terminal acknowledgement",
+        "sample_interval_ns": 10000000,
+        "samples_per_frame": 1,
+        "scale": [
+          1,
+          1
+        ],
+        "sequence_start": 1,
+        "stale": "substitute_initial",
+        "timestamp": "Runtime logical ns on CPU; backend domain/completion ns for device frames, correlated explicitly; never compare uncorrelated clocks",
+        "trigger_identity": 1,
+        "underrun": "substitute_safe",
+        "units_identity": 26001
+      },
+      "explanation": "plant_aggregate transports canonical fixed payloads through sample-and-hold selection. The record below fixes identity, units, age, frame sizes and four-slot capacity. CPU application headers and public sampled headers are both 120 bytes with different semantics; adapters explicitly encode them. plant_aggregate stays a CPU channel.",
+      "id": "channels/plant_aggregate",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "// Derived platform ownership primitives from the unchanged M25-04 kit.",
+          "path": "samples/golden_system/channel.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/io.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/codec.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-02",
+        "detection_releases": 1,
+        "id": "overload",
+        "index": 1,
+        "outcome": "mandatory deadline fail; no late output claimed",
+        "phase": "input",
+        "recovery": "fresh_owner",
+        "status": "planned",
+        "tick": 6
+      },
+      "explanation": "overload: mandatory deadline fail; no late output claimed. Inject at logical tick 6 in input; recovery policy is fresh_owner. The runner retains observed status, successful prefix, source/state and checked cleanup. A failed owner is not reused as an unreported success.",
+      "id": "faults/overload",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-02",
+        "detection_releases": 1,
+        "id": "stale_input",
+        "index": 2,
+        "outcome": "inclusive max-age exceeded; substitute initial sensor; count stale/substitution",
+        "phase": "controller",
+        "recovery": "clear_at_boundary",
+        "status": "planned",
+        "tick": 6
+      },
+      "explanation": "stale_input: inclusive max-age exceeded; substitute initial sensor; count stale/substitution. Inject at logical tick 6 in controller; recovery policy is clear_at_boundary. The runner retains observed status, successful prefix, source/state and checked cleanup. A failed owner is not reused as an unreported success.",
+      "id": "faults/stale_input",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-04",
+        "detection_releases": 1,
+        "id": "underflow",
+        "index": 3,
+        "outcome": "missing command substitutes zero effort; output safe only after ack",
+        "phase": "actuator",
+        "recovery": "clear_at_boundary",
+        "status": "planned",
+        "tick": 6
+      },
+      "explanation": "underflow: missing command substitutes zero effort; output safe only after ack. Inject at logical tick 6 in actuator; recovery policy is clear_at_boundary. The runner retains observed status, successful prefix, source/state and checked cleanup. A failed owner is not reused as an unreported success.",
+      "id": "faults/underflow",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-04",
+        "detection_releases": 1,
+        "id": "overrun",
+        "index": 4,
+        "outcome": "duplicate publication rejected; release failure; no overwrite",
+        "phase": "sensor",
+        "recovery": "fresh_owner",
+        "status": "planned",
+        "tick": 6
+      },
+      "explanation": "overrun: duplicate publication rejected; release failure; no overwrite. Inject at logical tick 6 in sensor; recovery policy is fresh_owner. The runner retains observed status, successful prefix, source/state and checked cleanup. A failed owner is not reused as an unreported success.",
+      "id": "faults/overrun",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-03",
+        "detection_releases": 1,
+        "id": "device_loss",
+        "index": 5,
+        "outcome": "terminal device_lost; no completion payload published",
+        "phase": "physics",
+        "recovery": "reset_then_fresh_owner",
+        "status": "planned",
+        "tick": 6
+      },
+      "explanation": "device_loss: terminal device_lost; no completion payload published. Inject at logical tick 6 in physics; recovery policy is reset_then_fresh_owner. The runner retains observed status, successful prefix, source/state and checked cleanup. A failed owner is not reused as an unreported success. Lost health cannot be reset to healthy; stop the old owner and recover with a fresh compatible owner. Resettable failure is a separate campaign.",
+      "id": "faults/device_loss",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-02",
+        "detection_releases": 1,
+        "id": "control_rejected",
+        "index": 6,
+        "outcome": "out-of-range typed body rejected off lane; malformed raw record invalid; no sequence advance",
+        "phase": "input",
+        "recovery": "restage_valid",
+        "status": "planned",
+        "tick": 6
+      },
+      "explanation": "control_rejected: out-of-range typed body rejected off lane; malformed raw record invalid; no sequence advance. Inject at logical tick 6 in input; recovery policy is restage_valid. The runner retains observed status, successful prefix, source/state and checked cleanup. A failed owner is not reused as an unreported success.",
+      "id": "faults/control_rejected",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-02",
+        "detection_releases": 1,
+        "id": "control_replaced",
+        "index": 7,
+        "outcome": "two valid same-kind records; earlier replaced, only later committed",
+        "phase": "controller",
+        "recovery": "continue",
+        "status": "planned",
+        "tick": 6
+      },
+      "explanation": "control_replaced: two valid same-kind records; earlier replaced, only later committed. Inject at logical tick 6 in controller; recovery policy is continue. The runner retains observed status, successful prefix, source/state and checked cleanup. A failed owner is not reused as an unreported success.",
+      "id": "faults/control_replaced",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-03",
+        "detection_releases": 1,
+        "id": "reset_failure",
+        "index": 8,
+        "outcome": "failed reset retains borrowed resources; stop non-success retained",
+        "phase": "physics",
+        "recovery": "bounded_retry",
+        "status": "planned",
+        "tick": 6
+      },
+      "explanation": "reset_failure: failed reset retains borrowed resources; stop non-success retained. Inject at logical tick 6 in physics; recovery policy is bounded_retry. The runner retains observed status, successful prefix, source/state and checked cleanup. A failed owner is not reused as an unreported success.",
+      "id": "faults/reset_failure",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-04",
+        "detection_releases": 1,
+        "id": "stop_failure",
+        "index": 9,
+        "outcome": "missing safe acknowledgement leaves safety unknown, invocation failure",
+        "phase": "actuator",
+        "recovery": "bounded_retry",
+        "status": "planned",
+        "tick": 6
+      },
+      "explanation": "stop_failure: missing safe acknowledgement leaves safety unknown, invocation failure. Inject at logical tick 6 in actuator; recovery policy is bounded_retry. The runner retains observed status, successful prefix, source/state and checked cleanup. A failed owner is not reused as an unreported success.",
+      "id": "faults/stop_failure",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-02",
+        "detection_releases": 1,
+        "id": "peer_missing",
+        "index": 10,
+        "outcome": "one nonblocking read; zero effort on absent/expired peer",
+        "phase": "controller",
+        "recovery": "fresh_mapping_and_owner",
+        "status": "planned",
+        "tick": 6
+      },
+      "explanation": "peer_missing: one nonblocking read; zero effort on absent/expired peer. Inject at logical tick 6 in controller; recovery policy is fresh_mapping_and_owner. The runner retains observed status, successful prefix, source/state and checked cleanup. A failed owner is not reused as an unreported success.",
+      "id": "faults/peer_missing",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "detection_releases": 1,
+        "id": "telemetry_loss",
+        "index": 11,
+        "outcome": "forced capacity pressure exposes exact gaps; replay refused",
+        "phase": "telemetry",
+        "recovery": "fresh_owner",
+        "status": "planned",
+        "tick": 6
+      },
+      "explanation": "Pause the actual trace consumer at tick 6 with capacity 64; observe 20 lost records at tick 12. The sample guard refuses replay before effects, then verifies paired fresh-owner recovery. Detection occurs at the next telemetry release, six logical ticks later; it is not instantaneous detection or a Runtime-wide rejection promise.",
+      "id": "faults/telemetry_loss",
+      "sources": [
+        {
+          "anchor": "#include \"session.hpp\"",
+          "path": "samples/golden_showcase/telemetry_loss.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/replay_gate.hpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "workers",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "host_startup",
+        "values": [
+          1,
+          2,
+          3
+        ]
+      },
+      "explanation": "workers executes every frozen value in the complete golden loop. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/workers",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "grain",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "host_startup",
+        "values": [
+          1,
+          4,
+          16,
+          64
+        ]
+      },
+      "explanation": "grain executes every frozen value in the complete golden loop. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/grain",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "rate_multiplier",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "new_configuration",
+        "values": [
+          1,
+          2,
+          4
+        ]
+      },
+      "explanation": "rate_multiplier executes every frozen value in the separate public Runtime task/rate/trace probe. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/rate_multiplier",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "budget_percent",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "new_configuration",
+        "values": [
+          25,
+          50,
+          100
+        ]
+      },
+      "explanation": "budget_percent executes every frozen value in the separate public Runtime task/rate/trace probe. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/budget_percent",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "queue_slots",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "new_configuration",
+        "values": [
+          4,
+          32,
+          1024
+        ]
+      },
+      "explanation": "queue_slots executes every frozen value in the separate public Runtime task/rate/trace probe. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/queue_slots",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "scratch_bytes",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "new_configuration",
+        "values": [
+          0,
+          64,
+          256
+        ]
+      },
+      "explanation": "scratch_bytes executes every frozen value in the separate public Runtime task/rate/trace probe. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/scratch_bytes",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "device_depth",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "new_configuration",
+        "values": [
+          1,
+          2
+        ]
+      },
+      "explanation": "device_depth executes every frozen value in the separate public HAL-v2 loopback copy probe. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/device_depth",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "cuda_graph",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "new_configuration",
+        "values": [
+          0,
+          1
+        ]
+      },
+      "explanation": "cuda_graph executes every frozen value in the complete golden loop. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/cuda_graph",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "transfer_batch",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "new_configuration",
+        "values": [
+          1,
+          4,
+          16
+        ]
+      },
+      "explanation": "transfer_batch executes every frozen value in the separate public HAL-v2 loopback copy probe. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/transfer_batch",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "staging_slots",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "new_configuration",
+        "values": [
+          2,
+          4
+        ]
+      },
+      "explanation": "staging_slots executes every frozen value in the separate public HAL-v2 loopback copy probe. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/staging_slots",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "telemetry_capacity",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "new_configuration",
+        "values": [
+          0,
+          64,
+          16384
+        ]
+      },
+      "explanation": "telemetry_capacity executes every frozen value in the separate public Runtime task/rate/trace probe. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/telemetry_capacity",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "control_burst",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "off_lane_boundary",
+        "values": [
+          1,
+          16,
+          17
+        ]
+      },
+      "explanation": "control_burst executes every frozen value in the public control-boundary experiment. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/control_burst",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "id": "overload_policy",
+        "rule": "Explicit finite experiment; preserve logical workload and compare configuration identities; capacity failures remain outcomes, never spill. Overload0=fail mandatory; overload1=bounded_catch_up with limit1 on mandatory domains; incompatible settings rejected before start.",
+        "scope": "new_configuration",
+        "values": [
+          0,
+          1
+        ]
+      },
+      "explanation": "overload_policy executes every frozen value in the separate public Runtime task/rate/trace probe. Requested and effective values, unchanged logical workload, configuration and executable identity are retained. Queue capacity 4 and mandatory overload retain bounded failures; disabled trace is not reported as measured retention loss. No optimality or full-loop tuning claim is inferred from a separate probe.",
+      "id": "levers/overload_policy",
+      "sources": [
+        {
+          "anchor": "#include \"experiments.hpp\"",
+          "path": "samples/golden_showcase/experiments.cpp"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-02",
+        "fields": [
+          "contract_sha256",
+          "configuration_sha256",
+          "source_commit",
+          "source_tree",
+          "variant",
+          "host",
+          "evidence",
+          "status",
+          "release_counts",
+          "phase_calls",
+          "state_digest",
+          "oracle",
+          "cleanup"
+        ],
+        "id": "run",
+        "path": "run.json",
+        "rule": "No placeholder success files; publish only after complete validation/checked cleanup. Preserve failures separately. Optional unavailable variants report NOT_RUN, never substituted success. M23 benchmark artifact schema remains unchanged.",
+        "status": "planned"
+      },
+      "explanation": "run binds source/configuration and actual state, counts, raw observations and checked cleanup. Immutable M26-01 artifact names describe requirements; concrete M26-05 reports are independently recomputed. M26-06 coverage adds the complete capability audit without changing or relabeling the historical M26-05 coverage schema.",
+      "id": "artifacts/run",
+      "sources": [
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-02",
+        "fields": [
+          "schema",
+          "contract_sha256",
+          "count",
+          "tick",
+          "generation",
+          "all_active_fields",
+          "checksum"
+        ],
+        "id": "state",
+        "path": "state.bin",
+        "rule": "No placeholder success files; publish only after complete validation/checked cleanup. Preserve failures separately. Optional unavailable variants report NOT_RUN, never substituted success. M23 benchmark artifact schema remains unchanged.",
+        "status": "planned"
+      },
+      "explanation": "state binds source/configuration and actual state, counts, raw observations and checked cleanup. Immutable M26-01 artifact names describe requirements; concrete M26-05 reports are independently recomputed. M26-06 coverage adds the complete capability audit without changing or relabeling the historical M26-05 coverage schema.",
+      "id": "artifacts/state",
+      "sources": [
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-02",
+        "fields": [
+          "contract_sha256",
+          "configuration_sha256",
+          "sample_snapshot_digest",
+          "runtime_snapshot_digest",
+          "trusted_payload_digest",
+          "action_digest",
+          "gap_count",
+          "replay_status"
+        ],
+        "id": "replay",
+        "path": "replay.json",
+        "rule": "No placeholder success files; publish only after complete validation/checked cleanup. Preserve failures separately. Optional unavailable variants report NOT_RUN, never substituted success. M23 benchmark artifact schema remains unchanged.",
+        "status": "planned"
+      },
+      "explanation": "replay binds source/configuration and actual state, counts, raw observations and checked cleanup. Immutable M26-01 artifact names describe requirements; concrete M26-05 reports are independently recomputed. M26-06 coverage adds the complete capability audit without changing or relabeling the historical M26-05 coverage schema.",
+      "id": "artifacts/replay",
+      "sources": [
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "fields": [
+          "contract_sha256",
+          "fault_id",
+          "injection_tick",
+          "observed_status",
+          "detection_release",
+          "safe_ack",
+          "reset_status",
+          "cleanup_status",
+          "recovery_status"
+        ],
+        "id": "fault",
+        "path": "faults.json",
+        "rule": "No placeholder success files; publish only after complete validation/checked cleanup. Preserve failures separately. Optional unavailable variants report NOT_RUN, never substituted success. M23 benchmark artifact schema remains unchanged.",
+        "status": "planned"
+      },
+      "explanation": "fault binds source/configuration and actual state, counts, raw observations and checked cleanup. Immutable M26-01 artifact names describe requirements; concrete M26-05 reports are independently recomputed. M26-06 coverage adds the complete capability audit without changing or relabeling the historical M26-05 coverage schema.",
+      "id": "artifacts/fault",
+      "sources": [
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "fields": [
+          "descriptor",
+          "raw_samples",
+          "summary",
+          "environment",
+          "correctness",
+          "cleanup"
+        ],
+        "id": "benchmark",
+        "path": "benchmark/",
+        "rule": "No placeholder success files; publish only after complete validation/checked cleanup. Preserve failures separately. Optional unavailable variants report NOT_RUN, never substituted success. M23 benchmark artifact schema remains unchanged.",
+        "status": "planned"
+      },
+      "explanation": "benchmark binds source/configuration and actual state, counts, raw observations and checked cleanup. Immutable M26-01 artifact names describe requirements; concrete M26-05 reports are independently recomputed. M26-06 coverage adds the complete capability audit without changing or relabeling the historical M26-05 coverage schema.",
+      "id": "artifacts/benchmark",
+      "sources": [
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-06",
+        "fields": [
+          "contract_sha256",
+          "capability",
+          "source",
+          "test",
+          "artifact",
+          "status",
+          "claim_boundary"
+        ],
+        "id": "coverage",
+        "path": "coverage.json",
+        "rule": "No placeholder success files; publish only after complete validation/checked cleanup. Preserve failures separately. Optional unavailable variants report NOT_RUN, never substituted success. M23 benchmark artifact schema remains unchanged.",
+        "status": "planned"
+      },
+      "explanation": "coverage binds source/configuration and actual state, counts, raw observations and checked cleanup. Immutable M26-01 artifact names describe requirements; concrete M26-05 reports are independently recomputed. M26-06 coverage adds the complete capability audit without changing or relabeling the historical M26-05 coverage schema.",
+      "id": "artifacts/coverage",
+      "sources": [
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        },
+        {
+          "anchor": "\"\"\"Recompute showcase coverage; reports never certify their own source inputs.\"\"\"",
+          "path": "samples/golden_showcase/report.py"
+        },
+        {
+          "anchor": "\"\"\"Source-linked audit inventory and offline bundle validation (standard library).\"\"\"",
+          "path": "samples/golden_audit/catalog.py"
+        },
+        {
+          "anchor": "#!/usr/bin/env python3",
+          "path": "samples/golden_audit/run.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        },
+        {
+          "anchor": "\"\"\"Meaningful omissions, forged completion, stale source and offline-link negatives.\"\"\"",
+          "path": "tests/golden_audit/test_catalog.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-02",
+        "device_phases": [],
+        "evidence": "portable_simulation",
+        "id": "cpu",
+        "requirements": [
+          "runtime"
+        ],
+        "status": "planned"
+      },
+      "explanation": "cpu: portable_simulation. Native and host here describe executor ownership. CPU and explicitly owned simulated driver variants run through actual Runtime/backend operations; real external CIL uses a separate controller process. No physical device is probed by the portable runner.",
+      "id": "variants/cpu",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_cuda/runner.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-03",
+        "device_phases": [
+          "physics"
+        ],
+        "evidence": "simulated_driver_protocol",
+        "id": "sim_cuda",
+        "requirements": [
+          "runtime",
+          "injected_cuda_driver"
+        ],
+        "status": "planned"
+      },
+      "explanation": "sim_cuda: simulated_driver_protocol. Native and host here describe executor ownership. CPU and explicitly owned simulated driver variants run through actual Runtime/backend operations; real external CIL uses a separate controller process. No physical device is probed by the portable runner.",
+      "id": "variants/sim_cuda",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_cuda/runner.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-04",
+        "device_phases": [
+          "sensor",
+          "actuator"
+        ],
+        "evidence": "simulated_driver_protocol",
+        "id": "sim_xdma",
+        "requirements": [
+          "runtime",
+          "injected_xdma_driver"
+        ],
+        "status": "planned"
+      },
+      "explanation": "sim_xdma: simulated_driver_protocol. Native and host here describe executor ownership. CPU and explicitly owned simulated driver variants run through actual Runtime/backend operations; real external CIL uses a separate controller process. No physical device is probed by the portable runner.",
+      "id": "variants/sim_xdma",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_cuda/runner.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-04",
+        "device_phases": [
+          "physics",
+          "sensor",
+          "actuator"
+        ],
+        "evidence": "simulated_driver_protocol",
+        "id": "sim_combined",
+        "requirements": [
+          "runtime",
+          "injected_cuda_driver",
+          "injected_xdma_driver"
+        ],
+        "status": "planned"
+      },
+      "explanation": "sim_combined: simulated_driver_protocol. Native and host here describe executor ownership. CPU and explicitly owned simulated driver variants run through actual Runtime/backend operations; real external CIL uses a separate controller process. No physical device is probed by the portable runner.",
+      "id": "variants/sim_combined",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_cuda/runner.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-02",
+        "device_phases": [],
+        "evidence": "separate_process_software",
+        "id": "external_cil",
+        "requirements": [
+          "runtime",
+          "fresh_shared_memory_mapping"
+        ],
+        "status": "planned"
+      },
+      "explanation": "external_cil: separate_process_software. Native and host here describe executor ownership. CPU and explicitly owned simulated driver variants run through actual Runtime/backend operations; real external CIL uses a separate controller process. No physical device is probed by the portable runner.",
+      "id": "variants/external_cil",
+      "sources": [
+        {
+          "anchor": "#include \"oracle.hpp\"",
+          "path": "samples/golden_system/main.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_cuda/runner.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/runner.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M18",
+        "device_phases": [
+          "physics"
+        ],
+        "evidence": "requires_named_physical_tuple",
+        "id": "real_cuda",
+        "requirements": [
+          "cuda_toolkit",
+          "owned_gpu",
+          "driver"
+        ],
+        "status": "not_run"
+      },
+      "explanation": "real_cuda remains NOT_RUN. A real CUDA host/launcher and optional compile path exist; the golden XDMA kit currently owns a simulator, and the native XDMA host wiring plus hardware campaign remain separate M18 work. Unreal requires the M19 engine adapter and lifecycle validation. Simulation does not substitute for any missing variant.",
+      "id": "variants/real_cuda",
+      "sources": [
+        {
+          "anchor": "#include \"runner.hpp\"",
+          "path": "samples/golden_cuda/real.cpp"
+        },
+        {
+          "anchor": "# Golden XDMA and combined source kit",
+          "path": "samples/golden_xdma/README.md"
+        },
+        {
+          "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
+          "path": "docs/evidence/M19-01-2026-08-12.md"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M18",
+        "device_phases": [
+          "sensor",
+          "actuator"
+        ],
+        "evidence": "requires_named_physical_tuple",
+        "id": "real_xdma",
+        "requirements": [
+          "owned_fpga",
+          "driver",
+          "bitstream",
+          "topology"
+        ],
+        "status": "not_run"
+      },
+      "explanation": "real_xdma remains NOT_RUN. A real CUDA host/launcher and optional compile path exist; the golden XDMA kit currently owns a simulator, and the native XDMA host wiring plus hardware campaign remain separate M18 work. Unreal requires the M19 engine adapter and lifecycle validation. Simulation does not substitute for any missing variant.",
+      "id": "variants/real_xdma",
+      "sources": [
+        {
+          "anchor": "#include \"runner.hpp\"",
+          "path": "samples/golden_cuda/real.cpp"
+        },
+        {
+          "anchor": "# Golden XDMA and combined source kit",
+          "path": "samples/golden_xdma/README.md"
+        },
+        {
+          "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
+          "path": "docs/evidence/M19-01-2026-08-12.md"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M19",
+        "device_phases": [],
+        "evidence": "requires_engine_lifecycle_validation",
+        "id": "unreal",
+        "requirements": [
+          "unreal_host"
+        ],
+        "status": "not_run"
+      },
+      "explanation": "unreal remains NOT_RUN. A real CUDA host/launcher and optional compile path exist; the golden XDMA kit currently owns a simulator, and the native XDMA host wiring plus hardware campaign remain separate M18 work. Unreal requires the M19 engine adapter and lifecycle validation. Simulation does not substitute for any missing variant.",
+      "id": "variants/unreal",
+      "sources": [
+        {
+          "anchor": "#include \"runner.hpp\"",
+          "path": "samples/golden_cuda/real.cpp"
+        },
+        {
+          "anchor": "# Golden XDMA and combined source kit",
+          "path": "samples/golden_xdma/README.md"
+        },
+        {
+          "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
+          "path": "docs/evidence/M19-01-2026-08-12.md"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_cuda/test_cuda.cpp"
+        },
+        {
+          "anchor": "#include \"../../samples/golden_cuda/owner.hpp\"",
+          "path": "tests/golden_xdma/test_xdma.cpp"
+        }
+      ]
+    },
+    {
+      "contract": "command",
+      "explanation": "The command resource is registered with declared readers and writers before finalization. Its application storage belongs to one World/Session; callbacks use bounded per-owner arrays and cross-domain consumers read copied channel frames.",
+      "id": "resources/command",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": "plant",
+      "explanation": "The plant resource is registered with declared readers and writers before finalization. Its application storage belongs to one World/Session; callbacks use bounded per-owner arrays and cross-domain consumers read copied channel frames.",
+      "id": "resources/plant",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": "stage",
+      "explanation": "The stage resource is registered with declared readers and writers before finalization. Its application storage belongs to one World/Session; callbacks use bounded per-owner arrays and cross-domain consumers read copied channel frames.",
+      "id": "resources/stage",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": "sensor",
+      "explanation": "The sensor resource is registered with declared readers and writers before finalization. Its application storage belongs to one World/Session; callbacks use bounded per-owner arrays and cross-domain consumers read copied channel frames.",
+      "id": "resources/sensor",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": "controller",
+      "explanation": "The controller resource is registered with declared readers and writers before finalization. Its application storage belongs to one World/Session; callbacks use bounded per-owner arrays and cross-domain consumers read copied channel frames.",
+      "id": "resources/controller",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": "actuator",
+      "explanation": "The actuator resource is registered with declared readers and writers before finalization. Its application storage belongs to one World/Session; callbacks use bounded per-owner arrays and cross-domain consumers read copied channel frames.",
+      "id": "resources/actuator",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": "aggregate",
+      "explanation": "The aggregate resource is registered with declared readers and writers before finalization. Its application storage belongs to one World/Session; callbacks use bounded per-owner arrays and cross-domain consumers read copied channel frames.",
+      "id": "resources/aggregate",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "arrays": 3,
+        "id": "position",
+        "initial_abs": 1024,
+        "maximum_abs": 2165760,
+        "offset_bytes": 0,
+        "unit": "model_position"
+      },
+      "explanation": "position is a three-axis int32 SoA field for 256 allocated entities, with unused tails zero. Canonical serialization excludes native padding and pointers; exact all-field scalar and segment oracles validate the result rather than accepting a digest alone.",
+      "id": "state/position",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/model.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/oracle.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "arrays": 3,
+        "id": "velocity",
+        "initial_abs": 64,
+        "maximum_abs": 4160,
+        "offset_bytes": 3072,
+        "unit": "model_position_per_tick"
+      },
+      "explanation": "velocity is a three-axis int32 SoA field for 256 allocated entities, with unused tails zero. Canonical serialization excludes native padding and pointers; exact all-field scalar and segment oracles validate the result rather than accepting a digest alone.",
+      "id": "state/velocity",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/model.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/oracle.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "arrays": 3,
+        "id": "acceleration",
+        "initial_abs": 4,
+        "maximum_abs": 4,
+        "offset_bytes": 6144,
+        "unit": "model_position_per_tick_squared"
+      },
+      "explanation": "acceleration is a three-axis int32 SoA field for 256 allocated entities, with unused tails zero. Canonical serialization excludes native padding and pointers; exact all-field scalar and segment oracles validate the result rather than accepting a digest alone.",
+      "id": "state/acceleration",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/model.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/oracle.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "body_bytes": 16,
+        "fields": [
+          {
+            "default": 8,
+            "id": "target_velocity",
+            "maximum": 64,
+            "minimum": -64,
+            "offset": 0
+          }
+        ],
+        "id": "scenario",
+        "kind": 1,
+        "type_id": 2601
+      },
+      "explanation": "scenario is staged off lane through the bounded live-control mailbox, consumed at its exact boundary and copied into an application-owned latch. Replacement and rejection preserve sequence accounting. Runtime generation rollback does not undo plant, external-process or physical effects.",
+      "id": "controls/scenario",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/controls.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/replay.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "body_bytes": 16,
+        "fields": [
+          {
+            "default": 1,
+            "id": "gain",
+            "maximum": 4,
+            "minimum": 0,
+            "offset": 0
+          }
+        ],
+        "id": "controller",
+        "kind": 2,
+        "type_id": 2602
+      },
+      "explanation": "controller is staged off lane through the bounded live-control mailbox, consumed at its exact boundary and copied into an application-owned latch. Replacement and rejection preserve sequence accounting. Runtime generation rollback does not undo plant, external-process or physical effects.",
+      "id": "controls/controller",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/controls.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/replay.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "body_bytes": 16,
+        "fields": [
+          {
+            "default": 0,
+            "id": "offset",
+            "maximum": 16,
+            "minimum": -16,
+            "offset": 0
+          }
+        ],
+        "id": "calibration",
+        "kind": 3,
+        "type_id": 2603
+      },
+      "explanation": "calibration is staged off lane through the bounded live-control mailbox, consumed at its exact boundary and copied into an application-owned latch. Replacement and rejection preserve sequence accounting. Runtime generation rollback does not undo plant, external-process or physical effects.",
+      "id": "controls/calibration",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/controls.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/replay.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "body_bytes": 16,
+        "fields": [
+          {
+            "default": 0,
+            "id": "fault_index",
+            "maximum": 11,
+            "minimum": 0,
+            "offset": 0
+          }
+        ],
+        "id": "fault",
+        "kind": 4,
+        "type_id": 2604
+      },
+      "explanation": "fault is staged off lane through the bounded live-control mailbox, consumed at its exact boundary and copied into an application-owned latch. Replacement and rejection preserve sequence accounting. Runtime generation rollback does not undo plant, external-process or physical effects.",
+      "id": "controls/fault",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/controls.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/replay.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "body_bytes": 16,
+        "fields": [
+          {
+            "default": 0,
+            "id": "zero",
+            "maximum": 0,
+            "minimum": 0,
+            "offset": 0
+          }
+        ],
+        "id": "clear_fault",
+        "kind": 5,
+        "type_id": 2605
+      },
+      "explanation": "clear_fault is staged off lane through the bounded live-control mailbox, consumed at its exact boundary and copied into an application-owned latch. Replacement and rejection preserve sequence accounting. Runtime generation rollback does not undo plant, external-process or physical effects.",
+      "id": "controls/clear_fault",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/controls.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/replay.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "kind": "scenario",
+        "phase": "input",
+        "target": "rate",
+        "tick": 1
+      },
+      "explanation": "scenario is staged off lane through the bounded live-control mailbox, consumed at its exact boundary and copied into an application-owned latch. Replacement and rejection preserve sequence accounting. Runtime generation rollback does not undo plant, external-process or physical effects.",
+      "id": "boundaries/scenario",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/controls.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/replay.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "kind": "controller",
+        "phase": "controller",
+        "target": "rate",
+        "tick": 3
+      },
+      "explanation": "controller is staged off lane through the bounded live-control mailbox, consumed at its exact boundary and copied into an application-owned latch. Replacement and rejection preserve sequence accounting. Runtime generation rollback does not undo plant, external-process or physical effects.",
+      "id": "boundaries/controller",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/controls.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/replay.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "kind": "calibration",
+        "phase": "sensor",
+        "target": "rate",
+        "tick": 2
+      },
+      "explanation": "calibration is staged off lane through the bounded live-control mailbox, consumed at its exact boundary and copied into an application-owned latch. Replacement and rejection preserve sequence accounting. Runtime generation rollback does not undo plant, external-process or physical effects.",
+      "id": "boundaries/calibration",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/controls.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/replay.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "kind": "fault",
+        "phase": "input",
+        "target": "host_frame",
+        "tick": 12
+      },
+      "explanation": "fault is staged off lane through the bounded live-control mailbox, consumed at its exact boundary and copied into an application-owned latch. Replacement and rejection preserve sequence accounting. Runtime generation rollback does not undo plant, external-process or physical effects.",
+      "id": "boundaries/fault",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/controls.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/replay.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "kind": "clear_fault",
+        "phase": "input",
+        "target": "host_frame",
+        "tick": 18
+      },
+      "explanation": "clear_fault is staged off lane through the bounded live-control mailbox, consumed at its exact boundary and copied into an application-owned latch. Replacement and rejection preserve sequence accounting. Runtime generation rollback does not undo plant, external-process or physical effects.",
+      "id": "boundaries/clear_fault",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/controls.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/replay.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-input",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "scenario",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-input is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-input",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-physics",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "physics",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-physics is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-physics",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-stage",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "host_staging",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-stage is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-stage",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-sensor",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "sampled_io",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-sensor is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-sensor",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-controller",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "controller",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-controller is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-controller",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-actuator",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "hal",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-actuator is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-actuator",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-aggregate",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "aggregation",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-aggregate is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-aggregate",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-telemetry",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "observability",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-telemetry is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-telemetry",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-host",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "executor",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-host is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-host",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-memory",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "memory",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-memory is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-memory",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-rates",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "multi_rate",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-rates is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-rates",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-controls",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "live_control",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-controls is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-controls",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-replay",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "checkpoint_replay",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-replay is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-replay",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-external",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "external_cil",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-external is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-external",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "batch": "M26-05",
+        "counters": [
+          "operations",
+          "phase_calls",
+          "entity_checks",
+          "faults",
+          "gaps",
+          "cleanup_failures"
+        ],
+        "id": "golden-loop",
+        "oracle": "complete state and count/status/cleanup checks; same canonical workload/configuration digest across compared variants",
+        "status": "planned",
+        "subsystem": "whole_loop",
+        "timing": "ProviderV1 invoke includes step/workload, observation and oracle; lifecycle cases include their declared setup/cleanup; no implied kernel-only timing"
+      },
+      "explanation": "golden-loop is a frozen ProviderV1 case with two warmups and five retained measured invocations. The named workload includes its declared lifecycle, oracle and evidence I/O. Seven distinct CPU phase probes and eight enclosing loop/lifecycle cases are documented separately; fake-clock structural results and steady-clock characterization are never compared as qualified timings.",
+      "id": "benchmarks/golden-loop",
+      "sources": [
+        {
+          "anchor": "#include \"provider.hpp\"",
+          "path": "samples/golden_showcase/provider.cpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/probes.hpp"
+        },
+        {
+          "anchor": "#include \"variants.hpp\"",
+          "path": "samples/golden_showcase/variants.cpp"
+        },
+        {
+          "anchor": "\"\"\"Independently bind showcase observations to source, state and raw M23 bundles.\"\"\"",
+          "path": "samples/golden_showcase/artifacts.py"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_showcase/provider.hpp\"",
+          "path": "tests/golden_showcase/test_showcase.cpp"
+        },
+        {
+          "anchor": "\"\"\"Mutation tests over actual source-bound showcase execution, with restoration.\"\"\"",
+          "path": "tests/golden_showcase/negative_artifacts.py"
+        }
+      ]
+    },
+    {
+      "contract": [
+        "input",
+        "physics"
+      ],
+      "explanation": "The explicit acyclic dependency input to physics orders conflicting accesses within one rate domain. Cross-rate feedback uses copied channels and deterministic prior-record selection, not an added graph cycle.",
+      "id": "edges/0",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": [
+        "physics",
+        "stage"
+      ],
+      "explanation": "The explicit acyclic dependency physics to stage orders conflicting accesses within one rate domain. Cross-rate feedback uses copied channels and deterministic prior-record selection, not an added graph cycle.",
+      "id": "edges/1",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": [
+        "aggregate",
+        "telemetry"
+      ],
+      "explanation": "The explicit acyclic dependency aggregate to telemetry orders conflicting accesses within one rate domain. Cross-rate feedback uses copied channels and deterministic prior-record selection, not an added graph cycle.",
+      "id": "edges/2",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "alignment": 64,
+        "auxiliary_layout": "Separate fixed SoA command[3][256] int32 and sensor[position,velocity][3][256] int32; each 64-byte aligned. Aggregate position/velocity axis sums use six int64 slots. Instance-local uint64 logical_tick, successful_steps, control_generation, sample_sequence[5], command_generation; checked increment with no wrap. Snapshot encodes fields individually, never native padding/pointers.",
+        "axes": 3,
+        "capacity": 256,
+        "controller": "For each axis: clamp(gain*(target_velocity-sampled_velocity), -4, 4), int64 intermediate; gain default1 range0..4, target default8 range-64..64; calibrated sensor = raw+offset, offset default0 range-16..16",
+        "controller_bytes": 3072,
+        "default_entities": 16,
+        "fields": [
+          {
+            "arrays": 3,
+            "id": "position",
+            "initial_abs": 1024,
+            "maximum_abs": 2165760,
+            "offset_bytes": 0,
+            "unit": "model_position"
+          },
+          {
+            "arrays": 3,
+            "id": "velocity",
+            "initial_abs": 64,
+            "maximum_abs": 4160,
+            "offset_bytes": 3072,
+            "unit": "model_position_per_tick"
+          },
+          {
+            "arrays": 3,
+            "id": "acceleration",
+            "initial_abs": 4,
+            "maximum_abs": 4,
+            "offset_bytes": 6144,
+            "unit": "model_position_per_tick_squared"
+          }
+        ],
+        "initialization": "M24 LCG uint32 wrap: state=1664525*state+1013904223; entity then axis, x=next%2049-1024, v=next%129-64, a=next%9-4; seed=1",
+        "layout": "SoA: field, axis, entity; unused entities zero",
+        "oracle": "M24 piecewise constant acceleration: v(n)=v0+n*a, x(n)=x0+n*v0+a*n*(n+1)/2; split at each acknowledged command change; compare every field of every entity, tolerance zero",
+        "owner": "one scenario instance; heap storage allocated before finalize",
+        "plant_bytes": 9216,
+        "rollback": "Runtime generation rollback does not restore sample/backend state. A failed frame is terminal for this owner; checked settle/stop, then restore a paired successful checkpoint in a fresh owner.",
+        "scalar": "int32_le",
+        "sensor_bytes": 6144,
+        "source": "samples/cuda_physics/model.hpp",
+        "update": "v_next=v+a; x_next=x+v_next; widen intermediates to int64, checked narrow to int32; no float or saturation in plant"
+      },
+      "explanation": "Each owner reserves fixed aligned SoA, command, sensor, frame, aggregate and canonical state storage before execution. Every field and auxiliary buffer layout is retained below. Application/Runtime checkpoints are paired only after a successful quiescent step; failed side effects require checked stop and fresh-owner recovery.",
+      "id": "contracts/state",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "base_tick_ns": 10000000,
+        "default_ticks": 24,
+        "epoch": "logical zero; half-open [0,ticks*base_tick_ns); no wall-clock correctness oracle",
+        "host_step_ticks": 1,
+        "maximum_ticks": 1024,
+        "substeps": 1,
+        "supercycle_ticks": 6
+      },
+      "explanation": "The 10 ms base tick is logical simulation time. The host Runtime clock, backend-local timeline and host benchmark steady clock are separate domains; compare timestamps only through explicit correlation. The owned simulator selects a finite 5 s scheduling watchdog while preserving 1 ms CUDA and 8 ms sampled logical/backend budgets. None is RT qualification.",
+      "id": "contracts/clock",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "axes_tasks": 3,
+        "cleanup_attempts": 2,
+        "default_grain": 4,
+        "default_inflight": 2,
+        "default_workers": 2,
+        "entity_grains": [
+          1,
+          4,
+          16,
+          64
+        ],
+        "hosts": [
+          "native",
+          "independent_host"
+        ],
+        "lifecycle_timeout_ms": 5000,
+        "maximum_inflight": 2,
+        "nested_depth": 2,
+        "ordering": "Rates in listed registration order, then compiled phase order, substep0; ordinary edges within a domain only; channels select latest preceding producer reference, including earlier same-time domains; first missing predecessor selects explicit initial, repeating horizon wraps to previous cycle.",
+        "policy": "Configure/finalize allocate; callbacks use fixed storage and bounded integer work only. Host control owns threads, clocks, files and drains. Keep borrowed memory/driver/host alive through acknowledged checked stop; failed cleanup retains ownership and invocation failure; no restart after stopped.",
+        "queue_slots": 1024,
+        "runtime_budget_bytes": 134217728,
+        "sample_budget_bytes": 33554432,
+        "staging": "physics completion -> CPU stage copy -> sensor channel; no device/device channel or peer DMA; CUDA and XDMA timelines are backend-local; same scenario identities in all variants.",
+        "task_scratch_bytes": 64,
+        "task_slots": 1024,
+        "workers": [
+          1,
+          2,
+          3
+        ]
+      },
+      "explanation": "Session borrows caller-owned jobs, arenas, clock and drivers; accepted work and failed checked stop extend those lifetimes. Prepare allocates/finalizes off lane. The bounded worker/task/queue/scratch/retention values below are frozen. Serialized host control drains telemetry and performs process/file I/O; callbacks do not.",
+      "id": "contracts/execution",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/jobs.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/memory.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/owner.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "application_latch": "Decode copied generation once per identity into sample-owned per-kind config; untouched kinds persist. Calibration offset changes application values only; fixed HAL calibration identity and descriptor never mutate. No Runtime payload parser or arbitrary application rollback.",
+        "artifact_bytes": 16777216,
+        "boundaries": [
+          {
+            "kind": "scenario",
+            "phase": "input",
+            "target": "rate",
+            "tick": 1
+          },
+          {
+            "kind": "controller",
+            "phase": "controller",
+            "target": "rate",
+            "tick": 3
+          },
+          {
+            "kind": "calibration",
+            "phase": "sensor",
+            "target": "rate",
+            "tick": 2
+          },
+          {
+            "kind": "fault",
+            "phase": "input",
+            "target": "host_frame",
+            "tick": 12
+          },
+          {
+            "kind": "clear_fault",
+            "phase": "input",
+            "target": "host_frame",
+            "tick": 18
+          }
+        ],
+        "checkpoint_bytes": 4194304,
+        "envelope": "M22 RTLC v1, 32-byte canonical envelope plus 16-byte body; explicit little-endian fields, unused words zero",
+        "initial_sequence": 1,
+        "mailbox": 2601,
+        "ordering": "Stage on non-RT host before exact target closes; resolve tick to compiled reference index/domain/phase/release/substep in first supercycle only. Use host-frame target for later-cycle controls, latched by host before its next step; never retarget a closed rate record. Sort mailbox then sequence; later same-kind replaces earlier; copy callback-local payload before return; never retain view.",
+        "payload_stride": 64,
+        "producer": 2601,
+        "replay": "Opt-in trusted M22 v2 admission/generation payload artifact plus M21 mixed-rate actions and sample-owned checkpoint. Reject gaps, changed contract/config/source, generation mismatch, malformed bytes or untrusted payload. Pair Runtime and application snapshots only at successful quiescent step boundary; replay mock/loopback only; never real-device side effects.",
+        "rollback": "restore_step_entry_generation",
+        "schema": 1,
+        "schemas": [
+          {
+            "body_bytes": 16,
+            "fields": [
+              {
+                "default": 8,
+                "id": "target_velocity",
+                "maximum": 64,
+                "minimum": -64,
+                "offset": 0
+              }
+            ],
+            "id": "scenario",
+            "kind": 1,
+            "type_id": 2601
+          },
+          {
+            "body_bytes": 16,
+            "fields": [
+              {
+                "default": 1,
+                "id": "gain",
+                "maximum": 4,
+                "minimum": 0,
+                "offset": 0
+              }
+            ],
+            "id": "controller",
+            "kind": 2,
+            "type_id": 2602
+          },
+          {
+            "body_bytes": 16,
+            "fields": [
+              {
+                "default": 0,
+                "id": "offset",
+                "maximum": 16,
+                "minimum": -16,
+                "offset": 0
+              }
+            ],
+            "id": "calibration",
+            "kind": 3,
+            "type_id": 2603
+          },
+          {
+            "body_bytes": 16,
+            "fields": [
+              {
+                "default": 0,
+                "id": "fault_index",
+                "maximum": 11,
+                "minimum": 0,
+                "offset": 0
+              }
+            ],
+            "id": "fault",
+            "kind": 4,
+            "type_id": 2604
+          },
+          {
+            "body_bytes": 16,
+            "fields": [
+              {
+                "default": 0,
+                "id": "zero",
+                "maximum": 0,
+                "minimum": 0,
+                "offset": 0
+              }
+            ],
+            "id": "clear_fault",
+            "kind": 5,
+            "type_id": 2605
+          }
+        ],
+        "slots": 16
+      },
+      "explanation": "Five fixed payload types use copied immutable generations and exact host/rate boundaries. The 16-slot mailbox rejects excess; same-kind replacement commits the last accepted record. Typed malformed controls are rejected off lane. Trusted replay stays on the originating simulated owner; source/configuration, generation and gap guards precede effects.",
+      "id": "contracts/controls",
+      "sources": [
+        {
+          "anchor": "class Session {",
+          "path": "samples/golden_system/session.hpp"
+        },
+        {
+          "anchor": "struct World {",
+          "path": "samples/golden_system/world.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/controls.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_showcase/replay_gate.hpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "application_schema": 1,
+        "capacity_each": 16384,
+        "drain": "outside callbacks after each settled host step; snapshot before checked stop releases backing; no RT file I/O",
+        "fields": [
+          "phase_calls",
+          "release_counts",
+          "entity_checks",
+          "state_digest",
+          "command_digest",
+          "control_generation",
+          "sample_sequence",
+          "sample_age_ns",
+          "sample_status",
+          "fault_id",
+          "terminal_status",
+          "safe_ack",
+          "cleanup_status",
+          "gap_count"
+        ],
+        "global_schema": 2,
+        "identity": "scenario_id + canonical contract SHA256 + source commit/tree + configuration digest + variant + host + fresh session generation",
+        "live_control_schema": 1,
+        "loss": "report sequence gaps/dropped/overwritten separately; any loss invalidates deterministic replay, never silently fabricate payloads",
+        "mixed_rate_schema": 1,
+        "rate_schema": 1
+      },
+      "explanation": "Trace, rate, mixed-rate and live-control records retain distinct schemas and cursor identities. Drain after settled steps, before backing storage release, on host control. Report dropped/overwritten/gap counts separately. Disabled capture is unavailable history, not a measured gap; any measured gap invalidates sample replay.",
+      "id": "contracts/telemetry",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/telemetry.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_xdma/telemetry.hpp"
+        },
+        {
+          "anchor": "#include \"session.hpp\"",
+          "path": "samples/golden_showcase/telemetry_loss.cpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "peer_timeout_ms": 5000,
+        "platforms": [
+          "Linux x86-64",
+          "Windows x64"
+        ],
+        "polls_per_boundary": 1,
+        "protocol": "Sample-owned M26 vector protocol v1; reuse M25 platform publication/ownership principles, never relabel the scalar M25 wire schema. Fixed 256x3 int32 velocity/command arrays, canonical LE, count and generation, sequence, issue/expiry tick, payload digest and zero unused entries. Encode off lane into fixed SPSC slots; CPU controller phase consumes copied snapshot only. Fresh mapping/name/generation on reconnect; one writer, no overwrite; stale/missing peer gives zero effort then fresh-owner recovery. Exact byte-offset codec is M26-02 implementation acceptance, not an extension of any SDK ABI."
+      },
+      "explanation": "The M26 vector transport owns a fresh mapping and generation per session, fixed 256 by 3 int32 arrays and one writer per channel. The actual external process supplies bounded snapshots. A missing or expired peer produces zero effort, then fresh-mapping/fresh-owner recovery; no callback spins on IPC or filesystem work.",
+      "id": "contracts/external_cil",
+      "sources": [
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/peer.hpp"
+        },
+        {
+          "anchor": "#pragma once",
+          "path": "samples/golden_system/wire.hpp"
+        },
+        {
+          "anchor": "// Derived platform ownership primitives from the unchanged M25-04 kit.",
+          "path": "samples/golden_system/mapping.hpp"
+        },
+        {
+          "anchor": "#include \"common.hpp\"",
+          "path": "samples/golden_system/controller.cpp"
+        }
+      ],
+      "tests": [
+        {
+          "anchor": "#include \"../../samples/golden_system/oracle.hpp\"",
+          "path": "tests/golden_system/test_system.cpp"
+        }
+      ]
+    }
+  ],
+  "schema": 1
+}

@@ -1,0 +1,720 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_sampled_io.cpp</title><h1>tests/test_sampled_io.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;rt/loopback_backend.hpp&gt;</span>
+<span id="L4"></span>
+<span id="L5">#include &quot;rt/src/sampled_io.hpp&quot;</span>
+<span id="L6"></span>
+<span id="L7">#include &lt;algorithm&gt;</span>
+<span id="L8">#include &lt;array&gt;</span>
+<span id="L9">#include &lt;cstddef&gt;</span>
+<span id="L10">#include &lt;cstring&gt;</span>
+<span id="L11">#include &lt;vector&gt;</span>
+<span id="L12"></span>
+<span id="L13">namespace {</span>
+<span id="L14"></span>
+<span id="L15">std::vector&lt;std::byte&gt; sampled_frame(</span>
+<span id="L16">    std::uint64_t channel_identity,</span>
+<span id="L17">    rt::SampledIoFrameStatus status,</span>
+<span id="L18">    std::uint64_t timestamp_domain,</span>
+<span id="L19">    std::uint64_t calibration,</span>
+<span id="L20">    std::uint64_t trigger,</span>
+<span id="L21">    std::uint64_t sequence = 1,</span>
+<span id="L22">    std::uint64_t release_generation = 0) {</span>
+<span id="L23">    std::vector&lt;std::byte&gt; bytes(sizeof(rt::SampledIoFrameHeader) + 8);</span>
+<span id="L24">    for (std::size_t index = sizeof(rt::SampledIoFrameHeader);</span>
+<span id="L25">         index &lt; bytes.size(); ++index) {</span>
+<span id="L26">        bytes[index] = static_cast&lt;std::byte&gt;(index);</span>
+<span id="L27">    }</span>
+<span id="L28">    rt::SampledIoFrameHeader header{};</span>
+<span id="L29">    header.channel_identity = channel_identity;</span>
+<span id="L30">    header.sequence = sequence;</span>
+<span id="L31">    header.release_generation = release_generation;</span>
+<span id="L32">    header.sample_count = 4;</span>
+<span id="L33">    header.encoding = static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L34">        rt::SampledIoEncoding::signed_int16_le);</span>
+<span id="L35">    header.timestamp_domain_identity = timestamp_domain;</span>
+<span id="L36">    header.sample_interval_ns = 1000;</span>
+<span id="L37">    header.trigger_identity = trigger;</span>
+<span id="L38">    header.trigger_sequence = sequence;</span>
+<span id="L39">    header.calibration_identity = calibration;</span>
+<span id="L40">    header.status = static_cast&lt;std::uint32_t&gt;(status);</span>
+<span id="L41">    header.payload_checksum = rt::sampled_io_payload_checksum(</span>
+<span id="L42">        std::span&lt;const std::byte&gt;(bytes).subspan(sizeof(header)));</span>
+<span id="L43">    std::memcpy(bytes.data(), &amp;header, sizeof(header));</span>
+<span id="L44">    return bytes;</span>
+<span id="L45">}</span>
+<span id="L46"></span>
+<span id="L47">struct CompilerFixture {</span>
+<span id="L48">    static constexpr std::uint32_t owner = 42;</span>
+<span id="L49">    rt::PhaseHandle device_phase{owner, 0};</span>
+<span id="L50">    rt::PhaseHandle cpu_phase{owner, 1};</span>
+<span id="L51">    rt::RateDomainHandle domain{owner, 0};</span>
+<span id="L52">    rt::DeviceBackendHandle backend{owner, 0};</span>
+<span id="L53">    rt::DeviceBufferHandle buffer{owner, 0};</span>
+<span id="L54">    rt::CrossRateChannelHandle channel{owner, 0};</span>
+<span id="L55">    std::vector&lt;std::byte&gt; initial = sampled_frame(</span>
+<span id="L56">        101, rt::SampledIoFrameStatus::initial, 7, 303, 404);</span>
+<span id="L57">    std::vector&lt;std::byte&gt; device_storage =</span>
+<span id="L58">        std::vector&lt;std::byte&gt;(initial.size() * 2);</span>
+<span id="L59">    rt::detail::SampledIoChannelSpec sampled{};</span>
+<span id="L60">    rt::detail::CrossRateChannelSpec cross_spec{};</span>
+<span id="L61">    rt::detail::CompiledCrossRatePlan cross_plan{};</span>
+<span id="L62">    rt::detail::CompiledDeviceRatePlan device_plan{};</span>
+<span id="L63">    rt::detail::CompiledRatePlan rate_plan{};</span>
+<span id="L64"></span>
+<span id="L65">    CompilerFixture() {</span>
+<span id="L66">        sampled.channel = channel;</span>
+<span id="L67">        sampled.direction = rt::SampledIoDirection::input;</span>
+<span id="L68">        sampled.channel_identity = 101;</span>
+<span id="L69">        sampled.encoding = rt::SampledIoEncoding::signed_int16_le;</span>
+<span id="L70">        sampled.element_count = 1;</span>
+<span id="L71">        sampled.samples_per_frame = 4;</span>
+<span id="L72">        sampled.units_identity = 202;</span>
+<span id="L73">        sampled.calibration_identity = 303;</span>
+<span id="L74">        sampled.sample_period_ns = 1000;</span>
+<span id="L75">        sampled.timestamp_domain_identity = 7;</span>
+<span id="L76">        sampled.clock_domain_identity = 8;</span>
+<span id="L77">        sampled.trigger_identity = 404;</span>
+<span id="L78">        sampled.ring_capacity = rt::cross_rate_snapshot_slot_count;</span>
+<span id="L79">        sampled.initial_sequence = 1;</span>
+<span id="L80">        sampled.maximum_age_ns = 2000;</span>
+<span id="L81">        sampled.initial_frame = initial;</span>
+<span id="L82"></span>
+<span id="L83">        cross_spec.name = &quot;sensor&quot;;</span>
+<span id="L84">        cross_spec.producer = device_phase;</span>
+<span id="L85">        cross_spec.consumer = cpu_phase;</span>
+<span id="L86">        cross_spec.payload_size = initial.size();</span>
+<span id="L87">        cross_spec.initial_sample = initial;</span>
+<span id="L88">        cross_spec.maximum_age_ns = 2000;</span>
+<span id="L89">        cross_spec.producer_device = {0, initial.size()};</span>
+<span id="L90"></span>
+<span id="L91">        rt::CompiledCrossRateChannel compiled{};</span>
+<span id="L92">        compiled.channel = channel;</span>
+<span id="L93">        compiled.producer = device_phase;</span>
+<span id="L94">        compiled.consumer = cpu_phase;</span>
+<span id="L95">        compiled.payload_size = initial.size();</span>
+<span id="L96">        compiled.snapshot_slot_count = rt::cross_rate_snapshot_slot_count;</span>
+<span id="L97">        compiled.maximum_age_ns = 2000;</span>
+<span id="L98">        compiled.producer_device = cross_spec.producer_device;</span>
+<span id="L99">        cross_plan.channels.push_back(compiled);</span>
+<span id="L100">        cross_plan.device_endpoint_index_by_channel.push_back(0);</span>
+<span id="L101">        rt::detail::CompiledCrossRateDeviceEndpoint endpoint{};</span>
+<span id="L102">        endpoint.channel_index = 0;</span>
+<span id="L103">        endpoint.producer = true;</span>
+<span id="L104">        endpoint.phase = device_phase;</span>
+<span id="L105">        endpoint.backend = backend;</span>
+<span id="L106">        endpoint.buffer = buffer;</span>
+<span id="L107">        endpoint.envelope_bytes = initial.size();</span>
+<span id="L108">        endpoint.slot_stride_bytes = initial.size();</span>
+<span id="L109">        endpoint.slot_count = 2;</span>
+<span id="L110">        endpoint.timestamp_domain_identity = 7;</span>
+<span id="L111">        endpoint.host_storage = device_storage;</span>
+<span id="L112">        cross_plan.device_endpoints.push_back(endpoint);</span>
+<span id="L113"></span>
+<span id="L114">        rt::CompiledDeviceRatePhase phase{};</span>
+<span id="L115">        phase.phase = device_phase;</span>
+<span id="L116">        phase.domain = domain;</span>
+<span id="L117">        phase.backend = backend;</span>
+<span id="L118">        phase.maximum_in_flight = 2;</span>
+<span id="L119">        phase.payload_reference_count = 1;</span>
+<span id="L120">        phase.signal_count = 1;</span>
+<span id="L121">        phase.completion_timestamp_domain_identity = 7;</span>
+<span id="L122">        device_plan.phases.push_back(phase);</span>
+<span id="L123">    }</span>
+<span id="L124"></span>
+<span id="L125">    rt::Status compile(</span>
+<span id="L126">        rt::detail::CompiledSampledIoPlan&amp; output,</span>
+<span id="L127">        rt::detail::SampledIoCompileDiagnostic&amp; diagnostic) {</span>
+<span id="L128">        const std::array specs{cross_spec};</span>
+<span id="L129">        const std::array sampled_specs{sampled};</span>
+<span id="L130">        return rt::detail::compile_sampled_io(</span>
+<span id="L131">            owner, sampled_specs, rate_plan, device_plan, specs,</span>
+<span id="L132">            cross_plan, output, diagnostic);</span>
+<span id="L133">    }</span>
+<span id="L134"></span>
+<span id="L135">    void configure_output() {</span>
+<span id="L136">        initial = sampled_frame(</span>
+<span id="L137">            101, rt::SampledIoFrameStatus::initial,</span>
+<span id="L138">            rt::cross_rate_runtime_logical_timestamp_domain_identity,</span>
+<span id="L139">            303, 404);</span>
+<span id="L140">        const auto safe = sampled_frame(</span>
+<span id="L141">            101, rt::SampledIoFrameStatus::safe,</span>
+<span id="L142">            rt::cross_rate_runtime_logical_timestamp_domain_identity,</span>
+<span id="L143">            303, 404);</span>
+<span id="L144">        device_storage.assign(initial.size() * 2, std::byte{});</span>
+<span id="L145">        sampled.direction = rt::SampledIoDirection::output;</span>
+<span id="L146">        sampled.timestamp_domain_identity =</span>
+<span id="L147">            rt::cross_rate_runtime_logical_timestamp_domain_identity;</span>
+<span id="L148">        sampled.underrun_policy =</span>
+<span id="L149">            rt::SampledIoUnderrunPolicy::substitute_safe;</span>
+<span id="L150">        sampled.safe_transition_timeout_ns = 1000;</span>
+<span id="L151">        sampled.initial_frame = initial;</span>
+<span id="L152">        sampled.startup_safe_frame = safe;</span>
+<span id="L153">        sampled.failure_safe_frame = safe;</span>
+<span id="L154">        sampled.shutdown_safe_frame = safe;</span>
+<span id="L155"></span>
+<span id="L156">        cross_spec.producer = cpu_phase;</span>
+<span id="L157">        cross_spec.consumer = device_phase;</span>
+<span id="L158">        cross_spec.initial_sample = initial;</span>
+<span id="L159">        cross_spec.producer_device = {};</span>
+<span id="L160">        cross_spec.consumer_device = {0, initial.size()};</span>
+<span id="L161">        auto&amp; compiled = cross_plan.channels[0];</span>
+<span id="L162">        compiled.producer = cpu_phase;</span>
+<span id="L163">        compiled.consumer = device_phase;</span>
+<span id="L164">        compiled.producer_device = {};</span>
+<span id="L165">        compiled.consumer_device = cross_spec.consumer_device;</span>
+<span id="L166">        auto&amp; endpoint = cross_plan.device_endpoints[0];</span>
+<span id="L167">        endpoint.producer = false;</span>
+<span id="L168">        endpoint.timestamp_domain_identity =</span>
+<span id="L169">            rt::cross_rate_runtime_logical_timestamp_domain_identity;</span>
+<span id="L170">        endpoint.host_storage = device_storage;</span>
+<span id="L171">        rt::ReferenceRelease release{};</span>
+<span id="L172">        release.phase = device_phase;</span>
+<span id="L173">        rate_plan.releases.push_back(release);</span>
+<span id="L174">    }</span>
+<span id="L175">};</span>
+<span id="L176"></span>
+<span id="L177">TEST(SampledIo, CompilesExactInputDescriptorAndDirectMap) {</span>
+<span id="L178">    CompilerFixture fixture;</span>
+<span id="L179">    rt::detail::CompiledSampledIoPlan plan;</span>
+<span id="L180">    rt::detail::SampledIoCompileDiagnostic diagnostic;</span>
+<span id="L181">    ASSERT_EQ(fixture.compile(plan, diagnostic), rt::Status::ok);</span>
+<span id="L182">    ASSERT_EQ(plan.channels.size(), 1u);</span>
+<span id="L183">    EXPECT_EQ(plan.channels[0].public_record.channel_identity, 101u);</span>
+<span id="L184">    EXPECT_EQ(plan.channels[0].public_record.frame_bytes,</span>
+<span id="L185">              fixture.initial.size());</span>
+<span id="L186">    ASSERT_EQ(plan.channel_index_by_cross_rate.size(), 1u);</span>
+<span id="L187">    EXPECT_EQ(plan.channel_index_by_cross_rate[0], 0u);</span>
+<span id="L188">    EXPECT_EQ(plan.frame_storage, fixture.initial);</span>
+<span id="L189">}</span>
+<span id="L190"></span>
+<span id="L191">TEST(SampledIo, FailureIsTransactionalAndCorrectionIsRetryable) {</span>
+<span id="L192">    CompilerFixture fixture;</span>
+<span id="L193">    rt::detail::CompiledSampledIoPlan plan;</span>
+<span id="L194">    rt::detail::SampledIoCompileDiagnostic diagnostic;</span>
+<span id="L195">    fixture.sampled.initial_frame.back() ^= std::byte{1};</span>
+<span id="L196">    EXPECT_EQ(fixture.compile(plan, diagnostic), rt::Status::invalid_argument);</span>
+<span id="L197">    EXPECT_TRUE(plan.channels.empty());</span>
+<span id="L198">    fixture.sampled.initial_frame = fixture.initial;</span>
+<span id="L199">    EXPECT_EQ(fixture.compile(plan, diagnostic), rt::Status::ok);</span>
+<span id="L200">    EXPECT_EQ(plan.channels.size(), 1u);</span>
+<span id="L201">}</span>
+<span id="L202"></span>
+<span id="L203">TEST(SampledIo, RejectsMalformedDescriptorsAndEndpointDisagreement) {</span>
+<span id="L204">    const auto expect_rejected = [](auto mutate, rt::Status expected) {</span>
+<span id="L205">        CompilerFixture fixture;</span>
+<span id="L206">        mutate(fixture);</span>
+<span id="L207">        rt::detail::CompiledSampledIoPlan plan;</span>
+<span id="L208">        rt::detail::SampledIoCompileDiagnostic diagnostic;</span>
+<span id="L209">        EXPECT_EQ(fixture.compile(plan, diagnostic), expected);</span>
+<span id="L210">        EXPECT_TRUE(plan.channels.empty());</span>
+<span id="L211">    };</span>
+<span id="L212">    expect_rejected(</span>
+<span id="L213">        [](CompilerFixture&amp; fixture) {</span>
+<span id="L214">            fixture.sampled.direction =</span>
+<span id="L215">                static_cast&lt;rt::SampledIoDirection&gt;(255);</span>
+<span id="L216">        },</span>
+<span id="L217">        rt::Status::invalid_argument);</span>
+<span id="L218">    expect_rejected(</span>
+<span id="L219">        [](CompilerFixture&amp; fixture) {</span>
+<span id="L220">            fixture.sampled.encoding =</span>
+<span id="L221">                static_cast&lt;rt::SampledIoEncoding&gt;(255);</span>
+<span id="L222">        },</span>
+<span id="L223">        rt::Status::invalid_argument);</span>
+<span id="L224">    expect_rejected(</span>
+<span id="L225">        [](CompilerFixture&amp; fixture) {</span>
+<span id="L226">            fixture.sampled.scale_denominator = 0;</span>
+<span id="L227">        },</span>
+<span id="L228">        rt::Status::invalid_argument);</span>
+<span id="L229">    expect_rejected(</span>
+<span id="L230">        [](CompilerFixture&amp; fixture) {</span>
+<span id="L231">            fixture.sampled.ring_capacity = 0;</span>
+<span id="L232">        },</span>
+<span id="L233">        rt::Status::invalid_argument);</span>
+<span id="L234">    expect_rejected(</span>
+<span id="L235">        [](CompilerFixture&amp; fixture) {</span>
+<span id="L236">            fixture.sampled.element_count = rt::cross_rate_payload_capacity;</span>
+<span id="L237">            fixture.sampled.samples_per_frame =</span>
+<span id="L238">                rt::cross_rate_payload_capacity;</span>
+<span id="L239">        },</span>
+<span id="L240">        rt::Status::capacity_exceeded);</span>
+<span id="L241">    expect_rejected(</span>
+<span id="L242">        [](CompilerFixture&amp; fixture) {</span>
+<span id="L243">            ++fixture.cross_plan.channels[0].payload_size;</span>
+<span id="L244">        },</span>
+<span id="L245">        rt::Status::invalid_argument);</span>
+<span id="L246">    expect_rejected(</span>
+<span id="L247">        [](CompilerFixture&amp; fixture) {</span>
+<span id="L248">            ++fixture.cross_plan.device_endpoints[0]</span>
+<span id="L249">                  .timestamp_domain_identity;</span>
+<span id="L250">        },</span>
+<span id="L251">        rt::Status::invalid_argument);</span>
+<span id="L252">    expect_rejected(</span>
+<span id="L253">        [](CompilerFixture&amp; fixture) {</span>
+<span id="L254">            fixture.cross_plan.device_endpoints[0].host_storage = {};</span>
+<span id="L255">        },</span>
+<span id="L256">        rt::Status::invalid_argument);</span>
+<span id="L257">    expect_rejected(</span>
+<span id="L258">        [](CompilerFixture&amp; fixture) {</span>
+<span id="L259">            fixture.device_plan.phases.clear();</span>
+<span id="L260">        },</span>
+<span id="L261">        rt::Status::invalid_argument);</span>
+<span id="L262">    expect_rejected(</span>
+<span id="L263">        [](CompilerFixture&amp; fixture) {</span>
+<span id="L264">            fixture.sampled.startup_safe_frame = fixture.initial;</span>
+<span id="L265">        },</span>
+<span id="L266">        rt::Status::invalid_argument);</span>
+<span id="L267">}</span>
+<span id="L268"></span>
+<span id="L269">TEST(SampledIo, OutputRequiresExactSafeFramesAndSignalOnlyPhase) {</span>
+<span id="L270">    CompilerFixture accepted;</span>
+<span id="L271">    accepted.configure_output();</span>
+<span id="L272">    rt::detail::CompiledSampledIoPlan plan;</span>
+<span id="L273">    rt::detail::SampledIoCompileDiagnostic diagnostic;</span>
+<span id="L274">    ASSERT_EQ(accepted.compile(plan, diagnostic), rt::Status::ok);</span>
+<span id="L275">    ASSERT_EQ(plan.channels.size(), 1u);</span>
+<span id="L276">    EXPECT_EQ(plan.safe_channel_indices.size(), 1u);</span>
+<span id="L277">    EXPECT_EQ(plan.safe_phases.size(), 1u);</span>
+<span id="L278">    EXPECT_EQ(</span>
+<span id="L279">        plan.frame_storage.size(),</span>
+<span id="L280">        accepted.initial.size() * 4);</span>
+<span id="L281"></span>
+<span id="L282">    const auto expect_invalid = [](auto mutate) {</span>
+<span id="L283">        CompilerFixture fixture;</span>
+<span id="L284">        fixture.configure_output();</span>
+<span id="L285">        mutate(fixture);</span>
+<span id="L286">        rt::detail::CompiledSampledIoPlan rejected;</span>
+<span id="L287">        rt::detail::SampledIoCompileDiagnostic rejected_diagnostic;</span>
+<span id="L288">        EXPECT_EQ(</span>
+<span id="L289">            fixture.compile(rejected, rejected_diagnostic),</span>
+<span id="L290">            rt::Status::invalid_argument);</span>
+<span id="L291">        EXPECT_TRUE(rejected.channels.empty());</span>
+<span id="L292">    };</span>
+<span id="L293">    expect_invalid([](CompilerFixture&amp; fixture) {</span>
+<span id="L294">        fixture.sampled.safe_transition_timeout_ns = 0;</span>
+<span id="L295">    });</span>
+<span id="L296">    expect_invalid([](CompilerFixture&amp; fixture) {</span>
+<span id="L297">        fixture.sampled.failure_safe_frame = {};</span>
+<span id="L298">    });</span>
+<span id="L299">    expect_invalid([](CompilerFixture&amp; fixture) {</span>
+<span id="L300">        fixture.device_plan.phases[0].wait_count = 1;</span>
+<span id="L301">    });</span>
+<span id="L302">    expect_invalid([](CompilerFixture&amp; fixture) {</span>
+<span id="L303">        fixture.device_plan.phases[0].signal_count = 0;</span>
+<span id="L304">    });</span>
+<span id="L305">    expect_invalid([](CompilerFixture&amp; fixture) {</span>
+<span id="L306">        fixture.rate_plan.releases.clear();</span>
+<span id="L307">    });</span>
+<span id="L308">}</span>
+<span id="L309"></span>
+<span id="L310">TEST(SampledIo, FrameValidationAcceptsUnalignedStorageWithoutAliasing) {</span>
+<span id="L311">    CompilerFixture fixture;</span>
+<span id="L312">    rt::detail::CompiledSampledIoPlan plan;</span>
+<span id="L313">    rt::detail::SampledIoCompileDiagnostic diagnostic;</span>
+<span id="L314">    ASSERT_EQ(fixture.compile(plan, diagnostic), rt::Status::ok);</span>
+<span id="L315">    std::vector&lt;std::byte&gt; unaligned(fixture.initial.size() + 1);</span>
+<span id="L316">    std::copy(fixture.initial.begin(), fixture.initial.end(),</span>
+<span id="L317">              unaligned.begin() + 1);</span>
+<span id="L318">    EXPECT_TRUE(rt::detail::sampled_io_frame_valid(</span>
+<span id="L319">        std::span&lt;const std::byte&gt;(unaligned).subspan(1),</span>
+<span id="L320">        plan.channels[0].public_record,</span>
+<span id="L321">        rt::SampledIoFrameStatus::initial, 1, 0, false));</span>
+<span id="L322">}</span>
+<span id="L323"></span>
+<span id="L324">TEST(SampledIo, FrameValidationRejectsEveryCorrelatedFieldAndChecksumDrift) {</span>
+<span id="L325">    CompilerFixture fixture;</span>
+<span id="L326">    rt::detail::CompiledSampledIoPlan plan;</span>
+<span id="L327">    rt::detail::SampledIoCompileDiagnostic diagnostic;</span>
+<span id="L328">    ASSERT_EQ(fixture.compile(plan, diagnostic), rt::Status::ok);</span>
+<span id="L329">    const auto&amp; channel = plan.channels[0].public_record;</span>
+<span id="L330">    const auto valid = sampled_frame(</span>
+<span id="L331">        101, rt::SampledIoFrameStatus::produced, 7, 303, 404, 5, 9);</span>
+<span id="L332">    ASSERT_TRUE(rt::detail::sampled_io_frame_valid(</span>
+<span id="L333">        valid, channel, rt::SampledIoFrameStatus::produced, 5, 9, true));</span>
+<span id="L334"></span>
+<span id="L335">    const auto expect_invalid = [&amp;](auto mutate) {</span>
+<span id="L336">        auto candidate = valid;</span>
+<span id="L337">        rt::SampledIoFrameHeader header{};</span>
+<span id="L338">        std::memcpy(&amp;header, candidate.data(), sizeof(header));</span>
+<span id="L339">        mutate(header, candidate);</span>
+<span id="L340">        std::memcpy(candidate.data(), &amp;header, sizeof(header));</span>
+<span id="L341">        EXPECT_FALSE(rt::detail::sampled_io_frame_valid(</span>
+<span id="L342">            candidate, channel, rt::SampledIoFrameStatus::produced,</span>
+<span id="L343">            5, 9, true));</span>
+<span id="L344">    };</span>
+<span id="L345">    expect_invalid([](auto&amp; header, auto&amp;) { --header.struct_size; });</span>
+<span id="L346">    expect_invalid([](auto&amp; header, auto&amp;) { ++header.version; });</span>
+<span id="L347">    expect_invalid([](auto&amp; header, auto&amp;) { ++header.channel_identity; });</span>
+<span id="L348">    expect_invalid([](auto&amp; header, auto&amp;) { ++header.sequence; });</span>
+<span id="L349">    expect_invalid([](auto&amp; header, auto&amp;) {</span>
+<span id="L350">        ++header.release_generation;</span>
+<span id="L351">    });</span>
+<span id="L352">    expect_invalid([](auto&amp; header, auto&amp;) { ++header.sample_count; });</span>
+<span id="L353">    expect_invalid([](auto&amp; header, auto&amp;) { ++header.encoding; });</span>
+<span id="L354">    expect_invalid([](auto&amp; header, auto&amp;) {</span>
+<span id="L355">        ++header.timestamp_domain_identity;</span>
+<span id="L356">    });</span>
+<span id="L357">    expect_invalid([](auto&amp; header, auto&amp;) {</span>
+<span id="L358">        ++header.sample_interval_ns;</span>
+<span id="L359">    });</span>
+<span id="L360">    expect_invalid([](auto&amp; header, auto&amp;) { ++header.trigger_identity; });</span>
+<span id="L361">    expect_invalid([](auto&amp; header, auto&amp;) { ++header.trigger_sequence; });</span>
+<span id="L362">    expect_invalid([](auto&amp; header, auto&amp;) {</span>
+<span id="L363">        ++header.calibration_identity;</span>
+<span id="L364">    });</span>
+<span id="L365">    expect_invalid([](auto&amp; header, auto&amp;) { ++header.status; });</span>
+<span id="L366">    expect_invalid([](auto&amp; header, auto&amp;) { ++header.reserved0; });</span>
+<span id="L367">    expect_invalid([](auto&amp;, auto&amp; bytes) {</span>
+<span id="L368">        bytes.back() ^= std::byte{1};</span>
+<span id="L369">    });</span>
+<span id="L370">}</span>
+<span id="L371"></span>
+<span id="L372">TEST(SampledIo, RuntimeLoopbackAcknowledgesSafeAndPublishesTerminalInput) {</span>
+<span id="L373">    constexpr std::size_t frame_bytes = sizeof(rt::SampledIoFrameHeader) + 8;</span>
+<span id="L374">    struct ManualClock final : rt::RuntimeClock {</span>
+<span id="L375">        std::uint64_t now_ns() noexcept override { return 1&#x27;000; }</span>
+<span id="L376">        rt::Status sleep_until_ns(std::uint64_t) noexcept override {</span>
+<span id="L377">            return rt::Status::ok;</span>
+<span id="L378">        }</span>
+<span id="L379">    } clock;</span>
+<span id="L380">    struct State {</span>
+<span id="L381">        rt::CrossRateChannelHandle output{};</span>
+<span id="L382">        rt::CrossRateChannelHandle input{};</span>
+<span id="L383">        rt::DeviceCommandBatch declaration{};</span>
+<span id="L384">        std::array&lt;std::byte, frame_bytes&gt; produced{};</span>
+<span id="L385">        std::array&lt;std::byte, frame_bytes&gt; consumed{};</span>
+<span id="L386">        rt::CrossRateReadResult read{};</span>
+<span id="L387">        std::uint64_t signal_value = 1;</span>
+<span id="L388">        std::size_t consume_count = 0;</span>
+<span id="L389">        bool skip_output = false;</span>
+<span id="L390">        bool publish_twice = false;</span>
+<span id="L391">        rt::Status second_publish_status = rt::Status::ok;</span>
+<span id="L392">    } state;</span>
+<span id="L393">    rt::SampledIoLoopbackBackend backend({4, 2, 4096, 1, 7});</span>
+<span id="L394">    ASSERT_EQ(backend.add_route({17, 101, 202, 7, 303, 404}), rt::Status::ok);</span>
+<span id="L395"></span>
+<span id="L396">    rt::Runtime runtime(clock);</span>
+<span id="L397">    rt::RuntimeConfig config;</span>
+<span id="L398">    config.callback_capacity = 3;</span>
+<span id="L399">    config.worker_count = 2;</span>
+<span id="L400">    config.executor_queue_capacity = 8;</span>
+<span id="L401">    config.task_scratch_slots = 8;</span>
+<span id="L402">    config.trace_capacity = 32;</span>
+<span id="L403">    config.device_backend_capacity = 1;</span>
+<span id="L404">    config.device_buffer_capacity = 1;</span>
+<span id="L405">    config.device_outstanding_capacity = 4;</span>
+<span id="L406">    config.device_completion_batch = 4;</span>
+<span id="L407">    ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L408">    ASSERT_EQ(runtime.set_rate_execution_policy({6}), rt::Status::ok);</span>
+<span id="L409">    ASSERT_EQ(</span>
+<span id="L410">        runtime.set_mixed_rate_closure_policy({</span>
+<span id="L411">            42,</span>
+<span id="L412">            128,</span>
+<span id="L413">            0,</span>
+<span id="L414">            0,</span>
+<span id="L415">            0,</span>
+<span id="L416">            rt::MixedRateOverflowPolicy::overwrite_committed,</span>
+<span id="L417">            false,</span>
+<span id="L418">            true,</span>
+<span id="L419">            {},</span>
+<span id="L420">        }),</span>
+<span id="L421">        rt::Status::ok);</span>
+<span id="L422">    rt::DeviceBackendHandle backend_handle;</span>
+<span id="L423">    ASSERT_EQ(runtime.register_device_backend(</span>
+<span id="L424">        backend.hal_v2_registration(), backend_handle), rt::Status::ok);</span>
+<span id="L425">    rt::DeviceMemoryDomainHandle memory_domain;</span>
+<span id="L426">    rt::HalV2MemoryDomain memory_description;</span>
+<span id="L427">    ASSERT_TRUE(runtime.device_memory_domain_at(</span>
+<span id="L428">        backend_handle, 0, memory_domain, memory_description));</span>
+<span id="L429">    alignas(64) std::array&lt;std::byte, frame_bytes * 4&gt; storage{};</span>
+<span id="L430">    rt::DeviceBufferHandle buffer;</span>
+<span id="L431">    ASSERT_EQ(runtime.register_device_buffer(</span>
+<span id="L432">        {&quot;sampled.loopback.buffer&quot;, backend_handle, memory_domain, storage, {},</span>
+<span id="L433">         storage.size(), rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L434">         RTFW_DEVICE_BUFFER_HOST_READ | RTFW_DEVICE_BUFFER_HOST_WRITE |</span>
+<span id="L435">             RTFW_DEVICE_BUFFER_DEVICE_READ |</span>
+<span id="L436">             RTFW_DEVICE_BUFFER_DEVICE_WRITE,</span>
+<span id="L437">         rt::HalV2MemoryCoherency::host_coherent,</span>
+<span id="L438">         rt::hal_v2_memory_sync_none},</span>
+<span id="L439">        buffer), rt::Status::ok);</span>
+<span id="L440">    rt::DeviceTimelineHandle timeline;</span>
+<span id="L441">    ASSERT_EQ(runtime.register_device_timeline(</span>
+<span id="L442">        {&quot;sampled.loopback.timeline&quot;, backend_handle, 0}, timeline),</span>
+<span id="L443">        rt::Status::ok);</span>
+<span id="L444"></span>
+<span id="L445">    rt::PhaseHandle output_phase;</span>
+<span id="L446">    ASSERT_EQ(runtime.register_callback(</span>
+<span id="L447">        {&quot;sampled.output&quot;,</span>
+<span id="L448">         [](void* opaque, const rt::CallbackContext&amp; context) {</span>
+<span id="L449">             auto&amp; value = *static_cast&lt;State*&gt;(opaque);</span>
+<span id="L450">             if (!context.rate_release) {</span>
+<span id="L451">                 return rt::CallbackResult::error;</span>
+<span id="L452">             }</span>
+<span id="L453">             if (value.skip_output) {</span>
+<span id="L454">                 return rt::CallbackResult::ok;</span>
+<span id="L455">             }</span>
+<span id="L456">             rt::SampledIoFrameHeader header{};</span>
+<span id="L457">             header.channel_identity = 101;</span>
+<span id="L458">             header.sequence =</span>
+<span id="L459">                 context.rate_release-&gt;domain_release_sequence + 2;</span>
+<span id="L460">             header.release_generation =</span>
+<span id="L461">                 context.rate_release-&gt;domain_release_sequence + 1;</span>
+<span id="L462">             header.sample_count = 4;</span>
+<span id="L463">             header.encoding = static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L464">                 rt::SampledIoEncoding::signed_int16_le);</span>
+<span id="L465">             header.timestamp_domain_identity = 1;</span>
+<span id="L466">             header.first_sample_timestamp =</span>
+<span id="L467">                 context.rate_release-&gt;logical_release_ns;</span>
+<span id="L468">             header.sample_interval_ns = 1000;</span>
+<span id="L469">             header.trigger_identity = 404;</span>
+<span id="L470">             header.trigger_sequence = header.sequence;</span>
+<span id="L471">             header.calibration_identity = 303;</span>
+<span id="L472">             header.status = static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L473">                 rt::SampledIoFrameStatus::produced);</span>
+<span id="L474">             header.payload_checksum = rt::sampled_io_payload_checksum(</span>
+<span id="L475">                 std::span&lt;const std::byte&gt;(value.produced).subspan(</span>
+<span id="L476">                     sizeof(header)));</span>
+<span id="L477">             std::memcpy(value.produced.data(), &amp;header, sizeof(header));</span>
+<span id="L478">             if (context.rate_release-&gt;publish(</span>
+<span id="L479">                     value.output, value.produced) != rt::Status::ok) {</span>
+<span id="L480">                 return rt::CallbackResult::error;</span>
+<span id="L481">             }</span>
+<span id="L482">             if (value.publish_twice) {</span>
+<span id="L483">                 value.second_publish_status = context.rate_release-&gt;publish(</span>
+<span id="L484">                     value.output, value.produced);</span>
+<span id="L485">                 return rt::CallbackResult::error;</span>
+<span id="L486">             }</span>
+<span id="L487">             return rt::CallbackResult::ok;</span>
+<span id="L488">         }, &amp;state}, output_phase), rt::Status::ok);</span>
+<span id="L489"></span>
+<span id="L490">    state.declaration.command_count = 1;</span>
+<span id="L491">    state.declaration.signal_count = 1;</span>
+<span id="L492">    state.declaration.commands[0].kind = static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L493">        rt::HalV2CommandKind::dispatch);</span>
+<span id="L494">    state.declaration.commands[0].opcode = 17;</span>
+<span id="L495">    state.declaration.commands[0].buffer_count = 2;</span>
+<span id="L496">    state.declaration.commands[0].buffers[0] = {</span>
+<span id="L497">        buffer.value, RTFW_DEVICE_ACCESS_READ, 0, 0, frame_bytes * 2};</span>
+<span id="L498">    state.declaration.commands[0].buffers[1] = {</span>
+<span id="L499">        buffer.value, RTFW_DEVICE_ACCESS_WRITE, 0,</span>
+<span id="L500">        frame_bytes * 2, frame_bytes * 2};</span>
+<span id="L501">    state.declaration.signals[0].timeline_handle = timeline.value;</span>
+<span id="L502">    rt::PhaseHandle device_phase;</span>
+<span id="L503">    ASSERT_EQ(runtime.register_device_batch_phase(</span>
+<span id="L504">        {&quot;sampled.loopback.device&quot;, backend_handle,</span>
+<span id="L505">         [](void* opaque, const rt::DeviceCallbackContext&amp;,</span>
+<span id="L506">            rt::DeviceCommandBatch&amp; batch) {</span>
+<span id="L507">             auto&amp; value = *static_cast&lt;State*&gt;(opaque);</span>
+<span id="L508">             batch = value.declaration;</span>
+<span id="L509">             batch.timeout_ns = 100&#x27;000&#x27;000;</span>
+<span id="L510">             batch.signals[0].value = ++value.signal_value;</span>
+<span id="L511">             return rt::CallbackResult::ok;</span>
+<span id="L512">         }, &amp;state, state.declaration}, device_phase), rt::Status::ok);</span>
+<span id="L513"></span>
+<span id="L514">    rt::PhaseHandle input_phase;</span>
+<span id="L515">    ASSERT_EQ(runtime.register_callback(</span>
+<span id="L516">        {&quot;sampled.input&quot;,</span>
+<span id="L517">         [](void* opaque, const rt::CallbackContext&amp; context) {</span>
+<span id="L518">             auto&amp; value = *static_cast&lt;State*&gt;(opaque);</span>
+<span id="L519">             if (!context.rate_release ||</span>
+<span id="L520">                 context.rate_release-&gt;copy(</span>
+<span id="L521">                     value.input, value.consumed, value.read) !=</span>
+<span id="L522">                     rt::CrossRateReadStatus::ok) {</span>
+<span id="L523">                 return rt::CallbackResult::error;</span>
+<span id="L524">             }</span>
+<span id="L525">             ++value.consume_count;</span>
+<span id="L526">             return rt::CallbackResult::ok;</span>
+<span id="L527">         }, &amp;state}, input_phase), rt::Status::ok);</span>
+<span id="L528">    rt::RateDomainHandle output_rate;</span>
+<span id="L529">    rt::RateDomainHandle device_rate;</span>
+<span id="L530">    rt::RateDomainHandle input_rate;</span>
+<span id="L531">    ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L532">        {&quot;sampled.output.rate&quot;, 2&#x27;000&#x27;000&#x27;000, 1, 900&#x27;000&#x27;000, 10},</span>
+<span id="L533">        output_rate), rt::Status::ok);</span>
+<span id="L534">    ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L535">        {&quot;sampled.device.rate&quot;, 4&#x27;000&#x27;000&#x27;000, 1, 900&#x27;000&#x27;000, 0},</span>
+<span id="L536">        device_rate), rt::Status::ok);</span>
+<span id="L537">    ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L538">        {&quot;sampled.input.rate&quot;, 1&#x27;000&#x27;000&#x27;000, 1, 900&#x27;000&#x27;000, 10},</span>
+<span id="L539">        input_rate), rt::Status::ok);</span>
+<span id="L540">    ASSERT_EQ(runtime.bind_phase_to_rate_domain(output_phase, output_rate),</span>
+<span id="L541">              rt::Status::ok);</span>
+<span id="L542">    const std::array roles{</span>
+<span id="L543">        rt::DeviceRatePayloadRole::input,</span>
+<span id="L544">        rt::DeviceRatePayloadRole::output};</span>
+<span id="L545">    ASSERT_EQ(runtime.bind_device_phase_to_rate_domain(</span>
+<span id="L546">        {device_phase, device_rate, 800&#x27;000&#x27;000, 2, roles}), rt::Status::ok);</span>
+<span id="L547">    ASSERT_EQ(runtime.bind_phase_to_rate_domain(input_phase, input_rate),</span>
+<span id="L548">              rt::Status::ok);</span>
+<span id="L549"></span>
+<span id="L550">    auto output_initial = sampled_frame(</span>
+<span id="L551">        101, rt::SampledIoFrameStatus::initial, 1, 303, 404);</span>
+<span id="L552">    auto output_safe = sampled_frame(</span>
+<span id="L553">        101, rt::SampledIoFrameStatus::safe, 1, 303, 404);</span>
+<span id="L554">    auto input_initial = sampled_frame(</span>
+<span id="L555">        202, rt::SampledIoFrameStatus::initial, 7, 303, 404);</span>
+<span id="L556">    ASSERT_EQ(runtime.register_cross_rate_channel(</span>
+<span id="L557">        {&quot;sampled.output.channel&quot;, output_phase, device_phase, frame_bytes,</span>
+<span id="L558">         output_initial, rt::CrossRateMode::sample_and_hold,</span>
+<span id="L559">         4&#x27;000&#x27;000&#x27;000, {}, {0, frame_bytes}}, state.output), rt::Status::ok);</span>
+<span id="L560">    ASSERT_EQ(runtime.register_cross_rate_channel(</span>
+<span id="L561">        {&quot;sampled.input.channel&quot;, device_phase, input_phase, frame_bytes,</span>
+<span id="L562">         input_initial, rt::CrossRateMode::sample_and_hold,</span>
+<span id="L563">         1&#x27;000&#x27;000&#x27;000, {1, frame_bytes}, {}}, state.input), rt::Status::ok);</span>
+<span id="L564">    rt::SampledIoChannelRegistration output_registration{};</span>
+<span id="L565">    output_registration.channel = state.output;</span>
+<span id="L566">    output_registration.direction = rt::SampledIoDirection::output;</span>
+<span id="L567">    output_registration.channel_identity = 101;</span>
+<span id="L568">    output_registration.element_count = 1;</span>
+<span id="L569">    output_registration.samples_per_frame = 4;</span>
+<span id="L570">    output_registration.units_identity = 202;</span>
+<span id="L571">    output_registration.calibration_identity = 303;</span>
+<span id="L572">    output_registration.sample_period_ns = 1000;</span>
+<span id="L573">    output_registration.timestamp_domain_identity = 1;</span>
+<span id="L574">    output_registration.clock_domain_identity = 1;</span>
+<span id="L575">    output_registration.trigger_identity = 404;</span>
+<span id="L576">    output_registration.ring_capacity = rt::cross_rate_snapshot_slot_count;</span>
+<span id="L577">    output_registration.initial_sequence = 1;</span>
+<span id="L578">    output_registration.maximum_age_ns = 4&#x27;000&#x27;000&#x27;000;</span>
+<span id="L579">    output_registration.underrun_policy =</span>
+<span id="L580">        rt::SampledIoUnderrunPolicy::substitute_safe;</span>
+<span id="L581">    output_registration.safe_transition_timeout_ns = 100&#x27;000&#x27;000;</span>
+<span id="L582">    output_registration.initial_frame = output_initial;</span>
+<span id="L583">    output_registration.startup_safe_frame = output_safe;</span>
+<span id="L584">    output_registration.failure_safe_frame = output_safe;</span>
+<span id="L585">    output_registration.shutdown_safe_frame = output_safe;</span>
+<span id="L586">    ASSERT_EQ(runtime.register_sampled_io_channel(output_registration),</span>
+<span id="L587">              rt::Status::ok);</span>
+<span id="L588">    auto input_registration = output_registration;</span>
+<span id="L589">    input_registration.channel = state.input;</span>
+<span id="L590">    input_registration.direction = rt::SampledIoDirection::input;</span>
+<span id="L591">    input_registration.channel_identity = 202;</span>
+<span id="L592">    input_registration.timestamp_domain_identity = 7;</span>
+<span id="L593">    input_registration.maximum_age_ns = 1&#x27;000&#x27;000&#x27;000;</span>
+<span id="L594">    input_registration.stale_policy =</span>
+<span id="L595">        rt::SampledIoStalePolicy::substitute_initial;</span>
+<span id="L596">    input_registration.safe_transition_timeout_ns = 0;</span>
+<span id="L597">    input_registration.underrun_policy =</span>
+<span id="L598">        rt::SampledIoUnderrunPolicy::fail_release;</span>
+<span id="L599">    input_registration.initial_frame = input_initial;</span>
+<span id="L600">    input_registration.startup_safe_frame = {};</span>
+<span id="L601">    input_registration.failure_safe_frame = {};</span>
+<span id="L602">    input_registration.shutdown_safe_frame = {};</span>
+<span id="L603">    ASSERT_EQ(runtime.register_sampled_io_channel(input_registration),</span>
+<span id="L604">              rt::Status::ok);</span>
+<span id="L605"></span>
+<span id="L606">    ASSERT_EQ(runtime.finalize(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L607">    rt::MemoryPlan plan;</span>
+<span id="L608">    ASSERT_TRUE(runtime.memory_plan(plan));</span>
+<span id="L609">    EXPECT_EQ(plan.sampled_io_channel_count, 2u);</span>
+<span id="L610">    EXPECT_EQ(plan.sampled_io_frame_bytes, frame_bytes * 2);</span>
+<span id="L611">    EXPECT_EQ(plan.sampled_io_safe_frame_bytes, frame_bytes * 3);</span>
+<span id="L612">    ASSERT_EQ(runtime.start(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L613">    rt::SampledIoChannelStatus output_status;</span>
+<span id="L614">    ASSERT_TRUE(runtime.sampled_io_channel_status(state.output, output_status));</span>
+<span id="L615">    EXPECT_EQ(output_status.safety_state,</span>
+<span id="L616">              rt::SampledIoSafetyState::startup_acknowledged);</span>
+<span id="L617">    rt::StepResult result;</span>
+<span id="L618">    ASSERT_EQ(runtime.step(</span>
+<span id="L619">        {0, std::chrono::nanoseconds(1), std::nullopt, 1&#x27;000}, &amp;result),</span>
+<span id="L620">        rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L621">    EXPECT_EQ(state.consume_count, 1u);</span>
+<span id="L622">    EXPECT_EQ(state.read.sampled_sequence, 2u);</span>
+<span id="L623">    EXPECT_EQ(state.read.sampled_trigger_identity, 404u);</span>
+<span id="L624">    EXPECT_EQ(state.read.sampled_calibration_identity, 303u);</span>
+<span id="L625"></span>
+<span id="L626">    ASSERT_EQ(runtime.step(</span>
+<span id="L627">        {1, std::chrono::seconds(1), std::nullopt, 1&#x27;001}, &amp;result),</span>
+<span id="L628">        rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L629">    EXPECT_EQ(state.consume_count, 2u);</span>
+<span id="L630">    EXPECT_TRUE(state.read.held);</span>
+<span id="L631">    EXPECT_EQ(state.read.age_ns, 1&#x27;000&#x27;000&#x27;000u);</span>
+<span id="L632">    EXPECT_EQ(state.read.freshness, rt::CrossRateFreshness::fresh);</span>
+<span id="L633">    EXPECT_FALSE(state.read.sampled_substituted);</span>
+<span id="L634"></span>
+<span id="L635">    state.skip_output = true;</span>
+<span id="L636">    ASSERT_EQ(runtime.step(</span>
+<span id="L637">        {2, std::chrono::seconds(1), std::nullopt, 1&#x27;000&#x27;001&#x27;001}, &amp;result),</span>
+<span id="L638">        rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L639">    EXPECT_EQ(state.consume_count, 3u);</span>
+<span id="L640">    EXPECT_TRUE(state.read.sampled_substituted);</span>
+<span id="L641">    EXPECT_EQ(state.read.sampled_sequence, 1u);</span>
+<span id="L642">    rt::SampledIoChannelStatus input_status;</span>
+<span id="L643">    ASSERT_TRUE(runtime.sampled_io_channel_status(state.input, input_status));</span>
+<span id="L644">    EXPECT_EQ(input_status.stale_frames, 1u);</span>
+<span id="L645">    EXPECT_EQ(input_status.substituted_frames, 1u);</span>
+<span id="L646">    ASSERT_TRUE(runtime.sampled_io_channel_status(state.output, output_status));</span>
+<span id="L647">    EXPECT_EQ(output_status.underruns, 1u);</span>
+<span id="L648">    EXPECT_EQ(output_status.substituted_frames, 1u);</span>
+<span id="L649"></span>
+<span id="L650">    state.skip_output = false;</span>
+<span id="L651">    ASSERT_EQ(runtime.step(</span>
+<span id="L652">        {3, std::chrono::seconds(2), std::nullopt, 2&#x27;000&#x27;001&#x27;001}, &amp;result),</span>
+<span id="L653">        rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L654">    EXPECT_EQ(state.consume_count, 5u);</span>
+<span id="L655">    EXPECT_FALSE(state.read.sampled_substituted);</span>
+<span id="L656">    EXPECT_EQ(state.read.sampled_sequence, 3u);</span>
+<span id="L657">    EXPECT_EQ(</span>
+<span id="L658">        state.read.producer_timestamp_domain_identity,</span>
+<span id="L659">        7u);</span>
+<span id="L660"></span>
+<span id="L661">    state.publish_twice = true;</span>
+<span id="L662">    EXPECT_EQ(runtime.step(</span>
+<span id="L663">        {4, std::chrono::seconds(2), std::nullopt, 4&#x27;000&#x27;001&#x27;001}, &amp;result),</span>
+<span id="L664">        rt::Status::callback_failed);</span>
+<span id="L665">    EXPECT_EQ(state.second_publish_status, rt::Status::invalid_state);</span>
+<span id="L666">    ASSERT_TRUE(runtime.sampled_io_channel_status(state.output, output_status));</span>
+<span id="L667">    EXPECT_EQ(output_status.overruns, 1u);</span>
+<span id="L668">    rt::MixedRateActionCursor action_cursor;</span>
+<span id="L669">    std::array&lt;rt::MixedRateActionRecord, 128&gt; actions{};</span>
+<span id="L670">    rt::MixedRateActionReadResult action_read;</span>
+<span id="L671">    ASSERT_EQ(</span>
+<span id="L672">        runtime.read_mixed_rate_actions(</span>
+<span id="L673">            action_cursor, actions, action_read),</span>
+<span id="L674">        rt::Status::ok);</span>
+<span id="L675">    EXPECT_EQ(action_read.lost_records, 0u);</span>
+<span id="L676">    EXPECT_TRUE(std::any_of(</span>
+<span id="L677">        actions.begin(),</span>
+<span id="L678">        actions.begin() +</span>
+<span id="L679">            static_cast&lt;std::ptrdiff_t&gt;(action_read.records_read),</span>
+<span id="L680">        [](const rt::MixedRateActionRecord&amp; action) {</span>
+<span id="L681">            return action.action == rt::MixedRateActionId::sampled_publish &amp;&amp;</span>
+<span id="L682">                action.reason == rt::MixedRateActionReason::overrun &amp;&amp;</span>
+<span id="L683">                action.stage == rt::MixedRateActionStage::terminal &amp;&amp;</span>
+<span id="L684">                action.terminal_status == static_cast&lt;std::int32_t&gt;(</span>
+<span id="L685">                    rt::Status::capacity_exceeded);</span>
+<span id="L686">        }));</span>
+<span id="L687">    ASSERT_EQ(backend.inject_next(</span>
+<span id="L688">        rt::SampledIoLoopbackFault::completion_error), rt::Status::ok);</span>
+<span id="L689">    EXPECT_EQ(runtime.stop(), rt::Status::device_error);</span>
+<span id="L690">    ASSERT_TRUE(runtime.sampled_io_channel_status(state.output, output_status));</span>
+<span id="L691">    EXPECT_EQ(output_status.safety_state,</span>
+<span id="L692">              rt::SampledIoSafetyState::unknown);</span>
+<span id="L693">    ASSERT_EQ(runtime.stop(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L694">    ASSERT_TRUE(runtime.sampled_io_channel_status(state.output, output_status));</span>
+<span id="L695">    EXPECT_EQ(output_status.safety_state,</span>
+<span id="L696">              rt::SampledIoSafetyState::shutdown_acknowledged);</span>
+<span id="L697">    ASSERT_EQ(</span>
+<span id="L698">        runtime.read_mixed_rate_actions(</span>
+<span id="L699">            action_cursor, actions, action_read),</span>
+<span id="L700">        rt::Status::ok);</span>
+<span id="L701">    bool saw_failed_stop = false;</span>
+<span id="L702">    bool saw_successful_stop = false;</span>
+<span id="L703">    for (std::size_t index = 0; index &lt; action_read.records_read; ++index) {</span>
+<span id="L704">        const auto&amp; action = actions[index];</span>
+<span id="L705">        if (action.action != rt::MixedRateActionId::runtime_stop) {</span>
+<span id="L706">            continue;</span>
+<span id="L707">        }</span>
+<span id="L708">        saw_failed_stop = saw_failed_stop ||</span>
+<span id="L709">            action.reason == rt::MixedRateActionReason::cleanup_pending;</span>
+<span id="L710">        saw_successful_stop = saw_successful_stop ||</span>
+<span id="L711">            (action.reason == rt::MixedRateActionReason::normal &amp;&amp;</span>
+<span id="L712">             action.terminal_status == static_cast&lt;std::int32_t&gt;(</span>
+<span id="L713">                 rt::Status::ok));</span>
+<span id="L714">    }</span>
+<span id="L715">    EXPECT_TRUE(saw_failed_stop);</span>
+<span id="L716">    EXPECT_TRUE(saw_successful_stop);</span>
+<span id="L717">    EXPECT_GE(backend.stats().frames_copied, 4u);</span>
+<span id="L718">}</span>
+<span id="L719"></span>
+<span id="L720">} // namespace</span></pre></html>

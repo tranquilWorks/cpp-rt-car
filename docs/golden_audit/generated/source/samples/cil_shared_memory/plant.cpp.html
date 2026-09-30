@@ -1,0 +1,53 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/cil_shared_memory/plant.cpp</title><h1>samples/cil_shared_memory/plant.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;plant_runtime.hpp&quot;</span>
+<span id="L2"></span>
+<span id="L3">int main(int argc, char** argv) {</span>
+<span id="L4">    cil::Options o;</span>
+<span id="L5">    if (!cil::options(argc, argv, o) || o.mode != &quot;normal&quot;) {</span>
+<span id="L6">        std::cerr &lt;&lt; &quot;usage: cil_plant NAME GENERATION TIMEOUT_MS\n&quot;; return 2;</span>
+<span id="L7">    }</span>
+<span id="L8">    cil::Mapping mapping; auto status = mapping.open(o.key, true);</span>
+<span id="L9">    if (status == cil::Code::ok) status = cil::initialize(*mapping.region(), o.generation);</span>
+<span id="L10">    if (status != cil::Code::ok) {</span>
+<span id="L11">        std::cerr &lt;&lt; &quot;plant setup=&quot; &lt;&lt; cil::name(status) &lt;&lt; &#x27;\n&#x27;; return cil::closed(mapping, status);</span>
+<span id="L12">    }</span>
+<span id="L13">    auto&amp; region = *mapping.region();</span>
+<span id="L14">    cil::Plant plant; plant.endpoint = {&amp;region, o.generation, {}, {}, true};</span>
+<span id="L15">    plant.ttl = o.timeout_ms * 1&#x27;000&#x27;000;</span>
+<span id="L16">    rt::Runtime runtime;</span>
+<span id="L17">    auto configured = cil::configure(runtime, plant);</span>
+<span id="L18">    if (configured != rt::Status::ok) {</span>
+<span id="L19">        plant.endpoint.detach(); std::cerr &lt;&lt; runtime.last_error() &lt;&lt; &#x27;\n&#x27;; return cil::closed(mapping, cil::Code::invalid);</span>
+<span id="L20">    }</span>
+<span id="L21">    rt::sdk::CheckedStopGuard stop(runtime);</span>
+<span id="L22">    bool runtime_ok = runtime.start() == rt::Status::ok;</span>
+<span id="L23">    if (runtime_ok) std::cout &lt;&lt; &quot;ready plant\n&quot; &lt;&lt; std::flush;</span>
+<span id="L24">    // Startup has its own finite budget; command freshness starts only once a</span>
+<span id="L25">    // controller owns the session, not while the OS is starting that process.</span>
+<span id="L26">    const auto startup = cil::now_ns() + 5&#x27;000&#x27;000&#x27;000;</span>
+<span id="L27">    while (runtime_ok &amp;&amp; !cil::load(region.controller) &amp;&amp; cil::now_ns() &lt; startup) cil::pause();</span>
+<span id="L28">    if (!cil::load(region.controller)) plant.status = cil::Code::timeout;</span>
+<span id="L29">    plant.now = cil::now_ns();</span>
+<span id="L30">    if (runtime_ok &amp;&amp; plant.status == cil::Code::ok)</span>
+<span id="L31">        runtime_ok = runtime.step({0, std::chrono::milliseconds(1)}) == rt::Status::ok;</span>
+<span id="L32">    for (std::uint64_t frame = 1; runtime_ok &amp;&amp; plant.status == cil::Code::ok &amp;&amp; frame &lt;= cil::steps; ++frame) {</span>
+<span id="L33">        const auto limit = cil::deadline(o);</span>
+<span id="L34">        while (cil::load(region.commands.state) == 0 &amp;&amp; cil::now_ns() &lt; limit) cil::pause();</span>
+<span id="L35">        if (cil::load(region.commands.state) == 0) { plant.status = cil::Code::timeout; break; }</span>
+<span id="L36">        plant.now = cil::now_ns();</span>
+<span id="L37">        runtime_ok = runtime.step({frame, std::chrono::milliseconds(1)}) == rt::Status::ok;</span>
+<span id="L38">    }</span>
+<span id="L39">    const auto stopped = stop.close();</span>
+<span id="L40">    if (stopped != rt::Status::ok) { std::cerr &lt;&lt; runtime.last_error() &lt;&lt; &#x27;\n&#x27;; std::terminate(); }</span>
+<span id="L41">    status = runtime_ok ? plant.status : cil::Code::invalid;</span>
+<span id="L42">    plant.endpoint.detach(); // No callback or endpoint can access the map after this point.</span>
+<span id="L43">    cil::store(region.stopping, 1);</span>
+<span id="L44">    const auto limit = cil::deadline(o);</span>
+<span id="L45">    while (cil::load(region.controller) &amp;&amp; !cil::load(region.acknowledged) &amp;&amp; cil::now_ns() &lt; limit) cil::pause();</span>
+<span id="L46">    const bool acknowledged = cil::load(region.acknowledged) == 1;</span>
+<span id="L47">    if (status == cil::Code::ok &amp;&amp; !acknowledged) status = cil::Code::no_ack;</span>
+<span id="L48">    std::cout &lt;&lt; &quot;plant status=&quot; &lt;&lt; cil::name(status) &lt;&lt; &quot; generation=&quot; &lt;&lt; o.generation</span>
+<span id="L49">              &lt;&lt; &quot; applied=&quot; &lt;&lt; plant.applied &lt;&lt; &quot; position=&quot; &lt;&lt; plant.position &lt;&lt; &quot; ack=&quot; &lt;&lt; acknowledged &lt;&lt; &quot; history=&quot;;</span>
+<span id="L50">    for (std::size_t i = 0; i &lt; plant.applied; ++i) std::cout &lt;&lt; (i ? &quot;,&quot; : &quot;&quot;) &lt;&lt; plant.history[i];</span>
+<span id="L51">    std::cout &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L52">    return cil::closed(mapping, status);</span>
+<span id="L53">}</span></pre></html>

@@ -1,0 +1,101 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_benchmark_artifacts.cpp</title><h1>tests/test_benchmark_artifacts.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;benchmark_fixtures/provider.hpp&quot;</span>
+<span id="L2">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L3">#include &lt;fstream&gt;</span>
+<span id="L4">#include &lt;random&gt;</span>
+<span id="L5">#include &lt;thread&gt;</span>
+<span id="L6">#ifndef _WIN32</span>
+<span id="L7">#include &lt;csignal&gt;</span>
+<span id="L8">#include &lt;sys/resource.h&gt;</span>
+<span id="L9">#include &lt;sys/wait.h&gt;</span>
+<span id="L10">#include &lt;unistd.h&gt;</span>
+<span id="L11">#endif</span>
+<span id="L12">using namespace benchmark_test;</span>
+<span id="L13">namespace {</span>
+<span id="L14">struct Workspace {</span>
+<span id="L15">    std::filesystem::path path;</span>
+<span id="L16">    Workspace() {</span>
+<span id="L17">        std::random_device random;</span>
+<span id="L18">        for (unsigned n=0; n&lt;32; ++n) {</span>
+<span id="L19">            path=std::filesystem::temp_directory_path()/(&quot;rtfw-test-&quot;+std::to_string(random()));</span>
+<span id="L20">            if (std::filesystem::create_directory(path)) return;</span>
+<span id="L21">        }</span>
+<span id="L22">        throw std::runtime_error(&quot;test workspace unavailable&quot;);</span>
+<span id="L23">    }</span>
+<span id="L24">    ~Workspace() { std::error_code error; std::filesystem::remove_all(path,error); }</span>
+<span id="L25">};</span>
+<span id="L26">std::string read(const std::filesystem::path&amp; path) {</span>
+<span id="L27">    std::ifstream in(path,std::ios::binary);</span>
+<span id="L28">    return {std::istreambuf_iterator&lt;char&gt;(in),std::istreambuf_iterator&lt;char&gt;()};</span>
+<span id="L29">}</span>
+<span id="L30">std::size_t count(const std::filesystem::path&amp; path) {</span>
+<span id="L31">    return static_cast&lt;std::size_t&gt;(std::distance(std::filesystem::directory_iterator(path),</span>
+<span id="L32">                                               std::filesystem::directory_iterator()));</span>
+<span id="L33">}</span>
+<span id="L34">}</span>
+<span id="L35">TEST(BenchmarkArtifacts, ExactFilesAndNoOverwrite) {</span>
+<span id="L36">    Workspace w; Fixture f; const auto r=result(f); const auto a=b::encode(r); const auto output=w.path/&quot;result&quot;;</span>
+<span id="L37">    ASSERT_EQ(b::publish(r,output),b::Status::ok);</span>
+<span id="L38">    ASSERT_EQ(count(output),3U);</span>
+<span id="L39">    EXPECT_EQ(read(output/&quot;descriptor.json&quot;),a.descriptor);</span>
+<span id="L40">    EXPECT_EQ(read(output/&quot;raw.json&quot;),a.raw); EXPECT_EQ(read(output/&quot;result.json&quot;),a.summary);</span>
+<span id="L41">    EXPECT_EQ(b::publish(r,output),b::Status::exists);</span>
+<span id="L42">    EXPECT_EQ(read(output/&quot;result.json&quot;),a.summary); EXPECT_EQ(count(w.path),1U);</span>
+<span id="L43">}</span>
+<span id="L44">TEST(BenchmarkArtifacts, RejectsUnsafeMissingAndInvalidWithoutOutput) {</span>
+<span id="L45">    Workspace w; Fixture f; auto r=result(f);</span>
+<span id="L46">    EXPECT_EQ(b::publish(r,w.path/&quot;..&quot;/&quot;unsafe&quot;),b::Status::invalid);</span>
+<span id="L47">    EXPECT_EQ(b::publish(r,w.path/&quot;missing&quot;/&quot;result&quot;),b::Status::io_error);</span>
+<span id="L48">    r.samples[0].index=23;</span>
+<span id="L49">    EXPECT_EQ(b::publish(r,w.path/&quot;bad&quot;),b::Status::invalid); EXPECT_EQ(count(w.path),0U);</span>
+<span id="L50">    r=result(f); r.start_utc=&quot;1970-02-31T00:00:00Z&quot;;</span>
+<span id="L51">    EXPECT_THROW((void)b::encode(r),std::invalid_argument);</span>
+<span id="L52">}</span>
+<span id="L53">TEST(BenchmarkArtifacts, ConcurrentCreateNewHasOneWinner) {</span>
+<span id="L54">    Workspace w; Fixture f; const auto r=result(f); b::Status one{},two{};</span>
+<span id="L55">    std::thread a([&amp;]{one=b::publish(r,w.path/&quot;race&quot;);});</span>
+<span id="L56">    std::thread c([&amp;]{two=b::publish(r,w.path/&quot;race&quot;);}); a.join(); c.join();</span>
+<span id="L57">    EXPECT_TRUE((one==b::Status::ok &amp;&amp; two==b::Status::exists) ||</span>
+<span id="L58">                (two==b::Status::ok &amp;&amp; one==b::Status::exists));</span>
+<span id="L59">    EXPECT_EQ(count(w.path),1U); EXPECT_EQ(count(w.path/&quot;race&quot;),3U);</span>
+<span id="L60">}</span>
+<span id="L61">TEST(BenchmarkArtifacts, FailedRunKeepsFailureAndNoMeasuredStatistics) {</span>
+<span id="L62">    Workspace w; Fixture f; f.throw_invoke=true; auto r=result(f);</span>
+<span id="L63">    ASSERT_EQ(b::publish(r,w.path/&quot;failed&quot;),b::Status::ok);</span>
+<span id="L64">    const auto contents=read(w.path/&quot;failed&quot;/&quot;result.json&quot;);</span>
+<span id="L65">    EXPECT_NE(contents.find(&quot;\&quot;status\&quot;:\&quot;provider_error\&quot;&quot;),std::string::npos);</span>
+<span id="L66">    EXPECT_NE(contents.find(&quot;\&quot;statistics\&quot;:null&quot;),std::string::npos);</span>
+<span id="L67">    EXPECT_EQ(contents.find(&quot;secret&quot;),std::string::npos);</span>
+<span id="L68">    r.diagnostic=&quot;private-user-data&quot;; EXPECT_THROW((void)b::encode(r),std::invalid_argument);</span>
+<span id="L69">}</span>
+<span id="L70">TEST(BenchmarkArtifacts, DoesNotFollowSymlinks) {</span>
+<span id="L71">    Workspace w; Fixture f; const auto r=result(f);</span>
+<span id="L72">    std::filesystem::create_directory(w.path/&quot;real&quot;);</span>
+<span id="L73">    std::error_code error;</span>
+<span id="L74">    std::filesystem::create_directory_symlink(w.path/&quot;real&quot;,w.path/&quot;link&quot;,error);</span>
+<span id="L75">    if (error) GTEST_SKIP() &lt;&lt; &quot;symlink privilege unavailable; Windows reparse CI remains required&quot;;</span>
+<span id="L76">    EXPECT_EQ(b::publish(r,w.path/&quot;link&quot;/&quot;result&quot;),b::Status::io_error);</span>
+<span id="L77">    EXPECT_EQ(b::publish(r,w.path/&quot;link&quot;),b::Status::exists);</span>
+<span id="L78">    EXPECT_EQ(count(w.path/&quot;real&quot;),0U);</span>
+<span id="L79">}</span>
+<span id="L80">#ifndef _WIN32</span>
+<span id="L81">TEST(BenchmarkArtifacts, ShortWriteRemovesPrivateStagingDirectory) {</span>
+<span id="L82">    Workspace w; Fixture f; const auto r=result(f); const auto output=w.path/&quot;limited&quot;;</span>
+<span id="L83">    const pid_t child=fork(); ASSERT_GE(child,0);</span>
+<span id="L84">    if (!child) {</span>
+<span id="L85">        std::signal(SIGXFSZ,SIG_IGN);</span>
+<span id="L86">        const struct rlimit limit{64,64};</span>
+<span id="L87">        if (setrlimit(RLIMIT_FSIZE,&amp;limit)!=0) _exit(2);</span>
+<span id="L88">        _exit(b::publish(r,output)==b::Status::io_error ? 0 : 1);</span>
+<span id="L89">    }</span>
+<span id="L90">    int status=0; ASSERT_EQ(waitpid(child,&amp;status,0),child);</span>
+<span id="L91">    ASSERT_TRUE(WIFEXITED(status)); EXPECT_EQ(WEXITSTATUS(status),0);</span>
+<span id="L92">    EXPECT_EQ(count(w.path),0U);</span>
+<span id="L93">}</span>
+<span id="L94">#endif</span>
+<span id="L95"></span>
+<span id="L96">#ifdef _WIN32</span>
+<span id="L97">TEST(BenchmarkArtifacts, RejectsWindowsNetworkDeviceAndAmbiguousPaths) {</span>
+<span id="L98">    for (const auto* path:{&quot;//server/share/out&quot;, &quot;\\\\server\\share\\out&quot;, &quot;C:relative&quot;, &quot;CON&quot;, &quot;aux.txt&quot;, &quot;LPT1&quot;, &quot;name.&quot;, &quot;name:stream&quot;})</span>
+<span id="L99">        EXPECT_EQ(b::check_destination(path),b::Status::invalid);</span>
+<span id="L100">}</span>
+<span id="L101">#endif</span></pre></html>

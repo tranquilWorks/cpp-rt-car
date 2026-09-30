@@ -1,0 +1,92 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_system/controls.hpp</title><h1>samples/golden_system/controls.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;model.hpp&quot;</span>
+<span id="L3">#include &lt;rt/live_control.hpp&gt;</span>
+<span id="L4">namespace golden {</span>
+<span id="L5">template &lt;unsigned Kind&gt; struct Control { std::int32_t value = 0; };</span>
+<span id="L6">struct Configuration {</span>
+<span id="L7">  std::int32_t target = 8, gain = 1, calibration = 0, fault = 0;</span>
+<span id="L8">  std::uint64_t generation = 0, applications = 0;</span>
+<span id="L9">  bool consume(const rt::LiveControlGenerationView *view) noexcept;</span>
+<span id="L10">};</span>
+<span id="L11">} // namespace golden</span>
+<span id="L12">namespace rt {</span>
+<span id="L13">template &lt;unsigned Kind&gt; struct LiveControlTypeTraits&lt;golden::Control&lt;Kind&gt;&gt; {</span>
+<span id="L14">  static_assert(Kind &gt;= 1 &amp;&amp; Kind &lt;= 5);</span>
+<span id="L15">  static constexpr std::uint32_t application_type_identity = 2600 + Kind,</span>
+<span id="L16">                                 application_schema_version = 1;</span>
+<span id="L17">  static constexpr auto update_kind = static_cast&lt;LiveControlUpdateKind&gt;(Kind);</span>
+<span id="L18">  static constexpr std::size_t encoded_extent = 16;</span>
+<span id="L19">  static bool validate(const golden::Control&lt;Kind&gt; &amp;x) noexcept {</span>
+<span id="L20">    constexpr std::array&lt;int, 5&gt; low{-64, 0, -16, 0, 0}, high{64, 4, 16, 11, 0};</span>
+<span id="L21">    return x.value &gt;= low[Kind - 1] &amp;&amp; x.value &lt;= high[Kind - 1];</span>
+<span id="L22">  }</span>
+<span id="L23">  static bool encode(const golden::Control&lt;Kind&gt; &amp;x,</span>
+<span id="L24">                     std::span&lt;std::byte, 16&gt; out) noexcept {</span>
+<span id="L25">    if (!validate(x))</span>
+<span id="L26">      return false;</span>
+<span id="L27">    std::fill(out.begin(), out.end(), std::byte{});</span>
+<span id="L28">    golden::put32(out, 0, x.value);</span>
+<span id="L29">    return true;</span>
+<span id="L30">  }</span>
+<span id="L31">  static bool decode(std::span&lt;const std::byte, 16&gt; in,</span>
+<span id="L32">                     golden::Control&lt;Kind&gt; &amp;out) noexcept {</span>
+<span id="L33">    for (std::size_t i = 4; i &lt; in.size(); ++i)</span>
+<span id="L34">      if (in[i] != std::byte{})</span>
+<span id="L35">        return false;</span>
+<span id="L36">    golden::Control&lt;Kind&gt; candidate{golden::get32(in, 0)};</span>
+<span id="L37">    if (!validate(candidate))</span>
+<span id="L38">      return false;</span>
+<span id="L39">    out = candidate;</span>
+<span id="L40">    return true;</span>
+<span id="L41">  }</span>
+<span id="L42">};</span>
+<span id="L43">} // namespace rt</span>
+<span id="L44">namespace golden {</span>
+<span id="L45">template &lt;unsigned Kind&gt;</span>
+<span id="L46">inline bool apply(const rt::LiveControlRecordView &amp;record,</span>
+<span id="L47">                  std::int32_t &amp;out) noexcept {</span>
+<span id="L48">  Control&lt;Kind&gt; value;</span>
+<span id="L49">  if (rt::decode_live_control_typed_payload(record.record, record.payload,</span>
+<span id="L50">                                            value) !=</span>
+<span id="L51">      rt::LiveControlTypedStatus::ok)</span>
+<span id="L52">    return false;</span>
+<span id="L53">  out = value.value;</span>
+<span id="L54">  return true;</span>
+<span id="L55">}</span>
+<span id="L56">inline bool</span>
+<span id="L57">Configuration::consume(const rt::LiveControlGenerationView *view) noexcept {</span>
+<span id="L58">  if (!view || !view-&gt;generation_identity ||</span>
+<span id="L59">      view-&gt;generation_identity == generation)</span>
+<span id="L60">    return true;</span>
+<span id="L61">  Configuration next = *this;</span>
+<span id="L62">  for (const auto &amp;record : view-&gt;records) {</span>
+<span id="L63">    bool ok = false;</span>
+<span id="L64">    switch (record.record.update_kind) {</span>
+<span id="L65">    case rt::LiveControlUpdateKind::scenario_parameters:</span>
+<span id="L66">      ok = apply&lt;1&gt;(record, next.target);</span>
+<span id="L67">      break;</span>
+<span id="L68">    case rt::LiveControlUpdateKind::controller_parameters:</span>
+<span id="L69">      ok = apply&lt;2&gt;(record, next.gain);</span>
+<span id="L70">      break;</span>
+<span id="L71">    case rt::LiveControlUpdateKind::sensor_calibration:</span>
+<span id="L72">      ok = apply&lt;3&gt;(record, next.calibration);</span>
+<span id="L73">      break;</span>
+<span id="L74">    case rt::LiveControlUpdateKind::fault_configuration:</span>
+<span id="L75">      ok = apply&lt;4&gt;(record, next.fault);</span>
+<span id="L76">      break;</span>
+<span id="L77">    case rt::LiveControlUpdateKind::clear_fault: {</span>
+<span id="L78">      std::int32_t zero = 0;</span>
+<span id="L79">      ok = apply&lt;5&gt;(record, zero);</span>
+<span id="L80">      next.fault = 0;</span>
+<span id="L81">      break;</span>
+<span id="L82">    }</span>
+<span id="L83">    }</span>
+<span id="L84">    if (!ok)</span>
+<span id="L85">      return false;</span>
+<span id="L86">    ++next.applications;</span>
+<span id="L87">  }</span>
+<span id="L88">  next.generation = view-&gt;generation_identity;</span>
+<span id="L89">  *this = next;</span>
+<span id="L90">  return true;</span>
+<span id="L91">}</span>
+<span id="L92">} // namespace golden</span></pre></html>

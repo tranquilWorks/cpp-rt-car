@@ -1,0 +1,182 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/host_adapter/test_host.cpp</title><h1>tests/host_adapter/test_host.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;../../samples/host_adapter/host.hpp&quot;</span>
+<span id="L2">#include &quot;../cuda_physics/allocation_guard.hpp&quot;</span>
+<span id="L3">#include &lt;iostream&gt;</span>
+<span id="L4">#include &lt;memory&gt;</span>
+<span id="L5">#define CHECK(x) do { if (!(x)) { std::cerr &lt;&lt; __func__ &lt;&lt; &#x27;:&#x27; &lt;&lt; __LINE__ &lt;&lt; &quot; failed: &quot; #x &lt;&lt; &#x27;\n&#x27;; return false; } } while (false)</span>
+<span id="L6">using rt::Status;</span>
+<span id="L7">using namespace host_example;</span>
+<span id="L8">struct Probe {</span>
+<span id="L9">    std::array&lt;std::atomic&lt;unsigned&gt;, 4096&gt; hits{};</span>
+<span id="L10">    std::atomic&lt;bool&gt; bad{false};</span>
+<span id="L11">    static void execute(void* a, void* b, std::uint64_t token, std::uint32_t worker) noexcept {</span>
+<span id="L12">        auto&amp; p = *static_cast&lt;Probe*&gt;(a);</span>
+<span id="L13">        if (b != a || token &gt;= p.hits.size() || worker &gt;= Jobs::workers) { p.bad.store(true); return; }</span>
+<span id="L14">        p.hits[static_cast&lt;std::size_t&gt;(token)].fetch_add(1);</span>
+<span id="L15">    }</span>
+<span id="L16">    rt::HostExecutorJob job(std::uint64_t id) noexcept { return {&amp;execute, this, this, id, nullptr, 0}; }</span>
+<span id="L17">};</span>
+<span id="L18">bool queue_contract() {</span>
+<span id="L19">    Jobs q; Probe p;</span>
+<span id="L20">    CHECK(Jobs::submit(&amp;q, p.job(0)) == Status::invalid_state);</span>
+<span id="L21">    CHECK(q.start(false) == Status::ok);</span>
+<span id="L22">    auto job = p.job(0);</span>
+<span id="L23">    for (std::uint64_t i = 0; i &lt; Jobs::capacity; ++i) { job.completion_token = i; CHECK(Jobs::submit(&amp;q, job) == Status::ok); }</span>
+<span id="L24">    job.execute = nullptr; job.completion_token = 999; // Accepted records must already be copied.</span>
+<span id="L25">    CHECK(Jobs::submit(&amp;q, p.job(100)) == Status::queue_full &amp;&amp; q.rejected.load() == 1);</span>
+<span id="L26">    CHECK(q.close() == Status::invalid_state); // Retain all accepted jobs.</span>
+<span id="L27">    CHECK(q.attach() == Status::ok &amp;&amp; q.detach() == Status::invalid_state);</span>
+<span id="L28">    CHECK(Jobs::submit(nullptr, p.job(0)) == Status::invalid_argument);</span>
+<span id="L29">    CHECK(Jobs::submit(&amp;q, {}) == Status::invalid_argument);</span>
+<span id="L30">    bool foreign_help = true;</span>
+<span id="L31">    std::thread foreign([&amp;] { foreign_help = Jobs::help(&amp;q); }); foreign.join(); CHECK(!foreign_help);</span>
+<span id="L32">    for (unsigned i = 0; i &lt; Jobs::capacity; ++i) CHECK(Jobs::help(&amp;q));</span>
+<span id="L33">    CHECK(!Jobs::help(&amp;q) &amp;&amp; q.pending.load() == 0 &amp;&amp; q.accepted.load() == 32 &amp;&amp; q.completed.load() == 32);</span>
+<span id="L34">    for (std::size_t i = 0; i &lt; Jobs::capacity; ++i) CHECK(p.hits[i].load() == 1);</span>
+<span id="L35">    CHECK(p.hits[100].load() == 0 &amp;&amp; !p.bad.load());</span>
+<span id="L36">    CHECK(q.close() == Status::invalid_state &amp;&amp; q.owners() == 1);</span>
+<span id="L37">    CHECK(q.detach() == Status::ok &amp;&amp; q.close() == Status::ok);</span>
+<span id="L38">    CHECK(q.start(true, true) == Status::resource_exhausted); // First worker is joined on partial start.</span>
+<span id="L39">    CHECK(q.close() == Status::ok);</span>
+<span id="L40">    return true;</span>
+<span id="L41">}</span>
+<span id="L42">bool queue_concurrency() {</span>
+<span id="L43">    Jobs q; Probe p; CHECK(q.start() == Status::ok);</span>
+<span id="L44">    std::atomic&lt;bool&gt; failed{false};</span>
+<span id="L45">    auto produce = [&amp;](std::size_t begin) {</span>
+<span id="L46">        std::size_t done = 0;</span>
+<span id="L47">        for (std::size_t attempts = 0; attempts &lt; 5&#x27;000&#x27;000 &amp;&amp; done &lt; 2048; ++attempts) {</span>
+<span id="L48">            auto s = Jobs::submit(&amp;q, p.job(begin + done));</span>
+<span id="L49">            if (s == Status::ok) ++done;</span>
+<span id="L50">            else if (s != Status::queue_full) { failed.store(true); break; }</span>
+<span id="L51">            else std::this_thread::yield();</span>
+<span id="L52">        }</span>
+<span id="L53">        if (done != 2048) failed.store(true);</span>
+<span id="L54">    };</span>
+<span id="L55">    std::thread a(produce, 0), b(produce, 2048); a.join(); b.join();</span>
+<span id="L56">    CHECK(q.quiesce() == Status::ok &amp;&amp; q.close() == Status::ok);</span>
+<span id="L57">    CHECK(!failed.load() &amp;&amp; !p.bad.load() &amp;&amp; q.accepted.load() == 4096 &amp;&amp; q.completed.load() == 4096);</span>
+<span id="L58">    for (const auto&amp; n : p.hits) CHECK(n.load() == 1);</span>
+<span id="L59">    return true;</span>
+<span id="L60">}</span>
+<span id="L61">bool memory_contract() {</span>
+<span id="L62">    auto m = std::make_unique&lt;Memory&gt;(); auto table = m-&gt;table();</span>
+<span id="L63">    rt::MemoryProviderAcquireRequest r; r.region = rt::memory_region_phase_scratch; r.logical_bytes = 128;</span>
+<span id="L64">    r.required_alignment = 64; r.page_rounding = rt::PageRounding::none; r.huge_pages = rt::HugePagePreference::disabled;</span>
+<span id="L65">    r.rollback = rt::RollbackIntent::release;</span>
+<span id="L66">    rt::MemoryProviderAllocation out;</span>
+<span id="L67">    auto bad = r; bad.logical_bytes = 65537; CHECK(table.acquire(m.get(), bad, out) == Status::resource_exhausted &amp;&amp; !out.token);</span>
+<span id="L68">    bad = r; bad.required_alignment = 3; CHECK(table.acquire(m.get(), bad, out) == Status::invalid_config);</span>
+<span id="L69">    bad = r; bad.region = {}; CHECK(table.acquire(m.get(), bad, out) == Status::invalid_config);</span>
+<span id="L70">    bad = r; bad.guard_bytes_before = 4096; CHECK(table.acquire(m.get(), bad, out) == Status::invalid_config);</span>
+<span id="L71">    bad = r; bad.huge_pages = rt::HugePagePreference::prefer; CHECK(table.acquire(m.get(), bad, out) == Status::invalid_config);</span>
+<span id="L72">    CHECK(table.acquire(m.get(), r, out) == Status::ok &amp;&amp; m-&gt;live_count() == 1 &amp;&amp; out.usable_bytes == 128);</span>
+<span id="L73">    const auto allocation = out;</span>
+<span id="L74">    CHECK(table.acquire(m.get(), r, out) == Status::invalid_state &amp;&amp; !out.token);</span>
+<span id="L75">    const auto policy = Memory::policy().memory_policies[0].policy;</span>
+<span id="L76">    rt::MemoryProviderObservation observation;</span>
+<span id="L77">    CHECK(table.apply(m.get(), allocation.token, policy, observation) == Status::ok);</span>
+<span id="L78">    CHECK(table.observe(m.get(), allocation.token, policy, observation) == Status::ok &amp;&amp; observation.independently_observed);</span>
+<span id="L79">    CHECK(observation.resident_bytes &lt;= 128 &amp;&amp; !observation.locked_bytes &amp;&amp; !observation.pinned_bytes);</span>
+<span id="L80">    table.release(m.get(), allocation.token, rt::RollbackIntent::release); // Must not release an applied token.</span>
+<span id="L81">    CHECK(m-&gt;violations == 1 &amp;&amp; m-&gt;live_count() == 1);</span>
+<span id="L82">    m-&gt;fail_rollback = 1;</span>
+<span id="L83">    CHECK(table.rollback(m.get(), allocation.token, policy, observation) == Status::internal_error &amp;&amp; m-&gt;live_count() == 1);</span>
+<span id="L84">    CHECK(table.rollback(m.get(), allocation.token, policy, observation) == Status::ok);</span>
+<span id="L85">    table.release(m.get(), allocation.token, rt::RollbackIntent::release);</span>
+<span id="L86">    CHECK(m-&gt;live_count() == 0 &amp;&amp; m-&gt;acquisitions == 1 &amp;&amp; m-&gt;releases == 1);</span>
+<span id="L87">    table.release(m.get(), allocation.token, rt::RollbackIntent::release); CHECK(m-&gt;violations == 2);</span>
+<span id="L88">    return true;</span>
+<span id="L89">}</span>
+<span id="L90">bool runtime_modes(bool adapter, bool cooperative = false) {</span>
+<span id="L91">    auto host = std::make_unique&lt;Host&gt;();</span>
+<span id="L92">    if (adapter) CHECK(host-&gt;jobs.start(!cooperative) == Status::ok);</span>
+<span id="L93">    Session a(host-&gt;clock, adapter ? &amp;host-&gt;jobs : nullptr, host-&gt;memory[0], 1);</span>
+<span id="L94">    Session b(host-&gt;clock, adapter ? &amp;host-&gt;jobs : nullptr, host-&gt;memory[1], 3);</span>
+<span id="L95">    CHECK(a.prepare() == Status::ok &amp;&amp; b.prepare() == Status::ok);</span>
+<span id="L96">    CHECK(a.telemetry.runtime_id != b.telemetry.runtime_id);</span>
+<span id="L97">    if (adapter) CHECK(host-&gt;jobs.close() == Status::invalid_state &amp;&amp; host-&gt;jobs.owners() == 2);</span>
+<span id="L98">    bool okay = true;</span>
+<span id="L99">    rtfw_physics_allocation::begin();</span>
+<span id="L100">    for (unsigned frame = 0; frame &lt; 16; ++frame) okay = okay &amp;&amp; a.step() == Status::ok &amp;&amp; b.step() == Status::ok;</span>
+<span id="L101">    const auto allocations = rtfw_physics_allocation::end();</span>
+<span id="L102">    CHECK(okay &amp;&amp; allocations == 0 &amp;&amp; a.world.matches(16) &amp;&amp; b.world.matches(16));</span>
+<span id="L103">    CHECK(a.telemetry.begins == 16 &amp;&amp; a.telemetry.ends == 16 &amp;&amp; a.telemetry.callbacks == 32 &amp;&amp; a.telemetry.lost == 0);</span>
+<span id="L104">    CHECK(b.telemetry.begins == 16 &amp;&amp; b.telemetry.ends == 16 &amp;&amp; b.telemetry.callbacks == 32 &amp;&amp; b.telemetry.lost == 0);</span>
+<span id="L105">    CHECK(a.telemetry.metrics(*a.runtime, 16) &amp;&amp; b.telemetry.metrics(*b.runtime, 16));</span>
+<span id="L106">    auto wrong = a.telemetry.cursor; rt::RuntimeTraceReadResult read; std::array&lt;rt::RuntimeTraceEvent, 2&gt; buffer;</span>
+<span id="L107">    CHECK(b.runtime-&gt;read_trace(wrong, buffer, read) != Status::ok);</span>
+<span id="L108">    CHECK(a.close() == Status::ok &amp;&amp; host-&gt;memory[0].live_count() == 0 &amp;&amp; host-&gt;memory[1].live_count() == 3);</span>
+<span id="L109">    CHECK(b.step() == Status::ok &amp;&amp; b.world.matches(17)); // One owner can detach without affecting the other.</span>
+<span id="L110">    CHECK(b.close() == Status::ok &amp;&amp; host-&gt;jobs.close() == Status::ok);</span>
+<span id="L111">    CHECK(host-&gt;jobs.pending.load() == 0 &amp;&amp; host-&gt;jobs.accepted.load() == host-&gt;jobs.completed.load());</span>
+<span id="L112">    CHECK(!adapter || (host-&gt;jobs.accepted.load() &gt; 0 &amp;&amp; (!cooperative || host-&gt;jobs.helped.load() &gt; 0)));</span>
+<span id="L113">    CHECK(host-&gt;memory[0].acquisitions == 3 &amp;&amp; host-&gt;memory[0].releases == 3 &amp;&amp; host-&gt;memory[1].releases == 3);</span>
+<span id="L114">    return true;</span>
+<span id="L115">}</span>
+<span id="L116">bool failures() {</span>
+<span id="L117">    for (unsigned fault = 0; fault &lt; 5; ++fault) {</span>
+<span id="L118">        auto host = std::make_unique&lt;Host&gt;(); CHECK(host-&gt;jobs.start() == Status::ok);</span>
+<span id="L119">        if (fault == 0) host-&gt;memory[0].fail_acquire = 2;</span>
+<span id="L120">        if (fault == 1) host-&gt;memory[0].fail_apply = 2;</span>
+<span id="L121">        if (fault == 2) host-&gt;memory[0].fail_observe = 2;</span>
+<span id="L122">        Session s(host-&gt;clock, &amp;host-&gt;jobs, host-&gt;memory[0], 1);</span>
+<span id="L123">        CHECK(s.prepare(fault == 4 ? 65536 : 256, fault == 3) != Status::ok);</span>
+<span id="L124">        CHECK(s.close() == Status::ok &amp;&amp; host-&gt;memory[0].live_count() == 0 &amp;&amp; host-&gt;jobs.owners() == 0);</span>
+<span id="L125">        CHECK(host-&gt;memory[0].acquisitions == host-&gt;memory[0].releases &amp;&amp; host-&gt;memory[0].violations == 0);</span>
+<span id="L126">        CHECK(host-&gt;jobs.close() == Status::ok);</span>
+<span id="L127">    }</span>
+<span id="L128">    auto host = std::make_unique&lt;Host&gt;(); CHECK(host-&gt;jobs.start() == Status::ok);</span>
+<span id="L129">    Session s(host-&gt;clock, &amp;host-&gt;jobs, host-&gt;memory[0], 1);</span>
+<span id="L130">    CHECK(s.prepare() == Status::ok);</span>
+<span id="L131">    host-&gt;clock.fail.store(true); CHECK(s.step() == Status::clock_failure &amp;&amp; s.frames == 0 &amp;&amp; s.world.checksum == 0);</span>
+<span id="L132">    host-&gt;clock.fail.store(false); CHECK(s.step() == Status::ok);</span>
+<span id="L133">    s.world.fail_callback = true; CHECK(s.step() == Status::callback_failed &amp;&amp; s.frames == 1);</span>
+<span id="L134">    host-&gt;memory[0].fail_rollback = 1;</span>
+<span id="L135">    CHECK(s.close() == Status::internal_error &amp;&amp; host-&gt;memory[0].live_count() &gt; 0 &amp;&amp; host-&gt;jobs.owners() == 1 &amp;&amp; s.runtime.has_value());</span>
+<span id="L136">    CHECK(host-&gt;jobs.close() == Status::invalid_state &amp;&amp; s.step() == Status::invalid_state);</span>
+<span id="L137">    CHECK(s.close() == Status::ok &amp;&amp; !s.runtime.has_value() &amp;&amp; host-&gt;memory[0].live_count() == 0);</span>
+<span id="L138">    CHECK(s.close() == Status::ok &amp;&amp; host-&gt;memory[0].releases == 3 &amp;&amp; host-&gt;jobs.close() == Status::ok);</span>
+<span id="L139">    return true;</span>
+<span id="L140">}</span>
+<span id="L141">bool telemetry_loss() {</span>
+<span id="L142">    auto host = std::make_unique&lt;Host&gt;(); Session s(host-&gt;clock, nullptr, host-&gt;memory[0], 1);</span>
+<span id="L143">    CHECK(s.prepare(8) == Status::ok);</span>
+<span id="L144">    const auto before = s.telemetry.events;</span>
+<span id="L145">    for (unsigned i = 0; i &lt; 4; ++i) CHECK(s.step(false) == Status::ok);</span>
+<span id="L146">    CHECK(s.telemetry.drain(*s.runtime, true) == Status::ok);</span>
+<span id="L147">    CHECK(s.telemetry.events - before == 8 &amp;&amp; s.telemetry.lost == 16); // Four frames * six events, eight retained.</span>
+<span id="L148">    CHECK(s.close() == Status::ok);</span>
+<span id="L149">    return true;</span>
+<span id="L150">}</span>
+<span id="L151">bool repeated_and_isolated() {</span>
+<span id="L152">    auto host = std::make_unique&lt;Host&gt;();</span>
+<span id="L153">    for (unsigned round = 0; round &lt; 4; ++round) {</span>
+<span id="L154">        CHECK(host-&gt;jobs.start() == Status::ok);</span>
+<span id="L155">        Session s(host-&gt;clock, &amp;host-&gt;jobs, host-&gt;memory[0], 2);</span>
+<span id="L156">        CHECK(s.prepare() == Status::ok &amp;&amp; s.step() == Status::ok &amp;&amp; s.world.matches(1));</span>
+<span id="L157">        CHECK(s.close() == Status::ok &amp;&amp; host-&gt;jobs.close() == Status::ok);</span>
+<span id="L158">    }</span>
+<span id="L159">    CHECK(host-&gt;memory[0].acquisitions == 12 &amp;&amp; host-&gt;memory[0].releases == 12);</span>
+<span id="L160">    std::atomic&lt;unsigned&gt; ready{0}; std::atomic&lt;bool&gt; good{true};</span>
+<span id="L161">    auto run = [&amp;](std::int64_t multiplier) {</span>
+<span id="L162">        auto h = std::make_unique&lt;Host&gt;();</span>
+<span id="L163">        if (h-&gt;jobs.start() != Status::ok) { good.store(false); ready.fetch_add(1); return; }</span>
+<span id="L164">        Session s(h-&gt;clock, &amp;h-&gt;jobs, h-&gt;memory[0], multiplier);</span>
+<span id="L165">        bool okay = s.prepare() == Status::ok;</span>
+<span id="L166">        ready.fetch_add(1);</span>
+<span id="L167">        const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);</span>
+<span id="L168">        while (ready.load() != 2 &amp;&amp; std::chrono::steady_clock::now() &lt; end) std::this_thread::yield();</span>
+<span id="L169">        okay = okay &amp;&amp; ready.load() == 2;</span>
+<span id="L170">        for (unsigned f = 0; f &lt; 8 &amp;&amp; okay; ++f) okay = s.step() == Status::ok &amp;&amp; s.world.matches(f + 1);</span>
+<span id="L171">        const auto stopped = s.close();</span>
+<span id="L172">        okay = okay &amp;&amp; stopped == Status::ok &amp;&amp; h-&gt;memory[0].live_count() == 0 &amp;&amp; h-&gt;jobs.close() == Status::ok;</span>
+<span id="L173">        if (!okay) good.store(false);</span>
+<span id="L174">    };</span>
+<span id="L175">    std::thread a(run, 2), b(run, 5); a.join(); b.join(); CHECK(good.load());</span>
+<span id="L176">    return true;</span>
+<span id="L177">}</span>
+<span id="L178">int main() {</span>
+<span id="L179">    if (!queue_contract() || !queue_concurrency() || !memory_contract() || !runtime_modes(false) ||</span>
+<span id="L180">        !runtime_modes(true) || !runtime_modes(true, true) || !failures() || !telemetry_loss() || !repeated_and_isolated()) return 1;</span>
+<span id="L181">    std::cout &lt;&lt; &quot;host jobs, memory, clock, native/adapter Runtime, telemetry, ownership and allocation passed\n&quot;;</span>
+<span id="L182">}</span></pre></html>

@@ -1,0 +1,485 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>rt/src/sampled_io.cpp</title><h1>rt/src/sampled_io.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;sampled_io.hpp&quot;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;cstring&gt;</span>
+<span id="L5">#include &lt;limits&gt;</span>
+<span id="L6">#include &lt;new&gt;</span>
+<span id="L7">#include &lt;utility&gt;</span>
+<span id="L8"></span>
+<span id="L9">namespace rt {</span>
+<span id="L10"></span>
+<span id="L11">std::size_t sampled_io_encoding_bytes(SampledIoEncoding encoding) noexcept {</span>
+<span id="L12">    switch (encoding) {</span>
+<span id="L13">    case SampledIoEncoding::signed_int16_le:</span>
+<span id="L14">    case SampledIoEncoding::unsigned_int16_le:</span>
+<span id="L15">        return 2;</span>
+<span id="L16">    case SampledIoEncoding::signed_int32_le:</span>
+<span id="L17">    case SampledIoEncoding::unsigned_int32_le:</span>
+<span id="L18">        return 4;</span>
+<span id="L19">    }</span>
+<span id="L20">    return 0;</span>
+<span id="L21">}</span>
+<span id="L22"></span>
+<span id="L23">std::uint64_t sampled_io_payload_checksum(</span>
+<span id="L24">    std::span&lt;const std::byte&gt; payload) noexcept {</span>
+<span id="L25">    std::uint64_t hash = 1469598103934665603ull;</span>
+<span id="L26">    for (const auto value : payload) {</span>
+<span id="L27">        hash ^= static_cast&lt;std::uint8_t&gt;(value);</span>
+<span id="L28">        hash *= 1099511628211ull;</span>
+<span id="L29">    }</span>
+<span id="L30">    return hash;</span>
+<span id="L31">}</span>
+<span id="L32"></span>
+<span id="L33">} // namespace rt</span>
+<span id="L34"></span>
+<span id="L35">namespace rt::detail {</span>
+<span id="L36">namespace {</span>
+<span id="L37"></span>
+<span id="L38">bool checked_add_size(</span>
+<span id="L39">    std::size_t left,</span>
+<span id="L40">    std::size_t right,</span>
+<span id="L41">    std::size_t&amp; output) noexcept {</span>
+<span id="L42">    if (left &gt; std::numeric_limits&lt;std::size_t&gt;::max() - right) {</span>
+<span id="L43">        return false;</span>
+<span id="L44">    }</span>
+<span id="L45">    output = left + right;</span>
+<span id="L46">    return true;</span>
+<span id="L47">}</span>
+<span id="L48"></span>
+<span id="L49">bool checked_multiply_size(</span>
+<span id="L50">    std::size_t left,</span>
+<span id="L51">    std::size_t right,</span>
+<span id="L52">    std::size_t&amp; output) noexcept {</span>
+<span id="L53">    if (left != 0 &amp;&amp; right &gt; std::numeric_limits&lt;std::size_t&gt;::max() / left) {</span>
+<span id="L54">        return false;</span>
+<span id="L55">    }</span>
+<span id="L56">    output = left * right;</span>
+<span id="L57">    return true;</span>
+<span id="L58">}</span>
+<span id="L59"></span>
+<span id="L60">bool zero_reserved(const SampledIoFrameHeader&amp; header) noexcept {</span>
+<span id="L61">    return header.reserved0 == 0 &amp;&amp;</span>
+<span id="L62">        std::all_of(</span>
+<span id="L63">            header.reserved.begin(), header.reserved.end(),</span>
+<span id="L64">            [](std::uint64_t value) { return value == 0; });</span>
+<span id="L65">}</span>
+<span id="L66"></span>
+<span id="L67">bool enum_valid(SampledIoDirection value) noexcept {</span>
+<span id="L68">    return value == SampledIoDirection::input ||</span>
+<span id="L69">        value == SampledIoDirection::output;</span>
+<span id="L70">}</span>
+<span id="L71"></span>
+<span id="L72">bool enum_valid(SampledIoTriggerMode value) noexcept {</span>
+<span id="L73">    return value == SampledIoTriggerMode::periodic ||</span>
+<span id="L74">        value == SampledIoTriggerMode::software ||</span>
+<span id="L75">        value == SampledIoTriggerMode::external;</span>
+<span id="L76">}</span>
+<span id="L77"></span>
+<span id="L78">bool enum_valid(SampledIoStalePolicy value) noexcept {</span>
+<span id="L79">    return value == SampledIoStalePolicy::fail_release ||</span>
+<span id="L80">        value == SampledIoStalePolicy::hold_last ||</span>
+<span id="L81">        value == SampledIoStalePolicy::substitute_initial;</span>
+<span id="L82">}</span>
+<span id="L83"></span>
+<span id="L84">bool enum_valid(SampledIoOverrunPolicy value) noexcept {</span>
+<span id="L85">    return value == SampledIoOverrunPolicy::fail_release ||</span>
+<span id="L86">        value == SampledIoOverrunPolicy::reject_newest;</span>
+<span id="L87">}</span>
+<span id="L88"></span>
+<span id="L89">bool enum_valid(SampledIoUnderrunPolicy value) noexcept {</span>
+<span id="L90">    return value == SampledIoUnderrunPolicy::fail_release ||</span>
+<span id="L91">        value == SampledIoUnderrunPolicy::substitute_safe;</span>
+<span id="L92">}</span>
+<span id="L93"></span>
+<span id="L94">} // namespace</span>
+<span id="L95"></span>
+<span id="L96">bool sampled_io_read_header(</span>
+<span id="L97">    std::span&lt;const std::byte&gt; frame,</span>
+<span id="L98">    SampledIoFrameHeader&amp; header) noexcept {</span>
+<span id="L99">    if (frame.size() &lt; sizeof(SampledIoFrameHeader)) {</span>
+<span id="L100">        return false;</span>
+<span id="L101">    }</span>
+<span id="L102">    std::memcpy(&amp;header, frame.data(), sizeof(header));</span>
+<span id="L103">    return true;</span>
+<span id="L104">}</span>
+<span id="L105"></span>
+<span id="L106">bool sampled_io_frame_valid(</span>
+<span id="L107">    std::span&lt;const std::byte&gt; frame,</span>
+<span id="L108">    const CompiledSampledIoChannel&amp; channel,</span>
+<span id="L109">    SampledIoFrameStatus expected_status,</span>
+<span id="L110">    std::uint64_t expected_sequence,</span>
+<span id="L111">    std::uint64_t expected_release_generation,</span>
+<span id="L112">    bool require_exact_sequence) noexcept {</span>
+<span id="L113">    SampledIoFrameHeader header{};</span>
+<span id="L114">    if (!sampled_io_read_header(frame, header) ||</span>
+<span id="L115">        frame.size() != channel.frame_bytes ||</span>
+<span id="L116">        header.struct_size != sizeof(SampledIoFrameHeader) ||</span>
+<span id="L117">        header.version != sampled_io_frame_version ||</span>
+<span id="L118">        header.channel_identity != channel.channel_identity ||</span>
+<span id="L119">        header.sample_count != channel.samples_per_frame ||</span>
+<span id="L120">        header.encoding != static_cast&lt;std::uint32_t&gt;(channel.encoding) ||</span>
+<span id="L121">        header.timestamp_domain_identity !=</span>
+<span id="L122">            channel.timestamp_domain_identity ||</span>
+<span id="L123">        header.sample_interval_ns != channel.sample_period_ns ||</span>
+<span id="L124">        header.trigger_identity != channel.trigger_identity ||</span>
+<span id="L125">        (require_exact_sequence &amp;&amp;</span>
+<span id="L126">         header.trigger_sequence != expected_sequence) ||</span>
+<span id="L127">        header.calibration_identity != channel.calibration_identity ||</span>
+<span id="L128">        header.status != static_cast&lt;std::uint32_t&gt;(expected_status) ||</span>
+<span id="L129">        !zero_reserved(header) || header.sequence == 0 ||</span>
+<span id="L130">        (require_exact_sequence &amp;&amp;</span>
+<span id="L131">         (header.sequence != expected_sequence ||</span>
+<span id="L132">          header.release_generation != expected_release_generation)) ||</span>
+<span id="L133">        (!require_exact_sequence &amp;&amp; header.release_generation != 0)) {</span>
+<span id="L134">        return false;</span>
+<span id="L135">    }</span>
+<span id="L136">    const auto payload = frame.subspan(sizeof(SampledIoFrameHeader));</span>
+<span id="L137">    return header.payload_checksum == sampled_io_payload_checksum(payload);</span>
+<span id="L138">}</span>
+<span id="L139"></span>
+<span id="L140">Status sampled_io_snapshot_slots(</span>
+<span id="L141">    std::uint32_t graph_owner,</span>
+<span id="L142">    std::span&lt;const SampledIoChannelSpec&gt; specifications,</span>
+<span id="L143">    std::span&lt;const CrossRateChannelSpec&gt; cross_rate_specs,</span>
+<span id="L144">    std::span&lt;std::size_t&gt; slot_counts,</span>
+<span id="L145">    SampledIoCompileDiagnostic&amp; diagnostic) noexcept {</span>
+<span id="L146">    diagnostic = {};</span>
+<span id="L147">    if (cross_rate_specs.size() &gt; cross_rate_channel_capacity ||</span>
+<span id="L148">        specifications.size() &gt; sampled_io_channel_capacity ||</span>
+<span id="L149">        slot_counts.size() != cross_rate_specs.size()) {</span>
+<span id="L150">        diagnostic = {Status::capacity_exceeded,</span>
+<span id="L151">                      &quot;sampled-I/O storage capacity exceeded&quot;, {}};</span>
+<span id="L152">        return diagnostic.status;</span>
+<span id="L153">    }</span>
+<span id="L154">    std::array&lt;std::size_t, cross_rate_channel_capacity&gt; candidate{};</span>
+<span id="L155">    candidate.fill(cross_rate_snapshot_slot_count);</span>
+<span id="L156">    std::array&lt;bool, cross_rate_channel_capacity&gt; seen{};</span>
+<span id="L157">    for (std::size_t index = 0; index &lt; specifications.size(); ++index) {</span>
+<span id="L158">        const auto&amp; spec = specifications[index];</span>
+<span id="L159">        if (!spec.channel.valid() || spec.channel.owner() != graph_owner ||</span>
+<span id="L160">            spec.channel.index() &gt;= cross_rate_specs.size() ||</span>
+<span id="L161">            spec.channel_identity == 0 ||</span>
+<span id="L162">            (spec.ring_capacity != 2 &amp;&amp; spec.ring_capacity != 4) ||</span>
+<span id="L163">            seen[spec.channel.index()]) {</span>
+<span id="L164">            diagnostic = {Status::invalid_argument,</span>
+<span id="L165">                          &quot;sampled-I/O storage request is invalid&quot;, spec.channel};</span>
+<span id="L166">            return diagnostic.status;</span>
+<span id="L167">        }</span>
+<span id="L168">        for (std::size_t prior = 0; prior &lt; index; ++prior) {</span>
+<span id="L169">            if (specifications[prior].channel_identity == spec.channel_identity) {</span>
+<span id="L170">                diagnostic = {Status::invalid_argument,</span>
+<span id="L171">                              &quot;sampled-I/O storage identity is duplicated&quot;, spec.channel};</span>
+<span id="L172">                return diagnostic.status;</span>
+<span id="L173">            }</span>
+<span id="L174">        }</span>
+<span id="L175">        // Four-slot geometry must be proven before allocating the larger store.</span>
+<span id="L176">        // Existing two-slot validation and its diagnostic ordering stay intact.</span>
+<span id="L177">        if (spec.ring_capacity == 4) {</span>
+<span id="L178">            const auto width = sampled_io_encoding_bytes(spec.encoding);</span>
+<span id="L179">            std::size_t values = 0, payload = 0, bytes = 0;</span>
+<span id="L180">            if (!width || !spec.element_count || !spec.samples_per_frame ||</span>
+<span id="L181">                !enum_valid(spec.direction)) {</span>
+<span id="L182">                diagnostic = {Status::invalid_argument,</span>
+<span id="L183">                              &quot;sampled-I/O storage geometry is invalid&quot;, spec.channel};</span>
+<span id="L184">                return diagnostic.status;</span>
+<span id="L185">            }</span>
+<span id="L186">            if (!checked_multiply_size(spec.element_count, spec.samples_per_frame, values) ||</span>
+<span id="L187">                !checked_multiply_size(values, width, payload) ||</span>
+<span id="L188">                !checked_add_size(sizeof(SampledIoFrameHeader), payload, bytes) ||</span>
+<span id="L189">                bytes &gt; cross_rate_payload_capacity) {</span>
+<span id="L190">                diagnostic = {Status::capacity_exceeded,</span>
+<span id="L191">                              &quot;sampled-I/O storage geometry overflows&quot;, spec.channel};</span>
+<span id="L192">                return diagnostic.status;</span>
+<span id="L193">            }</span>
+<span id="L194">            const auto&amp; cross = cross_rate_specs[spec.channel.index()];</span>
+<span id="L195">            if (bytes != cross.payload_size || spec.initial_frame != cross.initial_sample) {</span>
+<span id="L196">                diagnostic = {Status::invalid_argument,</span>
+<span id="L197">                              &quot;sampled-I/O storage shape disagrees with channel&quot;, spec.channel};</span>
+<span id="L198">                return diagnostic.status;</span>
+<span id="L199">            }</span>
+<span id="L200">        }</span>
+<span id="L201">        seen[spec.channel.index()] = true;</span>
+<span id="L202">        candidate[spec.channel.index()] = spec.ring_capacity;</span>
+<span id="L203">    }</span>
+<span id="L204">    std::copy_n(candidate.begin(), slot_counts.size(), slot_counts.begin());</span>
+<span id="L205">    return Status::ok;</span>
+<span id="L206">}</span>
+<span id="L207"></span>
+<span id="L208">Status compile_sampled_io(</span>
+<span id="L209">    std::uint32_t graph_owner,</span>
+<span id="L210">    std::span&lt;const SampledIoChannelSpec&gt; specifications,</span>
+<span id="L211">    const CompiledRatePlan&amp; rate_plan,</span>
+<span id="L212">    const CompiledDeviceRatePlan&amp; device_rate_plan,</span>
+<span id="L213">    std::span&lt;const CrossRateChannelSpec&gt; cross_rate_specs,</span>
+<span id="L214">    const CompiledCrossRatePlan&amp; cross_rate_plan,</span>
+<span id="L215">    CompiledSampledIoPlan&amp; output,</span>
+<span id="L216">    SampledIoCompileDiagnostic&amp; diagnostic) noexcept {</span>
+<span id="L217">    diagnostic = {};</span>
+<span id="L218">    if (specifications.size() &gt; sampled_io_channel_capacity) {</span>
+<span id="L219">        diagnostic = {Status::capacity_exceeded,</span>
+<span id="L220">                      &quot;sampled-I/O channel capacity exceeded&quot;, {}};</span>
+<span id="L221">        return diagnostic.status;</span>
+<span id="L222">    }</span>
+<span id="L223">    if (specifications.empty()) {</span>
+<span id="L224">        output = {};</span>
+<span id="L225">        return Status::ok;</span>
+<span id="L226">    }</span>
+<span id="L227">    try {</span>
+<span id="L228">        CompiledSampledIoPlan candidate;</span>
+<span id="L229">        candidate.channel_index_by_cross_rate.assign(</span>
+<span id="L230">            cross_rate_plan.channels.size(),</span>
+<span id="L231">            std::numeric_limits&lt;std::size_t&gt;::max());</span>
+<span id="L232">        candidate.channels.reserve(specifications.size());</span>
+<span id="L233">        candidate.safe_channel_indices.reserve(specifications.size());</span>
+<span id="L234">        candidate.safe_phases.reserve(specifications.size());</span>
+<span id="L235"></span>
+<span id="L236">        for (std::size_t index = 0; index &lt; specifications.size(); ++index) {</span>
+<span id="L237">            const auto&amp; spec = specifications[index];</span>
+<span id="L238">            diagnostic.channel = spec.channel;</span>
+<span id="L239">            if (!spec.channel.valid() || spec.channel.owner() != graph_owner ||</span>
+<span id="L240">                spec.channel.index() &gt;= cross_rate_plan.channels.size() ||</span>
+<span id="L241">                spec.channel.index() &gt;= cross_rate_specs.size() ||</span>
+<span id="L242">                !enum_valid(spec.direction) ||</span>
+<span id="L243">                sampled_io_encoding_bytes(spec.encoding) == 0 ||</span>
+<span id="L244">                spec.channel_identity == 0 || spec.element_count == 0 ||</span>
+<span id="L245">                spec.samples_per_frame == 0 || spec.scale_denominator == 0 ||</span>
+<span id="L246">                spec.offset_denominator == 0 || spec.units_identity == 0 ||</span>
+<span id="L247">                spec.calibration_identity == 0 || spec.sample_period_ns == 0 ||</span>
+<span id="L248">                spec.timestamp_domain_identity == 0 ||</span>
+<span id="L249">                spec.clock_domain_identity == 0 ||</span>
+<span id="L250">                !enum_valid(spec.trigger_mode) || spec.trigger_identity == 0 ||</span>
+<span id="L251">                (spec.ring_capacity != 2 &amp;&amp; spec.ring_capacity != 4) ||</span>
+<span id="L252">                spec.initial_sequence == 0 ||</span>
+<span id="L253">                !enum_valid(spec.stale_policy) ||</span>
+<span id="L254">                !enum_valid(spec.overrun_policy) ||</span>
+<span id="L255">                !enum_valid(spec.underrun_policy) ||</span>
+<span id="L256">                candidate.channel_index_by_cross_rate[spec.channel.index()] !=</span>
+<span id="L257">                    std::numeric_limits&lt;std::size_t&gt;::max()) {</span>
+<span id="L258">                diagnostic = {Status::invalid_argument,</span>
+<span id="L259">                              &quot;sampled-I/O descriptor fields or identity are invalid&quot;,</span>
+<span id="L260">                              spec.channel};</span>
+<span id="L261">                return diagnostic.status;</span>
+<span id="L262">            }</span>
+<span id="L263">            std::size_t sample_values = 0;</span>
+<span id="L264">            std::size_t payload_bytes = 0;</span>
+<span id="L265">            std::size_t frame_bytes = 0;</span>
+<span id="L266">            if (!checked_multiply_size(</span>
+<span id="L267">                    spec.element_count, spec.samples_per_frame,</span>
+<span id="L268">                    sample_values) ||</span>
+<span id="L269">                !checked_multiply_size(</span>
+<span id="L270">                    sample_values, sampled_io_encoding_bytes(spec.encoding),</span>
+<span id="L271">                    payload_bytes) ||</span>
+<span id="L272">                !checked_add_size(</span>
+<span id="L273">                    sizeof(SampledIoFrameHeader), payload_bytes,</span>
+<span id="L274">                    frame_bytes) || frame_bytes &gt; cross_rate_payload_capacity) {</span>
+<span id="L275">                diagnostic = {Status::capacity_exceeded,</span>
+<span id="L276">                              &quot;sampled-I/O frame geometry overflows&quot;,</span>
+<span id="L277">                              spec.channel};</span>
+<span id="L278">                return diagnostic.status;</span>
+<span id="L279">            }</span>
+<span id="L280">            const auto channel_index =</span>
+<span id="L281">                static_cast&lt;std::size_t&gt;(spec.channel.index());</span>
+<span id="L282">            const auto&amp; cross = cross_rate_plan.channels[channel_index];</span>
+<span id="L283">            const auto endpoint_index =</span>
+<span id="L284">                channel_index &lt;</span>
+<span id="L285">                        cross_rate_plan.device_endpoint_index_by_channel.size()</span>
+<span id="L286">                ? cross_rate_plan.device_endpoint_index_by_channel[channel_index]</span>
+<span id="L287">                : std::numeric_limits&lt;std::size_t&gt;::max();</span>
+<span id="L288">            if (cross.channel != spec.channel || cross.payload_size != frame_bytes ||</span>
+<span id="L289">                cross_rate_specs[channel_index].initial_sample !=</span>
+<span id="L290">                    spec.initial_frame ||</span>
+<span id="L291">                cross.maximum_age_ns != spec.maximum_age_ns ||</span>
+<span id="L292">                cross.snapshot_slot_count != spec.ring_capacity ||</span>
+<span id="L293">                endpoint_index &gt;= cross_rate_plan.device_endpoints.size()) {</span>
+<span id="L294">                diagnostic = {Status::invalid_argument,</span>
+<span id="L295">                              &quot;sampled-I/O descriptor disagrees with its cross-rate channel&quot;,</span>
+<span id="L296">                              spec.channel};</span>
+<span id="L297">                return diagnostic.status;</span>
+<span id="L298">            }</span>
+<span id="L299">            const auto&amp; endpoint =</span>
+<span id="L300">                cross_rate_plan.device_endpoints[endpoint_index];</span>
+<span id="L301">            const bool direction_matches =</span>
+<span id="L302">                spec.direction == SampledIoDirection::input</span>
+<span id="L303">                ? endpoint.producer &amp;&amp; cross.producer_device.valid() &amp;&amp;</span>
+<span id="L304">                      !cross.consumer_device.valid()</span>
+<span id="L305">                : !endpoint.producer &amp;&amp; cross.consumer_device.valid() &amp;&amp;</span>
+<span id="L306">                      !cross.producer_device.valid();</span>
+<span id="L307">            if (!direction_matches || endpoint.host_storage.empty() ||</span>
+<span id="L308">                endpoint.slot_count == 0 ||</span>
+<span id="L309">                endpoint.slot_count &gt; spec.ring_capacity ||</span>
+<span id="L310">                endpoint.timestamp_domain_identity !=</span>
+<span id="L311">                    (spec.direction == SampledIoDirection::input</span>
+<span id="L312">                         ? spec.timestamp_domain_identity</span>
+<span id="L313">                         : cross_rate_runtime_logical_timestamp_domain_identity) ||</span>
+<span id="L314">                (spec.direction == SampledIoDirection::output &amp;&amp;</span>
+<span id="L315">                 spec.timestamp_domain_identity !=</span>
+<span id="L316">                    cross_rate_runtime_logical_timestamp_domain_identity)) {</span>
+<span id="L317">                diagnostic = {Status::invalid_argument,</span>
+<span id="L318">                              &quot;sampled-I/O direction or timestamp domain disagrees with its device endpoint&quot;,</span>
+<span id="L319">                              spec.channel};</span>
+<span id="L320">                return diagnostic.status;</span>
+<span id="L321">            }</span>
+<span id="L322"></span>
+<span id="L323">            CompiledSampledIoRecord record;</span>
+<span id="L324">            record.public_record.channel = spec.channel;</span>
+<span id="L325">            record.public_record.registration_index = index;</span>
+<span id="L326">            record.public_record.direction = spec.direction;</span>
+<span id="L327">            record.public_record.channel_identity = spec.channel_identity;</span>
+<span id="L328">            record.public_record.encoding = spec.encoding;</span>
+<span id="L329">            record.public_record.element_count = spec.element_count;</span>
+<span id="L330">            record.public_record.samples_per_frame = spec.samples_per_frame;</span>
+<span id="L331">            record.public_record.frame_bytes = frame_bytes;</span>
+<span id="L332">            record.public_record.scale_numerator = spec.scale_numerator;</span>
+<span id="L333">            record.public_record.scale_denominator = spec.scale_denominator;</span>
+<span id="L334">            record.public_record.offset_numerator = spec.offset_numerator;</span>
+<span id="L335">            record.public_record.offset_denominator = spec.offset_denominator;</span>
+<span id="L336">            record.public_record.units_identity = spec.units_identity;</span>
+<span id="L337">            record.public_record.calibration_identity =</span>
+<span id="L338">                spec.calibration_identity;</span>
+<span id="L339">            record.public_record.sample_period_ns = spec.sample_period_ns;</span>
+<span id="L340">            record.public_record.timestamp_domain_identity =</span>
+<span id="L341">                spec.timestamp_domain_identity;</span>
+<span id="L342">            record.public_record.clock_domain_identity =</span>
+<span id="L343">                spec.clock_domain_identity;</span>
+<span id="L344">            record.public_record.trigger_mode = spec.trigger_mode;</span>
+<span id="L345">            record.public_record.trigger_identity = spec.trigger_identity;</span>
+<span id="L346">            record.public_record.ring_capacity = spec.ring_capacity;</span>
+<span id="L347">            record.public_record.initial_sequence = spec.initial_sequence;</span>
+<span id="L348">            record.public_record.maximum_age_ns = spec.maximum_age_ns;</span>
+<span id="L349">            record.public_record.stale_policy = spec.stale_policy;</span>
+<span id="L350">            record.public_record.overrun_policy = spec.overrun_policy;</span>
+<span id="L351">            record.public_record.underrun_policy = spec.underrun_policy;</span>
+<span id="L352">            record.public_record.safe_transition_timeout_ns =</span>
+<span id="L353">                spec.safe_transition_timeout_ns;</span>
+<span id="L354">            record.public_record.device_phase = endpoint.phase;</span>
+<span id="L355">            record.public_record.backend = endpoint.backend;</span>
+<span id="L356">            const auto phase = std::find_if(</span>
+<span id="L357">                device_rate_plan.phases.begin(),</span>
+<span id="L358">                device_rate_plan.phases.end(),</span>
+<span id="L359">                [&amp;](const CompiledDeviceRatePhase&amp; value) {</span>
+<span id="L360">                    return value.phase == endpoint.phase;</span>
+<span id="L361">                });</span>
+<span id="L362">            if (phase == device_rate_plan.phases.end()) {</span>
+<span id="L363">                diagnostic = {Status::invalid_argument,</span>
+<span id="L364">                              &quot;sampled-I/O endpoint has no admitted device-rate phase&quot;,</span>
+<span id="L365">                              spec.channel};</span>
+<span id="L366">                return diagnostic.status;</span>
+<span id="L367">            }</span>
+<span id="L368">            record.public_record.payload_reference_ordinal =</span>
+<span id="L369">                spec.direction == SampledIoDirection::input</span>
+<span id="L370">                ? cross.producer_device.payload_reference_ordinal</span>
+<span id="L371">                : cross.consumer_device.payload_reference_ordinal;</span>
+<span id="L372">            record.cross_rate_channel_index = channel_index;</span>
+<span id="L373"></span>
+<span id="L374">            const auto append_frame = [&amp;](std::span&lt;const std::byte&gt; bytes,</span>
+<span id="L375">                                          SampledIoFrameStatus status,</span>
+<span id="L376">                                          std::size_t&amp; offset) {</span>
+<span id="L377">                offset = candidate.frame_storage.size();</span>
+<span id="L378">                if (!sampled_io_frame_valid(</span>
+<span id="L379">                        bytes, record.public_record, status,</span>
+<span id="L380">                        spec.initial_sequence, 0, false)) {</span>
+<span id="L381">                    return false;</span>
+<span id="L382">                }</span>
+<span id="L383">                candidate.frame_storage.insert(</span>
+<span id="L384">                    candidate.frame_storage.end(), bytes.begin(), bytes.end());</span>
+<span id="L385">                return true;</span>
+<span id="L386">            };</span>
+<span id="L387">            if (!append_frame(</span>
+<span id="L388">                    spec.initial_frame, SampledIoFrameStatus::initial,</span>
+<span id="L389">                    record.initial_offset)) {</span>
+<span id="L390">                diagnostic = {Status::invalid_argument,</span>
+<span id="L391">                              &quot;sampled-I/O initial frame is invalid&quot;,</span>
+<span id="L392">                              spec.channel};</span>
+<span id="L393">                return diagnostic.status;</span>
+<span id="L394">            }</span>
+<span id="L395">            if (spec.direction == SampledIoDirection::input) {</span>
+<span id="L396">                if (!spec.startup_safe_frame.empty() ||</span>
+<span id="L397">                    !spec.failure_safe_frame.empty() ||</span>
+<span id="L398">                    !spec.shutdown_safe_frame.empty() ||</span>
+<span id="L399">                    spec.safe_transition_timeout_ns != 0 ||</span>
+<span id="L400">                    spec.underrun_policy ==</span>
+<span id="L401">                        SampledIoUnderrunPolicy::substitute_safe) {</span>
+<span id="L402">                    diagnostic = {Status::invalid_argument,</span>
+<span id="L403">                                  &quot;sampled input cannot declare output safe frames&quot;,</span>
+<span id="L404">                                  spec.channel};</span>
+<span id="L405">                    return diagnostic.status;</span>
+<span id="L406">                }</span>
+<span id="L407">            } else {</span>
+<span id="L408">                if (spec.safe_transition_timeout_ns == 0 ||</span>
+<span id="L409">                    phase-&gt;wait_count != 0 || phase-&gt;signal_count == 0 ||</span>
+<span id="L410">                    !append_frame(</span>
+<span id="L411">                        spec.startup_safe_frame, SampledIoFrameStatus::safe,</span>
+<span id="L412">                        record.startup_safe_offset) ||</span>
+<span id="L413">                    !append_frame(</span>
+<span id="L414">                        spec.failure_safe_frame, SampledIoFrameStatus::safe,</span>
+<span id="L415">                        record.failure_safe_offset) ||</span>
+<span id="L416">                    !append_frame(</span>
+<span id="L417">                        spec.shutdown_safe_frame, SampledIoFrameStatus::safe,</span>
+<span id="L418">                        record.shutdown_safe_offset)) {</span>
+<span id="L419">                    diagnostic = {Status::invalid_argument,</span>
+<span id="L420">                                  &quot;sampled output safe frames or phase timeline shape are invalid&quot;,</span>
+<span id="L421">                                  spec.channel};</span>
+<span id="L422">                    return diagnostic.status;</span>
+<span id="L423">                }</span>
+<span id="L424">                candidate.safe_channel_indices.push_back(index);</span>
+<span id="L425">            }</span>
+<span id="L426">            candidate.channel_index_by_cross_rate[channel_index] = index;</span>
+<span id="L427">            candidate.channels.push_back(std::move(record));</span>
+<span id="L428">        }</span>
+<span id="L429"></span>
+<span id="L430">        std::sort(</span>
+<span id="L431">            candidate.safe_channel_indices.begin(),</span>
+<span id="L432">            candidate.safe_channel_indices.end(),</span>
+<span id="L433">            [&amp;](std::size_t left, std::size_t right) {</span>
+<span id="L434">                const auto&amp; a = candidate.channels[left].public_record;</span>
+<span id="L435">                const auto&amp; b = candidate.channels[right].public_record;</span>
+<span id="L436">                return a.device_phase.index() != b.device_phase.index()</span>
+<span id="L437">                    ? a.device_phase.index() &lt; b.device_phase.index()</span>
+<span id="L438">                    : a.channel_identity &lt; b.channel_identity;</span>
+<span id="L439">            });</span>
+<span id="L440">        for (std::size_t cursor = 0;</span>
+<span id="L441">             cursor &lt; candidate.safe_channel_indices.size();) {</span>
+<span id="L442">            const auto first = cursor;</span>
+<span id="L443">            const auto&amp; first_record = candidate.channels[</span>
+<span id="L444">                candidate.safe_channel_indices[cursor]].public_record;</span>
+<span id="L445">            while (cursor &lt; candidate.safe_channel_indices.size() &amp;&amp;</span>
+<span id="L446">                   candidate.channels[candidate.safe_channel_indices[cursor]]</span>
+<span id="L447">                           .public_record.device_phase ==</span>
+<span id="L448">                       first_record.device_phase) {</span>
+<span id="L449">                ++cursor;</span>
+<span id="L450">            }</span>
+<span id="L451">            const auto reference = std::find_if(</span>
+<span id="L452">                rate_plan.releases.begin(), rate_plan.releases.end(),</span>
+<span id="L453">                [&amp;](const ReferenceRelease&amp; release) {</span>
+<span id="L454">                    return release.phase == first_record.device_phase;</span>
+<span id="L455">                });</span>
+<span id="L456">            if (reference == rate_plan.releases.end()) {</span>
+<span id="L457">                diagnostic = {Status::invalid_argument,</span>
+<span id="L458">                              &quot;sampled output phase has no reference release&quot;,</span>
+<span id="L459">                              first_record.channel};</span>
+<span id="L460">                return diagnostic.status;</span>
+<span id="L461">            }</span>
+<span id="L462">            candidate.safe_phases.push_back({</span>
+<span id="L463">                first_record.device_phase,</span>
+<span id="L464">                first_record.backend,</span>
+<span id="L465">                first,</span>
+<span id="L466">                cursor - first,</span>
+<span id="L467">                static_cast&lt;std::size_t&gt;(</span>
+<span id="L468">                    reference - rate_plan.releases.begin()),</span>
+<span id="L469">            });</span>
+<span id="L470">        }</span>
+<span id="L471">        output = std::move(candidate);</span>
+<span id="L472">        diagnostic = {};</span>
+<span id="L473">        return Status::ok;</span>
+<span id="L474">    } catch (const std::bad_alloc&amp;) {</span>
+<span id="L475">        diagnostic = {Status::resource_exhausted,</span>
+<span id="L476">                      &quot;sampled-I/O compiler allocation failed&quot;, {}};</span>
+<span id="L477">        return diagnostic.status;</span>
+<span id="L478">    } catch (...) {</span>
+<span id="L479">        diagnostic = {Status::internal_error,</span>
+<span id="L480">                      &quot;sampled-I/O compiler failed&quot;, {}};</span>
+<span id="L481">        return diagnostic.status;</span>
+<span id="L482">    }</span>
+<span id="L483">}</span>
+<span id="L484"></span>
+<span id="L485">} // namespace rt::detail</span></pre></html>

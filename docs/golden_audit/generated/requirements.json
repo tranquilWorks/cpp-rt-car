@@ -1,0 +1,259 @@
+{
+  "schema_version": 1,
+  "capabilities": [
+    {
+      "id": "CAP-M15",
+      "milestone": "M15",
+      "outcome": "Every runtime-owned thread and memory region has an explicit requested, resolved, applied, verified, and accounted policy.",
+      "scenarios": [
+        "strict startup succeeds only when all runtime-owned thread policies are applied and verified before callbacks",
+        "a partial thread or memory commitment rolls back without leaked ownership",
+        "portable defaults preserve current behavior",
+        "externally owned host and vendor threads are reported as verify-only"
+      ],
+      "evidence": {
+        "automated": [
+          "unit and integration tests with injected native-policy providers",
+          "all-thread inventory and exact-once accounting checks",
+          "no-allocation, sanitizer, determinism, ABI, package, and compatibility gates"
+        ],
+        "manual": [
+          "representative Linux affinity, scheduling, NUMA, locking, and residency inspection"
+        ]
+      },
+      "claim_limit": "Policy configuration alone does not establish RT1 or RT2."
+    },
+    {
+      "id": "CAP-M16",
+      "milestone": "M16",
+      "outcome": "Multi-rate releases, data transfer, overload, and optional-work behavior are deterministic and bounded.",
+      "scenarios": [
+        "harmonic and non-harmonic schedules match a reference timeline",
+        "cross-rate sample-hold and freshness contracts are race-free",
+        "admission rejects infeasible mandatory work",
+        "skip, bounded catch-up, hold, degrade, and fail policies are explicit",
+        "shedding and recovery are deterministic and versioned"
+      ],
+      "evidence": {
+        "automated": [
+          "reference-timeline/property tests",
+          "overload and bounded-capacity tests",
+          "determinism and telemetry-schema tests"
+        ],
+        "manual": []
+      },
+      "claim_limit": "WCET estimates are inputs and evidence, not portable guarantees."
+    },
+    {
+      "id": "CAP-M17",
+      "milestone": "M17",
+      "outcome": "HAL v2 coordinates heterogeneous memory and timeline completions while device ABI v1 remains compatible.",
+      "scenarios": [
+        "v1 backends operate through the compatibility path",
+        "every memory domain validates ownership, alignment, coherency, topology, and synchronization",
+        "blocked vendor calls cannot block executor workers",
+        "batched commands and timeline completions remain fixed-capacity",
+        "the CPU-GPU-FPGA-CPU sample uses the supported staging path"
+      ],
+      "evidence": {
+        "automated": [
+          "fake-driver and injected-failure suites",
+          "allocation, saturation, quarantine, coherency, cross-instance, sanitizer, and ABI compatibility tests"
+        ],
+        "manual": [
+          "real CUDA and XDMA functional smoke on selected M18 tuples"
+        ]
+      },
+      "claim_limit": "No direct peer-DMA claim without a separately supported stack."
+    },
+    {
+      "id": "CAP-M18",
+      "milestone": "M18",
+      "outcome": "Named NVIDIA, XDMA, combined, RT1, and optional RT2 tuples have retained reviewed evidence.",
+      "scenarios": [
+        "long-duration, thermal, saturation, device-loss, reset-rebind, and shutdown trials",
+        "thresholds are selected before measurement",
+        "incomplete provenance or unstable resources block promotion"
+      ],
+      "evidence": {
+        "automated": [
+          "qualification artifact schema and promotion-tool tests"
+        ],
+        "manual": [
+          "exact production hardware and workload campaigns"
+        ]
+      },
+      "claim_limit": "Hosted CI cannot complete this capability."
+    },
+    {
+      "id": "CAP-M19",
+      "milestone": "M19",
+      "outcome": "Unreal and extension integrations preserve runtime ownership, capacity, compatibility, and teardown rules.",
+      "scenarios": [
+        "engine jobs, allocator, clock, world lifecycle, and multiple instances",
+        "extension negotiation, quiescence, stop, unload, and stale reference rejection",
+        "relocated complete sample and long-run teardown"
+      ],
+      "evidence": {
+        "automated": [
+          "adapter unit, saturation, stale-completion, package, and lifecycle tests"
+        ],
+        "manual": [
+          "representative Unreal editor and packaged-build integration"
+        ]
+      },
+      "claim_limit": "The experimental plugin loader is not a supported compatibility path."
+    },
+    {
+      "id": "CAP-M20",
+      "milestone": "M20",
+      "outcome": "Releases are performance-gated, fuzzed, analyzed, signed, attributable, observable, and documented using the completed benchmark and SDK surfaces.",
+      "scenarios": [
+        "controlled-hardware performance regression",
+        "signed reproducible package and provenance verification",
+        "non-RT Perfetto, OpenTelemetry, and ETW export",
+        "supported tuple expansion and migration"
+      ],
+      "evidence": {
+        "automated": [
+          "continuous fuzz/static/security/package/provenance/documentation gates"
+        ],
+        "manual": [
+          "signing-key custody, controlled runner review, soak review, and release approval"
+        ]
+      },
+      "claim_limit": "Telemetry transport stays off RT lanes; M22 owns live-control validation and publication, and M20 cannot waive its evidence."
+    },
+    {
+      "id": "CAP-M21",
+      "milestone": "M21",
+      "outcome": "CPU and device phases execute in one bounded active multi-rate plan with explicit cross-rate payload and sampled-I/O semantics.",
+      "scenarios": [
+        "device phases are admitted, released, completed, timed out, and stopped under declared rate and deadline policy",
+        "CPU-to-device and device-to-CPU channels preserve exact generation, sequence, timestamp-domain, status, and pre-registered payload identity",
+        "sampled input and output define fixed ownership, clock/trigger identity, units/calibration identity, overrun, underrun, stale input, and safe output",
+        "mandatory device releases, optional shedding/recovery, and late actions remain bounded and observable",
+        "portable loopback replay reproduces data and action identity without implying physical timing"
+      ],
+      "evidence": {
+        "automated": [
+          "reference timeline and mixed CPU/device property tests",
+          "fake-driver payload, completion, timeout, overload, replay, no-allocation, sanitizer, and multi-instance suites",
+          "device-ABI-v1, C-ABI-v8, package, and installed-header compatibility gates"
+        ],
+        "manual": [
+          "optional physical sampled-I/O adapter trials under a separately approved M18 tuple"
+        ]
+      },
+      "claim_limit": "Portable loopback and fake-driver evidence do not qualify a DAC, DAQ, XDMA, CUDA, RT1, or RT2 deployment."
+    },
+    {
+      "id": "CAP-M22",
+      "milestone": "M22",
+      "outcome": "Configuration and control data can be hot-reloaded transactionally at an exact frame or release boundary.",
+      "scenarios": [
+        "off-lane validation produces a canonical fixed-capacity update targeted to one runtime and exact boundary",
+        "commit is atomic and torn or partially applied updates are impossible",
+        "overflow, stale target, rejection, rollback, stop, and concurrent producers have explicit bounded results",
+        "accepted and rejected identities participate in telemetry, checkpoint, and replay",
+        "multiple runtimes remain isolated across repeated start, update, stop, and restart"
+      ],
+      "evidence": {
+        "automated": [
+          "mailbox capacity, race, rollback, replay, checkpoint, no-allocation, sanitizer, and multiple-instance tests",
+          "relocated consumer and compatibility gates"
+        ],
+        "manual": []
+      },
+      "claim_limit": "This capability reloads validated data/configuration only; executable code and Unreal module hot reload are excluded."
+    },
+    {
+      "id": "CAP-M23",
+      "milestone": "M23",
+      "outcome": "Every supported subsystem exposes reproducible benchmark cases and optimization-ready machine-readable evidence.",
+      "scenarios": [
+        "descriptors capture subsystem, workload, parameters, warm-up, repetitions, counters, evidence class, and comparison policy",
+        "results bind exact source, build, compiler, host, policy, backend, and workload identity",
+        "CPU, memory, graph, rate, control, replay, observability, HAL, CUDA, XDMA, and full-pipeline cases use one runner and result schema",
+        "third-party or application subsystems can register cases without changing the runner",
+        "portable characterization never enforces or implies controlled-host latency qualification"
+      ],
+      "evidence": {
+        "automated": [
+          "schema, runner, deterministic-counter, comparison, malformed-input, extension, and artifact tests",
+          "portable benchmark smoke with non-flaky structural budgets"
+        ],
+        "manual": [
+          "controlled-host baseline and threshold review before release gating"
+        ]
+      },
+      "claim_limit": "Uncontrolled CI measurements are characterization only and cannot establish near-optimality, RT1/RT2, or hardware support."
+    },
+    {
+      "id": "CAP-M24",
+      "milestone": "M24",
+      "outcome": "The Runtime-integrated CUDA physics path meets the supported CPU runtime's rigor except for separately gated physical tuple qualification.",
+      "scenarios": [
+        "a normal Runtime graph performs fixed H2D, kernel or CUDA Graph, D2H, completion, and recovery flow",
+        "a CPU oracle validates exact or declared-tolerance state across seeds, sizes, schedules, and repeated runs",
+        "saturation, cancellation, timeout, device loss/reset, teardown, and multiple instances preserve ownership and boundedness",
+        "package consumers build fake-driver and optional real-CUDA variants through installed targets",
+        "at least 90 percent of declared capability rows and every critical row have retained automated evidence"
+      ],
+      "evidence": {
+        "automated": [
+          "CPU-oracle, fake-driver, graph/kernel parity, failure, lifetime, no-allocation, sanitizer, package, and benchmark suites",
+          "machine-checked CUDA capability-matrix coverage report"
+        ],
+        "manual": [
+          "named real NVIDIA correctness, profiling, thermal, endurance, and recovery trials owned by M18"
+        ]
+      },
+      "claim_limit": "The reference model is validation content, not a general physics engine; fake-driver coverage cannot promote a physical NVIDIA tuple."
+    },
+    {
+      "id": "CAP-M25",
+      "milestone": "M25",
+      "outcome": "A new consumer can install, understand, embed, extend, and troubleshoot RTFW using only shipped public artifacts.",
+      "scenarios": [
+        "a 30-60-line hello-runtime builds with find_package and add_subdirectory paths",
+        "optional typed helpers preserve explicit capacities, ownership, checked stop, and allocation-free execution",
+        "a minimal HAL-v2 backend passes a reusable conformance and fault suite",
+        "a bounded shared-memory reference connects an external CIL controller process",
+        "a headless game-style host demonstrates external jobs, allocator, clock, frame loop, multiple runtimes, and checked teardown without Unreal",
+        "all sample sources and relevant docs ship in the relocatable package and compile outside the repository"
+      ],
+      "evidence": {
+        "automated": [
+          "relocated hello, builder, C, C++, backend, shared-memory CIL, independent host-adapter, and sample-package consumers",
+          "generated API-link, command-transcript, diagnostic, and documentation smoke tests"
+        ],
+        "manual": [
+          "first-use walkthrough review by a consumer unfamiliar with repository internals"
+        ]
+      },
+      "claim_limit": "Optional helpers do not replace the raw bounded API, and the reference transport is not a universal networking or safety-certified protocol."
+    },
+    {
+      "id": "CAP-M26",
+      "milestone": "M26",
+      "outcome": "One living golden system proves that the complete software framework composes into a useful multi-entity CIL/HIL-style simulation.",
+      "scenarios": [
+        "portable mode runs a multi-entity vehicle-like plant with CPU systems, simulated CUDA, simulated XDMA HAL, sampled sensors/actuators, controls, and replay",
+        "optional real CUDA and XDMA variants preserve the same scenario and report truthful qualification state",
+        "benchmark output covers every participating subsystem and the end-to-end loop with documented tuning levers",
+        "injected overload, stale input, underflow, device loss, control rejection, checkpoint, and recovery are visible and bounded",
+        "source-linked documentation explains every component, phase, buffer, rate, ownership boundary, failure path, and result"
+      ],
+      "evidence": {
+        "automated": [
+          "installed-package build, portable scenario correctness, replay, fault matrix, benchmark artifact, documentation-link, and soak tests"
+        ],
+        "manual": [
+          "optional real CUDA/XDMA and Unreal variant reviews under their existing M18/M19 gates"
+        ]
+      },
+      "claim_limit": "M26 establishes software-framework feature completion only; it does not establish physical hardware, RT1/RT2, production vehicle-model, Unreal, release, or deployment qualification."
+    }
+  ]
+}

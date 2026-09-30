@@ -157,7 +157,7 @@ storage before provider, native-policy, thread, backend-init, or callback side
 effects. Start and stop retain the existing startup barrier, one device-service
 lane, reverse buffer/backend cleanup, first-error retention, and unresolved-only
 retry. The supported manager invokes only HAL v2 operations; direct v1 calls
-occur only inside the adapter. See [the HAL v2 contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/hal_v2.md).
+occur only inside the adapter. See [the HAL v2 contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/hal_v2.md).
 
 M17-02 optionally discovers one bounded native memory/topology snapshot while
 configuring. Discovery and validation are transactional. Core-only native v2
@@ -169,7 +169,7 @@ initialization; checked stop unregisters it in reverse order before backend
 shutdown and retains unresolved ownership for retry. Instance-local inspectors
 expose copied domain, node, link, timestamp, completion-domain, and memory
 object facts. Timestamp correlation is a bounded running-state control call.
-See the [heterogeneous-memory contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/heterogeneous_memory.md).
+See the [heterogeneous-memory contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/heterogeneous_memory.md).
 
 ## Typed configuration
 
@@ -222,7 +222,7 @@ provider is consulted only for active phase scratch, task scratch, and trace
 storage. Reentrant status calls fail closed and observation accessors return
 safe empty/default values while any provider callback is active. Live token and
 allocation-extent uniqueness is enforced across runtime instances. See the
-[CPU/memory policy contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/cpu_memory_policy.md).
+[CPU/memory policy contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/cpu_memory_policy.md).
 
 `<rt/profile.hpp>` maps the complete schema into `RuntimeConfig` through a
 bounded, allocation-free, transactional JSON parser. It rejects missing,
@@ -491,7 +491,7 @@ watchdog/degradation, and fail-closed prerequisite reporting. It does not
 preempt callbacks or qualify a deployment; see the
 [time/platform contract](docs__time_platform.md). M6 adds bounded versioned
 trace/counter emission and non-RT cursor/export APIs; see the
-[observability contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/observability.md). M7 adds bounded canonical-state
+[observability contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/observability.md). M7 adds bounded canonical-state
 checkpoint and replay control operations; see the
 [determinism/replay contract](docs__determinism_replay.md). M8 adds bounded
 submission/poll, graph-held completions, health/reset/shutdown, and a
@@ -503,8 +503,8 @@ observable results. M17-02 adds bounded memory/topology discovery,
 heterogeneous registration, inspection, and timestamp correlation while
 preserving that core path. It adds no device-rate execution, command batch,
 timeline, vendor lane, or qualification claim; see the
-[HAL v2 contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/hal_v2.md) and
-[heterogeneous-memory contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/heterogeneous_memory.md).
+[HAL v2 contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/hal_v2.md) and
+[heterogeneous-memory contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/heterogeneous_memory.md).
 M16-01 adds rate-model/reference-plan inspection. M16-02 adds CPU-only
 cross-rate declarations, immutable first/repeating selection inspection,
 copied initial-sample inspection, and preallocated snapshot stores. M16-03 adds
@@ -587,4 +587,4 @@ cleanup while retaining the first error, and cleans services in reverse only
 after related backend ownership resolves. `detach_extension` is checked,
 clears borrowed callables, retires the generation, and reports readiness
 without unloading. Details are in
-[extension registration](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/extension_registration.md).
+[extension registration](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/extension_registration.md).
