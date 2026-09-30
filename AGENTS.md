@@ -470,6 +470,28 @@ all CUDA feature acceptance with fresh local/all32 hosted gates before integrati
 M26-04..06 remain inactive; standing scoped publication/merge authority persists.
 Historical activation/checkpoint text above does not reopen completed repairs.
 
+## M26-04 XDMA sampled-I/O activation
+
+Owner requested M26-04 after target277 merged at b0564fef90ce9cc3537e2814e8e972c4e32cc168
+with all32 final checks and canonical closure557. Canonical plan558 merged at
+71307ba6379a9209da43f4b6b5e31fb282129ca9, blob 04a4073dfab4f22374c7509d8c35f97ff66b9489.
+Implement only the new XDMA/combined golden source kit under this contract, using
+actual Runtime sampled channels, native backend operations, owned simulation,
+acknowledged safe outputs and bounded failure/recovery/replay. Preserve frozen
+logical scenario, all prior kits/tests/evidence, native Runtime/backend/ABI and
+protected ci.yml. All32 target gates and standing scoped publication/merge
+authority persist. Known M23 timeout-fixture submission assumption remains
+separate benchmark follow-up. M26-05/M26-06 remain inactive; no human/physical/RT/
+Unreal/controlled-performance/release promotion. Earlier activation text is history.
+
+Canonical header-description correction560 merged at da7e8563c3aba6c427cfec5de17f716a8fc96b82,
+blob b4cf895e418b76598ab124875e0894867f46822c: both preserved application and public sampled
+headers are120 bytes with different semantics. The first M26-04 graph exposes
+a separate blocker: frozen ring4 versus Runtime fixed2. Feature implementation
+is incomplete and retained as a draft checkpoint. No Runtime repair is active;
+see docs/evidence/M26-04-repair-proposal.md. Never ship the ring2 diagnostic as
+golden acceptance. Obtain the bounded repair decision before forbidden edits.
+
 ## M26-04R sampled storage repair activation
 
 Owner explicitly approved separate four-slot repair and resume/complete of M26-04.
@@ -481,6 +503,29 @@ Require all32 target gates and guarded integration, then canonically reactivate
 and complete draft279 under continuing scoped publication/merge authorization.
 No later-batch, physical/RT/human/Unreal/performance/release activation or claim.
 
+## M26-04 reactivation after four-slot storage repair
+
+M26-04R target280 merged at e8caf4396cd5987d9aa4a4bf3dad9a178cf2ded7 after all32 exact-head gates.
+Canonical reactivation merged at 3af5a3db321a51fa61b7fb18f133ddbdd3eed689, blob 4447bb07bd3d11befcfe8272e05f7b7eb0ecc180.
+Finish preserved feature279 using actual frozen ring4 storage. Runtime/native
+backends and all prior/repair tests/evidence remain protected. Complete every
+original feature acceptance and fresh local/all32 gates before integration.
+M26-05/M26-06 remain inactive; standing scoped publication/merge authority persists.
+Earlier blocked checkpoints are historical; no physical/human/RT/release claim.
+
+## M26-04 second prerequisite: capacity policy decision
+
+Storage repair280 and reactivation562 are merged. Actual XDMA-only24-tick
+native/host parity and trusted replay pass with zero allocations. Combined
+CUDA1/XDMA2 fails because Runtime global admission3 is also imposed as each
+backend's required capacity. Retain all new evidence and the original ring failure.
+The proposed M26-04R2 explicit per-backend capacity policy is not approved yet;
+do not change Runtime/native backends, inflate XDMA slots, weaken deadlines or
+merge incomplete feature279. See docs/evidence/M26-04-capacity-repair-proposal.md.
+M26-05/M26-06 remain inactive. The original storage approval does not silently
+approve this new C++ Runtime policy. Preserve the verified storage repair and
+all prior source/tests/evidence while the owner reviews the concrete proposal.
+
 ## M26-04R2 capacity repair activation
 
 M26-04R2 capacity repair is active after explicit owner approval of the retained
@@ -491,6 +536,17 @@ bounds, pass all32 target gates and integrate separately; then canonically
 reactivate and finish retained feature279 at c939b017ba81de9e80471a593d875d6e62cee729.
 M26-05/M26-06 remain inactive. Standing scoped publication/merge authority persists.
 No physical/RT/human/Unreal/performance/release claim. Earlier activation notes are history.
+
+## M26-04 reactivation after capacity policy repair
+
+M26-04R2 target281 merged at 242793be0cb1ff75b56c74e5b89d0f6e8a21fd76 after all32 exact-head gates.
+Canonical reactivation merged at 069139f9c2504349d71f280f6dbd16dbc1c92089, blob 20d0d8b47161d3be5deef554e65ad38187e5bfca.
+Finish feature279 with actual ring4 and CUDA1/XDMA2. Only combined selects
+native_per_backend for aggregate3. Runtime/native
+backends and all prior/repair tests/evidence remain protected. Complete every
+original feature acceptance and fresh local/all32 gates before integration.
+M26-05/M26-06 remain inactive; standing scoped publication/merge authority persists.
+Earlier blocked checkpoints are historical; no physical/human/RT/release claim.
 
 ## M26-04R3 sampled lifecycle/recovery prerequisite
 
@@ -504,6 +560,17 @@ and exact32 gates; integrate, canonically reactivate and complete the feature.
 No public format/design expansion without a separate explicit decision.
 M26-05/M26-06 inactive; standing scoped publication/integration persists.
 Earlier feature checkpoints are historical, not closure.
+
+## M26-04 resumed after sampled recovery repair
+
+Repair282 merged at f5402b9a646a6d7adfbb54f5eca2170a69a6e292 after all32 exact-head checks and full110+114,
+sanitizers11+11, allocation/static/full55SDK/default-byte verification.
+Canonical reactivation 1a2c1ee989319ffcd6c2d1874f13e1ed0f82bccb, blob e45d19649894bbc4f4abb92645730b812afc986f, is merged.
+Finish preserved feature279 under the complete original M26-04 acceptance.
+Preserve every Runtime/native/repair source, prior test and failed evidence.
+Frozen ring4, native CUDA1/XDMA2 with combined aggregate3, safe8ms remain fixed.
+M26-05/M26-06 stay inactive. Standing scoped publication/merge authority persists.
+No physical/HIL/RT/human/Unreal/performance/release claim. Earlier notes are history.
 
 ## M26-04R4 private sampled simulator timing repair
 
@@ -525,3 +592,14 @@ Retain pending ownership until subsequent checked stop collects actual terminal
 completion. Controlled native default/selected baseline negatives are retained.
 Preserve native sources, public formats/deadlines and all earlier tests/evidence.
 Fresh local/all32 gates and completion of feature279 remain mandatory.
+
+## M26-04 resumed after sampled timing and completion cleanup repair
+
+Repair283 merged at 3ecf5695f67b604504a6caa7d5fc6073c3984a92 after all32 exact-head checks and full111+115,
+sanitizers13+13, allocation/static/full56SDK/default-byte verification.
+Canonical reactivation 8383959bf0935c8c51f39e1f8c53ad6381078768, blob 5d630fee16526e03f745d6de5947a71b08997b05, is merged.
+Finish preserved feature279 under the complete original M26-04 acceptance.
+Preserve every Runtime/native/repair source, prior test and failed evidence.
+Frozen ring4, native CUDA1/XDMA2 with combined aggregate3, safe8ms remain fixed.
+M26-05/M26-06 stay inactive. Standing scoped publication/merge authority persists.
+No physical/HIL/RT/human/Unreal/performance/release claim. Earlier notes are history.

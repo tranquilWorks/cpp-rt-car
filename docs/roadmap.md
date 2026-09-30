@@ -1,3 +1,128 @@
+# M26-04 software locally verified; integration pending
+
+The installed golden XDMA/combined source kit runs actual Runtime sampled
+channels and native backend batches with owned simulated drivers, CPU/kernel/
+Graph physics, native/host/external execution, full-state parity, owner replay,
+checkpoint recovery, faults, safe acknowledgements and bounded ownership.
+Full148+152, focused37, ASan/UBSan/leaks25, TSan25, allocation/static and actual
+CPack65 SDK/embedding/negative gates pass. See
+[evidence](evidence/M26-04-final-verification/acceptance.md) and PR279.
+Exact-final-head full/all32 and guarded integration/canonical closure remain.
+M26-05 showcase and M26-06 documentation/audit remain inactive; no physical,
+RT/human/Unreal/controlled-performance/release claim. Earlier notes are history.
+
+# M26-04 feature resumed after sampled timing and completion cleanup repair
+
+Repair283 is merged at 3ecf5695f67b604504a6caa7d5fc6073c3984a92; all32 final checks and local full111+115,
+sanitizers13+13, allocation/static/full56SDK/default artifact checks pass.
+Canonical reactivation 8383959bf0935c8c51f39e1f8c53ad6381078768, blob 5d630fee16526e03f745d6de5947a71b08997b05, is merged.
+Complete retained feature279: all original execution/parity/safety/replay/fault,
+installed-kit, artifact, documentation and fresh local/all32 gates remain binding.
+Preserve all repaired Runtime/native sources and prior tests/evidence.
+M26-05/M26-06 remain inactive; physical/manual/RT/Unreal/release gates stay separate.
+
+## Historical checkpoints
+
+# M26-04 feature resumed after sampled recovery repair
+
+Repair282 is merged at f5402b9a646a6d7adfbb54f5eca2170a69a6e292; all32 final checks and local full110+114,
+sanitizers11+11, allocation/static/full55SDK/default artifact checks pass.
+Canonical reactivation 1a2c1ee989319ffcd6c2d1874f13e1ed0f82bccb, blob e45d19649894bbc4f4abb92645730b812afc986f, is merged.
+Complete retained feature279: all original execution/parity/safety/replay/fault,
+installed-kit, artifact, documentation and fresh local/all32 gates remain binding.
+Preserve all repaired Runtime/native sources and prior tests/evidence.
+M26-05/M26-06 remain inactive; physical/manual/RT/Unreal/release gates stay separate.
+
+## Historical checkpoints
+
+# M26-04 XDMA feature resumed after storage repair
+
+Repair target281 is merged at 242793be0cb1ff75b56c74e5b89d0f6e8a21fd76; all32 final checks, full109+113,
+sanitizers51+51, allocation/static/package/default artifact checks passed.
+Canonical reactivation 069139f9c2504349d71f280f6dbd16dbc1c92089, blob 20d0d8b47161d3be5deef554e65ad38187e5bfca, is merged.
+Complete preserved feature279 on actual frozen four-slot Runtime storage.
+The feature remains incomplete until actual execution/parity/safety/replay/faults,
+installed kit and fresh local/all32 gates pass. Preserve all earlier failures
+and every repaired Runtime/native source/test. M26-05/M26-06 stay inactive;
+human/physical/RT/Unreal/performance/release gates remain separate.
+
+## Historical checkpoints
+
+# M26-04 resumed: storage repaired; combined capacity decision pending
+
+The approved four-slot repair is merged as target280 at
+ e8caf4396cd5987d9aa4a4bf3dad9a178cf2ded7 (all32 exact-head checks PASS).
+Canonical reactivation562 is merged at3af5a3db321a51fa61b7fb18f133ddbdd3eed689.
+The unchanged original24-tick XDMA probe now passes through native transfers.
+New count9/ticks24 native and independent host-job XDMA-only parity and trusted
+replay pass against actual CPU canonical state, with zero counted steady/replay
+allocations and a detected positive control. These are partial prototype results.
+
+Combined CUDA/XDMA exposes a separate Runtime capacity mismatch: aggregate
+admission requires3 reservations, while registration/initialization require every
+backend to support that global count. The intended native capacities areCUDA1 and
+XDMA2. Isolated1/2/3 diagnostics and the failed startup variant are retained.
+See [the bounded second-repair proposal](evidence/M26-04-capacity-repair-proposal.md).
+Owner approval is pending for the new explicit opt-in capacity policy; no Runtime,
+native backend or frozen contract change has been made. Do not enlarge native
+XDMA capacity or weaken gates as a workaround.
+
+Feature279 remains incomplete and must not merge. Combined execution, the full
+parity matrix, faults/recovery, installed CLI/kit/artifacts and fresh feature
+sanitizer/static/local/all32 gates remain outstanding. M26-05/M26-06 stay inactive.
+The existing M23 benchmark follow-up and human/physical/RT/Unreal/performance/
+release gates remain separate. Standing authority covers current checkpoint
+publication; the new Runtime/C++ policy requires its own approved canonical batch.
+
+## Historical reactivation and checkpoints
+
+# M26-04 XDMA feature resumed after storage repair
+
+Repair target280 is merged at e8caf4396cd5987d9aa4a4bf3dad9a178cf2ded7; all32 final checks, full108+112,
+sanitizers52+52, allocation/static/package/default artifact checks passed.
+Canonical reactivation 3af5a3db321a51fa61b7fb18f133ddbdd3eed689, blob 4447bb07bd3d11befcfe8272e05f7b7eb0ecc180, is merged.
+Complete preserved feature279 on actual frozen four-slot Runtime storage.
+The feature remains incomplete until actual execution/parity/safety/replay/faults,
+installed kit and fresh local/all32 gates pass. Preserve all earlier failures
+and every repaired Runtime/native source/test. M26-05/M26-06 stay inactive;
+human/physical/RT/Unreal/performance/release gates remain separate.
+
+## Historical checkpoints
+
+# M26-04 checkpoint: four-slot sampled storage blocked
+
+The first XDMA graph compiles but fails Runtime finalization: frozen scenario
+ring capacity4 conflicts with the existing fixed2 implementation. The isolated
+same-graph ring2 diagnostic finalizes without starting a device; it is not
+scenario or safety evidence. Runtime, prior kits/tests and frozen scenario are
+unchanged. See [the concrete repair proposal](evidence/M26-04-repair-proposal.md)
+and [retained evidence](evidence/M26-04-2026-09-29.md).
+
+Canonical header-description correction560 is merged; no Runtime repair is
+activated. M26-04 acceptance is incomplete, pending a separately scoped repair
+and then all feature/local/hosted/package/integration work. M26-05/M26-06 remain
+inactive. No physical/human/RT/Unreal/performance/release promotion.
+
+## Earlier activation checkpoint
+
+# M26-04 XDMA HAL HIL-loopback implementation
+
+M26-03 is merged as [target277](https://github.com/tranquilWorks/cpp-rt-car/pull/277)
+at b0564fef90ce9cc3537e2814e8e972c4e32cc168 with all32 final target checks.
+Canonical [M26-04 plan558](https://github.com/tranquilWorks/portfolio-control/pull/558)
+is merged at 71307ba6379a9209da43f4b6b5e31fb282129ca9, blob 04a4073dfab4f22374c7509d8c35f97ff66b9489.
+
+Only M26-04 is active: new public-SDK sampled-I/O/XDMA and combined CUDA+XDMA
+source kit, explicit host staging, safe acknowledgements, faults/recovery/replay
+and installed/process evidence. Implementation and acceptance are in progress;
+activation is not completed functionality. Preserve all existing CPU/CUDA kits,
+immutable scenario, Runtime/native backends, ABI and earlier failure evidence.
+The known M23 timing-sensitive benchmark fixture remains separate follow-up.
+M26-05 showcase and M26-06 final audit remain inactive; human/physical/RT/Unreal/
+controlled-performance/release gates remain separate.
+
+## Historical M26-03 completion
+
 # M26-04R4 local verification complete; integration pending
 
 Sampled simulator timing and checked-stop completion repair passes full111+115,

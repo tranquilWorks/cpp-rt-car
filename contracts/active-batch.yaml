@@ -1,207 +1,317 @@
 schema_version: 1
 batch:
-  id: M26-04R4
-  title: Apply existing mock timing to sampled safe transitions
-  goal: Forward the existing explicitly selected mock-only simulation timing to sampled startup/failure/shutdown
-    safe submissions, preserving logical/backend deadlines and native defaults; then finish M26-04. Complete
-    bounded native completion collection on checked stop after timeout so retained registrations can be
-    released.
+  id: M26-04
+  title: XDMA HAL HIL-loopback variant
+  goal: Run the frozen golden sensor/actuator loop through actual Runtime sampled-I/O channels and the
+    native HAL-v2 XDMA candidate with an owned simulated driver, including CPU/CUDA physics, safe acknowledgements,
+    faults/recovery and a complete installed source kit.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
   - products/cpp-rt-car/PRD.md#cap-m26--golden-full-system-reference
   - products/cpp-rt-car/acceptance.yaml#CAP-M26
   milestone: products/cpp-rt-car/milestones/M26.md#m26-04--xdma-hal-hil-loopback-variant
-  baseline_commit: f5402b9a646a6d7adfbb54f5eca2170a69a6e292
+  baseline_commit: 3ecf5695f67b604504a6caa7d5fc6073c3984a92
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M26-04R4.yaml
-  predecessor: 'Repairs280/281/282 and feature reactivation568 are merged. Feature279 retains TSan preparation/cleanup
-    failures and isolated30ms event-hold probe: ordinary simulated dispatch succeeds, startup and shutdown
-    time out despite identical explicit simulation policy.'
-  owner_scope: 'Owner approved repair and requested finish. This bounded private propagation correction
-    completes the existing approved mock timing policy; no new public policy, format, capability or deadline
-    weakening. Standing scoped publication/integration authority persists. Integrate separately, canonically
-    reactivate and complete feature279; M26-05/M26-06 remain inactive. A retained native timeout exposes
-    stop polling quiescence before final completion collection: unregister remains invalid_state across
-    eight checked retries, destructor fails closed (GDB retained). Extend only private stop-time bounded
-    collection under the same necessary repair-and-finish authority; no new public design.'
-  control_plane_revision: a78293d9884c8fe73d615d3cc9c4615514443ccd
-  canonical_revision: a78293d9884c8fe73d615d3cc9c4615514443ccd
-  canonical_blob_sha: ebc6262ada9fe74f239f54bdb67f0785dbe4fa9c
+  control_plane_path: products/cpp-rt-car/batches/M26-04.yaml
+  predecessor: M26-04R4 target PR283 merged at 3ecf5695f67b604504a6caa7d5fc6073c3984a92, tested head fb72c963b53f05e0478c1c261ec779fb75c5778d/tree
+    a90a55fd39a27a8ba73f02a69101f6af19482613, all32 exact-head checks successful. Full111+115, focused123/new13,
+    ASan/UBSan/leaks13, TSan13, all3 zero-allocation controls,36TU plus final delta/fixture static, actual
+    CPack full56SDK and exact default MemoryPlan/checkpoint/active bytes passed. Preserve repairs280/281/282/283
+    and every failed diagnostic.
+  owner_scope: Owner approved repair and requested completion. Sampled timing/completion cleanup repair283
+    is integrated; reactivate only preserved feature279 and finish every original M26-04 acceptance. Standing
+    scoped publication/integration authority persists; M26-05/M26-06 remain inactive.
+  control_plane_revision: 8383959bf0935c8c51f39e1f8c53ad6381078768
+  canonical_revision: 8383959bf0935c8c51f39e1f8c53ad6381078768
+  canonical_blob_sha: 5d630fee16526e03f745d6de5947a71b08997b05
 dependencies:
+- M26-01
+- M26-02
+- M26-03
+- M24-04
+- M21-05
+- M22-04
+- M26-04R
+- M26-04R2
 - M26-04R3
-- M26-03R
+- M26-04R4
 scope:
   allowed_paths:
   - AGENTS.md
   - contracts/active-batch.yaml
-  - rt/src/host_runtime.cpp
+  - contracts/verification.commands
+  - CMakeLists.txt
+  - samples/CMakeLists.txt
+  - samples/golden_xdma/**
   - tests/CMakeLists.txt
+  - tests/golden_xdma/**
+  - tests/golden_system/package_contract.cmake
+  - tests/golden_cuda/package_contract.cmake
   - tests/package_consumer/CMakeLists.txt
-  - tests/test_sampled_io_simulation.cpp
-  - tests/sampled_io_simulation/**
-  - tests/package_consumer/sampled_io_simulation_consumer.cpp
+  - docs/golden_xdma.md
+  - docs/golden_system.md
+  - docs/golden_cuda.md
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
   - docs/roadmap.md
-  - docs/architecture.md
-  - docs/device_backend.md
-  - docs/determinism_replay.md
-  - docs/memory_plan.md
-  - docs/sdk/generated/**
-  - docs/cuda_capabilities.json
+  - docs/evidence/M26-04-*
+  - tools/check_docs_contract.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - docs/evidence/M26-04R4-*
-  - rt/src/device_manager.cpp
+  - .github/workflows/docs-contract.yml
   forbidden_paths:
-  - abi/
+  - rt/
   - core/
+  - abi/
   - hal/
   - gpu/
   - include/
   - src/
   - integrations/
-  - bench/
-  - samples/
   - configs/
   - profiles/
   - qualification/
-  - .github/
-  - rt/src/cuda_backend.cpp
-  - rt/src/xdma_backend.cpp
-  - rt/src/mock_device.cpp
-  - rt/src/loopback_backend.cpp
-  - rt/include/rt/c_api.h
-  - rt/include/rt/device_abi.h
-  - rt/include/rt/config.hpp
-  - rt/include/rt/cuda_backend.hpp
-  - rt/include/rt/xdma_backend.hpp
-  - tests/test_command_batch.cpp
-  - tests/test_rate_dispatch.cpp
-  - tests/test_mixed_rate_replay.cpp
-  - tests/mixed_rate_conformance.hpp
+  - bench/
+  - samples/hello_runtime/
+  - samples/typed_runtime/
+  - samples/cuda_physics/
+  - tests/hello_runtime/
+  - tests/typed_runtime/
   - tests/cuda_physics/
-  - tests/golden_system/
-  - tests/golden_cuda/
+  - tests/test_cuda_backend.cpp
+  - tests/test_command_batch.cpp
   - tests/package_consumer/package_contract.cmake
+  - tools/check_cuda_capabilities.py
+  - docs/cuda_capabilities.json
+  - docs/cuda_capabilities.md
+  - docs/evidence/M24-*
+  - docs/evidence/M23-*
+  - docs/evidence/M25-01-*
+  - docs/evidence/M25-02-*
+  - .github/workflows/release.yml
+  - .github/workflows/cuda-qualification.yml
+  - .github/workflows/xdma-qualification.yml
   - release/keys/
   - release/signatures/
   - VERSION.txt
   - LICENSE
   - CHANGELOG.md
   - SECURITY.md
-  - docs/evidence/M24-*
-  - docs/evidence/M23-*
-  - docs/evidence/M25-*
+  - samples/backend_authoring/
+  - tests/backend_authoring/
+  - docs/backend_authoring.md
+  - docs/evidence/M25-03-*
+  - samples/cil_shared_memory/
+  - tests/cil_shared_memory/
+  - docs/cil_shared_memory.md
+  - docs/evidence/M25-04-*
+  - samples/host_adapter/
+  - tests/host_adapter/
+  - docs/host_adapter.md
+  - docs/evidence/M25-05-*
+  - tests/mixed_rate_conformance.hpp
+  - tests/package_consumer/*.cpp
+  - tests/package_consumer/*.c
+  - samples/recipes/
+  - tests/installed_docs/
+  - docs/sdk/
+  - tools/generate_sdk_docs.py
+  - tools/check_sdk_docs.py
+  - docs/evidence/M25-06-*
+  - tools/check_golden_contract.py
+  - tests/golden_system/test_contract.py
   - docs/evidence/M26-01-*
+  - samples/golden_system/contract.json
+  - samples/golden_system/model.hpp
+  - samples/golden_system/world.hpp
+  - samples/golden_system/oracle.hpp
+  - samples/golden_system/fixed.hpp
+  - samples/golden_system/controls.hpp
+  - samples/golden_system/replay.hpp
+  - samples/golden_system/main.cpp
+  - samples/golden_system/telemetry.hpp
+  - tests/golden_system/test_system.cpp
+  - tests/golden_system/protocol_checks.hpp
+  - tests/golden_system/process_suite.py
+  - tests/golden_system/test_config.py
+  - tests/golden_system/verify_package.py
   - docs/evidence/M26-02-*
-  - docs/evidence/M26-03-*
-  - tests/test_sampled_io.cpp
-  - tests/test_cross_rate_data.cpp
+  - .github/workflows/ci.yml
   - tests/test_device_rate_simulation.cpp
   - tests/device_rate_simulation/
-  - tests/golden_xdma/
   - docs/evidence/M26-03R-*
-  - docs/evidence/M26-04-*
-  - rt/src/cross_rate_data.hpp
-  - rt/src/cross_rate_data.cpp
-  - rt/src/sampled_io.hpp
-  - rt/src/sampled_io.cpp
-  - rt/src/rate_dispatch.cpp
+  - samples/golden_system/
+  - samples/golden_cuda/
+  - docs/evidence/M26-03-*
+  - tests/golden_cuda/test_cuda.cpp
+  - tests/golden_cuda/allocation.cpp
+  - tests/golden_cuda/allocation.hpp
+  - tests/golden_cuda/process_suite.py
+  - tests/golden_cuda/verify_package.py
+  - tests/golden_cuda/CMakeLists.txt
   - tests/test_sampled_io_storage.cpp
   - tests/sampled_io_storage/
-  - tests/package_consumer/sampled_io_storage_consumer.cpp
   - docs/evidence/M26-04R-*
-  - rt/include/rt/runtime.hpp
-  - rt/src/device_manager.hpp
   - tests/test_device_capacity.cpp
   - tests/device_capacity/
   - tests/package_consumer/device_capacity_consumer.cpp
+  - tests/package_consumer/sampled_io_storage_consumer.cpp
   - docs/evidence/M26-04R2-*
   - tests/test_sampled_io_recovery.cpp
   - tests/sampled_io_recovery/
   - tests/package_consumer/sampled_io_recovery_consumer.cpp
   - docs/evidence/M26-04R3-*
+  - tests/test_sampled_io_simulation.cpp
+  - tests/sampled_io_simulation/
+  - tests/package_consumer/sampled_io_simulation_consumer.cpp
+  - docs/evidence/M26-04R4-*
 acceptance:
-- 'Change only private host_runtime.cpp and device_manager.cpp behavior: bounded completion collection
-  during checked stop, and forwarding the already compiled explicit DeviceRateSimulationPolicy to real
-  sampled safe submissions. Preserve ABI8/70exports/fingerprint0xd0e7a5a14bf35f97, SONAME8/deviceABI1,
-  public layouts, RuntimeConfig schema7, native sources, defaults, existing MemoryPlan and artifact bytes;
-  no new public state or policy.'
-- For startup/failure/shutdown, select only the matching compiled device phase simulation policy. Retain
-  original safe-transition logical duration and batch/backend timeout, checked now+timeout arithmetic,
-  actual terminal acknowledgement and unknown-on-failure ownership. Existing finite host watchdog applies
-  only to an opted-in deterministic mock; unselected mock and all native paths keep the original wall
-  deadline. Never claim safety from elapsed time or cancellation alone.
-- After device submission/service lanes quiesce, each checked stop may perform one bounded poll per registered
-  command backend before unregistering buffers. Collect actual native terminal completions still retaining
-  buffer references; never treat canceled/timeout work as safe ACK or free unfinished native work. Keep
-  bounded callbacks, existing completion buffers/capacities, no new waits/allocations/public state, and
-  original failure retention when native completion is not yet ready. Subsequent checked stop must be
-  able to progress. Prove an unchanged-baseline negative with controlled held completion visibility and
-  real native XDMA registration; cover delayed pending/retry, default and explicit simulation, ordinary
-  completion preservation and isolation. Preserve every prior timeout/assertion/native source.
-- 'New public-API fixture/installed consumer must demonstrate the unchanged-baseline negative: bounded
-  held actual native XDMA event with fixed injected logical clock exceeds8ms host duration, regular dispatch
-  succeeds while lifecycle startup/stop fail; repaired opted-in lifecycle passes. Exercise startup/failure/stop,
-  logical deadline expiry, finite host watchdog, missing ACK, default/unselected/native rejection, multiple
-  owners, checked retry/resource conservation and zero allocation with positive control. Preserve every
-  earlier fixture/assertion/deadline.'
-- Run contract/quick/full, preserved focused device/rate/sampled/control/replay suites, new regressions,
-  ASan/UBSan/leaks, TSan, relevant Clang static, actual relocated CPack full SDK/custom paths/spaces/removed
-  original prefix/embedding/negative consumers, ABI and exact default artifact/MemoryPlan comparisons.
-  Require all32 exact-final-head target checks with exact M26-03 names/multiplicity; no local/target exceptions.
-  Retain failures and risk review.
-- Refresh only necessary source-linked docs and reviewed ledgers; cuda_capabilities.json product_sources
-  hashes only. Guard separate merge with clean exact head/base, no unresolved review threads, fetched
-  tested-tree equality. Canonically reactivate feature279 and complete every original acceptance with
-  fresh gates; repair alone does not close M26-04 or CAP-M26. M26-05/M26-06 and human/physical/RT/Unreal/performance/release
-  remain separate.
+- Reconcile preserved feature279 with integrated sampled simulator timing and completion-collection repair283.
+  The existing explicit mock timing now applies to actual startup/failure/shutdown safe submissions without
+  changing safe8ms logical/backend timeouts; native/default paths remain wall-bounded. Checked stop collects
+  one bounded native completion batch per initialized backend after Runtime lane quiescence, retaining
+  unknown safety and ownership until actual terminal collection. Preserve both private corrections, all
+  prior repairs/tests/evidence, and public/native/default identities. No further Runtime/native changes
+  are part of the feature; complete all original acceptance with fresh full/sanitizer/static/package/all32
+  gates.
+- Reconcile preserved feature279 with integrated sampled cleanup/checkpoint repair282. Preserve actual
+  stop-time safe acknowledgement before retaining the private teardown stage; failed acknowledgements
+  still execute on retry. Preserve exact produced sampled-device checkpoint provenance reconstructed from
+  validated existing bytes. No further Runtime/native/layout/schema/identity changes are part of M26-04.
+  Complete every original feature acceptance and fresh gates; prerequisite probes do not close the feature.
+- Use integrated M26-04R2 explicit DeviceCapacityPolicy::native_per_backend only in the new combined CUDA/XDMA
+  sample. Distinguish unchanged native CUDA1/XDMA2 storage from aggregate Runtime admission reservation3
+  for the three same-nominal device phases. No native queue/event-pool inflation or weakened phase/backend/global
+  admission. XDMA-only and all prior kits retain their defaults. Reconcile preserved draft279 with repaired
+  main; preserve both repair implementations/tests/evidence and all original feature criteria. This amendment
+  reactivates only M26-04; complete fresh feature gates before closure.
+- Use integrated M26-04R actual four-slot sampled storage with the unchanged frozen ring_capacity4; no
+  diagnostic two-slot downgrade. Reconcile preserved draft279 with repaired main before feature verification.
+  Preserve the private storage plumbing and public comment-only extension, new storage regressions/consumer
+  and all failed repair/feature evidence unchanged. This amendment closes the repair and resumes only
+  the original M26-04 feature acceptance; all feature criteria and required gates remain binding.
+- Preserve the immutable M26-01 contract/digest, fixed256-capacity integer SoA/initialization/model/controls/rate
+  envelopes/channel identities and independent C++/Python oracles, all CPU/CUDA source kits/tests and
+  repaired Runtime/native backends. New source files may derive documented copies with provenance and
+  reuse installed sibling headers. Keep eight logical scenario phases; bounded CPU completion/codec callbacks
+  may implement device-phase bookkeeping after successful terminal validation, but must be identified
+  separately with exact physical graph/count/budget accounting. No new physical state, hidden direct submit,
+  device/device channel, peer DMA or changed frozen logical workload.
+- Provide native-worker and independent host-job execution for sim_xdma with CPU physics and sim_combined
+  with both existing CUDA kernel and Graph physics, plus actual external CIL using the preserved vector
+  controller. Stage CUDA output through the existing CPU plant stage before XDMA. Use actual XdmaDeviceBackend
+  HAL-v2 batches, fixed caller-owned host buffers/card storage, explicit payload roles and host-visible
+  references, ordered H2C/C2H and declared control/event operations. Keep CUDA and XDMA timelines/backend
+  identities distinct, at most the frozen two XDMA in-flight slots, and immutable rate envelopes by partitioning
+  budgets among actual phases.
+- 'Register actual M21 sampled-I/O descriptors for the four channels with exactly one device endpoint;
+  leave CPU-only plant_aggregate as ordinary cross-rate data. Preserve identities26001..26005, payload
+  shape/LE encoding/scales/calibration/trigger/sequence/age and fixed120-byte sampled header. Explicitly
+  adapt existing120-byte sample-private envelopes without changing them. Use direction-appropriate public
+  policies: input stale substitution uses the declared initial frame, while missing CPU-to-device command
+  substitutes zero safe effort and output safety is claimed only after terminal acknowledgement. Sample
+  safe-transition timeout remains8ms; logical device completion budgets fit their rate envelope. Correlate
+  the actual injected backend clock domain explicitly rather than comparing unrelated clocks.'
+- Route startup, failure and shutdown safe frames through real Runtime safe-transition submissions and
+  the actual XDMA backend/driver. Simulated sensor calibration and actuator/ECU loopback operate on transferred
+  payloads; return validated device data to canonical host state before checkpoint capture, never publish
+  failed completion data or calculate replacement device work behind the oracle. Verify every active/inactive
+  state field, channel selection/sequence/age/generation/control and exact CPU/XDMA/combined parity over
+  count1/odd/default/capacity256, bounded ticks through1024, workers1/2/3 and grains1/4/16/64. Record
+  exact actual backend operations, safe acknowledgements, terminal outcomes and resource conservation.
+- Native XDMA and CUDA deterministic_mock remain0 and native replay remains unsupported. Only an explicitly
+  named complete forwarding sample adapter accepting the owned deterministic injected XDMA driver may
+  declare mock semantics and select the integrated finite five-second simulator host watchdog, using the
+  concurrent-safe injected Runtime clock; backend command deadlines stay finite and logical budgets unchanged.
+  Every transfer, control/event and completion still executes through the actual native backend. Prove
+  native replay-enabled registration rejects and no native-resource path can inherit simulator capabilities/timing.
+- Preserve originating-owner lossless trusted replay for the declared simulated variants and compatible
+  paired fresh-owner checkpoint recovery. Rebuild card-side state from freshly uploaded canonical host
+  data, reconstruct output header/timeline sequence from public Runtime state, retain original owner/configuration
+  identities and reject malformed/foreign/CPU/CUDA-only/cross-variant artifacts before side effects. Tests
+  cover full replay and exact state/action/control/channel/safe-transition semantics without identity
+  rewriting or omitted records. Detect telemetry gaps and refuse invalid replay.
+- Implement frozen tick6 underflow, overrun and stop_failure through real missing command, duplicate sampled
+  publication and missing safe acknowledgement. Underflow must yield zero effort and truthful acknowledged/unknown
+  safety; overrun must reject without overwrite and fail the release; failed stop must retain borrowed
+  resources and status until bounded retry. Include stale sequence/timestamp/payload/header corruption,
+  delayed/not-ready and actual transfer timeout, short transfer, driver loss/reset failure, saturation,
+  cancellation, partial initialize/shutdown failures, cleanup retry and multiple-owner isolation. Recover
+  only at documented boundaries or via a fresh compatible owner and verify the independent oracle. Preserve
+  earlier CUDA/CPU/external campaigns and failures.
+- Prove steady execution and supported replay allocate no ordinary heap, including real native XDMA worker
+  activity; fixed MemoryPlan/sample-owned budgets and positive allocation instrumentation controls remain
+  explicit. Configure/finalize and off-lane lifecycle work may allocate. Borrowed buffers, driver state,
+  host jobs and memory outlive Runtime through failed checked stop; accepted submissions and resources
+  reconcile exactly after success/retry. Add sanitizer/leak/race/static coverage and meaningful concurrency
+  and retention negatives.
+- Ship a complete public-SDK golden_xdma source kit and one-command build/run/independent artifact validation
+  with hashes of every reused sibling source. Artifacts label sim_xdma versus sim_combined, actual sampled-I/O
+  metadata/safety/status/counts, original state/replay pairing and physical NOT_RUN. Test actual CPack
+  extraction after removed original prefix, custom include/data paths with spaces, source embedding, all
+  prior SDK consumers and missing/private-path/source/configuration/state/cleanup/fabricated-backend negatives.
+  Prior package contracts may only add the new exact data inventory, never remove assertions. Guide links
+  may be additive. Physical XDMA/combined execution stays under M18; no default hardware probe or invented
+  real-host success.
+- Run frozen contract/config and prior CPU Python tests, focused numerical/device/rate/sampled-I/O/control/replay/fault/allocation/concurrency/process
+  tests, supported ASan/UBSan/leaks and TSan, Clang static analysis, explicit contract/quick/full, package
+  gates and all32 exact-head hosted records with M26-03 names/multiplicity. Existing protected ci.yml
+  is unchanged; new tests join existing targets/filters and allowed docs CI. Retain every failure/retry/correction,
+  exact canonical/head/tree/check/merge evidence and agent risk review. Preserve the known M23 timeout
+  benchmark finding as separate follow-up. Close only M26-04; M26-05/M26-06 remain inactive.
 validation:
   local:
+  - python3 tools/check_golden_contract.py
+  - python3 tools/generate_golden_config.py --check
+  - python3 -m unittest discover -s tests/golden_system -p "test_*.py"
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh quick
+  - ctest --test-dir build/agent-quick -R golden --output-on-failure
+  - python3 tests/golden_xdma/verify_package.py --work-directory build/m26-04-package
   - ./scripts/agent-verify.sh full
-  - Focused new sampled simulation and preserved device/rate/sampled/control/replay suites; unchanged-baseline
-    timing negative, exact default bytes/MemoryPlan, native/default controls and zero-allocation positive
-    controls.
-  - ASan/UBSan/leaks, TSan, Clang static, installed/relocated full SDK consumer, ABI/default-v1 and source-linked
-    docs.
+  - Focused XDMA/combined sampled-I/O sanitizer/leak/allocation/static/process commands retained in evidence.
   - git diff --check
   focused_tests_to_add:
-  - Explicit mock startup/failure/shutdown honors finite host watchdog while logical/backend8ms remains
-    enforced.
-  - Unselected/native/default behavior, logical expiry, host expiry, missing ACK and resource/checked
-    retry controls.
-  - Independent owner/allocation and public relocated SDK coverage with unchanged-baseline negative.
-  - 'Controlled native terminal completion visibility after poll lane quiescence: actual unregister remains
-    pending before readiness, later bounded checked stop collects and releases; original baseline fails.'
+  - Exact nominal CPU/XDMA/CUDA+XDMA kernel/Graph parity through real native backend operations and sampled-I/O.
+  - Acknowledged safe startup/failure/shutdown, underrun/overrun/stale/timeout/loss/reset/retention and
+    recovery.
+  - Originating-owner replay, native rejection, fresh-owner checkpoint recovery, foreign/malformed rejection,
+    actual no-allocation and isolation.
+  - Native/host/external CLI, independent full artifacts, relocated CPack/full SDK/embedding and negative
+    controls.
   required_ci:
-  - All32 exact-head records successful with exact M26-03 names/multiplicity; no target exceptions.
-  - New cases join existing compiler/FMA/sanitizer/package filters; workflows and earlier tests remain
-    unchanged.
+  - All32 exact-head target records successful with exact M26-03 names/multiplicity; clean/head/base/no
+    unresolved review guards and fetched merge-tree equality.
+  - New portable coverage joins existing compiler/FMA/sanitizer/package targets and allowed docs CI without
+    modifying protected ci.yml or weakening prior tests/timeouts.
   manual:
-  - No physical CUDA/XDMA/HIL/RT/human/Unreal/controlled-performance/release/signing/deployment claim.
+  - M25 human first-use and independent ownership review remain UNPERFORMED.
+  - Physical XDMA/CUDA/combined/HIL requires a named owned tuple under M18; no hardware/RT1/RT2/Unreal/controlled-performance/release/deployment
+    qualification.
 risk:
   class: high
   hazards:
-  - Wrong phase policy leaks simulation timing to native/default submissions.
-  - Logical/backend deadlines or real terminal safe acknowledgement weaken.
-  - Host watchdog is omitted, unbounded or uses an unrelated clock.
-  - Prior repairs, artifacts, tests or mandatory gates are changed.
+  - Adapter advertises simulator replay for native hardware or bypasses actual XDMA submission.
+  - Malformed, failed or stale device data reaches canonical plant state before Runtime validation.
+  - Safety is claimed without an actual terminal safe-output acknowledgement.
+  - Card payload, clock correlation, timeline or sampled sequence differs after restore/replay.
+  - Borrowed buffers/driver/jobs die while native worker or failed stop retains ownership.
+  - Codec/bookkeeping changes frozen semantics or package inventory and hides physical callback counts.
   stop_conditions:
-  - Public ABI/layout/schema versioning, default capacity/timeout weakening or native backend changes
-    become necessary.
-  - Earlier tests/assertions/deadlines or mandatory gates would require weakening.
-  - Unrelated product, physical/privileged/signing/release authority is needed.
+  - A Runtime/native backend/public ABI/schema or frozen logical workload change requires a separately
+    bounded canonical amendment/repair.
+  - Protected prior sources/assertions, native policy, mandatory gate or timeout would need weakening.
+  - A new material product decision, physical/privileged access, signing or release action is required.
 rollback:
-  strategy: Revert only private lifecycle timing propagation and new regression/docs/activation; preserve
-    all prior repairs and feature evidence.
+  strategy: Revert only the new XDMA golden source kit/tests/docs and additive install/validation wiring;
+    preserve all CPU/CUDA kits, frozen contract/oracles, Runtime/native backends/ABIs, earlier evidence
+    and support claims.
 evidence:
   output:
-  - docs/evidence/M26-04R4-<date>.md
-  - Exact retained positive/negative/baseline, memory/identity/replay/ownership/allocation/sanitizer/package/ABI
-    commands and source/head/tree/check/merge records.
-  claim_boundary: Portable owned-simulator lifecycle timing only; no physical/HIL/RT/human or feature/milestone/release
-    closure.
+  - docs/evidence/M26-04-<date>.md
+  - Exact acceptance mapping, commands/status/counts/source and canonical identities, full failed/retried
+    logs, agent review, local/hosted and guarded merge evidence.
+  claim_boundary: Portable Runtime sampled-I/O and actual native XDMA/CUDA backend execution through owned
+    simulated drivers only. No physical safe-state, timing, hardware/RT, controlled performance, Unreal,
+    CAP-M26 closure or release/deployment claim.

@@ -1,0 +1,5 @@
+# Retained lifecycle timing blocker
+
+The complete ordinary feature suite passes37/37; pre-bulk ASan/UBSan/leaks passes19 cases and relocated package passes64 SDK consumers. TSan reaches real preparation/cleanup failures with no race diagnostic. The sample bulk-copy optimization preserves payload checks but does not resolve these failures.
+
+An isolated public feature-owner probe holds the actual driver event30ms with the injected logical clock fixed: startup returns device_timeout, ordinary step succeeds, shutdown returns device_timeout and retains three regions; each checked cleanup succeeds and releases everything. Runtime lifecycle safe submissions omit the existing compiled simulation timing that regular releases pass to DeviceManager. Frozen safe8ms logical/backend timeout and native defaults must remain unchanged. Scope a separate private propagation correction before continuing feature gates. No Runtime change or functional waiver is included in this checkpoint; all earlier evidence remains retained.

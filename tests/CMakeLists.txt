@@ -594,6 +594,8 @@ if(TARGET rtfw_host_adapter_tests)
     add_dependencies(rtfw_host_adapter_tests rtfw_sampled_recovery_noalloc)
 endif()
 
+add_subdirectory(golden_xdma)
+
 add_executable(rtfw_sampled_simulation_noalloc sampled_io_simulation/noalloc.cpp)
 target_link_libraries(rtfw_sampled_simulation_noalloc PRIVATE rtfw::runtime rtfw::xdma_backend)
 rtfw_enable_project_warnings(rtfw_sampled_simulation_noalloc)

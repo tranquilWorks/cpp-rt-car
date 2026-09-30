@@ -1407,3 +1407,32 @@ install(FILES
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/golden-cuda-provenance.json"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_cuda RENAME provenance.json)
 install(FILES docs/golden_cuda.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+
+execute_process(COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/golden_xdma/provenance.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/golden-xdma-provenance.json"
+    RESULT_VARIABLE golden_xdma_provenance_result)
+if(NOT golden_xdma_provenance_result EQUAL 0)
+    message(FATAL_ERROR "Golden XDMA source provenance generation failed")
+endif()
+install(FILES
+    samples/golden_xdma/CMakeLists.txt
+    samples/golden_xdma/README.md
+    samples/golden_xdma/artifacts.py
+    samples/golden_xdma/codec.hpp
+    samples/golden_xdma/io.hpp
+    samples/golden_xdma/main.cpp
+    samples/golden_xdma/oracle.hpp
+    samples/golden_xdma/owner.hpp
+    samples/golden_xdma/provenance.py
+    samples/golden_xdma/replay.hpp
+    samples/golden_xdma/run.py
+    samples/golden_xdma/runner.hpp
+    samples/golden_xdma/session.hpp
+    samples/golden_xdma/simulated_driver.hpp
+    samples/golden_xdma/state.py
+    samples/golden_xdma/telemetry.hpp
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_xdma)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/golden-xdma-provenance.json"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_xdma RENAME provenance.json)
+install(FILES docs/golden_xdma.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
