@@ -4045,7 +4045,9 @@ struct Runtime::Impl {
         for (const auto& safe_phase : compiled_sampled_io_plan.safe_phases) {
             if (!safe_phase.phase.valid() ||
                 safe_phase.phase.index() >= callbacks.size() ||
-                safe_phase.reference_index >= compiled_rate_plan.releases.size()) {
+                safe_phase.reference_index >= compiled_rate_plan.releases.size() ||
+                safe_phase.reference_index >= compiled_rate_dispatch_plan
+                    .device_phase_by_reference.size()) {
                 return Status::internal_error;
             }
             const auto& callback = callbacks[safe_phase.phase.index()];
@@ -4118,11 +4120,27 @@ struct Runtime::Impl {
                 now + timeout_ns,
                 timeout_ns,
             };
+            // Safe transitions use the same explicit mock-only policy as the
+            // compiled device phase. Logical safety and backend timeouts remain
+            // unchanged; only host scheduling uses the finite simulator watchdog.
+            detail::DeviceRateSimulationTiming simulation_timing;
+            const auto device_phase_index = compiled_rate_dispatch_plan
+                .device_phase_by_reference[safe_phase.reference_index];
+            if (device_phase_index >= compiled_device_rate_plan.phases.size()) {
+                return Status::internal_error;
+            }
+            const auto& simulation = compiled_device_rate_plan
+                .phases[device_phase_index].simulation;
+            if (simulation) {
+                simulation_timing = {
+                    simulation->host_watchdog_ns, clock, now + timeout_ns};
+            }
             detail::DeviceRateTicket ticket;
             std::uint64_t batch_id = 0;
             auto status = devices->submit_batch(
                 safe_phase.backend.index(), safe_phase.phase.index(),
-                kNoWorker, 0, batch, declaration, batch_id, &identity, &ticket);
+                kNoWorker, 0, batch, declaration, batch_id, &identity, &ticket,
+                simulation_timing.host_watchdog_ns ? &simulation_timing : nullptr);
             detail::DeviceRateCompletion completion;
             if (status == Status::ok) {
                 status = devices->wait_rate_batch(ticket, completion);

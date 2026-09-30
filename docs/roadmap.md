@@ -1,3 +1,15 @@
+# M26-04 feature resumed after sampled timing and completion cleanup repair
+
+Repair283 is merged at 3ecf5695f67b604504a6caa7d5fc6073c3984a92; all32 final checks and local full111+115,
+sanitizers13+13, allocation/static/full56SDK/default artifact checks pass.
+Canonical reactivation 8383959bf0935c8c51f39e1f8c53ad6381078768, blob 5d630fee16526e03f745d6de5947a71b08997b05, is merged.
+Complete retained feature279: all original execution/parity/safety/replay/fault,
+installed-kit, artifact, documentation and fresh local/all32 gates remain binding.
+Preserve all repaired Runtime/native sources and prior tests/evidence.
+M26-05/M26-06 remain inactive; physical/manual/RT/Unreal/release gates stay separate.
+
+## Historical checkpoints
+
 # M26-04 feature resumed after sampled recovery repair
 
 Repair282 is merged at f5402b9a646a6d7adfbb54f5eca2170a69a6e292; all32 final checks and local full110+114,
@@ -97,6 +109,30 @@ M26-05 showcase and M26-06 final audit remain inactive; human/physical/RT/Unreal
 controlled-performance/release gates remain separate.
 
 ## Historical M26-03 completion
+
+# M26-04R4 local verification complete; integration pending
+
+Sampled simulator timing and checked-stop completion repair passes full111+115,
+focused123/new13, sanitizer13+13, allocation0/positive1, static36+delta1 and
+fixture analysis, relocated full56 SDK/embedding/negatives and exact default
+MemoryPlan/checkpoint/active bytes. See evidence/M26-04R4-2026-09-29.md and PR283.
+Require exact-final-head full/all32 and guarded merge, then canonically
+reactivate and FINISH feature279. M26-05/M26-06 remain inactive.
+No physical/HIL/RT/human/release claim. Earlier checkpoints are historical.
+
+## Earlier activation and history
+
+# M26-04R4 local verification complete; integration pending
+
+Sampled simulator timing and checked-stop completion repair passes full111+115,
+focused123/new13, sanitizer13+13, allocation0/positive1, static36+delta1 and
+fixture analysis, relocated full56 SDK/embedding/negatives and exact default
+MemoryPlan/checkpoint/active bytes. See evidence/M26-04R4-2026-09-29.md and PR283.
+Require exact-final-head full/all32 and guarded merge, then canonically
+reactivate and FINISH feature279. M26-05/M26-06 remain inactive.
+No physical/HIL/RT/human/release claim. Earlier checkpoints are historical.
+
+## Earlier activation and history
 
 # M26-04R3 local verification complete; integration required
 

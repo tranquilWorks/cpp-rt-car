@@ -13,6 +13,14 @@ if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8
     endif()
     add_test(NAME host_adapter_golden_xdma_contract COMMAND test_golden_xdma --case 0)
     set_tests_properties(host_adapter_golden_xdma_contract PROPERTIES TIMEOUT 120)
+    # Instrumented full-horizon execution includes 1024 recorded frames and
+    # complete originating-owner replay. Retained TSan evidence takes 121 s;
+    # allow sanitizer overhead without changing logical/watchdog deadlines,
+    # the workload, assertions, or any earlier test's timeout.
+    set(golden_xdma_long_test_timeout 120)
+    if(SIM_SANITIZERS)
+        set(golden_xdma_long_test_timeout 300)
+    endif()
     foreach(case RANGE 1 18)
         if(case EQUAL 9 OR case EQUAL 18)
             # Each 1024-tick owner retains its complete originating-owner replay.
@@ -20,12 +28,12 @@ if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8
             add_test(NAME host_adapter_golden_xdma_parity_${case} COMMAND test_golden_xdma --case ${case}
                 --dispatch reference --reference ${CMAKE_CURRENT_BINARY_DIR}/reference-${case})
             set_tests_properties(host_adapter_golden_xdma_parity_${case} PROPERTIES
-                TIMEOUT 120 FIXTURES_SETUP golden_xdma_reference_${case})
+                TIMEOUT ${golden_xdma_long_test_timeout} FIXTURES_SETUP golden_xdma_reference_${case})
             foreach(dispatch cpu kernel graph)
                 add_test(NAME host_adapter_golden_xdma_parity_${case}_${dispatch} COMMAND test_golden_xdma --case ${case}
                     --dispatch ${dispatch} --reference ${CMAKE_CURRENT_BINARY_DIR}/reference-${case})
                 set_tests_properties(host_adapter_golden_xdma_parity_${case}_${dispatch} PROPERTIES
-                    TIMEOUT 120 FIXTURES_REQUIRED golden_xdma_reference_${case})
+                    TIMEOUT ${golden_xdma_long_test_timeout} FIXTURES_REQUIRED golden_xdma_reference_${case})
             endforeach()
         else()
             add_test(NAME host_adapter_golden_xdma_parity_${case} COMMAND test_golden_xdma --case ${case})

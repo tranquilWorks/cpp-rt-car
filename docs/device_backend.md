@@ -441,3 +441,19 @@ Select `Runtime::set_device_capacity_policy(DeviceCapacityPolicy::native_per_bac
 ## Sampled lifecycle and checkpoint recovery
 
 Checked stop retains a completed sampled stop-time safe-output acknowledgement across partial backend teardown. Retry continues teardown without resubmitting to workers already stopped. A failed acknowledgement remains unknown and must execute successfully on retry before teardown may complete.
+
+### Explicit simulation timing for sampled safe output
+
+An explicitly selected device-phase simulation policy also applies to that
+phase's sampled startup, failure and shutdown safe submissions. The configured
+safe-transition duration remains both the injected logical deadline and the
+backend command timeout. The policy's finite host watchdog bounds host lane
+scheduling separately. Native backends and phases without the opt-in retain
+their original wall-clock deadline. Safety still requires actual successful
+terminal acknowledgement; failures retain unknown safety and checked ownership.
+
+Checked stop collects one bounded completion batch per initialized command
+backend after Runtime lanes quiesce and before unregistering referenced memory.
+A pending native operation still prevents unregister; ownership is retained for
+a later checked stop. Collecting a canceled or timed-out terminal completion
+does not acknowledge safe output or resume device execution.

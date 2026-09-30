@@ -194,6 +194,8 @@ bool native_queue();
 bool additional_replay();
 int main(int argc, char **argv) {
   std::cout << std::unitbuf;
+  // Distinguish sanitizer loader failures from every entered test attempt.
+  std::cerr << "golden XDMA fixture entered" << std::endl;
   int selected = -1, selected_dispatch = -1;
   std::filesystem::path reference;
   if (argc != 1) {

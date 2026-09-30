@@ -36,8 +36,9 @@ def main():
         inventory=json.loads(run('ctest','--test-dir',relocated/'full SDK','-C','Release','--show-only=json-v1'))
         names={test['name'] for test in inventory['tests']}
         expected={'golden_xdma_kit_'+mode+'_'+dispatch for mode in ('native','host','external') for dispatch in ('cpu','kernel','graph')}
-        if len(inventory['tests'])!=64 or not expected.issubset(names):
-            raise RuntimeError('full SDK must include all 55 prior consumers and nine XDMA variants')
+        expected.add('sampled_simulation_package_consumer')
+        if len(inventory['tests'])!=65 or not expected.issubset(names):
+            raise RuntimeError('full SDK must include all 56 prior consumers and nine XDMA variants')
         helpers.build_test(kit,relocated/'embedded',f'-DGOLDEN_RTFW_SOURCE={ROOT}','-DENABLE_TESTS=OFF','-DRTFW_BUILD_EXAMPLES=ON','-DSIM_SANITIZERS=','-DSIM_WERROR=ON')
         # Public SDK discovery and source embedding failures must be useful.
         run('cmake','-S',kit,'-B',relocated/'missing SDK','-DCMAKE_DISABLE_FIND_PACKAGE_rtfw=TRUE',failure='rtfw')
