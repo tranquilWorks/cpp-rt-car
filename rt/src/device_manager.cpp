@@ -738,7 +738,7 @@ Status DeviceManager::stop() noexcept {
              backend_index < backends_.size(); ++backend_index) {
             if (initialized_backends_[backend_index] != kBackendOwnershipNone &&
                 backends_[backend_index].command_state) {
-                poll_batch_completions(backend_index);
+                poll_batch_completions(backend_index, true);
             }
         }
     }
@@ -1970,9 +1970,30 @@ void DeviceManager::process_batch_completion(
 }
 
 void DeviceManager::poll_batch_completions(
-    std::size_t backend_index) noexcept {
+    std::size_t backend_index, bool draining) noexcept {
     auto* command_state = backends_[backend_index].command_state;
     if (!command_state) {
+        return;
+    }
+    // Another backend can wake the shared service lane before this backend
+    // publishes any batch. Do not consume a one-shot poll failure when there
+    // is no published owner to receive it. Reserved slots are still being
+    // constructed. Checked stop still drains native ownership after Runtime
+    // slots retire, including non-rate batches whose terminal error is known.
+    const auto& polling_control = batch_backends_[backend_index];
+    bool published = draining;
+    for (std::size_t offset = 0;
+         !published && offset < polling_control.slot_count; ++offset) {
+        const auto state = batch_slots_[polling_control.slot_offset + offset]
+                               .state.load(std::memory_order_acquire);
+        if (state == kBatchQueued || state == kBatchSubmitting ||
+            state == kBatchSubmitted || state == kBatchRateQuarantineOwned ||
+            state == kBatchRateQuarantined) {
+            published = true;
+            break;
+        }
+    }
+    if (!published) {
         return;
     }
     const auto poll_capacity = native_per_backend_ ? std::min(

@@ -1,28 +1,29 @@
 schema_version: 1
 batch:
-  id: M27-01
-  title: Trusted active replay rejection preserves capture
-  goal: Reject foreign active replay owners before entering live-control replay mode, preserving valid
-    later checkpoint/capture/replay and existing ordinary cross-owner compatibility.
+  id: M27-02
+  title: Startup and device poll failure conservation
+  goal: Establish and repair the retained startup-status and one-shot poll-overflow failure causes without
+    changing logical deadlines or fault meaning.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
-  - products/cpp-rt-car/acceptance.yaml#CAP-M22
+  - products/cpp-rt-car/acceptance.yaml#CAP-M21
   - products/cpp-rt-car/evidence/M26-06-closure-2026-09-30/closure.md
-  milestone: products/cpp-rt-car/milestones/M27.md#m27-01
-  baseline_commit: 2f0c9954e29d9e5b6a4ee8a2105fc13b43206181
+  milestone: products/cpp-rt-car/milestones/M27.md#m27-02
+  baseline_commit: 677fae6976f8eddd6ed7e060f222c3535a9e7ae2
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M27-01.yaml
-  owner_scope: Owner requested batching the remaining software work and doing the first now. Only M27-01
-    is selected for implementation; all later cards remain planned and require refreshed baseline/scope/environment
-    at activation. Standing scoped publication/guarded merge and completed zero-step control-only exception
-    persist; no target/local functional waiver.
+  control_plane_path: products/cpp-rt-car/batches/M27-02.yaml
+  owner_scope: Owner selected M27-02 after completed M27-01 target286/control585. Investigate and repair
+    only demonstrated private startup/poll causes, preserving existing tests and cleanup ownership. Standing
+    scoped publication/guarded merge and completed zero-step control-only exception persist; no target/local
+    functional waiver. Later cards stay inactive.
   activation: selected_after_canonical_plan_merge
-  control_plane_revision: 4bf157caf478c310ecfddb404eb52d5d67589f22
-  canonical_revision: 4bf157caf478c310ecfddb404eb52d5d67589f22
-  canonical_blob_sha: 96982bc8cd1255b64ce595ddcb4833d187c5c9a0
+  predecessor_control_revision: d8ff3b1bf02397a41b85cb53da69445aae18ab15
+  control_plane_revision: 4bae99f263db49f865817b4f3d9226d085d217b7
+  canonical_revision: 4bae99f263db49f865817b4f3d9226d085d217b7
+  canonical_blob_sha: 64f7a153aa082d960f160fccd19c02f6454477f5
 dependencies:
-- M26-06
+- M27-01
 scope:
   allowed_paths:
   - AGENTS.md
@@ -38,14 +39,15 @@ scope:
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
   - rt/src/host_runtime.cpp
+  - rt/src/device_manager.cpp
+  - rt/src/device_manager.hpp
   - tests/CMakeLists.txt
-  - tests/test_replay_rejection.cpp
-  - tests/replay_rejection/**
+  - tests/test_startup_poll_reliability.cpp
+  - tests/startup_poll_reliability/**
+  - docs/evidence/M27-02-*
   - tests/package_consumer/CMakeLists.txt
-  - tests/package_consumer/replay_rejection_consumer.cpp
-  - docs/determinism_replay.md
+  - tests/package_consumer/startup_poll_reliability_consumer.cpp
   - docs/cuda_capabilities.json
-  - docs/evidence/M27-01-*
   forbidden_paths:
   - abi/
   - VERSION.txt
@@ -71,15 +73,7 @@ scope:
   - docs/evidence/M24-*
   - docs/evidence/M25-*
   - docs/evidence/M26-*
-  - bench/
-  - hal/
-  - gpu/
-  - core/
-  - src/
-  - integrations/
   - rt/include/
-  - rt/src/live_control_mailbox.cpp
-  - rt/src/live_control_mailbox.hpp
   - rt/src/cuda_backend.cpp
   - rt/src/xdma_backend.cpp
   - rt/src/mock_device.cpp
@@ -88,40 +82,33 @@ scope:
   - samples/golden_cuda/
   - samples/golden_xdma/
   - samples/golden_showcase/
-  - samples/cuda_physics/
-  - samples/host_adapter/
-  - samples/cil_shared_memory/
-  - samples/recipes/
+  - tests/test_sampled_io_simulation.cpp
+  - tests/package_consumer/sampled_io_simulation_consumer.cpp
   - docs/golden_audit/requirements.yaml
   - docs/golden_audit/requirements.json
   - docs/golden_audit/requirements-binding.json
 acceptance:
-- On unchanged M26-06, independently reproduce direct Runtime foreign trusted active-replay rejection
-  followed by failed valid capture. The new regression must fail the unchanged baseline and pass the repaired
-  implementation; retain both commands/results and original golden probe.
-- Check active replay owner compatibility before any replay-mode or action/correlation bookkeeping mutation.
-  Cover trusted v1 and lossless v2, fresh/restored and already-used owners, repeat refusal, no callback
-  invocation, full application state, serialized checkpoint/live-control inspection/cursor conservation,
-  subsequent live admission/step/capture and originating-owner replay. Foreign active artifacts retain
-  incompatible_artifact status; never rewrite their identities.
-- Preserve ordinary input-log/trusted replay compatibility across compatible fresh Runtime instances.
-  Do not impose active-replay ownership rules on ordinary replay, alter successful originating-owner behavior,
-  error/status precedence outside the repaired path, checksums, serialized v1/v2 bytes or existing sample
-  guards.
-- Keep the correction private to host_runtime.cpp, with bounded allocation-free checks and unchanged ABI8/70exports/fingerprint0xd0e7a5a14bf35f97/SONAME8/deviceABI1/configschema7/default
-  MemoryPlan. Native backends, all prior production/test/sample sources and every earlier assertion/deadline/evidence
-  remain unchanged.
-- Add an independent public installed consumer and no-allocation positive/control coverage. Run the new
-  cases plus preserved ordinary/active/live-control replay suites, corrupt/malformed/foreign negatives,
-  ASan/UBSan/leaks, TSan, Clang static, actual relocated full SDK consumers and byte/default/ABI checks.
-  No inference that every possible replay failure is transactional.
-- Update the living audit only to reflect the specific demonstrated repair; keep all other findings and
-  qualification actions open. Retain source-hash/reproducible generated-document bindings and risk review.
-  Full local profiles/all32 exact-head target checks and guarded target/canonical closure remain mandatory.
+- Reproduce the R4 invalid_state(-2) versus device_timeout(-18) startup finding and native one-shot poll-overflow
+  unexpected success with controlled ordering and retained baseline evidence. Classify fixture versus
+  production cause separately; no assumption that an idle-poll window is the proven cause.
+- Fix only demonstrated causal defects; preserve safe8ms and all existing deadlines, checked cleanup/live0,
+  terminal-error visibility, capacity and lifecycle semantics. Add deterministic scheduling/barrier negatives
+  plus meaningful repeated integration checks; retain all original tests unchanged.
+- Cover timeout, underflow, cancellation, repeated checked stop, ownership conservation and independent
+  instances with no-allocation/sanitizer/package validation. An unreproduced finding remains open with
+  exact evidence; a retry pass never erases it.
+- 'Distinguish the original timeout from a checked-cleanup failure: never report successful release while
+  native ownership remains pending, or suppress invalid_state required by existing held-completion cases.
+  Controlled public backend callbacks may establish ordering without production test hooks. Preserve original
+  fixtures unchanged; an expectation incompatible with the ownership contract is documented separately
+  rather than weakened.'
 - Preserve prior completed batches/evidence and protected ABI/default/support claims. Run complete repository
   contract/quick/full plus all32 exact final-head hosted records with exact baseline names/multiplicity;
   retain failed attempts and risk review. Guard clean/head/base/review/merge-tree equality before scoped
   integration and canonical closure.
+- Refresh only existing product-source hashes in docs/cuda_capabilities.json for scoped private changes;
+  preserve its source inventory, scenarios, statuses and support claims. Contract validation requires
+  this binding update.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
@@ -131,18 +118,15 @@ validation:
     and actual installed package validation.
   - git diff --check
   focused_tests_to_add:
-  - On unchanged M26-06, independently reproduce direct Runtime foreign trusted active-replay rejection
-    followed by failed valid capture. The new regression must fail the unchanged baseline and pass the
-    repaired implementation; retain both commands/results and original golden probe.
-  - Check active replay owner compatibility before any replay-mode or action/correlation bookkeeping mutation.
-    Cover trusted v1 and lossless v2, fresh/restored and already-used owners, repeat refusal, no callback
-    invocation, full application state, serialized checkpoint/live-control inspection/cursor conservation,
-    subsequent live admission/step/capture and originating-owner replay. Foreign active artifacts retain
-    incompatible_artifact status; never rewrite their identities.
-  - Preserve ordinary input-log/trusted replay compatibility across compatible fresh Runtime instances.
-    Do not impose active-replay ownership rules on ordinary replay, alter successful originating-owner
-    behavior, error/status precedence outside the repaired path, checksums, serialized v1/v2 bytes or
-    existing sample guards.
+  - Reproduce the R4 invalid_state(-2) versus device_timeout(-18) startup finding and native one-shot
+    poll-overflow unexpected success with controlled ordering and retained baseline evidence. Classify
+    fixture versus production cause separately; no assumption that an idle-poll window is the proven cause.
+  - Fix only demonstrated causal defects; preserve safe8ms and all existing deadlines, checked cleanup/live0,
+    terminal-error visibility, capacity and lifecycle semantics. Add deterministic scheduling/barrier
+    negatives plus meaningful repeated integration checks; retain all original tests unchanged.
+  - Cover timeout, underflow, cancellation, repeated checked stop, ownership conservation and independent
+    instances with no-allocation/sanitizer/package validation. An unreproduced finding remains open with
+    exact evidence; a retry pass never erases it.
   required_ci:
   - All32 exact final-head target checks successful with exact M26-06 names/multiplicity. No target/local
     gate waived.
@@ -163,7 +147,7 @@ rollback:
     and other planned batches.
 evidence:
   output:
-  - docs/evidence/M27-01-<date>.md
+  - docs/evidence/M27-02-<date>.md
   - Exact baseline/positive/negative commands, hashes, raw logs, risk review and final-head local/CI/merge/closure
     records.
   claim_boundary: Portable software implementation and tested compatibility only. Original M18/M19/M20/M25/M26

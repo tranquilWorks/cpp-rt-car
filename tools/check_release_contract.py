@@ -50,6 +50,10 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'tests/startup_poll_reliability/CMakeLists.txt',
+    'tests/startup_poll_reliability/main.cpp',
+    'tests/startup_poll_reliability/verify_package.py',
+
     'tests/replay_rejection/CMakeLists.txt',
     'tests/replay_rejection/main.cpp',
     'tests/replay_rejection/scenario.hpp',

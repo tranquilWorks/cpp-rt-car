@@ -738,7 +738,7 @@
 <span id="L738">             backend_index &lt; backends_.size(); ++backend_index) {</span>
 <span id="L739">            if (initialized_backends_[backend_index] != kBackendOwnershipNone &amp;&amp;</span>
 <span id="L740">                backends_[backend_index].command_state) {</span>
-<span id="L741">                poll_batch_completions(backend_index);</span>
+<span id="L741">                poll_batch_completions(backend_index, true);</span>
 <span id="L742">            }</span>
 <span id="L743">        }</span>
 <span id="L744">    }</span>
@@ -1970,389 +1970,410 @@
 <span id="L1970">}</span>
 <span id="L1971"></span>
 <span id="L1972">void DeviceManager::poll_batch_completions(</span>
-<span id="L1973">    std::size_t backend_index) noexcept {</span>
+<span id="L1973">    std::size_t backend_index, bool draining) noexcept {</span>
 <span id="L1974">    auto* command_state = backends_[backend_index].command_state;</span>
 <span id="L1975">    if (!command_state) {</span>
 <span id="L1976">        return;</span>
 <span id="L1977">    }</span>
-<span id="L1978">    const auto poll_capacity = native_per_backend_ ? std::min(</span>
-<span id="L1979">        completion_batch_, static_cast&lt;std::size_t&gt;(</span>
-<span id="L1980">            command_state-&gt;capabilities.completion_batch_capacity))</span>
-<span id="L1981">        : completion_batch_;</span>
-<span id="L1982">    std::fill_n(batch_completion_buffer_.get(), poll_capacity,</span>
-<span id="L1983">                HalV2BatchCompletion{});</span>
-<span id="L1984">    for (std::size_t index = 0; index &lt; poll_capacity; ++index) {</span>
-<span id="L1985">        batch_completion_buffer_[index].struct_size = 0;</span>
-<span id="L1986">    }</span>
-<span id="L1987">    std::uint64_t count = 0;</span>
-<span id="L1988">    HalV2Status callback_status = HalV2Status::internal_error;</span>
-<span id="L1989">    try {</span>
-<span id="L1990">        callback_status = command_state-&gt;extension.poll(</span>
-<span id="L1991">            command_state-&gt;extension.instance, batch_completion_buffer_.get(),</span>
-<span id="L1992">            poll_capacity, &amp;count);</span>
-<span id="L1993">    } catch (...) {</span>
-<span id="L1994">        callback_status = HalV2Status::internal_error;</span>
+<span id="L1978">    // Another backend can wake the shared service lane before this backend</span>
+<span id="L1979">    // publishes any batch. Do not consume a one-shot poll failure when there</span>
+<span id="L1980">    // is no published owner to receive it. Reserved slots are still being</span>
+<span id="L1981">    // constructed. Checked stop still drains native ownership after Runtime</span>
+<span id="L1982">    // slots retire, including non-rate batches whose terminal error is known.</span>
+<span id="L1983">    const auto&amp; polling_control = batch_backends_[backend_index];</span>
+<span id="L1984">    bool published = draining;</span>
+<span id="L1985">    for (std::size_t offset = 0;</span>
+<span id="L1986">         !published &amp;&amp; offset &lt; polling_control.slot_count; ++offset) {</span>
+<span id="L1987">        const auto state = batch_slots_[polling_control.slot_offset + offset]</span>
+<span id="L1988">                               .state.load(std::memory_order_acquire);</span>
+<span id="L1989">        if (state == kBatchQueued || state == kBatchSubmitting ||</span>
+<span id="L1990">            state == kBatchSubmitted || state == kBatchRateQuarantineOwned ||</span>
+<span id="L1991">            state == kBatchRateQuarantined) {</span>
+<span id="L1992">            published = true;</span>
+<span id="L1993">            break;</span>
+<span id="L1994">        }</span>
 <span id="L1995">    }</span>
-<span id="L1996">    service_polls_.fetch_add(1, std::memory_order_relaxed);</span>
-<span id="L1997">    const auto callback_runtime_status =</span>
-<span id="L1998">        hal_v2_status_to_runtime(callback_status);</span>
-<span id="L1999">    if (callback_runtime_status != Status::ok || count &gt; poll_capacity) {</span>
-<span id="L2000">        fail_backend_batches(</span>
-<span id="L2001">            backend_index, callback_runtime_status == Status::ok</span>
-<span id="L2002">                               ? Status::device_error</span>
-<span id="L2003">                               : callback_runtime_status);</span>
-<span id="L2004">        return;</span>
-<span id="L2005">    }</span>
-<span id="L2006">    bool valid = true;</span>
-<span id="L2007">    auto&amp; control = batch_backends_[backend_index];</span>
-<span id="L2008">    const auto timestamp_domain = backends_[backend_index].memory_state</span>
-<span id="L2009">        ? backends_[backend_index]</span>
-<span id="L2010">              .memory_state-&gt;snapshot.completion_timestamp_domain_identity</span>
-<span id="L2011">        : 0;</span>
-<span id="L2012">    for (std::size_t completion_index = 0;</span>
-<span id="L2013">         completion_index &lt; static_cast&lt;std::size_t&gt;(count); ++completion_index) {</span>
-<span id="L2014">        const auto&amp; completion = batch_completion_buffer_[completion_index];</span>
-<span id="L2015">        if (!validate_batch_completion(completion) ||</span>
-<span id="L2016">            completion.timestamp_domain_identity != timestamp_domain) {</span>
-<span id="L2017">            valid = false;</span>
-<span id="L2018">            break;</span>
-<span id="L2019">        }</span>
-<span id="L2020">        for (std::size_t prior = 0; prior &lt; completion_index; ++prior) {</span>
-<span id="L2021">            if (batch_completion_buffer_[prior].batch_id == completion.batch_id) {</span>
-<span id="L2022">                valid = false;</span>
-<span id="L2023">                break;</span>
-<span id="L2024">            }</span>
-<span id="L2025">        }</span>
-<span id="L2026">        BatchSlot* matched = nullptr;</span>
-<span id="L2027">        for (std::size_t offset = 0; valid &amp;&amp; offset &lt; control.slot_count;</span>
-<span id="L2028">             ++offset) {</span>
-<span id="L2029">            auto&amp; slot = batch_slots_[control.slot_offset + offset];</span>
-<span id="L2030">            const auto state = slot.state.load(std::memory_order_acquire);</span>
-<span id="L2031">            if (slot.batch.batch_id == completion.batch_id &amp;&amp;</span>
-<span id="L2032">                (state == kBatchSubmitting || state == kBatchSubmitted ||</span>
-<span id="L2033">                 state == kBatchRateQuarantineOwned ||</span>
-<span id="L2034">                 state == kBatchRateQuarantined)) {</span>
-<span id="L2035">                matched = &amp;slot;</span>
-<span id="L2036">                break;</span>
-<span id="L2037">            }</span>
-<span id="L2038">        }</span>
-<span id="L2039">        if (!matched || completion.signal_count != matched-&gt;batch.signal_count) {</span>
-<span id="L2040">            valid = false;</span>
-<span id="L2041">            break;</span>
-<span id="L2042">        }</span>
-<span id="L2043">        for (std::size_t signal = 0; signal &lt; completion.signal_count; ++signal) {</span>
-<span id="L2044">            if (completion.signals[signal].timeline_handle !=</span>
-<span id="L2045">                    matched-&gt;batch.signals[signal].timeline_handle ||</span>
-<span id="L2046">                completion.signals[signal].value !=</span>
-<span id="L2047">                    matched-&gt;batch.signals[signal].value) {</span>
-<span id="L2048">                valid = false;</span>
-<span id="L2049">                break;</span>
-<span id="L2050">            }</span>
-<span id="L2051">        }</span>
-<span id="L2052">    }</span>
-<span id="L2053">    if (!valid) {</span>
-<span id="L2054">        fail_backend_batches(backend_index, Status::device_error);</span>
-<span id="L2055">        return;</span>
-<span id="L2056">    }</span>
-<span id="L2057">    for (std::size_t completion_index = 0;</span>
-<span id="L2058">         completion_index &lt; static_cast&lt;std::size_t&gt;(count); ++completion_index) {</span>
-<span id="L2059">        process_batch_completion(</span>
-<span id="L2060">            backend_index, batch_completion_buffer_[completion_index]);</span>
-<span id="L2061">    }</span>
-<span id="L2062">}</span>
-<span id="L2063"></span>
-<span id="L2064">void DeviceManager::service_loop() noexcept {</span>
-<span id="L2065">    service_starts_.fetch_add(1, std::memory_order_release);</span>
-<span id="L2066">    service_ready_.store(true, std::memory_order_release);</span>
-<span id="L2067">    while (!stopping_.load(std::memory_order_acquire)) {</span>
-<span id="L2068">        if (outstanding_count_.load(std::memory_order_acquire) == 0) {</span>
-<span id="L2069">            if (wait_strategy_ == WaitStrategy::spin) {</span>
-<span id="L2070">                rt::cpu_relax();</span>
-<span id="L2071">                continue;</span>
-<span id="L2072">            }</span>
-<span id="L2073">            if (wait_strategy_ == WaitStrategy::yield) {</span>
-<span id="L2074">                std::this_thread::yield();</span>
-<span id="L2075">                continue;</span>
-<span id="L2076">            }</span>
-<span id="L2077">            const auto observed =</span>
-<span id="L2078">                wake_sequence_.load(std::memory_order_acquire);</span>
-<span id="L2079">            if (!stopping_.load(std::memory_order_acquire) &amp;&amp;</span>
-<span id="L2080">                outstanding_count_.load(std::memory_order_acquire) == 0) {</span>
-<span id="L2081">                wake_sequence_.wait(</span>
-<span id="L2082">                    observed,</span>
-<span id="L2083">                    std::memory_order_relaxed);</span>
-<span id="L2084">            }</span>
-<span id="L2085">            continue;</span>
-<span id="L2086">        }</span>
-<span id="L2087">        for (std::size_t backend_index = 0;</span>
-<span id="L2088">             backend_index &lt; backends_.size();</span>
-<span id="L2089">             ++backend_index) {</span>
-<span id="L2090">            auto&amp; batch_control = batch_backends_[backend_index];</span>
-<span id="L2091">            for (std::size_t offset = 0; offset &lt; batch_control.slot_count;</span>
-<span id="L2092">                 ++offset) {</span>
-<span id="L2093">                auto&amp; slot = batch_slots_[batch_control.slot_offset + offset];</span>
-<span id="L2094">                auto expected = kBatchCompletionReady;</span>
-<span id="L2095">                if (slot.state.compare_exchange_strong(</span>
-<span id="L2096">                        expected, kBatchOwned, std::memory_order_acq_rel,</span>
-<span id="L2097">                        std::memory_order_relaxed)) {</span>
-<span id="L2098">                    finish_batch_slot(</span>
-<span id="L2099">                        slot,</span>
-<span id="L2100">                        hal_v2_status_to_runtime(static_cast&lt;HalV2Status&gt;(</span>
-<span id="L2101">                            slot.early_completion.status)),</span>
-<span id="L2102">                        slot.early_completion_valid,</span>
-<span id="L2103">                        slot.early_completion_valid</span>
-<span id="L2104">                            ? &amp;slot.early_completion</span>
-<span id="L2105">                            : nullptr);</span>
-<span id="L2106">                }</span>
-<span id="L2107">            }</span>
-<span id="L2108">            std::fill_n(</span>
-<span id="L2109">                completion_buffer_.get(),</span>
-<span id="L2110">                completion_batch_,</span>
-<span id="L2111">                HalV2Completion{});</span>
-<span id="L2112">            for (std::size_t index = 0; index &lt; completion_batch_; ++index) {</span>
-<span id="L2113">                completion_buffer_[index].struct_size = 0;</span>
-<span id="L2114">            }</span>
-<span id="L2115">            std::uint64_t count = 0;</span>
-<span id="L2116">            HalV2Status device_status = HalV2Status::internal_error;</span>
-<span id="L2117">            try {</span>
-<span id="L2118">                device_status = backends_[backend_index].api.poll(</span>
-<span id="L2119">                    backends_[backend_index].api.instance,</span>
-<span id="L2120">                    completion_buffer_.get(),</span>
-<span id="L2121">                    completion_batch_,</span>
-<span id="L2122">                    &amp;count);</span>
-<span id="L2123">            } catch (...) {</span>
-<span id="L2124">                device_status = HalV2Status::internal_error;</span>
-<span id="L2125">            }</span>
-<span id="L2126">            service_polls_.fetch_add(1, std::memory_order_relaxed);</span>
-<span id="L2127">            const auto status =</span>
-<span id="L2128">                hal_v2_status_to_runtime(device_status);</span>
-<span id="L2129">            if (status != Status::ok ||</span>
-<span id="L2130">                count &gt; completion_batch_) {</span>
-<span id="L2131">                fail_backend_outstanding(</span>
-<span id="L2132">                    backend_index,</span>
-<span id="L2133">                    status == Status::ok</span>
-<span id="L2134">                        ? Status::device_error</span>
-<span id="L2135">                        : status);</span>
-<span id="L2136">                continue;</span>
-<span id="L2137">            }</span>
-<span id="L2138">            bool batch_valid = true;</span>
-<span id="L2139">            for (std::size_t completion_index = 0;</span>
-<span id="L2140">                 completion_index &lt; static_cast&lt;std::size_t&gt;(count);</span>
-<span id="L2141">                 ++completion_index) {</span>
-<span id="L2142">                const auto&amp; completion =</span>
-<span id="L2143">                    completion_buffer_[completion_index];</span>
-<span id="L2144">                if (!validate_hal_v2_completion(completion)) {</span>
-<span id="L2145">                    batch_valid = false;</span>
-<span id="L2146">                    break;</span>
-<span id="L2147">                }</span>
-<span id="L2148">                for (std::size_t prior = 0;</span>
-<span id="L2149">                     prior &lt; completion_index;</span>
-<span id="L2150">                     ++prior) {</span>
-<span id="L2151">                    if (completion_buffer_[prior].submission_id ==</span>
-<span id="L2152">                        completion.submission_id) {</span>
-<span id="L2153">                        batch_valid = false;</span>
-<span id="L2154">                        break;</span>
-<span id="L2155">                    }</span>
-<span id="L2156">                }</span>
-<span id="L2157">                bool matched = false;</span>
-<span id="L2158">                for (std::size_t slot_index = 0;</span>
-<span id="L2159">                     batch_valid &amp;&amp; slot_index &lt; outstanding_capacity_;</span>
-<span id="L2160">                     ++slot_index) {</span>
-<span id="L2161">                    const auto&amp; slot = outstanding_slots_[slot_index];</span>
-<span id="L2162">                    const auto slot_state =</span>
-<span id="L2163">                        slot.state.load(std::memory_order_acquire);</span>
-<span id="L2164">                    if ((slot_state == kOutstandingSubmitting ||</span>
-<span id="L2165">                         slot_state == kOutstandingSubmitted) &amp;&amp;</span>
-<span id="L2166">                        slot.backend_index == backend_index &amp;&amp;</span>
-<span id="L2167">                        slot.submission_id == completion.submission_id) {</span>
-<span id="L2168">                        matched = true;</span>
-<span id="L2169">                        break;</span>
-<span id="L2170">                    }</span>
-<span id="L2171">                }</span>
-<span id="L2172">                if (!matched) {</span>
-<span id="L2173">                    batch_valid = false;</span>
-<span id="L2174">                }</span>
-<span id="L2175">                if (!batch_valid) {</span>
-<span id="L2176">                    break;</span>
+<span id="L1996">    if (!published) {</span>
+<span id="L1997">        return;</span>
+<span id="L1998">    }</span>
+<span id="L1999">    const auto poll_capacity = native_per_backend_ ? std::min(</span>
+<span id="L2000">        completion_batch_, static_cast&lt;std::size_t&gt;(</span>
+<span id="L2001">            command_state-&gt;capabilities.completion_batch_capacity))</span>
+<span id="L2002">        : completion_batch_;</span>
+<span id="L2003">    std::fill_n(batch_completion_buffer_.get(), poll_capacity,</span>
+<span id="L2004">                HalV2BatchCompletion{});</span>
+<span id="L2005">    for (std::size_t index = 0; index &lt; poll_capacity; ++index) {</span>
+<span id="L2006">        batch_completion_buffer_[index].struct_size = 0;</span>
+<span id="L2007">    }</span>
+<span id="L2008">    std::uint64_t count = 0;</span>
+<span id="L2009">    HalV2Status callback_status = HalV2Status::internal_error;</span>
+<span id="L2010">    try {</span>
+<span id="L2011">        callback_status = command_state-&gt;extension.poll(</span>
+<span id="L2012">            command_state-&gt;extension.instance, batch_completion_buffer_.get(),</span>
+<span id="L2013">            poll_capacity, &amp;count);</span>
+<span id="L2014">    } catch (...) {</span>
+<span id="L2015">        callback_status = HalV2Status::internal_error;</span>
+<span id="L2016">    }</span>
+<span id="L2017">    service_polls_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L2018">    const auto callback_runtime_status =</span>
+<span id="L2019">        hal_v2_status_to_runtime(callback_status);</span>
+<span id="L2020">    if (callback_runtime_status != Status::ok || count &gt; poll_capacity) {</span>
+<span id="L2021">        fail_backend_batches(</span>
+<span id="L2022">            backend_index, callback_runtime_status == Status::ok</span>
+<span id="L2023">                               ? Status::device_error</span>
+<span id="L2024">                               : callback_runtime_status);</span>
+<span id="L2025">        return;</span>
+<span id="L2026">    }</span>
+<span id="L2027">    bool valid = true;</span>
+<span id="L2028">    auto&amp; control = batch_backends_[backend_index];</span>
+<span id="L2029">    const auto timestamp_domain = backends_[backend_index].memory_state</span>
+<span id="L2030">        ? backends_[backend_index]</span>
+<span id="L2031">              .memory_state-&gt;snapshot.completion_timestamp_domain_identity</span>
+<span id="L2032">        : 0;</span>
+<span id="L2033">    for (std::size_t completion_index = 0;</span>
+<span id="L2034">         completion_index &lt; static_cast&lt;std::size_t&gt;(count); ++completion_index) {</span>
+<span id="L2035">        const auto&amp; completion = batch_completion_buffer_[completion_index];</span>
+<span id="L2036">        if (!validate_batch_completion(completion) ||</span>
+<span id="L2037">            completion.timestamp_domain_identity != timestamp_domain) {</span>
+<span id="L2038">            valid = false;</span>
+<span id="L2039">            break;</span>
+<span id="L2040">        }</span>
+<span id="L2041">        for (std::size_t prior = 0; prior &lt; completion_index; ++prior) {</span>
+<span id="L2042">            if (batch_completion_buffer_[prior].batch_id == completion.batch_id) {</span>
+<span id="L2043">                valid = false;</span>
+<span id="L2044">                break;</span>
+<span id="L2045">            }</span>
+<span id="L2046">        }</span>
+<span id="L2047">        BatchSlot* matched = nullptr;</span>
+<span id="L2048">        for (std::size_t offset = 0; valid &amp;&amp; offset &lt; control.slot_count;</span>
+<span id="L2049">             ++offset) {</span>
+<span id="L2050">            auto&amp; slot = batch_slots_[control.slot_offset + offset];</span>
+<span id="L2051">            const auto state = slot.state.load(std::memory_order_acquire);</span>
+<span id="L2052">            if (slot.batch.batch_id == completion.batch_id &amp;&amp;</span>
+<span id="L2053">                (state == kBatchSubmitting || state == kBatchSubmitted ||</span>
+<span id="L2054">                 state == kBatchRateQuarantineOwned ||</span>
+<span id="L2055">                 state == kBatchRateQuarantined)) {</span>
+<span id="L2056">                matched = &amp;slot;</span>
+<span id="L2057">                break;</span>
+<span id="L2058">            }</span>
+<span id="L2059">        }</span>
+<span id="L2060">        if (!matched || completion.signal_count != matched-&gt;batch.signal_count) {</span>
+<span id="L2061">            valid = false;</span>
+<span id="L2062">            break;</span>
+<span id="L2063">        }</span>
+<span id="L2064">        for (std::size_t signal = 0; signal &lt; completion.signal_count; ++signal) {</span>
+<span id="L2065">            if (completion.signals[signal].timeline_handle !=</span>
+<span id="L2066">                    matched-&gt;batch.signals[signal].timeline_handle ||</span>
+<span id="L2067">                completion.signals[signal].value !=</span>
+<span id="L2068">                    matched-&gt;batch.signals[signal].value) {</span>
+<span id="L2069">                valid = false;</span>
+<span id="L2070">                break;</span>
+<span id="L2071">            }</span>
+<span id="L2072">        }</span>
+<span id="L2073">    }</span>
+<span id="L2074">    if (!valid) {</span>
+<span id="L2075">        fail_backend_batches(backend_index, Status::device_error);</span>
+<span id="L2076">        return;</span>
+<span id="L2077">    }</span>
+<span id="L2078">    for (std::size_t completion_index = 0;</span>
+<span id="L2079">         completion_index &lt; static_cast&lt;std::size_t&gt;(count); ++completion_index) {</span>
+<span id="L2080">        process_batch_completion(</span>
+<span id="L2081">            backend_index, batch_completion_buffer_[completion_index]);</span>
+<span id="L2082">    }</span>
+<span id="L2083">}</span>
+<span id="L2084"></span>
+<span id="L2085">void DeviceManager::service_loop() noexcept {</span>
+<span id="L2086">    service_starts_.fetch_add(1, std::memory_order_release);</span>
+<span id="L2087">    service_ready_.store(true, std::memory_order_release);</span>
+<span id="L2088">    while (!stopping_.load(std::memory_order_acquire)) {</span>
+<span id="L2089">        if (outstanding_count_.load(std::memory_order_acquire) == 0) {</span>
+<span id="L2090">            if (wait_strategy_ == WaitStrategy::spin) {</span>
+<span id="L2091">                rt::cpu_relax();</span>
+<span id="L2092">                continue;</span>
+<span id="L2093">            }</span>
+<span id="L2094">            if (wait_strategy_ == WaitStrategy::yield) {</span>
+<span id="L2095">                std::this_thread::yield();</span>
+<span id="L2096">                continue;</span>
+<span id="L2097">            }</span>
+<span id="L2098">            const auto observed =</span>
+<span id="L2099">                wake_sequence_.load(std::memory_order_acquire);</span>
+<span id="L2100">            if (!stopping_.load(std::memory_order_acquire) &amp;&amp;</span>
+<span id="L2101">                outstanding_count_.load(std::memory_order_acquire) == 0) {</span>
+<span id="L2102">                wake_sequence_.wait(</span>
+<span id="L2103">                    observed,</span>
+<span id="L2104">                    std::memory_order_relaxed);</span>
+<span id="L2105">            }</span>
+<span id="L2106">            continue;</span>
+<span id="L2107">        }</span>
+<span id="L2108">        for (std::size_t backend_index = 0;</span>
+<span id="L2109">             backend_index &lt; backends_.size();</span>
+<span id="L2110">             ++backend_index) {</span>
+<span id="L2111">            auto&amp; batch_control = batch_backends_[backend_index];</span>
+<span id="L2112">            for (std::size_t offset = 0; offset &lt; batch_control.slot_count;</span>
+<span id="L2113">                 ++offset) {</span>
+<span id="L2114">                auto&amp; slot = batch_slots_[batch_control.slot_offset + offset];</span>
+<span id="L2115">                auto expected = kBatchCompletionReady;</span>
+<span id="L2116">                if (slot.state.compare_exchange_strong(</span>
+<span id="L2117">                        expected, kBatchOwned, std::memory_order_acq_rel,</span>
+<span id="L2118">                        std::memory_order_relaxed)) {</span>
+<span id="L2119">                    finish_batch_slot(</span>
+<span id="L2120">                        slot,</span>
+<span id="L2121">                        hal_v2_status_to_runtime(static_cast&lt;HalV2Status&gt;(</span>
+<span id="L2122">                            slot.early_completion.status)),</span>
+<span id="L2123">                        slot.early_completion_valid,</span>
+<span id="L2124">                        slot.early_completion_valid</span>
+<span id="L2125">                            ? &amp;slot.early_completion</span>
+<span id="L2126">                            : nullptr);</span>
+<span id="L2127">                }</span>
+<span id="L2128">            }</span>
+<span id="L2129">            std::fill_n(</span>
+<span id="L2130">                completion_buffer_.get(),</span>
+<span id="L2131">                completion_batch_,</span>
+<span id="L2132">                HalV2Completion{});</span>
+<span id="L2133">            for (std::size_t index = 0; index &lt; completion_batch_; ++index) {</span>
+<span id="L2134">                completion_buffer_[index].struct_size = 0;</span>
+<span id="L2135">            }</span>
+<span id="L2136">            std::uint64_t count = 0;</span>
+<span id="L2137">            HalV2Status device_status = HalV2Status::internal_error;</span>
+<span id="L2138">            try {</span>
+<span id="L2139">                device_status = backends_[backend_index].api.poll(</span>
+<span id="L2140">                    backends_[backend_index].api.instance,</span>
+<span id="L2141">                    completion_buffer_.get(),</span>
+<span id="L2142">                    completion_batch_,</span>
+<span id="L2143">                    &amp;count);</span>
+<span id="L2144">            } catch (...) {</span>
+<span id="L2145">                device_status = HalV2Status::internal_error;</span>
+<span id="L2146">            }</span>
+<span id="L2147">            service_polls_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L2148">            const auto status =</span>
+<span id="L2149">                hal_v2_status_to_runtime(device_status);</span>
+<span id="L2150">            if (status != Status::ok ||</span>
+<span id="L2151">                count &gt; completion_batch_) {</span>
+<span id="L2152">                fail_backend_outstanding(</span>
+<span id="L2153">                    backend_index,</span>
+<span id="L2154">                    status == Status::ok</span>
+<span id="L2155">                        ? Status::device_error</span>
+<span id="L2156">                        : status);</span>
+<span id="L2157">                continue;</span>
+<span id="L2158">            }</span>
+<span id="L2159">            bool batch_valid = true;</span>
+<span id="L2160">            for (std::size_t completion_index = 0;</span>
+<span id="L2161">                 completion_index &lt; static_cast&lt;std::size_t&gt;(count);</span>
+<span id="L2162">                 ++completion_index) {</span>
+<span id="L2163">                const auto&amp; completion =</span>
+<span id="L2164">                    completion_buffer_[completion_index];</span>
+<span id="L2165">                if (!validate_hal_v2_completion(completion)) {</span>
+<span id="L2166">                    batch_valid = false;</span>
+<span id="L2167">                    break;</span>
+<span id="L2168">                }</span>
+<span id="L2169">                for (std::size_t prior = 0;</span>
+<span id="L2170">                     prior &lt; completion_index;</span>
+<span id="L2171">                     ++prior) {</span>
+<span id="L2172">                    if (completion_buffer_[prior].submission_id ==</span>
+<span id="L2173">                        completion.submission_id) {</span>
+<span id="L2174">                        batch_valid = false;</span>
+<span id="L2175">                        break;</span>
+<span id="L2176">                    }</span>
 <span id="L2177">                }</span>
-<span id="L2178">            }</span>
-<span id="L2179">            if (!batch_valid) {</span>
-<span id="L2180">                fail_backend_outstanding(</span>
-<span id="L2181">                    backend_index,</span>
-<span id="L2182">                    Status::device_error);</span>
-<span id="L2183">                continue;</span>
-<span id="L2184">            }</span>
-<span id="L2185">            for (std::size_t completion_index = 0;</span>
-<span id="L2186">                 completion_index &lt;</span>
-<span id="L2187">                     static_cast&lt;std::size_t&gt;(count);</span>
-<span id="L2188">                 ++completion_index) {</span>
-<span id="L2189">                process_completion(</span>
-<span id="L2190">                    backend_index,</span>
-<span id="L2191">                    completion_buffer_[completion_index]);</span>
-<span id="L2192">            }</span>
-<span id="L2193">            poll_batch_completions(backend_index);</span>
-<span id="L2194">        }</span>
-<span id="L2195">        for (std::size_t backend_index = 0; backend_index &lt; backends_.size();</span>
-<span id="L2196">             ++backend_index) {</span>
-<span id="L2197">            auto&amp; control = batch_backends_[backend_index];</span>
-<span id="L2198">            for (std::size_t offset = 0; offset &lt; control.slot_count; ++offset) {</span>
-<span id="L2199">                auto&amp; slot = batch_slots_[control.slot_offset + offset];</span>
-<span id="L2200">                const auto state = slot.state.load(std::memory_order_acquire);</span>
-<span id="L2201">                const bool simulator = slot.simulation_timing.load(</span>
-<span id="L2202">                    std::memory_order_relaxed);</span>
-<span id="L2203">                if ((state == kBatchSubmitted ||</span>
-<span id="L2204">                     (state == kBatchSubmitting &amp;&amp; slot.rate_owned) ||</span>
-<span id="L2205">                     (simulator &amp;&amp; (state == kBatchQueued ||</span>
-<span id="L2206">                                    state == kBatchEarlyReady))) &amp;&amp;</span>
-<span id="L2207">                    monotonic_now_ns() &gt;= slot.deadline_ns) {</span>
-<span id="L2208">                    auto expected = state;</span>
-<span id="L2209">                    const auto target = slot.rate_owned</span>
-<span id="L2210">                        ? kBatchRateQuarantineOwned</span>
-<span id="L2211">                        : kBatchOwned;</span>
-<span id="L2212">                    if (!slot.state.compare_exchange_strong(</span>
-<span id="L2213">                            expected, target, std::memory_order_acq_rel,</span>
-<span id="L2214">                            std::memory_order_relaxed)) {</span>
-<span id="L2215">                        continue;</span>
-<span id="L2216">                    }</span>
-<span id="L2217">                    if (state == kBatchQueued) {</span>
-<span id="L2218">                        // No vendor callback owns an unsent batch, but the</span>
-<span id="L2219">                        // submission lane may hold a selected-slot pointer.</span>
-<span id="L2220">                        // Keep its storage until checked stop joins that lane.</span>
-<span id="L2221">                        finish_rate_quarantine(slot, Status::device_timeout);</span>
-<span id="L2222">                        continue;</span>
-<span id="L2223">                    }</span>
-<span id="L2224">                    if (!slot.cancellation_requested.exchange(</span>
-<span id="L2225">                            true, std::memory_order_acq_rel)) {</span>
-<span id="L2226">                        try {</span>
-<span id="L2227">                            (void)backends_[backend_index]</span>
-<span id="L2228">                                .command_state-&gt;extension.cancel(</span>
-<span id="L2229">                                    backends_[backend_index]</span>
-<span id="L2230">                                        .command_state-&gt;extension.instance,</span>
-<span id="L2231">                                    slot.batch.batch_id);</span>
-<span id="L2232">                        } catch (...) {</span>
-<span id="L2233">                        }</span>
-<span id="L2234">                    }</span>
-<span id="L2235">                    if (slot.rate_owned) {</span>
-<span id="L2236">                        finish_rate_quarantine(</span>
-<span id="L2237">                            slot, Status::device_timeout);</span>
-<span id="L2238">                    } else {</span>
-<span id="L2239">                        finish_batch_slot(</span>
-<span id="L2240">                            slot, Status::device_timeout, false);</span>
-<span id="L2241">                    }</span>
-<span id="L2242">                }</span>
-<span id="L2243">            }</span>
-<span id="L2244">        }</span>
-<span id="L2245">        rt::cpu_relax();</span>
-<span id="L2246">    }</span>
-<span id="L2247">}</span>
-<span id="L2248"></span>
-<span id="L2249">void DeviceManager::service_entry(void* manager) noexcept {</span>
-<span id="L2250">    static_cast&lt;DeviceManager*&gt;(manager)-&gt;service_loop();</span>
-<span id="L2251">}</span>
-<span id="L2252"></span>
-<span id="L2253">Status DeviceManager::health(</span>
-<span id="L2254">    std::size_t backend_index,</span>
-<span id="L2255">    DeviceHealth&amp; output) noexcept {</span>
-<span id="L2256">    output = make_device_health();</span>
-<span id="L2257">    if (!started_.load(std::memory_order_acquire) ||</span>
-<span id="L2258">        backend_index &gt;= backends_.size()) {</span>
-<span id="L2259">        return Status::invalid_state;</span>
-<span id="L2260">    }</span>
-<span id="L2261">    HalV2Health hal_health;</span>
-<span id="L2262">    hal_health.reserved0 = std::numeric_limits&lt;std::uint32_t&gt;::max();</span>
-<span id="L2263">    HalV2Status device_status = HalV2Status::internal_error;</span>
-<span id="L2264">    try {</span>
-<span id="L2265">        device_status = backends_[backend_index].api.get_health(</span>
-<span id="L2266">            backends_[backend_index].api.instance,</span>
-<span id="L2267">            &amp;hal_health);</span>
-<span id="L2268">    } catch (...) {</span>
-<span id="L2269">        device_status = HalV2Status::internal_error;</span>
-<span id="L2270">    }</span>
-<span id="L2271">    const auto status = hal_v2_status_to_runtime(device_status);</span>
-<span id="L2272">    if (status != Status::ok) {</span>
-<span id="L2273">        return status;</span>
-<span id="L2274">    }</span>
-<span id="L2275">    if (!validate_hal_v2_health(hal_health)) {</span>
-<span id="L2276">        return Status::device_error;</span>
-<span id="L2277">    }</span>
-<span id="L2278">    output.state = hal_health.state;</span>
-<span id="L2279">    output.last_status = hal_health.last_status;</span>
-<span id="L2280">    output.generation = hal_health.generation;</span>
-<span id="L2281">    output.submissions = hal_health.submissions;</span>
-<span id="L2282">    output.completions = hal_health.completions;</span>
-<span id="L2283">    output.queue_rejections = hal_health.queue_rejections;</span>
-<span id="L2284">    output.timeouts = hal_health.timeouts;</span>
-<span id="L2285">    output.errors = hal_health.errors;</span>
-<span id="L2286">    output.losses = hal_health.losses;</span>
-<span id="L2287">    output.cancellations = hal_health.cancellations;</span>
-<span id="L2288">    output.resets = hal_health.resets;</span>
-<span id="L2289">    output.outstanding = hal_health.outstanding;</span>
-<span id="L2290">    return Status::ok;</span>
-<span id="L2291">}</span>
-<span id="L2292"></span>
-<span id="L2293">Status DeviceManager::reset(std::size_t backend_index) noexcept {</span>
-<span id="L2294">    if (!started_.load(std::memory_order_acquire) ||</span>
-<span id="L2295">        backend_index &gt;= backends_.size()) {</span>
-<span id="L2296">        return Status::invalid_state;</span>
-<span id="L2297">    }</span>
-<span id="L2298">    for (std::size_t index = 0;</span>
-<span id="L2299">         index &lt; outstanding_capacity_;</span>
-<span id="L2300">         ++index) {</span>
-<span id="L2301">        if (outstanding_slots_[index].state.load(</span>
-<span id="L2302">                std::memory_order_acquire) ==</span>
-<span id="L2303">                kOutstandingSubmitted &amp;&amp;</span>
-<span id="L2304">            outstanding_slots_[index].backend_index ==</span>
-<span id="L2305">                backend_index) {</span>
-<span id="L2306">            return Status::invalid_state;</span>
-<span id="L2307">        }</span>
-<span id="L2308">    }</span>
-<span id="L2309">    if (backends_[backend_index].command_state) {</span>
-<span id="L2310">        const auto&amp; control = batch_backends_[backend_index];</span>
-<span id="L2311">        for (std::size_t offset = 0; offset &lt; control.slot_count; ++offset) {</span>
-<span id="L2312">            if (batch_slots_[control.slot_offset + offset].state.load(</span>
-<span id="L2313">                    std::memory_order_acquire) != kBatchFree) {</span>
-<span id="L2314">                return Status::invalid_state;</span>
-<span id="L2315">            }</span>
-<span id="L2316">        }</span>
-<span id="L2317">    }</span>
-<span id="L2318">    HalV2Status device_status = HalV2Status::internal_error;</span>
-<span id="L2319">    try {</span>
-<span id="L2320">        device_status = backends_[backend_index].api.reset(</span>
-<span id="L2321">            backends_[backend_index].api.instance);</span>
-<span id="L2322">    } catch (...) {</span>
-<span id="L2323">        device_status = HalV2Status::internal_error;</span>
-<span id="L2324">    }</span>
-<span id="L2325">    const auto status = hal_v2_status_to_runtime(device_status);</span>
-<span id="L2326">    if (status == Status::ok) {</span>
-<span id="L2327">        resets_.fetch_add(1, std::memory_order_relaxed);</span>
-<span id="L2328">        auto reset_event = DeviceEvent{</span>
-<span id="L2329">            DeviceEventKind::reset,</span>
-<span id="L2330">            status,</span>
-<span id="L2331">            backend_index,</span>
-<span id="L2332">            std::numeric_limits&lt;std::size_t&gt;::max(),</span>
-<span id="L2333">            0,</span>
-<span id="L2334">            0,</span>
-<span id="L2335">            0,</span>
-<span id="L2336">        };</span>
-<span id="L2337">        reset_event.producer = RuntimeTraceProducer::host;</span>
-<span id="L2338">        emit(reset_event);</span>
-<span id="L2339">    }</span>
-<span id="L2340">    return status;</span>
-<span id="L2341">}</span>
-<span id="L2342"></span>
-<span id="L2343">DeviceManagerStats DeviceManager::stats() const noexcept {</span>
-<span id="L2344">    return DeviceManagerStats{</span>
-<span id="L2345">        submissions_.load(std::memory_order_acquire),</span>
-<span id="L2346">        completions_.load(std::memory_order_acquire),</span>
-<span id="L2347">        failures_.load(std::memory_order_acquire),</span>
-<span id="L2348">        queue_rejections_.load(std::memory_order_acquire),</span>
-<span id="L2349">        timeouts_.load(std::memory_order_acquire),</span>
-<span id="L2350">        losses_.load(std::memory_order_acquire),</span>
-<span id="L2351">        resets_.load(std::memory_order_acquire),</span>
-<span id="L2352">        service_polls_.load(std::memory_order_acquire),</span>
-<span id="L2353">        outstanding_count_.load(std::memory_order_acquire),</span>
-<span id="L2354">        service_starts_.load(std::memory_order_acquire),</span>
-<span id="L2355">    };</span>
-<span id="L2356">}</span>
-<span id="L2357"></span>
-<span id="L2358">} // namespace rt::detail</span></pre></html>
+<span id="L2178">                bool matched = false;</span>
+<span id="L2179">                for (std::size_t slot_index = 0;</span>
+<span id="L2180">                     batch_valid &amp;&amp; slot_index &lt; outstanding_capacity_;</span>
+<span id="L2181">                     ++slot_index) {</span>
+<span id="L2182">                    const auto&amp; slot = outstanding_slots_[slot_index];</span>
+<span id="L2183">                    const auto slot_state =</span>
+<span id="L2184">                        slot.state.load(std::memory_order_acquire);</span>
+<span id="L2185">                    if ((slot_state == kOutstandingSubmitting ||</span>
+<span id="L2186">                         slot_state == kOutstandingSubmitted) &amp;&amp;</span>
+<span id="L2187">                        slot.backend_index == backend_index &amp;&amp;</span>
+<span id="L2188">                        slot.submission_id == completion.submission_id) {</span>
+<span id="L2189">                        matched = true;</span>
+<span id="L2190">                        break;</span>
+<span id="L2191">                    }</span>
+<span id="L2192">                }</span>
+<span id="L2193">                if (!matched) {</span>
+<span id="L2194">                    batch_valid = false;</span>
+<span id="L2195">                }</span>
+<span id="L2196">                if (!batch_valid) {</span>
+<span id="L2197">                    break;</span>
+<span id="L2198">                }</span>
+<span id="L2199">            }</span>
+<span id="L2200">            if (!batch_valid) {</span>
+<span id="L2201">                fail_backend_outstanding(</span>
+<span id="L2202">                    backend_index,</span>
+<span id="L2203">                    Status::device_error);</span>
+<span id="L2204">                continue;</span>
+<span id="L2205">            }</span>
+<span id="L2206">            for (std::size_t completion_index = 0;</span>
+<span id="L2207">                 completion_index &lt;</span>
+<span id="L2208">                     static_cast&lt;std::size_t&gt;(count);</span>
+<span id="L2209">                 ++completion_index) {</span>
+<span id="L2210">                process_completion(</span>
+<span id="L2211">                    backend_index,</span>
+<span id="L2212">                    completion_buffer_[completion_index]);</span>
+<span id="L2213">            }</span>
+<span id="L2214">            poll_batch_completions(backend_index);</span>
+<span id="L2215">        }</span>
+<span id="L2216">        for (std::size_t backend_index = 0; backend_index &lt; backends_.size();</span>
+<span id="L2217">             ++backend_index) {</span>
+<span id="L2218">            auto&amp; control = batch_backends_[backend_index];</span>
+<span id="L2219">            for (std::size_t offset = 0; offset &lt; control.slot_count; ++offset) {</span>
+<span id="L2220">                auto&amp; slot = batch_slots_[control.slot_offset + offset];</span>
+<span id="L2221">                const auto state = slot.state.load(std::memory_order_acquire);</span>
+<span id="L2222">                const bool simulator = slot.simulation_timing.load(</span>
+<span id="L2223">                    std::memory_order_relaxed);</span>
+<span id="L2224">                if ((state == kBatchSubmitted ||</span>
+<span id="L2225">                     (state == kBatchSubmitting &amp;&amp; slot.rate_owned) ||</span>
+<span id="L2226">                     (simulator &amp;&amp; (state == kBatchQueued ||</span>
+<span id="L2227">                                    state == kBatchEarlyReady))) &amp;&amp;</span>
+<span id="L2228">                    monotonic_now_ns() &gt;= slot.deadline_ns) {</span>
+<span id="L2229">                    auto expected = state;</span>
+<span id="L2230">                    const auto target = slot.rate_owned</span>
+<span id="L2231">                        ? kBatchRateQuarantineOwned</span>
+<span id="L2232">                        : kBatchOwned;</span>
+<span id="L2233">                    if (!slot.state.compare_exchange_strong(</span>
+<span id="L2234">                            expected, target, std::memory_order_acq_rel,</span>
+<span id="L2235">                            std::memory_order_relaxed)) {</span>
+<span id="L2236">                        continue;</span>
+<span id="L2237">                    }</span>
+<span id="L2238">                    if (state == kBatchQueued) {</span>
+<span id="L2239">                        // No vendor callback owns an unsent batch, but the</span>
+<span id="L2240">                        // submission lane may hold a selected-slot pointer.</span>
+<span id="L2241">                        // Keep its storage until checked stop joins that lane.</span>
+<span id="L2242">                        finish_rate_quarantine(slot, Status::device_timeout);</span>
+<span id="L2243">                        continue;</span>
+<span id="L2244">                    }</span>
+<span id="L2245">                    if (!slot.cancellation_requested.exchange(</span>
+<span id="L2246">                            true, std::memory_order_acq_rel)) {</span>
+<span id="L2247">                        try {</span>
+<span id="L2248">                            (void)backends_[backend_index]</span>
+<span id="L2249">                                .command_state-&gt;extension.cancel(</span>
+<span id="L2250">                                    backends_[backend_index]</span>
+<span id="L2251">                                        .command_state-&gt;extension.instance,</span>
+<span id="L2252">                                    slot.batch.batch_id);</span>
+<span id="L2253">                        } catch (...) {</span>
+<span id="L2254">                        }</span>
+<span id="L2255">                    }</span>
+<span id="L2256">                    if (slot.rate_owned) {</span>
+<span id="L2257">                        finish_rate_quarantine(</span>
+<span id="L2258">                            slot, Status::device_timeout);</span>
+<span id="L2259">                    } else {</span>
+<span id="L2260">                        finish_batch_slot(</span>
+<span id="L2261">                            slot, Status::device_timeout, false);</span>
+<span id="L2262">                    }</span>
+<span id="L2263">                }</span>
+<span id="L2264">            }</span>
+<span id="L2265">        }</span>
+<span id="L2266">        rt::cpu_relax();</span>
+<span id="L2267">    }</span>
+<span id="L2268">}</span>
+<span id="L2269"></span>
+<span id="L2270">void DeviceManager::service_entry(void* manager) noexcept {</span>
+<span id="L2271">    static_cast&lt;DeviceManager*&gt;(manager)-&gt;service_loop();</span>
+<span id="L2272">}</span>
+<span id="L2273"></span>
+<span id="L2274">Status DeviceManager::health(</span>
+<span id="L2275">    std::size_t backend_index,</span>
+<span id="L2276">    DeviceHealth&amp; output) noexcept {</span>
+<span id="L2277">    output = make_device_health();</span>
+<span id="L2278">    if (!started_.load(std::memory_order_acquire) ||</span>
+<span id="L2279">        backend_index &gt;= backends_.size()) {</span>
+<span id="L2280">        return Status::invalid_state;</span>
+<span id="L2281">    }</span>
+<span id="L2282">    HalV2Health hal_health;</span>
+<span id="L2283">    hal_health.reserved0 = std::numeric_limits&lt;std::uint32_t&gt;::max();</span>
+<span id="L2284">    HalV2Status device_status = HalV2Status::internal_error;</span>
+<span id="L2285">    try {</span>
+<span id="L2286">        device_status = backends_[backend_index].api.get_health(</span>
+<span id="L2287">            backends_[backend_index].api.instance,</span>
+<span id="L2288">            &amp;hal_health);</span>
+<span id="L2289">    } catch (...) {</span>
+<span id="L2290">        device_status = HalV2Status::internal_error;</span>
+<span id="L2291">    }</span>
+<span id="L2292">    const auto status = hal_v2_status_to_runtime(device_status);</span>
+<span id="L2293">    if (status != Status::ok) {</span>
+<span id="L2294">        return status;</span>
+<span id="L2295">    }</span>
+<span id="L2296">    if (!validate_hal_v2_health(hal_health)) {</span>
+<span id="L2297">        return Status::device_error;</span>
+<span id="L2298">    }</span>
+<span id="L2299">    output.state = hal_health.state;</span>
+<span id="L2300">    output.last_status = hal_health.last_status;</span>
+<span id="L2301">    output.generation = hal_health.generation;</span>
+<span id="L2302">    output.submissions = hal_health.submissions;</span>
+<span id="L2303">    output.completions = hal_health.completions;</span>
+<span id="L2304">    output.queue_rejections = hal_health.queue_rejections;</span>
+<span id="L2305">    output.timeouts = hal_health.timeouts;</span>
+<span id="L2306">    output.errors = hal_health.errors;</span>
+<span id="L2307">    output.losses = hal_health.losses;</span>
+<span id="L2308">    output.cancellations = hal_health.cancellations;</span>
+<span id="L2309">    output.resets = hal_health.resets;</span>
+<span id="L2310">    output.outstanding = hal_health.outstanding;</span>
+<span id="L2311">    return Status::ok;</span>
+<span id="L2312">}</span>
+<span id="L2313"></span>
+<span id="L2314">Status DeviceManager::reset(std::size_t backend_index) noexcept {</span>
+<span id="L2315">    if (!started_.load(std::memory_order_acquire) ||</span>
+<span id="L2316">        backend_index &gt;= backends_.size()) {</span>
+<span id="L2317">        return Status::invalid_state;</span>
+<span id="L2318">    }</span>
+<span id="L2319">    for (std::size_t index = 0;</span>
+<span id="L2320">         index &lt; outstanding_capacity_;</span>
+<span id="L2321">         ++index) {</span>
+<span id="L2322">        if (outstanding_slots_[index].state.load(</span>
+<span id="L2323">                std::memory_order_acquire) ==</span>
+<span id="L2324">                kOutstandingSubmitted &amp;&amp;</span>
+<span id="L2325">            outstanding_slots_[index].backend_index ==</span>
+<span id="L2326">                backend_index) {</span>
+<span id="L2327">            return Status::invalid_state;</span>
+<span id="L2328">        }</span>
+<span id="L2329">    }</span>
+<span id="L2330">    if (backends_[backend_index].command_state) {</span>
+<span id="L2331">        const auto&amp; control = batch_backends_[backend_index];</span>
+<span id="L2332">        for (std::size_t offset = 0; offset &lt; control.slot_count; ++offset) {</span>
+<span id="L2333">            if (batch_slots_[control.slot_offset + offset].state.load(</span>
+<span id="L2334">                    std::memory_order_acquire) != kBatchFree) {</span>
+<span id="L2335">                return Status::invalid_state;</span>
+<span id="L2336">            }</span>
+<span id="L2337">        }</span>
+<span id="L2338">    }</span>
+<span id="L2339">    HalV2Status device_status = HalV2Status::internal_error;</span>
+<span id="L2340">    try {</span>
+<span id="L2341">        device_status = backends_[backend_index].api.reset(</span>
+<span id="L2342">            backends_[backend_index].api.instance);</span>
+<span id="L2343">    } catch (...) {</span>
+<span id="L2344">        device_status = HalV2Status::internal_error;</span>
+<span id="L2345">    }</span>
+<span id="L2346">    const auto status = hal_v2_status_to_runtime(device_status);</span>
+<span id="L2347">    if (status == Status::ok) {</span>
+<span id="L2348">        resets_.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L2349">        auto reset_event = DeviceEvent{</span>
+<span id="L2350">            DeviceEventKind::reset,</span>
+<span id="L2351">            status,</span>
+<span id="L2352">            backend_index,</span>
+<span id="L2353">            std::numeric_limits&lt;std::size_t&gt;::max(),</span>
+<span id="L2354">            0,</span>
+<span id="L2355">            0,</span>
+<span id="L2356">            0,</span>
+<span id="L2357">        };</span>
+<span id="L2358">        reset_event.producer = RuntimeTraceProducer::host;</span>
+<span id="L2359">        emit(reset_event);</span>
+<span id="L2360">    }</span>
+<span id="L2361">    return status;</span>
+<span id="L2362">}</span>
+<span id="L2363"></span>
+<span id="L2364">DeviceManagerStats DeviceManager::stats() const noexcept {</span>
+<span id="L2365">    return DeviceManagerStats{</span>
+<span id="L2366">        submissions_.load(std::memory_order_acquire),</span>
+<span id="L2367">        completions_.load(std::memory_order_acquire),</span>
+<span id="L2368">        failures_.load(std::memory_order_acquire),</span>
+<span id="L2369">        queue_rejections_.load(std::memory_order_acquire),</span>
+<span id="L2370">        timeouts_.load(std::memory_order_acquire),</span>
+<span id="L2371">        losses_.load(std::memory_order_acquire),</span>
+<span id="L2372">        resets_.load(std::memory_order_acquire),</span>
+<span id="L2373">        service_polls_.load(std::memory_order_acquire),</span>
+<span id="L2374">        outstanding_count_.load(std::memory_order_acquire),</span>
+<span id="L2375">        service_starts_.load(std::memory_order_acquire),</span>
+<span id="L2376">    };</span>
+<span id="L2377">}</span>
+<span id="L2378"></span>
+<span id="L2379">} // namespace rt::detail</span></pre></html>

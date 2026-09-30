@@ -1,3 +1,34 @@
+# M27-02 implementation and focused verification complete
+
+Private command polling now requires a published owner in that backend; checked
+stop preserves bounded native completion drain. The independently failing baseline
+now passes24 ordered fault scenarios, repeated success/isolation, startup ownership,
+117 preserved tests, allocation/sanitizers/static/default bytes and real relocated
+CPack/71SDK consumers. See [evidence](evidence/M27-02-2026-09-30.md).
+Startup -2 correctly retains pending cleanup while channel status retains -18;
+old timing-sensitive immediate-cleanup assertions remain unchanged/documented.
+Complete exact-head local/all32 gates and guarded target/canonical closure remain
+mandatory and are recorded in the PR/control closure. Only02 is selected; later
+M27/Unreal/qualification/signing/release/deployment work remains separate.
+
+## Historical checkpoints
+
+# M27-02 startup and poll failure conservation active
+
+M27-01 target286/control585 is complete. Canonical activation586 merged at
+df8426233eace65317bf52f10e291e1a18f93a8a, blob 0b77558b4b211a3dea89e33de22b29e9575514d7. The owner selected02.
+Baseline677fae6976f8eddd6ed7e060f222c3535a9e7ae2 independently reproduces idle
+backend polling consuming a one-shot fault before its work is published.
+A controlled native startup also proves -2 retains cleanup ownership while the
+channel preserves -18; this status must not be suppressed. Repair only the
+private polling gap and validate both lifecycle outcomes, preserving original
+fixtures, safe8ms, native sources, public ABI/defaults and earlier evidence.
+Full local and all32 exact-head gates plus guarded integration/closure remain
+mandatory under standing authorization. Later M27 and external qualification,
+Unreal/signing/release/deployment work remain inactive.
+
+## Historical checkpoints
+
 # M27-01 implementation and focused acceptance complete
 
 The private foreign trusted active replay repair checks outer live-control and

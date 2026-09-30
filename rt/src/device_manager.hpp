@@ -356,7 +356,8 @@ private:
         Status status) noexcept;
     void submission_loop(std::size_t backend_index) noexcept;
     static void submission_entry(void* context) noexcept;
-    void poll_batch_completions(std::size_t backend_index) noexcept;
+    void poll_batch_completions(
+        std::size_t backend_index, bool draining = false) noexcept;
     void process_batch_completion(
         std::size_t backend_index,
         const HalV2BatchCompletion& completion) noexcept;

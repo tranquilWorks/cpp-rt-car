@@ -608,3 +608,6 @@ endif()
 add_subdirectory(golden_showcase)
 add_subdirectory(golden_audit)
 add_subdirectory(replay_rejection)
+
+# M27-02 deterministic public callback ordering and checked failure ownership.
+add_subdirectory(startup_poll_reliability)
