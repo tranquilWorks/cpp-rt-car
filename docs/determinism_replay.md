@@ -438,3 +438,14 @@ Only the explicit native-per-backend policy contributes a conditional graph/conf
 ## Sampled lifecycle and checkpoint recovery
 
 Restoring a produced sampled device frame reconstructs its successful producer release/substep and device timestamp from the validated existing sampled header and compiled rate/endpoint metadata. It validates every sampled frame before applying any checkpoint state. Runtime time never replaces device time; initial and untyped ordinary payload behavior and all artifact bytes/formats remain unchanged.
+
+## Foreign trusted active replay owners (M27-01)
+
+Trusted active replay is bound to its originating Runtime owner. Runtime checks
+both outer and nested active identities before entering live-control replay mode.
+A foreign owner returns incompatible_artifact without changing action/correlation
+bookkeeping, mailbox accounting, application state or invoking callbacks. A later
+valid live admission, checkpoint, capture and originating-owner replay remain
+usable. Ordinary input-log trusted replay retains compatible cross-owner behavior.
+This does not promise transactionality for every invalid artifact or failure after
+execution begins. Existing golden sample pre-effect guards remain in place.

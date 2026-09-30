@@ -1,3 +1,35 @@
+# M27-01 implementation and focused acceptance complete
+
+The private foreign trusted active replay repair checks outer live-control and
+nested active owners in their separate identity namespaces before bookkeeping.
+Ordinary compatible cross-owner replay remains supported. Independent baseline
+failures,14 new scenarios plus full golden recovery,93 preserved tests,
+sanitizers/static/default-byte checks and actual CPack/71SDK consumers pass.
+See [evidence](evidence/M27-01-2026-09-30.md) for retained failures and claim limits.
+Complete exact-head local profiles, all32 hosted checks, guarded target merge and
+canonical closure are recorded in the batch PR/control closure; they remain
+mandatory before integration. Later M27-02..08 are planned/inactive. Broader
+qualification, Unreal, human review and signing/release/deployment remain open.
+
+## Historical checkpoints
+
+# M27-01 trusted active replay rejection repair
+
+M26-06 is integrated as target285, canonically closed by control581. The owner
+requested the post-audit software queue and its first implementation. Canonical
+plan582 selects only M27-01. A direct public API baseline probe confirms that a
+foreign trusted active replay can be rejected after altering live-control action
+correlation, breaking later valid recovery capture. Repair private ordering with
+independent baseline/regression, ordinary cross-owner compatibility, full local,
+sanitizer/static/allocation/package and all32 exact-head gates. Implementation
+and validation are in progress; no completion or qualification is claimed here.
+
+Later M27-02 through M27-08 are planned, not active. M19 engine integration,
+physical/RT/controlled-performance/human review, production signing, release and
+deployment remain separate. Preserve every prior source/test and failure record.
+
+## Historical checkpoints
+
 # M26-06 source-linked documentation and capability audit
 
 M26-01 through M26-05 are merged; the final target284 merge is

@@ -607,3 +607,4 @@ endif()
 
 add_subdirectory(golden_showcase)
 add_subdirectory(golden_audit)
+add_subdirectory(replay_rejection)

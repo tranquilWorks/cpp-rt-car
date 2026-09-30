@@ -15042,7 +15042,12 @@ Status Runtime::replay_live_control(
             parse_status,
             "live-control replay artifact validation failed before restore");
     }
-    if (view.metadata.config_id != impl_->observability.config_id ||
+    // Ordinary input-log replay permits compatible fresh owners. Active replay
+    // is owner-bound, so refuse foreign ownership before begin_replay can reset
+    // action correlation or consume admission history during its cleanup.
+    if ((view.metadata.nested_kind == LiveControlNestedArtifactKind::active_replay &&
+         view.metadata.runtime_id != impl_->live_control_mailboxes->runtime_id()) ||
+        view.metadata.config_id != impl_->observability.config_id ||
         view.metadata.replay_id != impl_->replay_id ||
         view.metadata.graph_id != impl_->graph_id ||
         view.metadata.state_schema_id != impl_->state_schema_id ||
@@ -15210,6 +15215,13 @@ Status Runtime::replay_live_control(
             return impl_->fail(
                 Status::incompatible_artifact,
                 "nested active replay checkpoint is not the outer checkpoint");
+        }
+        // Check the nested owner independently: a structurally valid outer
+        // header cannot grant ownership of another Runtime's active transcript.
+        if (nested_view.metadata.runtime_id != impl_->observability.runtime_id) {
+            return impl_->fail(
+                Status::incompatible_artifact,
+                "nested active replay owner does not match the finalized runtime");
         }
         if (!impl_->live_control_mailboxes->begin_replay(view)) {
             return impl_->fail(

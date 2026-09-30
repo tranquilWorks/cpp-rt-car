@@ -638,3 +638,17 @@ universal feature completion from passing golden scenarios. All32 target checks,
 full local validation and guarded integration remain mandatory under standing
 scoped publication/merge authority. No later batch, hardware, RT, Unreal, signing,
 release or deployment activity is activated. Earlier activation notes are history.
+
+## M27-01 trusted active replay rejection repair
+
+Canonical software follow-up plan582 merged at 4bf157caf478c310ecfddb404eb52d5d67589f22,
+M27-01 blob 96982bc8cd1255b64ce595ddcb4833d187c5c9a0. The owner requested batching and the first
+implementation now. Baseline is M26-06 target285 merged
+2f0c9954e29d9e5b6a4ee8a2105fc13b43206181. Only M27-01 is active. Repair
+foreign trusted active owner rejection before live-control replay bookkeeping;
+preserve ordinary compatible cross-owner replay, all public formats/defaults,
+prior Runtime/native/sample/test/evidence and unchanged sample guards. Retain
+the reproduced baseline capture failure. Require full local/sanitizer/static/
+allocation/relocated SDK/all32 exact-head gates and guarded target/canonical
+closure under standing scoped publication/merge authorization. Later M27 and
+Unreal/hardware/signing/release work stay inactive. Earlier activations are history.
