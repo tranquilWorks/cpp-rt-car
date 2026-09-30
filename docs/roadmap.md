@@ -1,3 +1,41 @@
+# M26-05 golden showcase implemented
+
+The optional public-SDK kit provides fifteen meaningful M23 cases, CPU and
+owned simulated CUDA/XDMA/combined variants with native, independent host and
+actual external-controller execution. All36 settings across13 frozen levers and
+all11 fault campaigns execute, including measured telemetry loss, pre-effect
+replay refusal and paired fresh-owner recovery. Independently validated raw,
+state, replay, fault and coverage artifacts retain actual failures and scope.
+
+Focused2/2, ASan/UBSan/leaks2/2, TSan contract plus complete454-second process
+workflow,14 mutation controls, Clang14 static7 and relocated CPack71 optional SDK
+consumers/embedding/negative checks pass. See the [guide](golden_showcase.md),
+[evidence](evidence/M26-05-2026-09-30.md) and
+[PR284](https://github.com/tranquilWorks/cpp-rt-car/pull/284) for complete repository,
+exact-head hosted and guarded integration disposition. Final acceptance requires
+all32 hosted records and complete repository validation; no gate is waived.
+
+M26-06 documentation/feature-completion audit is the next software batch and
+remains separately inactive. CAP-M26 closure, independent human review,
+physical CUDA/XDMA/HIL, RT1/RT2, controlled performance, Unreal, signing/release
+and deployment remain separate. Preserve all prior Runtime/native/kit/test
+sources, identities, ABIs and failed evidence. Known protected fixture findings
+remain separately tracked; this batch does not repair them.
+
+## Historical checkpoints
+
+# M26-05 benchmark, fault and control showcase
+
+Canonical [plan576](https://github.com/tranquilWorks/portfolio-control/pull/576)
+merged at 1ee6e9571a49047f42f2d20f0b3c6aed053fea4a, blob fa6006e7c40d23e420d85642a2707026ccff3a5b. Target baseline is merged
+M26-04 PR279 at 6d6dbc98a4f1d6eb438d61cbeecc2a0f1d1ba252. Only M26-05
+is active. Implementation and acceptance are incomplete. Preserve frozen scenario,
+all prior kits/tests, Runtime/native sources and ABI. All32 target gates remain
+mandatory under standing scoped publication/integration authorization. M26-06
+remains inactive; physical/RT/human/Unreal/performance/release remain separate.
+
+## Historical state
+
 # M26-04 software locally verified; integration pending
 
 The installed golden XDMA/combined source kit runs actual Runtime sampled

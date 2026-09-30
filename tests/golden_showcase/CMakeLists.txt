@@ -1,0 +1,25 @@
+if(TARGET rtfw_golden_showcase)
+    add_executable(test_golden_showcase test_showcase.cpp ../golden_cuda/allocation.cpp)
+    target_link_libraries(test_golden_showcase PRIVATE rtfw_golden_showcase)
+    rtfw_enable_project_warnings(test_golden_showcase)
+    add_test(NAME host_adapter_golden_showcase_contract COMMAND test_golden_showcase)
+    set_tests_properties(host_adapter_golden_showcase_contract PROPERTIES TIMEOUT 120)
+    if(TARGET rtfw_host_adapter_tests)
+        add_dependencies(rtfw_host_adapter_tests test_golden_showcase sample_golden_showcase sample_golden_telemetry_loss sample_golden_experiment)
+    endif()
+endif()
+if(TARGET sample_golden_showcase AND TARGET sample_golden_system)
+    add_test(NAME host_adapter_golden_showcase_process COMMAND ${RTFW_PYTHON_EXECUTABLE}
+        "${PROJECT_SOURCE_DIR}/tests/golden_showcase/process_suite.py" --build "${PROJECT_BINARY_DIR}"
+        --provenance "${PROJECT_BINARY_DIR}/golden-showcase-provenance.json" --config "$<CONFIG>")
+    set(golden_showcase_process_timeout 300)
+    if(SIM_SANITIZERS MATCHES "thread")
+        # The complete 175-invocation aggregate exceeded 300s under TSan.
+        # Keep every child bound, workload, oracle and instrumentation intact.
+        set(golden_showcase_process_timeout 900)
+    endif()
+    set_tests_properties(host_adapter_golden_showcase_process PROPERTIES TIMEOUT ${golden_showcase_process_timeout})
+    if(TARGET rtfw_host_adapter_tests)
+        add_dependencies(rtfw_host_adapter_tests sample_golden_system sample_golden_cuda sample_golden_xdma sample_golden_controller)
+    endif()
+endif()

@@ -249,3 +249,5 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../golden_xdma/package_contract.cmake")
 add_executable(rtfw_sampled_simulation_consumer sampled_io_simulation_consumer.cpp)
 target_link_libraries(rtfw_sampled_simulation_consumer PRIVATE rtfw::runtime rtfw::xdma_backend)
 add_test(NAME sampled_simulation_package_consumer COMMAND rtfw_sampled_simulation_consumer)
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../golden_showcase/package_contract.cmake")
