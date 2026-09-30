@@ -1,0 +1,495 @@
+[
+  {
+    "label": "repair-runtime-build",
+    "command": [
+      "cmake",
+      "--build",
+      "build/agent-quick",
+      "--target",
+      "rtfw_runtime",
+      "--parallel",
+      "2"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "baseline-full-canary-build02",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-O1",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/replay_rejection/main.cpp",
+      "tests/golden_cuda/allocation.cpp",
+      "/tmp/cpp-m27-01-baseline-full-runtime.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-01-baseline-full-canary"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "baseline-full-canary",
+    "command": [
+      "/tmp/cpp-m27-01-baseline-full-canary"
+    ],
+    "exit": 1,
+    "expected": 1
+  },
+  {
+    "label": "baseline-defaults-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-O1",
+      "-Iinclude",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "-Icore/include",
+      "tests/package_consumer/sampled_io_recovery_consumer.cpp",
+      "/tmp/cpp-m27-01-baseline-full-runtime.a",
+      "build/agent-quick/librtfw_xdma_backend.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-01-pass2-baseline-defaults"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "baseline-defaults",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-baseline-defaults",
+      "--defaults",
+      "/tmp/cpp-m27-01-pass2-baseline.checkpoint"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repaired-defaults-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-O1",
+      "-Iinclude",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "-Icore/include",
+      "tests/package_consumer/sampled_io_recovery_consumer.cpp",
+      "build/agent-quick/librtfw_runtime.a",
+      "build/agent-quick/librtfw_xdma_backend.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-01-pass2-repaired-defaults"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repaired-defaults",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-repaired-defaults",
+      "--defaults",
+      "/tmp/cpp-m27-01-pass2-repaired.checkpoint"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "focused-build02",
+    "command": [
+      "cmake",
+      "--build",
+      "build/agent-quick",
+      "--target",
+      "simcore_tests",
+      "rtfw_replay_rejection_tests",
+      "rtfw_replay_rejection_golden",
+      "--parallel",
+      "2"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "focused02",
+    "command": [
+      "ctest",
+      "--test-dir",
+      "build/agent-quick",
+      "-R",
+      "^host_adapter_replay_rejection",
+      "--output-on-failure"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "preserved-replay",
+    "command": [
+      "build/agent-quick/tests/simcore_tests",
+      "--gtest_filter=*Replay*.*:LiveControl*.*:MixedRateReplay.*:TraceNoAlloc.*:MemoryPlan.*"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "asan-runtime-build",
+    "command": [
+      "cmake",
+      "--build",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-asan",
+      "--target",
+      "rtfw_runtime",
+      "--parallel",
+      "2"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "asan-regressions-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-g",
+      "-O1",
+      "-fno-pie",
+      "-no-pie",
+      "-fsanitize=address,undefined",
+      "-fno-omit-frame-pointer",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/replay_rejection/main.cpp",
+      "tests/golden_cuda/allocation.cpp",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-asan/librtfw_runtime.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-01-pass2-asan-regressions"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "asan-regressions-attempt01",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-asan-regressions"
+    ],
+    "exit": 0,
+    "expected": null
+  },
+  {
+    "label": "asan-golden-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-g",
+      "-O1",
+      "-fno-pie",
+      "-no-pie",
+      "-fsanitize=address,undefined",
+      "-fno-omit-frame-pointer",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/replay_rejection/golden_probe.cpp",
+      "-Isamples/golden_showcase",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-asan/librtfw_runtime.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-01-pass2-asan-golden"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "asan-golden-attempt01",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-asan-golden",
+      "/tmp/cpp-m27-01-pass2-asan-golden-output/result.json"
+    ],
+    "exit": 0,
+    "expected": null
+  },
+  {
+    "label": "tsan-runtime-build",
+    "command": [
+      "cmake",
+      "--build",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-tsan",
+      "--target",
+      "rtfw_runtime",
+      "--parallel",
+      "2"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "tsan-regressions-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-g",
+      "-O1",
+      "-fno-pie",
+      "-no-pie",
+      "-fsanitize=thread",
+      "-fno-omit-frame-pointer",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/replay_rejection/main.cpp",
+      "tests/golden_cuda/allocation.cpp",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-tsan/librtfw_runtime.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "tsan-regressions-attempt01",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt02",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt03",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt04",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt05",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt06",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt07",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt08",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt09",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt10",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt11",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt12",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt13",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt14",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt15",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt16",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-regressions-attempt17",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-regressions"
+    ],
+    "exit": 0,
+    "expected": null
+  },
+  {
+    "label": "tsan-golden-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-g",
+      "-O1",
+      "-fno-pie",
+      "-no-pie",
+      "-fsanitize=thread",
+      "-fno-omit-frame-pointer",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/replay_rejection/golden_probe.cpp",
+      "-Isamples/golden_showcase",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-tsan/librtfw_runtime.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-01-pass2-tsan-golden"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "tsan-golden-attempt01",
+    "command": [
+      "/tmp/cpp-m27-01-pass2-tsan-golden",
+      "/tmp/cpp-m27-01-pass2-tsan-golden-output/result.json"
+    ],
+    "exit": 0,
+    "expected": null
+  },
+  {
+    "label": "static",
+    "command": [
+      "python3",
+      "tools/check_static_analysis.py",
+      "--compile-commands",
+      "build/m26-04r-static/compile_commands.json",
+      "--source-manifest",
+      "tools/static_analysis_sources.txt",
+      "--clang-tidy",
+      "clang-tidy-14",
+      "--output",
+      "/tmp/cpp-m27-01-static-report.json"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "static-main.cpp",
+    "command": [
+      "clang++-14",
+      "--analyze",
+      "-std=c++20",
+      "-Xanalyzer",
+      "-analyzer-output=text",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "-Isamples/golden_showcase",
+      "tests/replay_rejection/main.cpp",
+      "-o",
+      "/tmp/cpp-m27-01-pass2-main.cpp.plist"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "static-golden_probe.cpp",
+    "command": [
+      "clang++-14",
+      "--analyze",
+      "-std=c++20",
+      "-Xanalyzer",
+      "-analyzer-output=text",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "-Isamples/golden_showcase",
+      "tests/replay_rejection/golden_probe.cpp",
+      "-o",
+      "/tmp/cpp-m27-01-pass2-golden_probe.cpp.plist"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "package01",
+    "command": [
+      "python3",
+      "tests/replay_rejection/verify_package.py",
+      "--work-directory",
+      "build/m27-01-package01"
+    ],
+    "exit": 0,
+    "expected": 0
+  }
+]

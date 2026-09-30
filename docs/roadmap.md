@@ -1230,3 +1230,13 @@ independently validated installed CPack source kit. See the [guide](golden_syste
 and [evidence](evidence/M26-02-2026-09-29.md) for validation/integration status.
 M26-03 CUDA, M26-04 XDMA, M26-05 showcase and M26-06 audit remain separate,
 unactivated batches; human/physical/RT/performance/Unreal/release gates remain.
+
+## M27 software follow-up queue
+
+Canonical control plan582 selects M27-01 foreign active replay refusal/capture
+repair. Subsequent planned batches are startup/poll failure conservation (02),
+submission/experimental timeout investigation (03), native non-RT telemetry
+exporters (04), continuous fuzz/security tooling (05), test-identity signing and
+provenance verification (06), native golden XDMA host preparation (07), and
+platform/migration/portable soak readiness (08). Only01 is active. Separate Unreal,
+physical/RT, unfamiliar-consumer and release/deployment acceptance remains open.

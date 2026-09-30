@@ -1,93 +1,64 @@
 schema_version: 1
 batch:
-  id: M26-06
-  title: Living documentation and feature-completion audit
-  goal: Deliver a source-linked installed golden-system manual, independently checked CAP-M15 through
-    CAP-M26 audit, and reproducible relocated replay/fault/soak evidence with explicit remaining actions.
+  id: M27-01
+  title: Trusted active replay rejection preserves capture
+  goal: Reject foreign active replay owners before entering live-control replay mode, preserving valid
+    later checkpoint/capture/replay and existing ordinary cross-owner compatibility.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
-  - products/cpp-rt-car/PRD.md#cap-m26--golden-full-system-reference
-  - products/cpp-rt-car/acceptance.yaml
-  milestone: products/cpp-rt-car/milestones/M26.md#m26-06--living-documentation-and-feature-completion-audit
-  baseline_commit: 912ce878ad311d38e452a5d2916ee0daa6ee3f72
+  - products/cpp-rt-car/acceptance.yaml#CAP-M22
+  - products/cpp-rt-car/evidence/M26-06-closure-2026-09-30/closure.md
+  milestone: products/cpp-rt-car/milestones/M27.md#m27-01
+  baseline_commit: 2f0c9954e29d9e5b6a4ee8a2105fc13b43206181
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M26-06.yaml
-  predecessor: M26-05 target284 merged912ce878ad311d38e452a5d2916ee0daa6ee3f72, all32 at a25a96ac614fc274582d57492f2d1640dea67461
-    / tree46f7ea4ad6485103605003fb8297166646dd4803; full148/152, sanitizers/static, relocated CPack71
-    SDK. Canonical closure578 merged d9bf6ec7b326333a1c60344da5d320fe34a8554e. Preserve prior source and
-    failed evidence.
-  owner_scope: Owner requested 06 after M26-05 integration. Standing scoped planning/publication/guarded
-    merge authorization continues; integrate canonical plan before target activation. Control-only completed
-    zero-step infrastructure exception after full local PASS persists; no target/local functional waiver.
-    No automatic subsequent batch, hardware, Unreal, release or deployment activation.
-  control_plane_revision: 14d624e25e7038fae18d4ab0af5122d4577c4564
-  canonical_revision: 14d624e25e7038fae18d4ab0af5122d4577c4564
-  canonical_blob_sha: 7a676271265c1d6038ff117561900286cb107c14
+  control_plane_path: products/cpp-rt-car/batches/M27-01.yaml
+  owner_scope: Owner requested batching the remaining software work and doing the first now. Only M27-01
+    is selected for implementation; all later cards remain planned and require refreshed baseline/scope/environment
+    at activation. Standing scoped publication/guarded merge and completed zero-step control-only exception
+    persist; no target/local functional waiver.
+  activation: selected_after_canonical_plan_merge
+  control_plane_revision: 4bf157caf478c310ecfddb404eb52d5d67589f22
+  canonical_revision: 4bf157caf478c310ecfddb404eb52d5d67589f22
+  canonical_blob_sha: 96982bc8cd1255b64ce595ddcb4833d187c5c9a0
 dependencies:
-- M26-01
-- M26-02
-- M26-03
-- M26-04
-- M26-05
-- M25-06
+- M26-06
 scope:
   allowed_paths:
   - AGENTS.md
-  - README.md
   - contracts/active-batch.yaml
-  - contracts/verification.commands
-  - CMakeLists.txt
-  - tests/CMakeLists.txt
-  - samples/golden_audit/**
-  - tests/golden_audit/**
-  - docs/**
-  - tools/generate_golden_audit.py
-  - tools/check_golden_audit.py
-  - tools/check_docs_contract.py
-  - tools/generate_sdk_docs.py
+  - docs/CURRENT_STATE.md
+  - docs/HANDOFF.md
+  - docs/roadmap.md
+  - docs/architecture.md
+  - docs/sdk/generated/**
+  - docs/golden_audit/**
+  - samples/golden_audit/catalog.py
+  - tests/golden_audit/test_catalog.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - .github/workflows/docs-contract.yml
+  - rt/src/host_runtime.cpp
+  - tests/CMakeLists.txt
+  - tests/test_replay_rejection.cpp
+  - tests/replay_rejection/**
+  - tests/package_consumer/CMakeLists.txt
+  - tests/package_consumer/replay_rejection_consumer.cpp
+  - docs/determinism_replay.md
+  - docs/cuda_capabilities.json
+  - docs/evidence/M27-01-*
   forbidden_paths:
-  - rt/
-  - core/
   - abi/
-  - hal/
-  - gpu/
-  - include/
-  - src/
-  - integrations/
-  - configs/
-  - profiles/
-  - qualification/
-  - bench/
-  - samples/golden_system/
-  - samples/golden_cuda/
-  - samples/golden_xdma/
-  - samples/golden_showcase/
-  - samples/cuda_physics/
-  - samples/host_adapter/
-  - samples/cil_shared_memory/
-  - samples/recipes/
-  - tests/golden_system/
-  - tests/golden_cuda/
-  - tests/golden_xdma/
-  - tests/golden_showcase/
-  - tests/installed_docs/
-  - tests/package_consumer/
-  - tests/benchmark_fixtures/
-  - tests/test_sampled_io_simulation.cpp
-  - tools/check_benchmark_artifact.py
-  - tools/check_golden_contract.py
-  - tools/check_golden_showcase.py
-  - tools/generate_golden_config.py
-  - .github/workflows/ci.yml
-  - .github/workflows/release.yml
-  - release/keys/
-  - release/signatures/
   - VERSION.txt
   - LICENSE
+  - release/keys/
+  - release/signatures/
+  - qualification/
+  - profiles/
+  - configs/
+  - .github/workflows/ci.yml
+  - .github/workflows/release.yml
+  - rt/include/rt/c_api.h
+  - rt/include/rt/device_abi.h
   - docs/evidence/M15-*
   - docs/evidence/M16-*
   - docs/evidence/M17-*
@@ -99,98 +70,101 @@ scope:
   - docs/evidence/M23-*
   - docs/evidence/M24-*
   - docs/evidence/M25-*
-  - docs/evidence/M26-01-*
-  - docs/evidence/M26-02-*
-  - docs/evidence/M26-03-*
-  - docs/evidence/M26-04-*
-  - docs/evidence/M26-05-*
+  - docs/evidence/M26-*
+  - bench/
+  - hal/
+  - gpu/
+  - core/
+  - src/
+  - integrations/
+  - rt/include/
+  - rt/src/live_control_mailbox.cpp
+  - rt/src/live_control_mailbox.hpp
+  - rt/src/cuda_backend.cpp
+  - rt/src/xdma_backend.cpp
+  - rt/src/mock_device.cpp
+  - rt/src/loopback_backend.cpp
+  - samples/golden_system/
+  - samples/golden_cuda/
+  - samples/golden_xdma/
+  - samples/golden_showcase/
+  - samples/cuda_physics/
+  - samples/host_adapter/
+  - samples/cil_shared_memory/
+  - samples/recipes/
+  - docs/golden_audit/requirements.yaml
+  - docs/golden_audit/requirements.json
+  - docs/golden_audit/requirements-binding.json
 acceptance:
-- Preserve frozen M26-01 contract and all prior Runtime/native/kit/test/benchmark sources, ABI8/70 exports/fingerprint0xd0e7a5a14bf35f97/SONAME8/deviceABI1/schema7,
-  budgets, default package isolation, support and release claims. New Python audit orchestration is off
-  lane; no new native implementation or runtime policy.
-- Publish readable living documentation mapped to actual source and artifacts for every frozen phase,
-  resource, state/buffer, rate, channel, clock, execution/ownership boundary, control, fault/recovery,
-  benchmark, lever and variant. Include lifecycle and external-process failure/retention, logical versus
-  host/device clocks, staged transfers, deterministic simulated replay versus unavailable native replay,
-  real/native prerequisites and exact expected results. Frozen planned labels are historical requirements,
-  never current implementation status.
-- Generate reproducible source-linked installed documentation with exact source hashes and valid file/fragment
-  anchors. The default package ships the manual; optional benchmark-enabled installation supplies one
-  command building and running CPU, simulated CUDA/XDMA/combined and actual external CIL through preserved
-  public kits. Verify actual CPack relocation, removal of original prefix, paths with spaces, missing
-  component/source/provenance and stale/mutated documentation negatives; no private include paths or source
-  checkout dependency.
-- Bind an exhaustive CAP-M15 through CAP-M26 audit to a byte-identical snapshot of canonical acceptance
-  requirements and exact source/test/retained-evidence references. Account for every scenario, automated
-  evidence item, manual gate and claim limit exactly once. Classify implemented portable evidence, remaining
-  software/integration work, manual/physical/controlled-runner gates and residual findings separately.
-  Do not infer acceptance from a label, omit known gaps, promote every capability from passing M26 checks,
-  or claim only hardware remains when M20 release engineering or other work is still open.
-- Execute fresh installed benchmark/fault/replay validation and a bounded repeatable soak across native/host
-  CPU, CUDA kernel/Graph, XDMA and combined, with actual external controllers, repeated fresh-owner lifecycle,
-  recovery/fault coverage and full-state/counter/cleanup validation. Declare cycle count and logical ticks
-  separately from measured wall duration; retain every run, failed prefix, provenance and executable hash.
-  No physical endurance or RT/performance claim. Independently reject omitted cycles, altered states/counters,
-  stale source/binaries, false safety/replay, fabricated completion and erased failures.
-- Reconcile current README, architecture/product/roadmap/handoff and installed manual navigation with
-  merged evidence, retaining historical checkpoints. Publish a finite remaining-action list including
-  M18 physical/RT, M19 Unreal, M20 controlled-performance/security/signing/exporter/platform/release work,
-  M25 unfamiliar-consumer review and known protected fixture/replay findings as actually supported by
-  the audit. M26 audit delivery and portable golden journey completion do not close those capabilities
-  or authorize their implementation.
-- Run generated-document/source/link/requirement audit and meaningful mutation tests, actual relocated
-  package full prior SDK consumers, fresh replay/fault/soak workflow, contract/quick/full and all32 exact
-  final-head hosted checks with exact predecessor names/multiplicity. New Python checks join existing
-  allowed docs CI; existing native sanitizer/static gates remain mandatory without gratuitous duplicate
-  native implementation. Preserve every failure and retry and never weaken earlier tests/deadlines.
-- Complete scoped risk review, exact clean/head/base/no-unresolved-review and fetched tested-tree guards,
-  target integration and canonical closure. Mark only evidence-backed M26 portable software/audit completion;
-  report any discovered substantive golden user-journey gap and repair it only through separately bounded
-  authorization. No release/deployment, hardware operation or support promotion.
+- On unchanged M26-06, independently reproduce direct Runtime foreign trusted active-replay rejection
+  followed by failed valid capture. The new regression must fail the unchanged baseline and pass the repaired
+  implementation; retain both commands/results and original golden probe.
+- Check active replay owner compatibility before any replay-mode or action/correlation bookkeeping mutation.
+  Cover trusted v1 and lossless v2, fresh/restored and already-used owners, repeat refusal, no callback
+  invocation, full application state, serialized checkpoint/live-control inspection/cursor conservation,
+  subsequent live admission/step/capture and originating-owner replay. Foreign active artifacts retain
+  incompatible_artifact status; never rewrite their identities.
+- Preserve ordinary input-log/trusted replay compatibility across compatible fresh Runtime instances.
+  Do not impose active-replay ownership rules on ordinary replay, alter successful originating-owner behavior,
+  error/status precedence outside the repaired path, checksums, serialized v1/v2 bytes or existing sample
+  guards.
+- Keep the correction private to host_runtime.cpp, with bounded allocation-free checks and unchanged ABI8/70exports/fingerprint0xd0e7a5a14bf35f97/SONAME8/deviceABI1/configschema7/default
+  MemoryPlan. Native backends, all prior production/test/sample sources and every earlier assertion/deadline/evidence
+  remain unchanged.
+- Add an independent public installed consumer and no-allocation positive/control coverage. Run the new
+  cases plus preserved ordinary/active/live-control replay suites, corrupt/malformed/foreign negatives,
+  ASan/UBSan/leaks, TSan, Clang static, actual relocated full SDK consumers and byte/default/ABI checks.
+  No inference that every possible replay failure is transactional.
+- Update the living audit only to reflect the specific demonstrated repair; keep all other findings and
+  qualification actions open. Retain source-hash/reproducible generated-document bindings and risk review.
+  Full local profiles/all32 exact-head target checks and guarded target/canonical closure remain mandatory.
+- Preserve prior completed batches/evidence and protected ABI/default/support claims. Run complete repository
+  contract/quick/full plus all32 exact final-head hosted records with exact baseline names/multiplicity;
+  retain failed attempts and risk review. Guard clean/head/base/review/merge-tree equality before scoped
+  integration and canonical closure.
 validation:
   local:
-  - python3 tools/generate_golden_audit.py --check
-  - python3 tools/check_golden_audit.py
-  - python3 -m unittest discover -s tests/golden_audit -p "test_*.py"
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh quick
   - ./scripts/agent-verify.sh full
-  - python3 tests/golden_audit/verify_package.py --work-directory build/m26-06-package
-  - Fresh bounded installed showcase and multi-variant soak with exact command, counts, duration, hashes
-    and result retained.
+  - Focused entry-point positive/negative tests, independently failing baseline control, applicable sanitizer/static/no-allocation/default-byte/ABI
+    and actual installed package validation.
+  - git diff --check
   focused_tests_to_add:
-  - Missing/duplicate/foreign requirement, omitted source-map entry, stale source/anchor, invalid offline
-    link and unjustified qualification/completion mutations.
-  - Soak/run omission, altered source/binary/state/counters, corrupt manifest, missing package/components
-    and original-prefix/private-path rejection.
+  - On unchanged M26-06, independently reproduce direct Runtime foreign trusted active-replay rejection
+    followed by failed valid capture. The new regression must fail the unchanged baseline and pass the
+    repaired implementation; retain both commands/results and original golden probe.
+  - Check active replay owner compatibility before any replay-mode or action/correlation bookkeeping mutation.
+    Cover trusted v1 and lossless v2, fresh/restored and already-used owners, repeat refusal, no callback
+    invocation, full application state, serialized checkpoint/live-control inspection/cursor conservation,
+    subsequent live admission/step/capture and originating-owner replay. Foreign active artifacts retain
+    incompatible_artifact status; never rewrite their identities.
+  - Preserve ordinary input-log/trusted replay compatibility across compatible fresh Runtime instances.
+    Do not impose active-replay ownership rules on ordinary replay, alter successful originating-owner
+    behavior, error/status precedence outside the repaired path, checksums, serialized v1/v2 bytes or
+    existing sample guards.
   required_ci:
-  - All32 exact final-head check records successful with exact M26-05 names/multiplicity.
-  - Existing compiler/FMA/sanitizer/package/ABI and docs jobs plus new audit/docs/package checks; protected
-    ci.yml unchanged.
+  - All32 exact final-head target checks successful with exact M26-06 names/multiplicity. No target/local
+    gate waived.
   manual:
-  - Independent unfamiliar-consumer review remains UNPERFORMED without an actual reviewer.
-  - Named physical/RT/controlled-performance/Unreal/signing/release/deployment actions remain separately
-    gated.
+  - No physical/HIL/RT/human/controlled-performance/Unreal/production-signing/release/deployment claim
+    from portable software tests.
 risk:
   class: high
   hazards:
-  - Audit silently omits an unmet requirement or turns simulated evidence into qualification.
-  - Generated source links or installed commands depend on stale/private checkout paths.
-  - Soak hides failed cycles or only checks a PASS field instead of state, identity and cleanup.
-  - Documentation changes reinterpret frozen behavior or erase protected fixture findings.
+  - Software evidence is promoted to qualification or an unresolved finding is silently closed.
+  - A repair weakens compatibility, deadlines, bounds, prior tests or evidence.
   stop_conditions:
-  - A protected source/test/ABI/default/deadline needs repair outside this batch.
-  - A substantive unresolved golden user-journey gap requires separately scoped implementation.
-  - A material product decision, privileged hardware action, signing, release or deployment is required.
+  - A new public ABI/schema/default-policy decision or forbidden source change becomes necessary.
+  - Required hardware, real engine environment, production key or release/deployment authority is missing
+    for the claimed outcome.
 rollback:
-  strategy: Revert only additive audit documentation/tooling/source-kit/tests and build/validation wiring;
-    preserve all prior native and sample implementations, immutable requirements and evidence.
+  strategy: Revert only this batch correction/additions and their wiring; preserve all predecessor code/evidence
+    and other planned batches.
 evidence:
   output:
-  - docs/evidence/M26-06-<date>.md
-  - Source/requirement maps, exact generated inventory, installed workflow/soak results with raw hashes,
-    all failed attempts, risk review and exact-head local/CI/merge records.
-  claim_boundary: Portable installed framework composition and evidence-backed audit only. CAP-M15 through
-    CAP-M26 have separate scenario/manual qualification dispositions; unresolved engineering and review
-    actions remain explicit. No physical/HIL/RT/human/controlled-performance/Unreal/release/deployment
-    claim.
+  - docs/evidence/M27-01-<date>.md
+  - Exact baseline/positive/negative commands, hashes, raw logs, risk review and final-head local/CI/merge/closure
+    records.
+  claim_boundary: Portable software implementation and tested compatibility only. Original M18/M19/M20/M25/M26
+    qualification and acceptance obligations remain separate.

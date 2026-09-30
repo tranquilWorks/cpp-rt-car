@@ -50,6 +50,12 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'tests/replay_rejection/CMakeLists.txt',
+    'tests/replay_rejection/main.cpp',
+    'tests/replay_rejection/scenario.hpp',
+    'tests/replay_rejection/golden_probe.cpp',
+    'tests/replay_rejection/verify_package.py',
+
     'tests/golden_audit/test_plan.py',
     'docs/golden_audit.md',
     'docs/golden_audit/capabilities.json',
