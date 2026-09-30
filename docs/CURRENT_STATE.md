@@ -1,3 +1,19 @@
+# M27-02 corrected implementation and focused verification complete
+
+Keep command polling for late native completion reaping, and retain unclaimed
+callback/count faults per backend until an eligible batch receives them. Checks
+before and after poll cover publication during a callback. The final26-case suite,
+ten repeats,117 preserved tests plus unchanged M17 native recovery, sanitizers,
+static/default bytes and actual relocated CPack/71SDK consumers pass.
+See [final evidence](evidence/M27-02-2026-09-30.md). Candidate30c5 and intermediate
+race failures are retained and superseded. Startup -2 correctly retains cleanup
+ownership with -18 channel cause; old timing-sensitive assertions remain unchanged.
+Exact-final-head full/all32 and guarded target/canonical closure remain mandatory,
+with final records in the PR/control closure. Only02 is selected; later batches
+and external qualification/Unreal/signing/release/deployment remain separate.
+
+## Historical checkpoints
+
 # M27-02 implementation and focused verification complete
 
 Private command polling now requires a published owner in that backend; checked

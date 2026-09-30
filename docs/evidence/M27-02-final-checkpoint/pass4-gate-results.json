@@ -1,0 +1,879 @@
+[
+  {
+    "label": "focused-build",
+    "command": [
+      "cmake",
+      "--build",
+      "build/agent-quick",
+      "--target",
+      "simcore_tests",
+      "rtfw_startup_poll_tests",
+      "rtfw_cpu_gpu_fpga_cpu_sample_tests",
+      "--parallel",
+      "2"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "baseline-suite-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-O1",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/startup_poll_reliability/main.cpp",
+      "tests/golden_cuda/allocation.cpp",
+      "/tmp/cpp-m27-02-baseline-runtime.a",
+      "build/agent-quick/librtfw_xdma_backend.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-02-pass4-baseline-suite"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "baseline-suite",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-baseline-suite"
+    ],
+    "exit": 1,
+    "expected": 1
+  },
+  {
+    "label": "pending-draft-control-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-O1",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/startup_poll_reliability/main.cpp",
+      "tests/golden_cuda/allocation.cpp",
+      "/tmp/cpp-m27-02-pending-draft-runtime.a",
+      "build/agent-quick/librtfw_xdma_backend.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-02-pass4-pending-draft-control"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "pending-draft-control",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-pending-draft-control",
+      "publication"
+    ],
+    "exit": 1,
+    "expected": 1
+  },
+  {
+    "label": "baseline-startup",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-baseline-suite",
+      "startup"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "preserved-late-completion",
+    "command": [
+      "ctest",
+      "--test-dir",
+      "build/agent-quick",
+      "-R",
+      "^m17_cpu_gpu_fpga_cpu_sample$",
+      "--output-on-failure"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "focused-final",
+    "command": [
+      "ctest",
+      "--test-dir",
+      "build/agent-quick",
+      "-R",
+      "^host_adapter_startup_poll",
+      "--output-on-failure"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "preserved",
+    "command": [
+      "build/agent-quick/tests/simcore_tests",
+      "--gtest_filter=CommandBatch.*:RateDispatch.*:MixedRateReplay.*:TraceNoAlloc.*:MemoryPlan.*"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-0",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-1",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-2",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-3",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-4",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-5",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-6",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-7",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-8",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repeated-9",
+    "command": [
+      "build/agent-quick/tests/startup_poll_reliability/rtfw_startup_poll_tests"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "baseline-defaults-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-O1",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/package_consumer/sampled_io_recovery_consumer.cpp",
+      "/tmp/cpp-m27-02-baseline-runtime.a",
+      "build/agent-quick/librtfw_xdma_backend.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-02-pass4-baseline-defaults"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "baseline-defaults",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-baseline-defaults",
+      "--defaults",
+      "/tmp/cpp-m27-02-pass4-baseline.checkpoint"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repaired-defaults-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-O1",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/package_consumer/sampled_io_recovery_consumer.cpp",
+      "build/agent-quick/librtfw_runtime.a",
+      "build/agent-quick/librtfw_xdma_backend.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-02-pass4-repaired-defaults"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "repaired-defaults",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-repaired-defaults",
+      "--defaults",
+      "/tmp/cpp-m27-02-pass4-repaired.checkpoint"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "asan-runtime-build",
+    "command": [
+      "cmake",
+      "--build",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-asan",
+      "--target",
+      "rtfw_runtime",
+      "rtfw_xdma_backend",
+      "--parallel",
+      "2"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "asan-suite-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-g",
+      "-O1",
+      "-fno-pie",
+      "-no-pie",
+      "-fsanitize=address,undefined",
+      "-fno-omit-frame-pointer",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/startup_poll_reliability/main.cpp",
+      "tests/golden_cuda/allocation.cpp",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-asan/librtfw_runtime.a",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-asan/librtfw_xdma_backend.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-02-pass4-asan-suite"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "asan-suite-attempt01",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-asan-suite"
+    ],
+    "exit": 0,
+    "expected": null
+  },
+  {
+    "label": "tsan-runtime-build",
+    "command": [
+      "cmake",
+      "--build",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-tsan",
+      "--target",
+      "rtfw_runtime",
+      "rtfw_xdma_backend",
+      "--parallel",
+      "2"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "tsan-suite-build",
+    "command": [
+      "c++",
+      "-std=c++20",
+      "-g",
+      "-O1",
+      "-fno-pie",
+      "-no-pie",
+      "-fsanitize=thread",
+      "-fno-omit-frame-pointer",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/startup_poll_reliability/main.cpp",
+      "tests/golden_cuda/allocation.cpp",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-tsan/librtfw_runtime.a",
+      "/home/kbianco/.local/share/portfolio-control/worktrees/targets/cpp-rt-car-m24/build/m26-04r-tsan/librtfw_xdma_backend.a",
+      "-pthread",
+      "-o",
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "tsan-suite-attempt01",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt02",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt03",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt04",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt05",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt06",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt07",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt08",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt09",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt10",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt11",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt12",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 0,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt13",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt14",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 0,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt15",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt16",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt17",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt18",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt19",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt20",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt21",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt22",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt23",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt24",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt25",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt26",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt27",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt28",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt29",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt30",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt31",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt32",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt33",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt34",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt35",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt36",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt37",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt38",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt39",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt40",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt41",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt42",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt43",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt44",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt45",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt46",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt47",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt48",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt49",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt50",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt51",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt52",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt53",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt54",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt55",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt56",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt57",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": -11,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt58",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt59",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt60",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 66,
+    "expected": null
+  },
+  {
+    "label": "tsan-suite-attempt61",
+    "command": [
+      "/tmp/cpp-m27-02-pass4-tsan-suite"
+    ],
+    "exit": 0,
+    "expected": null
+  },
+  {
+    "label": "static",
+    "command": [
+      "python3",
+      "tools/check_static_analysis.py",
+      "--compile-commands",
+      "build/m26-04r-static/compile_commands.json",
+      "--source-manifest",
+      "tools/static_analysis_sources.txt",
+      "--clang-tidy",
+      "clang-tidy-14",
+      "--output",
+      "/tmp/cpp-m27-02-pass4-static-report.json"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "static-fixture",
+    "command": [
+      "clang++-14",
+      "--analyze",
+      "-std=c++20",
+      "-Xanalyzer",
+      "-analyzer-output=text",
+      "-Iinclude",
+      "-Icore/include",
+      "-Irt/include",
+      "tests/startup_poll_reliability/main.cpp",
+      "-o",
+      "/tmp/cpp-m27-02-pass4-fixture.plist"
+    ],
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "label": "package",
+    "command": [
+      "python3",
+      "tests/startup_poll_reliability/verify_package.py",
+      "--work-directory",
+      "build/m27-02-package02"
+    ],
+    "exit": 0,
+    "expected": 0
+  }
+]

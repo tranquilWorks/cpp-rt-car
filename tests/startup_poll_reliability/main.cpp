@@ -5,6 +5,7 @@
 #include "../package_consumer/sampled_io_simulation_consumer.cpp"
 #include "../golden_cuda/allocation.hpp"
 #include <cstdlib>
+#include <mutex>
 #include <new>
 
 namespace {
@@ -14,21 +15,53 @@ void require(bool value, const char* message) {
     if (!value) { std::fprintf(stderr, "FAIL %s\n", message); std::exit(1); }
 }
 void check(Status status) { require(status == Status::ok, "setup/cleanup status"); }
-struct Gate { std::atomic<bool> open{false}, expired{false}; };
+struct Gate {
+    std::atomic<bool> open{false}, expired{false}, publish{false};
+    bool defer_publication = false;
+};
 struct Backend : device_capacity::Backend {
+    // This wrapper adds reset/reuse to the preserved SPSC fixture. Serialize
+    // its test storage across host reset and submission; service poll only
+    // tries the lock and returns immediately on contention.
+    std::mutex storage_mutex;
     Gate* gate = nullptr;
     unsigned index = 0;
     bool wait_for_submit = false;
     std::atomic<bool> armed{false}, consumed{false}, idle_consumed{false};
     rt::HalV2Status fault = rt::HalV2Status::ok; // ok denotes count overflow
     rt::HalV2CommandTimelineExtension original{};
+    rt::HalV2BatchCompletion held{};
+    bool held_valid = false; // service-lane-only test state
+    rt::HalV2BackendApi guarded_core() {
+        auto api = core();
+        api.reset = [](void* p) {
+            auto& self = *static_cast<Backend*>(
+                static_cast<device_capacity::Backend*>(p));
+            std::lock_guard<std::mutex> lock(self.storage_mutex);
+            for (auto& slot : self.queue) slot.occupied = false;
+            return rt::HalV2Status::ok;
+        };
+        return api;
+    }
     rt::HalV2CommandTimelineExtension wrapped() {
         original = commands();
         auto extension = original;
+        extension.submit = [](void* p, const rt::DeviceCommandBatch* batch) {
+            auto& self = *static_cast<Backend*>(
+                static_cast<device_capacity::Backend*>(p));
+            std::lock_guard<std::mutex> lock(self.storage_mutex);
+            return self.original.submit(p, batch);
+        };
         extension.poll = [](void* p, rt::HalV2BatchCompletion* out,
                             std::uint64_t capacity, std::uint64_t* count) {
             auto& self = *static_cast<Backend*>(
                 static_cast<device_capacity::Backend*>(p));
+            if (self.held_valid) {
+                out[0] = self.held;
+                *count = 1;
+                self.held_valid = false;
+                return rt::HalV2Status::ok;
+            }
             if (self.wait_for_submit && self.armed.load() &&
                 self.submitted.load() == 0) {
                 *count = 0;
@@ -41,10 +74,36 @@ struct Backend : device_capacity::Backend {
                 *count = self.fault == rt::HalV2Status::ok ? capacity + 1 : 0;
                 return self.fault;
             }
+            // Test-only finite ordering barrier: create a new published
+            // owner inside a later poll after its initial pending-error scan.
+            if (self.index == 0 && self.gate->defer_publication &&
+                self.gate->open && !self.gate->publish.exchange(true)) {
+                const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+                while (self.submitted.load() == 0) {
+                    if (std::chrono::steady_clock::now() >= limit) {
+                        self.gate->expired = true;
+                        *count = 0;
+                        return rt::HalV2Status::internal_error;
+                    }
+                    std::this_thread::yield();
+                }
+            }
+            std::unique_lock<std::mutex> lock(self.storage_mutex, std::try_to_lock);
+            if (!lock.owns_lock()) {
+                *count = 0;
+                return rt::HalV2Status::ok;
+            }
             const auto status = self.original.poll(p, out, capacity, count);
             // On the baseline, the shared service lane has already polled
             // backend0 with no published batch when backend1 opens this gate.
-            if (self.index == 1 && *count != 0) self.gate->open = true;
+            if (self.index == 1 && *count != 0) {
+                self.gate->open = true;
+                if (self.gate->defer_publication && !self.gate->publish.load()) {
+                    self.held = out[0];
+                    self.held_valid = true;
+                    *count = 0; // keep a Runtime owner to drive the next poll
+                }
+            }
             return status;
         };
         return extension;
@@ -54,11 +113,12 @@ struct Provider {
     Gate* gate = nullptr;
     unsigned index = 0;
     rt::DeviceCommandBatch batch{};
-    static rt::CallbackResult call(void* p, const rt::DeviceCallbackContext&,
+    static rt::CallbackResult call(void* p, const rt::DeviceCallbackContext& context,
                                    rt::DeviceCommandBatch& out) {
         auto& self = *static_cast<Provider*>(p);
         const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-        while (self.index == 0 && !self.gate->open.load()) {
+        while (self.index == 0 && (!self.gate->open.load() ||
+               (self.gate->defer_publication && !self.gate->publish.load()))) {
             if (std::chrono::steady_clock::now() >= limit) {
                 self.gate->expired = true;
                 return rt::CallbackResult::error;
@@ -67,7 +127,7 @@ struct Provider {
         }
         out = self.batch;
         out.timeout_ns = 5'000'000'000;
-        out.signals[0].value = 1;
+        out.signals[0].value = context.frame.frame_index + 1;
         return rt::CallbackResult::ok;
     }
 };
@@ -76,7 +136,9 @@ struct PollFixture {
     std::array<Backend, 2> backends;
     std::array<Provider, 2> providers;
     rt::Runtime runtime;
-    explicit PollFixture(bool uniform = false) {
+    std::array<rt::DeviceBackendHandle, 2> devices;
+    explicit PollFixture(bool uniform = false, bool defer = false) {
+        gate.defer_publication = defer;
         rt::RuntimeConfig cfg;
         cfg.worker_count = 2; cfg.callback_capacity = 2;
         cfg.device_backend_capacity = 2;
@@ -89,9 +151,9 @@ struct PollFixture {
             backend.pending_capacity = uniform ? 2u : 1u;
             backend.gate = &gate; backend.index = i;
             auto memory = backend.memory(); auto commands = backend.wrapped();
-            rt::DeviceBackendHandle device;
+            auto& device = devices[i];
             const char* name = i == 0 ? "first" : "second";
-            check(runtime.register_device_backend({name, backend.core(), &memory, &commands}, device));
+            check(runtime.register_device_backend({name, backend.guarded_core(), &memory, &commands}, device));
             rt::DeviceTimelineHandle timeline;
             check(runtime.register_device_timeline({name, device, 0}, timeline));
             auto& provider = providers[i]; provider.gate = &gate; provider.index = i;
@@ -108,6 +170,11 @@ struct PollFixture {
     Status run(bool measured = true) {
         if (measured) allocation::begin();
         const auto status = runtime.step({0, std::chrono::milliseconds(1)});
+        if (status != Status::ok) {
+            check(runtime.reset_device(devices[0]));
+            check(runtime.reset_device(devices[1]));
+            check(runtime.step({1, std::chrono::milliseconds(1)}));
+        }
         const auto stopped = runtime.stop();
         const auto repeated = runtime.stop();
         const auto allocations = measured ? allocation::end() : 0;
@@ -131,8 +198,8 @@ Status mapped(rt::HalV2Status status) {
     default: return Status::device_error;
     }
 }
-void poll_fault(rt::HalV2Status fault, bool active, bool uniform) {
-    PollFixture fixture(uniform);
+void poll_fault(rt::HalV2Status fault, bool active, bool uniform, bool defer = false) {
+    PollFixture fixture(uniform, defer);
     fixture.backends[0].fault = fault;
     fixture.backends[0].wait_for_submit = active;
     fixture.backends[0].armed = true;
@@ -141,8 +208,9 @@ void poll_fault(rt::HalV2Status fault, bool active, bool uniform) {
         int(fault), active, uniform, int(status), fixture.backends[0].consumed.load(),
         fixture.backends[0].idle_consumed.load());
     require(status == mapped(fault), "one-shot poll fault lost or remapped");
-    require(fixture.backends[0].consumed && !fixture.backends[0].idle_consumed,
-            "poll fault consumed without a published owner");
+    require(fixture.backends[0].consumed &&
+            fixture.backends[0].idle_consumed.load() == !active,
+            "controlled fault delivery ordering changed");
 }
 void pending_startup() {
     sampled_simulation::Fixture fixture;
@@ -203,7 +271,12 @@ int main(int argc, char** argv) {
     const auto count = allocation::end(); ::operator delete(positive);
     require(count != 0, "allocation positive control");
     const bool startup_only = argc == 2 && std::strcmp(argv[1], "startup") == 0;
+    if (argc == 2 && std::strcmp(argv[1], "publication") == 0) {
+        for (bool uniform : {false, true}) poll_fault(rt::HalV2Status::ok, false, uniform, true);
+        return 0;
+    }
     if (!startup_only) {
+        for (bool uniform : {false, true}) poll_fault(rt::HalV2Status::ok, false, uniform, true);
         for (bool uniform : {false, true}) for (bool active : {false, true})
             for (auto fault : {rt::HalV2Status::ok, rt::HalV2Status::error,
                                rt::HalV2Status::lost, rt::HalV2Status::reset_required,
