@@ -1,0 +1,117 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/cuda_physics/test_capabilities.py</title><h1>tests/cuda_physics/test_capabilities.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#!/usr/bin/env python3</span>
+<span id="L2">&quot;&quot;&quot;Negative controls for retained coverage, inventory and evidence binding.&quot;&quot;&quot;</span>
+<span id="L3">import copy</span>
+<span id="L4">import importlib.util</span>
+<span id="L5">import json</span>
+<span id="L6">from pathlib import Path, PureWindowsPath</span>
+<span id="L7">import subprocess</span>
+<span id="L8">import shutil</span>
+<span id="L9">import tempfile</span>
+<span id="L10">import sys</span>
+<span id="L11">import unittest</span>
+<span id="L12">from unittest import mock</span>
+<span id="L13"></span>
+<span id="L14">ROOT = Path(__file__).resolve().parents[2]</span>
+<span id="L15">spec = importlib.util.spec_from_file_location(&#x27;coverage&#x27;, ROOT/&#x27;tools/check_cuda_capabilities.py&#x27;)</span>
+<span id="L16">coverage = importlib.util.module_from_spec(spec)</span>
+<span id="L17">spec.loader.exec_module(coverage)</span>
+<span id="L18"></span>
+<span id="L19"></span>
+<span id="L20">class CoverageTests(unittest.TestCase):</span>
+<span id="L21">    def setUp(self):</span>
+<span id="L22">        self.matrix = json.loads((ROOT/&#x27;docs/cuda_capabilities.json&#x27;).read_text())</span>
+<span id="L23"></span>
+<span id="L24">    def reject(self, mutate):</span>
+<span id="L25">        candidate = copy.deepcopy(self.matrix)</span>
+<span id="L26">        mutate(candidate)</span>
+<span id="L27">        with self.assertRaises((ValueError, KeyError, TypeError)):</span>
+<span id="L28">            coverage.validate(candidate)</span>
+<span id="L29"></span>
+<span id="L30">    def test_complete_report_includes_physical_denominator(self):</span>
+<span id="L31">        report = coverage.validate(self.matrix)</span>
+<span id="L32">        self.assertEqual(report[&#x27;automated_rows&#x27;], 40)</span>
+<span id="L33">        self.assertEqual(report[&#x27;total_rows&#x27;], 44)</span>
+<span id="L34">        self.assertEqual(report[&#x27;critical_rows&#x27;], 37)</span>
+<span id="L35">        self.assertEqual(report[&#x27;physical_not_run_rows&#x27;], 4)</span>
+<span id="L36">        self.assertGreaterEqual(report[&#x27;overall_percent&#x27;], 90)</span>
+<span id="L37"></span>
+<span id="L38">    def test_removed_duplicate_and_extra_rows(self):</span>
+<span id="L39">        self.reject(lambda m: m[&#x27;rows&#x27;].pop())</span>
+<span id="L40">        self.reject(lambda m: m[&#x27;rows&#x27;].append(copy.deepcopy(m[&#x27;rows&#x27;][0])))</span>
+<span id="L41">        self.reject(lambda m: m[&#x27;rows&#x27;][0].update(id=&#x27;invented-capability&#x27;))</span>
+<span id="L42"></span>
+<span id="L43">    def test_critical_state_and_gate_substitution(self):</span>
+<span id="L44">        self.reject(lambda m: m[&#x27;rows&#x27;][0].update(critical=False))</span>
+<span id="L45">        self.reject(lambda m: m[&#x27;rows&#x27;][0].update(critical=1))</span>
+<span id="L46">        self.reject(lambda m: m[&#x27;rows&#x27;][0].update(state=&#x27;unverified&#x27;))</span>
+<span id="L47">        self.reject(lambda m: m[&#x27;rows&#x27;][0].update(gates=[&#x27;unknown&#x27;]))</span>
+<span id="L48">        self.reject(lambda m: m[&#x27;rows&#x27;][0].update(gates=[&#x27;abi&#x27;]))</span>
+<span id="L49">        self.reject(lambda m: m[&#x27;rows&#x27;][0].update(gates=[]))</span>
+<span id="L50"></span>
+<span id="L51">    def test_physical_cannot_be_promoted_or_excluded(self):</span>
+<span id="L52">        self.reject(lambda m: m[&#x27;rows&#x27;][-1].update(state=&#x27;automated&#x27;, gates=[&#x27;pipeline&#x27;]))</span>
+<span id="L53">        self.reject(lambda m: m[&#x27;rows&#x27;][-1].update(state=&#x27;not-applicable&#x27;))</span>
+<span id="L54"></span>
+<span id="L55">    def test_failed_or_missing_evidence(self):</span>
+<span id="L56">        self.reject(lambda m: m[&#x27;gates&#x27;][&#x27;benchmark&#x27;].update(status=&#x27;failed&#x27;))</span>
+<span id="L57">        self.reject(lambda m: m[&#x27;gates&#x27;][&#x27;benchmark&#x27;].update(status=&#x27;unperformed&#x27;))</span>
+<span id="L58">        self.reject(lambda m: m[&#x27;gates&#x27;][&#x27;benchmark&#x27;].update(evidence={}))</span>
+<span id="L59">        self.reject(lambda m: m[&#x27;gates&#x27;][&#x27;benchmark&#x27;].update(sources={}))</span>
+<span id="L60">        self.reject(lambda m: m[&#x27;gates&#x27;].pop(&#x27;benchmark&#x27;))</span>
+<span id="L61">        path = next(iter(self.matrix[&#x27;gates&#x27;][&#x27;benchmark&#x27;][&#x27;sources&#x27;]))</span>
+<span id="L62">        self.reject(lambda m: m[&#x27;gates&#x27;][&#x27;benchmark&#x27;][&#x27;sources&#x27;].update({path: &#x27;0&#x27;*64}))</span>
+<span id="L63">        self.reject(lambda m: m[&#x27;gates&#x27;][&#x27;benchmark&#x27;][&#x27;evidence&#x27;].update({&#x27;docs/evidence/absent.txt&#x27;: &#x27;0&#x27;*64}))</span>
+<span id="L64">        self.reject(lambda m: m[&#x27;gates&#x27;][&#x27;benchmark&#x27;][&#x27;sources&#x27;].update({&#x27;../outside&#x27;: &#x27;0&#x27;*64}))</span>
+<span id="L65"></span>
+<span id="L66">    def test_windows_inventory_uses_canonical_forward_slashes(self):</span>
+<span id="L67">        root = PureWindowsPath(&#x27;C:/checkout&#x27;)</span>
+<span id="L68">        files = [[root/&#x27;rt/src/runtime.cpp&#x27;], [root/&#x27;core/include/core/units.hpp&#x27;]]</span>
+<span id="L69">        with mock.patch.object(PureWindowsPath, &#x27;rglob&#x27;, create=True, side_effect=files):</span>
+<span id="L70">            self.assertEqual(coverage.product_sources(root),</span>
+<span id="L71">                             {&#x27;rt/src/runtime.cpp&#x27;, &#x27;core/include/core/units.hpp&#x27;})</span>
+<span id="L72"></span>
+<span id="L73">    def test_underlying_runtime_and_backend_changes_invalidate_evidence(self):</span>
+<span id="L74">        path = &#x27;rt/src/cuda_backend.cpp&#x27;</span>
+<span id="L75">        self.reject(lambda m: m[&#x27;product_sources&#x27;].update({path: &#x27;0&#x27;*64}))</span>
+<span id="L76">        self.reject(lambda m: m[&#x27;product_sources&#x27;].pop(&#x27;rt/src/device_manager.hpp&#x27;))</span>
+<span id="L77">        self.reject(lambda m: m[&#x27;product_sources&#x27;].update({&#x27;rt/src/invented.cpp&#x27;: &#x27;0&#x27;*64}))</span>
+<span id="L78"></span>
+<span id="L79">    def test_crosswalk_and_schema_drift(self):</span>
+<span id="L80">        self.reject(lambda m: m.update(version=2))</span>
+<span id="L81">        self.reject(lambda m: m.update(extra=True))</span>
+<span id="L82">        self.reject(lambda m: m[&#x27;m23_crosswalk&#x27;].update(overlap=[&#x27;fabricated&#x27;]))</span>
+<span id="L83"></span>
+<span id="L84">    def test_measured_optimization_negative_controls(self):</span>
+<span id="L85">        directory = &#x27;docs/evidence/M24-04-measurements&#x27;</span>
+<span id="L86">        comparison = json.loads((ROOT/directory/&#x27;comparison.json&#x27;).read_text())</span>
+<span id="L87">        with tempfile.TemporaryDirectory() as temporary:</span>
+<span id="L88">            root = Path(temporary)</span>
+<span id="L89">            files = list(comparison[&#x27;source_sha256&#x27;]) + [&#x27;tools/check_benchmark_artifact.py&#x27;,</span>
+<span id="L90">                &#x27;bench/schemas/result.schema.json&#x27;, &#x27;bench/schemas/descriptor.schema.json&#x27;]</span>
+<span id="L91">            for name in files:</span>
+<span id="L92">                (root/name).parent.mkdir(parents=True, exist_ok=True)</span>
+<span id="L93">                shutil.copy2(ROOT/name, root/name)</span>
+<span id="L94">            shutil.copytree(ROOT/directory, root/directory)</span>
+<span id="L95">            coverage.validate_measurements(root)</span>
+<span id="L96">            comparison[&#x27;median_ns&#x27;][&#x27;kernel&#x27;] += 1</span>
+<span id="L97">            (root/directory/&#x27;comparison.json&#x27;).write_text(json.dumps(comparison))</span>
+<span id="L98">            with self.assertRaises(ValueError):</span>
+<span id="L99">                coverage.validate_measurements(root)</span>
+<span id="L100">            shutil.copy2(ROOT/directory/&#x27;comparison.json&#x27;, root/directory/&#x27;comparison.json&#x27;)</span>
+<span id="L101">            raw = root/directory/&#x27;kernel-0/raw.json&#x27;</span>
+<span id="L102">            value = json.loads(raw.read_text())</span>
+<span id="L103">            value[&#x27;samples&#x27;][0][&#x27;checksum&#x27;] += 1</span>
+<span id="L104">            raw.write_text(json.dumps(value))</span>
+<span id="L105">            with self.assertRaises(ValueError):</span>
+<span id="L106">                coverage.validate_measurements(root)</span>
+<span id="L107"></span>
+<span id="L108">    def test_generated_document_exact_and_actual_cli(self):</span>
+<span id="L109">        self.assertEqual(coverage.render(self.matrix), (ROOT/&#x27;docs/cuda_capabilities.md&#x27;).read_text())</span>
+<span id="L110">        result = subprocess.run([sys.executable, str(ROOT/&#x27;tools/check_cuda_capabilities.py&#x27;)],</span>
+<span id="L111">                                capture_output=True, text=True, timeout=30)</span>
+<span id="L112">        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)</span>
+<span id="L113">        self.assertEqual(json.loads(result.stdout)[&#x27;total_rows&#x27;], 44)</span>
+<span id="L114"></span>
+<span id="L115"></span>
+<span id="L116">if __name__ == &#x27;__main__&#x27;:</span>
+<span id="L117">    unittest.main()</span></pre></html>

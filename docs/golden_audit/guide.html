@@ -1,0 +1,116 @@
+<h1>RTFW golden system: source, evidence and capability audit</h1>
+<p>This manual explains the installed multi-entity reference and accounts for every
+CAP-M15 through CAP-M26 requirement. It covers portable execution and owned
+simulated-driver protocol evidence. It does not certify hardware, deadlines,
+human acceptance, controlled performance, Unreal or a release.</p>
+<nav><a href="#run">Run the installed system</a> · <a href="#architecture">Ownership
+and data flow</a> · <a href="#failure">Failure and recovery</a> ·
+<a href="#scenario">100 scenario mappings</a> · <a href="#capabilities">112 requirement
+dispositions</a> · <a href="#remaining">Remaining actions</a></nav>
+<h2 id="run">Build, run and independently validate</h2>
+<p>Install an SDK built with <code>-DRTFW_BUILD_BENCHMARKS=ON</code>. Python 3 and
+a C++20 compiler/CMake are required to build the optional public source kits.
+The default SDK ships this offline manual without requiring a documentation
+generator or installing the optional audit runner.</p>
+<pre>python3 "/sdk/share/rtfw/examples/golden_audit/run.py" \
+  --prefix "/sdk" --build "/tmp/golden build" \
+  --output "/tmp/new golden evidence" --cycles 16 --clock steady</pre>
+<p>Use the actual installed data directory if customized. Paths containing spaces
+are supported. The output directory must be new. Multi-configuration generators
+select <code>--config Debug</code> or <code>--config Release</code> consistently.
+The runner builds the sibling showcase through installed public targets; it does
+not require a checkout. Missing benchmark or backend components are errors, with
+no silent CPU fallback. No physical device is automatically probed.</p>
+<p>The command runs all 15 benchmark cases and additional variant combinations
+(25 bundles, 50 warmups and 125 measured samples), all 36 values across 13 levers,
+all 11 fault campaigns, real external controller processes and independent
+source/state/counter/replay validation. It then repeats 18 nominal execution
+combinations per soak cycle: CPU, CUDA kernel/Graph, XDMA CPU, combined
+kernel/Graph, each under native, host and external operation. Every fresh owner
+is stopped and its complete state and replay checked. Six fault/recovery
+paths are also exercised per cycle. The exact matrix, count and measured wall
+duration are recorded; no failed prefix is omitted.</p>
+<p>Sixteen cycles constitute a bounded software regression soak, not a thermal or
+long-duration physical endurance campaign. Logical ticks are simulation work,
+not elapsed wall time. Fake-clock results are structural fixtures; steady-clock
+results are portable characterization with lifecycle/oracle/artifact work included.
+They do not establish an optimal worker count, isolated kernel latency or RT1/RT2.</p>
+<pre>python3 "/sdk/share/rtfw/examples/golden_audit/run.py" \
+  --verify "/tmp/new golden evidence" --binaries-build "/tmp/golden build"</pre>
+<p>Successful verification prints <code>PASS M26-06 installed audit and bounded
+soak</code>. The evidence includes <code>execution.json</code>,
+<code>soak.json</code>, the unchanged showcase reports, every raw run and its
+state/replay artifacts. Revalidation requires the same installed source and exact
+executables. The report recomputes results and checks complete inventories and
+hashes; a stored PASS string is not an oracle. Hashes bind bytes, not who ran them.</p>
+<h2 id="architecture">Follow the ownership and data flow</h2>
+<pre>input → physics → host stage
+                    ↓ sampled sensor → controller → sampled actuator
+                    ↓ aggregate → telemetry               ↓
+                    └──────── copied channels ─────────── input(next)
+
+host control: construct → configure/finalize → start → settled steps
+              → drain/capture → checked stop/retry → release borrowed owners</pre>
+<p>Solid phase dependencies stay within a rate domain. Cross-domain feedback uses
+fixed copied sample-and-hold channels. The plant has 256 allocated entity slots
+and 16 active by default. Three int32 axes each for position, velocity and
+acceleration occupy 9,216 bytes; command and sensor arrays occupy 3,072 and
+6,144 bytes. Canonical output has a 512-byte header and 18,432-byte body.
+Unused tails remain zero. No native padding or pointer enters the state format.</p>
+<p>The 10 ms logical base tick has plant/sensor/controller/actuator/observe periods
+1/2/3/3/6. A 24-tick nominal run invokes the eight phases
+24/24/24/12/8/8/4/4 times. There are 27 phase references per six-tick supercycle.
+Cross-rate identities 26001 through 26005 remain fixed; the four device-facing
+sampled channels use four slots. Application and public sampled headers are both
+120 bytes with different encodings; the adapter translates them explicitly.</p>
+<p>Runtime owns its bounded execution lanes and copied declarations. The sample
+owns the World, clock, arenas, host jobs, driver objects, registered buffers and
+CUDA/XDMA resources. Borrowed owners outlive accepted work and failed checked
+stop. Configure/finalize, process launch, reporting and file I/O run off lane.
+CPU callbacks use bounded arrays and public task dispatch. Native means native
+executor threads here; the device drivers remain explicitly simulated.</p>
+<p>CUDA replaces physics only. XDMA carries sampled sensor and actuator operations.
+Combined execution uses host-visible staging and separate backend-local
+timelines. It does not use peer DMA. The explicit simulator host watchdog is
+five seconds; one-millisecond CUDA completion and eight-millisecond sampled
+logical/backend budgets remain unchanged. Runtime logical, host monotonic,
+backend and benchmark clocks are not interchangeable.</p>
+<h2 id="failure">Controls, failure, replay and recovery</h2>
+<p>Off-lane typed validation stages fixed 16-byte control bodies inside the M22
+canonical envelope. The mailbox has 16 slots. Exact-boundary publication gives
+callbacks copied immutable generations; same-kind updates replace deterministically
+and excess updates retain rejected status without consuming a sequence.
+Application latches retain untouched kinds across new generations.</p>
+<p>A failed Runtime frame can already have application/backend effects. Runtime
+generation rollback is not plant rollback. Retain the owner, settle accepted
+work, check stop and retry within declared bounds. Recover from a paired
+successful application/Runtime checkpoint in a fresh compatible owner.</p>
+<p>Trusted replay belongs to the originating deterministic simulated owner.
+Foreign-owner or measured telemetry-gap evidence is refused by the sample guard
+before effects. The broader Runtime foreign-replay/correlation finding remains
+separately tracked. Native physical replay is unavailable, not simulated success.
+Telemetry pressure pauses consumption at tick 6 and detects 20 lost records at
+the next telemetry release, tick 12; zero-capacity disabled capture is distinct.</p>
+<p>Missing sampled input substitutes initial/safe values according to the channel
+policy; duplicate publication fails instead of overwriting. Device loss prohibits
+publication and requires a fresh owner. A reset failure retains resources for
+bounded retry. Safe output is unknown until terminal acknowledgement: failed stop
+does not free a still-owned backend. External CIL uses a real process and fresh
+mapping/generation; an absent or expired peer gives zero effort.</p>
+<h2 id="reading">How to read the audit</h2>
+<p>The frozen M26-01 contract retains historical <code>planned</code> and
+<code>contract_only</code> fields. These are immutable design records, not current
+delivery status. The source map below preserves those records and points to the
+implemented symbols, tests and limits. Source pages ship exact bytes and line
+anchors for offline reading; private implementation snapshots are not SDK APIs.</p>
+<p>Each canonical requirement appears once. <code>portable_implemented</code>
+describes source and portable evidence; <code>remaining_engineering</code>
+identifies software/integration still owed; <code>gated_unperformed</code> requires
+actual review, a controlled runner or named physical execution. A
+<code>claim_limit</code> preserves a boundary. No aggregate percentage can turn
+an unmet mandatory requirement into completion.</p>
+<p>M26 portable composition and this audit can be delivered while CAP-M18,
+CAP-M19, CAP-M20 and independent M25 human acceptance remain open. Release
+engineering includes native telemetry exporters, signing/provenance, controlled
+performance and platform/migration/soak work—not just an approval button.
+Earlier failed tests remain retained and linked under remaining actions.</p>

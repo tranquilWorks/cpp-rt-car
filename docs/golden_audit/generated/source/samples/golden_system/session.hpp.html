@@ -1,0 +1,333 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_system/session.hpp</title><h1>samples/golden_system/session.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;jobs.hpp&quot;</span>
+<span id="L3">#include &quot;memory.hpp&quot;</span>
+<span id="L4">#include &quot;physics.hpp&quot;</span>
+<span id="L5">#include &lt;optional&gt;</span>
+<span id="L6">#include &lt;vector&gt;</span>
+<span id="L7"></span>
+<span id="L8">namespace golden {</span>
+<span id="L9">class Clock final : public rt::RuntimeClock {</span>
+<span id="L10">public:</span>
+<span id="L11">  std::atomic&lt;std::uint64_t&gt; now{1000};</span>
+<span id="L12">  std::uint64_t now_ns() noexcept override {</span>
+<span id="L13">    return now.load(std::memory_order_relaxed);</span>
+<span id="L14">  }</span>
+<span id="L15">};</span>
+<span id="L16">class Session {</span>
+<span id="L17">  Physics *physics_;</span>
+<span id="L18">  Jobs *jobs_;</span>
+<span id="L19">  Memory &amp;memory_;</span>
+<span id="L20">  bool attached_ = false, closed_ = false;</span>
+<span id="L21"></span>
+<span id="L22">public:</span>
+<span id="L23">  Clock clock;</span>
+<span id="L24">  World world;</span>
+<span id="L25">  std::optional&lt;rt::Runtime&gt; runtime;</span>
+<span id="L26">  std::array&lt;Binding, 8&gt; bindings{};</span>
+<span id="L27">  std::array&lt;rt::PhaseHandle, 8&gt; phases{};</span>
+<span id="L28">  std::array&lt;rt::RateDomainHandle, 5&gt; rates{};</span>
+<span id="L29">  rt::MemoryPlan plan{};</span>
+<span id="L30">  rt::LiveControlProducerHandle producer{};</span>
+<span id="L31">  std::uint64_t sequence = 1;</span>
+<span id="L32">  Session(Options options, Jobs *jobs, Memory &amp;memory, Physics *physics = nullptr)</span>
+<span id="L33">      : physics_(physics), jobs_(jobs), memory_(memory), world(options),</span>
+<span id="L34">        runtime(std::in_place, clock) {}</span>
+<span id="L35">  ~Session() {</span>
+<span id="L36">    if (close() != rt::Status::ok)</span>
+<span id="L37">      std::terminate();</span>
+<span id="L38">  }</span>
+<span id="L39">  Session(const Session &amp;) = delete;</span>
+<span id="L40">  Session &amp;operator=(const Session &amp;) = delete;</span>
+<span id="L41">  rt::Status</span>
+<span id="L42">  prepare(std::size_t retention_capacity = fixed::action_capacity,</span>
+<span id="L43">          const rt::CpuMemoryPolicy *cpu_policy = nullptr) noexcept {</span>
+<span id="L44">    if (!world.options.valid())</span>
+<span id="L45">      return rt::Status::invalid_argument;</span>
+<span id="L46">    rt::RuntimeConfig c;</span>
+<span id="L47">    c.callback_capacity = 8;</span>
+<span id="L48">    c.worker_count = world.options.workers;</span>
+<span id="L49">    c.executor_queue_capacity = fixed::queue_slots;</span>
+<span id="L50">    c.scratch_bytes = fixed::scratch_bytes;</span>
+<span id="L51">    c.task_scratch_bytes = fixed::scratch_bytes;</span>
+<span id="L52">    c.task_scratch_slots = fixed::task_slots;</span>
+<span id="L53">    c.trace_capacity = fixed::action_capacity;</span>
+<span id="L54">    c.memory_budget_bytes = fixed::runtime_budget;</span>
+<span id="L55">    c.snapshot_max_bytes = fixed::checkpoint_bytes;</span>
+<span id="L56">    c.input_log_max_bytes = fixed::artifact_bytes;</span>
+<span id="L57">    c.replay_input_capacity = fixed::maximum_ticks;</span>
+<span id="L58">    c.determinism_tier = rt::DeterminismTier::unspecified;</span>
+<span id="L59">    std::copy(fixed::scenario_id.begin(), fixed::scenario_id.end(),</span>
+<span id="L60">              c.workload_id.begin());</span>
+<span id="L61">    if (jobs_)</span>
+<span id="L62">      c.executor_policy = rt::ExecutorPolicy::host_adapter;</span>
+<span id="L63">    if (physics_)</span>
+<span id="L64">      physics_-&gt;limits(c);</span>
+<span id="L65">    const bool replay_enabled = !physics_ || physics_-&gt;replay_enabled();</span>
+<span id="L66">    auto &amp;r = *runtime;</span>
+<span id="L67">    rt::Status s;</span>
+<span id="L68">#define GOLDEN_TRY(expression)                                                 \</span>
+<span id="L69">  do {                                                                         \</span>
+<span id="L70">    s = (expression);                                                          \</span>
+<span id="L71">    if (s != rt::Status::ok)                                                   \</span>
+<span id="L72">      return s;                                                                \</span>
+<span id="L73">  } while (false)</span>
+<span id="L74">    GOLDEN_TRY(r.configure(c));</span>
+<span id="L75">    if (jobs_) {</span>
+<span id="L76">      GOLDEN_TRY(jobs_-&gt;attach());</span>
+<span id="L77">      attached_ = true;</span>
+<span id="L78">      GOLDEN_TRY(r.set_host_executor(jobs_-&gt;adapter()));</span>
+<span id="L79">    }</span>
+<span id="L80">    GOLDEN_TRY(r.set_memory_provider(memory_.table()));</span>
+<span id="L81">    GOLDEN_TRY(r.set_cpu_memory_policy(cpu_policy ? *cpu_policy : Memory::policy()));</span>
+<span id="L82">    GOLDEN_TRY(</span>
+<span id="L83">        r.set_rate_execution_policy({128, 26, 1, 1, fixed::action_capacity}));</span>
+<span id="L84">    GOLDEN_TRY(r.set_mixed_rate_closure_policy(</span>
+<span id="L85">        {26,</span>
+<span id="L86">         retention_capacity,</span>
+<span id="L87">         retention_capacity,</span>
+<span id="L88">         fixed::artifact_bytes,</span>
+<span id="L89">         128,</span>
+<span id="L90">         rt::MixedRateOverflowPolicy::overwrite_committed,</span>
+<span id="L91">         replay_enabled,</span>
+<span id="L92">         true,</span>
+<span id="L93">         {}}));</span>
+<span id="L94">    rt::LiveControlPolicy p;</span>
+<span id="L95">    p.policy_identity = 2601;</span>
+<span id="L96">    p.mailbox_capacity = 1;</span>
+<span id="L97">    p.producer_capacity = 1;</span>
+<span id="L98">    p.record_capacity = 16;</span>
+<span id="L99">    p.payload_bytes_per_record = 64;</span>
+<span id="L100">    p.total_payload_storage_bytes = 1024;</span>
+<span id="L101">    GOLDEN_TRY(r.set_live_control_policy(p));</span>
+<span id="L102">    rt::LiveControlMailboxRegistration m;</span>
+<span id="L103">    m.mailbox_identity = 2601;</span>
+<span id="L104">    m.record_capacity = 16;</span>
+<span id="L105">    m.payload_bytes_per_record = 64;</span>
+<span id="L106">    GOLDEN_TRY(r.register_live_control_mailbox(m));</span>
+<span id="L107">    rt::LiveControlProducerRegistration producer_registration;</span>
+<span id="L108">    producer_registration.mailbox_identity = 2601;</span>
+<span id="L109">    producer_registration.producer_identity = 2601;</span>
+<span id="L110">    GOLDEN_TRY(r.register_live_control_producer(producer_registration));</span>
+<span id="L111">    rt::LiveControlClosurePolicy closure;</span>
+<span id="L112">    closure.policy_identity = 2601;</span>
+<span id="L113">    closure.action_capacity = retention_capacity;</span>
+<span id="L114">    closure.retained_generation_capacity = 128;</span>
+<span id="L115">    closure.retained_record_capacity = 256;</span>
+<span id="L116">    closure.retained_payload_bytes = 16384;</span>
+<span id="L117">    closure.replay_record_capacity = retention_capacity;</span>
+<span id="L118">    closure.replay_max_bytes = fixed::artifact_bytes;</span>
+<span id="L119">    closure.replay_enabled = replay_enabled;</span>
+<span id="L120">    GOLDEN_TRY(r.set_live_control_closure_policy(closure));</span>
+<span id="L121">    rt::LiveControlReplayRetentionPolicy retention;</span>
+<span id="L122">    retention.policy_identity = 2601;</span>
+<span id="L123">    retention.admission_capacity = 128;</span>
+<span id="L124">    retention.payload_capacity_bytes = 8192;</span>
+<span id="L125">    if (replay_enabled)</span>
+<span id="L126">      GOLDEN_TRY(r.set_live_control_replay_retention_policy(retention));</span>
+<span id="L127">    if (physics_)</span>
+<span id="L128">      GOLDEN_TRY(physics_-&gt;configure(r, world));</span>
+<span id="L129">    constexpr std::array&lt;std::size_t, 5&gt; phases_per_domain{3, 1, 1, 1, 2};</span>
+<span id="L130">    // Contract budgets are domain-release envelopes; Runtime charges each</span>
+<span id="L131">    // phase.</span>
+<span id="L132">    for (std::size_t i = 0; i &lt; 5; ++i)</span>
+<span id="L133">      GOLDEN_TRY(r.register_rate_domain(</span>
+<span id="L134">          {fixed::rate_names[i], fixed::periods[i] * fixed::tick_ns, 1,</span>
+<span id="L135">           fixed::periods[i] * fixed::tick_ns,</span>
+<span id="L136">           fixed::budgets[i] / phases_per_domain[i]},</span>
+<span id="L137">          rates[i]));</span>
+<span id="L138">    for (std::size_t i = 0; i &lt; 8; ++i) {</span>
+<span id="L139">      bindings[i] = {&amp;world, i};</span>
+<span id="L140">      if (physics_ &amp;&amp; i == 1) {</span>
+<span id="L141">        GOLDEN_TRY(physics_-&gt;register_phase(r, rates[0], phases[i]));</span>
+<span id="L142">      } else {</span>
+<span id="L143">        GOLDEN_TRY(r.register_callback(</span>
+<span id="L144">            {fixed::phase_names[i], physics_ ? invoke_variant : invoke,</span>
+<span id="L145">             physics_ ? static_cast&lt;void *&gt;(this) : static_cast&lt;void *&gt;(&amp;bindings[i])},</span>
+<span id="L146">            phases[i]));</span>
+<span id="L147">        GOLDEN_TRY(r.bind_phase_to_rate_domain(phases[i], rates[fixed::phase_rates[i]]));</span>
+<span id="L148">      }</span>
+<span id="L149">    }</span>
+<span id="L150">    for (auto edge :</span>
+<span id="L151">         std::array&lt;std::array&lt;std::size_t, 2&gt;, 3&gt;{{{0, 1}, {1, 2}, {6, 7}}})</span>
+<span id="L152">      GOLDEN_TRY(r.add_dependency(phases[edge[0]], phases[edge[1]]));</span>
+<span id="L153">    constexpr std::array&lt;std::string_view, 7&gt; names{</span>
+<span id="L154">        &quot;command&quot;,    &quot;plant&quot;,    &quot;stage&quot;,    &quot;sensor&quot;,</span>
+<span id="L155">        &quot;controller&quot;, &quot;actuator&quot;, &quot;aggregate&quot;};</span>
+<span id="L156">    std::array&lt;rt::ResourceHandle, 7&gt; resources{};</span>
+<span id="L157">    for (std::size_t i = 0; i &lt; 7; ++i) {</span>
+<span id="L158">      GOLDEN_TRY(r.register_resource(names[i], resources[i]));</span>
+<span id="L159">      GOLDEN_TRY(r.declare_resource_access(phases[i], resources[i],</span>
+<span id="L160">                                           rt::ResourceAccess::write));</span>
+<span id="L161">    }</span>
+<span id="L162">    GOLDEN_TRY(r.declare_resource_access(phases[1], resources[0],</span>
+<span id="L163">                                         rt::ResourceAccess::read));</span>
+<span id="L164">    GOLDEN_TRY(r.declare_resource_access(phases[2], resources[1],</span>
+<span id="L165">                                         rt::ResourceAccess::read));</span>
+<span id="L166">    GOLDEN_TRY(r.declare_resource_access(phases[7], resources[6],</span>
+<span id="L167">                                         rt::ResourceAccess::read));</span>
+<span id="L168">    for (std::size_t i = 0; i &lt; 5; ++i) {</span>
+<span id="L169">      Frame f{};</span>
+<span id="L170">      if (i == 3)</span>
+<span id="L171">        pack_vector(f, world.plant.acceleration);</span>
+<span id="L172">      seal(f, i, 0, 1);</span>
+<span id="L173">      GOLDEN_TRY(r.register_cross_rate_channel(</span>
+<span id="L174">          {fixed::channel_names[i], phases[fixed::channel_producers[i]],</span>
+<span id="L175">           phases[fixed::channel_consumers[i]], frame_size(i), frame_span(f, i),</span>
+<span id="L176">           rt::CrossRateMode::sample_and_hold,</span>
+<span id="L177">           fixed::channel_age[i] * fixed::tick_ns},</span>
+<span id="L178">          world.channels[i]));</span>
+<span id="L179">    }</span>
+<span id="L180">    GOLDEN_TRY(r.register_state({&quot;golden.state&quot;, 1, world.canonical}));</span>
+<span id="L181">    GOLDEN_TRY(r.finalize());</span>
+<span id="L182">    if (!r.memory_plan(plan) || plan.planned_bytes &gt; fixed::runtime_budget ||</span>
+<span id="L183">        plan.phase_count != 8 || plan.rate_domain_count != 5 ||</span>
+<span id="L184">        plan.rate_binding_count != 8 || plan.reference_release_count != 27 ||</span>
+<span id="L185">        plan.cross_rate_channel_count != 5 ||</span>
+<span id="L186">        plan.sampled_io_channel_count != 0 ||</span>
+<span id="L187">        (physics_ ? !physics_-&gt;plan(plan) : plan.device_backend_count != 0) ||</span>
+<span id="L188">        memory_.live_count() != 3)</span>
+<span id="L189">      return rt::Status::internal_error;</span>
+<span id="L190">    const auto accounted =</span>
+<span id="L191">        plan.runtime_control_bytes + plan.executor_control_bytes +</span>
+<span id="L192">        plan.phase_scratch_total_bytes + plan.task_scratch_total_bytes +</span>
+<span id="L193">        plan.trace_storage_bytes;</span>
+<span id="L194">    // The six-row equation includes device metadata as its own control row.</span>
+<span id="L195">    if (accounted + plan.device_control_bytes != plan.planned_bytes ||</span>
+<span id="L196">        plan.phase_scratch_total_bytes &gt; Memory::region_capacity ||</span>
+<span id="L197">        plan.task_scratch_total_bytes &gt; Memory::region_capacity ||</span>
+<span id="L198">        plan.trace_storage_bytes &gt; Memory::region_capacity)</span>
+<span id="L199">      return rt::Status::internal_error;</span>
+<span id="L200">    GOLDEN_TRY(r.live_control_producer_handle(2601, 2601, producer));</span>
+<span id="L201">    GOLDEN_TRY(r.start());</span>
+<span id="L202">#undef GOLDEN_TRY</span>
+<span id="L203">    return rt::Status::ok;</span>
+<span id="L204">  }</span>
+<span id="L205">  static rt::CallbackResult invoke_variant(void *opaque, const rt::CallbackContext &amp;ctx) noexcept {</span>
+<span id="L206">    auto &amp;s = *static_cast&lt;Session *&gt;(opaque);</span>
+<span id="L207">    if (!ctx.rate_release || !s.physics_)</span>
+<span id="L208">      return rt::CallbackResult::error;</span>
+<span id="L209">    const auto phase = ctx.rate_release-&gt;phase.index();</span>
+<span id="L210">    if (phase == 2 &amp;&amp; !s.physics_-&gt;complete(ctx))</span>
+<span id="L211">      return rt::CallbackResult::error;</span>
+<span id="L212">    if (!s.world.phase(phase, ctx) || (phase == 0 &amp;&amp; !s.physics_-&gt;input(ctx)))</span>
+<span id="L213">      return rt::CallbackResult::error;</span>
+<span id="L214">    return rt::CallbackResult::ok;</span>
+<span id="L215">  }</span>
+<span id="L216">  rt::HostFrameContext frame(std::size_t tick) const noexcept {</span>
+<span id="L217">    return {tick, std::chrono::nanoseconds(fixed::tick_ns), std::nullopt,</span>
+<span id="L218">            1000 + tick * fixed::tick_ns};</span>
+<span id="L219">  }</span>
+<span id="L220">  rt::Status step(std::size_t tick, bool late = false) noexcept {</span>
+<span id="L221">    if (tick == 6 &amp;&amp; world.options.campaign == Campaign::control_rejected &amp;&amp;</span>
+<span id="L222">        !stage&lt;1&gt;(6, 16, false, 0, true))</span>
+<span id="L223">      return rt::Status::internal_error;</span>
+<span id="L224">    auto f = frame(tick);</span>
+<span id="L225">    clock.now.store(*f.nominal_release_ns + (late ? 2 * fixed::tick_ns : 0),</span>
+<span id="L226">                    std::memory_order_relaxed);</span>
+<span id="L227">    return runtime-&gt;step(f);</span>
+<span id="L228">  }</span>
+<span id="L229">  template &lt;unsigned Kind&gt;</span>
+<span id="L230">  bool stage(std::size_t tick, std::int32_t value, bool rate = false,</span>
+<span id="L231">             std::size_t phase = 0, bool corrupt = false) noexcept {</span>
+<span id="L232">    rt::LiveControlTypedPayload&lt;Control&lt;Kind&gt;&gt; payload{};</span>
+<span id="L233">    rt::LiveControlUpdateRecord record;</span>
+<span id="L234">    rt::LiveControlTypedStatus typed;</span>
+<span id="L235">    if (rate) {</span>
+<span id="L236">      rt::LiveControlBoundaryTarget target;</span>
+<span id="L237">      target.kind = rt::LiveControlTargetKind::rate_release;</span>
+<span id="L238">      bool found = false;</span>
+<span id="L239">      for (std::size_t i = 0; i &lt; 27; ++i) {</span>
+<span id="L240">        rt::ReferenceRelease ref;</span>
+<span id="L241">        if (!runtime-&gt;reference_release_at(i, ref))</span>
+<span id="L242">          return false;</span>
+<span id="L243">        if (ref.release_time_ns == tick * fixed::tick_ns &amp;&amp;</span>
+<span id="L244">            ref.phase.index() == phase) {</span>
+<span id="L245">          target.reference_release_index = static_cast&lt;std::uint32_t&gt;(i);</span>
+<span id="L246">          target.rate_release_sequence = ref.domain_release_sequence;</span>
+<span id="L247">          target.rate_domain_registration_index =</span>
+<span id="L248">              static_cast&lt;std::uint32_t&gt;(ref.domain_registration_index);</span>
+<span id="L249">          target.phase_index = ref.phase.index();</span>
+<span id="L250">          target.rate_substep_ordinal = ref.substep_ordinal;</span>
+<span id="L251">          found = true;</span>
+<span id="L252">          break;</span>
+<span id="L253">        }</span>
+<span id="L254">      }</span>
+<span id="L255">      if (!found)</span>
+<span id="L256">        return false;</span>
+<span id="L257">      typed = rt::make_live_control_rate_update(</span>
+<span id="L258">          producer, sequence, target, Control&lt;Kind&gt;{value}, payload, record);</span>
+<span id="L259">    } else</span>
+<span id="L260">      typed = rt::make_live_control_host_update(</span>
+<span id="L261">          producer, sequence, tick, Control&lt;Kind&gt;{value}, payload, record);</span>
+<span id="L262">    if (typed != rt::LiveControlTypedStatus::ok)</span>
+<span id="L263">      return false;</span>
+<span id="L264">    if (corrupt)</span>
+<span id="L265">      record.payload_digest ^= 1;</span>
+<span id="L266">    rt::LiveControlAdmissionResult admission;</span>
+<span id="L267">    if (runtime-&gt;stage_live_control_update(producer, record, payload,</span>
+<span id="L268">                                           admission) != rt::Status::ok)</span>
+<span id="L269">      return false;</span>
+<span id="L270">    if (corrupt)</span>
+<span id="L271">      return admission == rt::LiveControlAdmissionResult::invalid;</span>
+<span id="L272">    if (admission != rt::LiveControlAdmissionResult::accepted)</span>
+<span id="L273">      return false;</span>
+<span id="L274">    ++sequence;</span>
+<span id="L275">    return true;</span>
+<span id="L276">  }</span>
+<span id="L277">  bool controls() noexcept {</span>
+<span id="L278">    const auto n = world.options.ticks;</span>
+<span id="L279">    const auto campaign = world.options.campaign;</span>
+<span id="L280">    if (n &gt; 1 &amp;&amp; !stage&lt;1&gt;(1, 16, true, 0))</span>
+<span id="L281">      return false;</span>
+<span id="L282">    if (n &gt; 2 &amp;&amp; !stage&lt;3&gt;(2, 2, true, 3))</span>
+<span id="L283">      return false;</span>
+<span id="L284">    if (n &gt; 3 &amp;&amp; !stage&lt;2&gt;(3, 2, true, 4))</span>
+<span id="L285">      return false;</span>
+<span id="L286">    if (campaign == Campaign::control_replaced &amp;&amp;</span>
+<span id="L287">        (!stage&lt;2&gt;(6, 1) || !stage&lt;2&gt;(6, 3)))</span>
+<span id="L288">      return false;</span>
+<span id="L289">    if (campaign == Campaign::stale_input &amp;&amp; !stage&lt;4&gt;(6, 2))</span>
+<span id="L290">      return false;</span>
+<span id="L291">    if (campaign == Campaign::peer_missing &amp;&amp; !stage&lt;4&gt;(6, 10))</span>
+<span id="L292">      return false;</span>
+<span id="L293">    return (n &lt;= 12 || stage&lt;4&gt;(12, 0)) &amp;&amp; (n &lt;= 18 || stage&lt;5&gt;(18, 0));</span>
+<span id="L294">  }</span>
+<span id="L295">  std::vector&lt;std::byte&gt; checkpoint(std::uint64_t tick) {</span>
+<span id="L296">    std::size_t size = 0;</span>
+<span id="L297">    rt::ArtifactWriteResult result;</span>
+<span id="L298">    if (runtime-&gt;checkpoint_size(size) != rt::Status::ok ||</span>
+<span id="L299">        size &gt; fixed::checkpoint_bytes)</span>
+<span id="L300">      return {};</span>
+<span id="L301">    std::vector&lt;std::byte&gt; bytes(size);</span>
+<span id="L302">    if (runtime-&gt;write_checkpoint(tick, bytes, result) != rt::Status::ok)</span>
+<span id="L303">      return {};</span>
+<span id="L304">    bytes.resize(result.bytes_written);</span>
+<span id="L305">    return bytes;</span>
+<span id="L306">  }</span>
+<span id="L307">  rt::Status close() noexcept {</span>
+<span id="L308">    if (closed_)</span>
+<span id="L309">      return rt::Status::ok;</span>
+<span id="L310">    if (attached_) {</span>
+<span id="L311">      auto s = jobs_-&gt;quiesce();</span>
+<span id="L312">      if (s != rt::Status::ok)</span>
+<span id="L313">        return s;</span>
+<span id="L314">    }</span>
+<span id="L315">    if (runtime &amp;&amp; runtime-&gt;state() != rt::RuntimeState::configuring) {</span>
+<span id="L316">      auto s = runtime-&gt;stop();</span>
+<span id="L317">      if (s != rt::Status::ok)</span>
+<span id="L318">        return s;</span>
+<span id="L319">    }</span>
+<span id="L320">    if (memory_.live_count() || memory_.violations)</span>
+<span id="L321">      return rt::Status::internal_error;</span>
+<span id="L322">    runtime.reset();</span>
+<span id="L323">    if (attached_) {</span>
+<span id="L324">      auto s = jobs_-&gt;detach();</span>
+<span id="L325">      if (s != rt::Status::ok)</span>
+<span id="L326">        return s;</span>
+<span id="L327">      attached_ = false;</span>
+<span id="L328">    }</span>
+<span id="L329">    closed_ = true;</span>
+<span id="L330">    return rt::Status::ok;</span>
+<span id="L331">  }</span>
+<span id="L332">};</span>
+<span id="L333">} // namespace golden</span></pre></html>

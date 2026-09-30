@@ -1,0 +1,1826 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_memory_policy.cpp</title><h1>tests/test_memory_policy.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;array&gt;</span>
+<span id="L5">#include &lt;cerrno&gt;</span>
+<span id="L6">#include &lt;chrono&gt;</span>
+<span id="L7">#include &lt;csignal&gt;</span>
+<span id="L8">#include &lt;cstddef&gt;</span>
+<span id="L9">#include &lt;cstdint&gt;</span>
+<span id="L10">#include &lt;cstdlib&gt;</span>
+<span id="L11">#include &lt;limits&gt;</span>
+<span id="L12"></span>
+<span id="L13">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L14"></span>
+<span id="L15">#include &quot;rt/src/thread_policy.hpp&quot;</span>
+<span id="L16"></span>
+<span id="L17">#if defined(__linux__)</span>
+<span id="L18">#include &lt;sys/uio.h&gt;</span>
+<span id="L19">#include &lt;unistd.h&gt;</span>
+<span id="L20">#endif</span>
+<span id="L21"></span>
+<span id="L22">#if defined(__SANITIZE_ADDRESS__)</span>
+<span id="L23">#define RTFW_TEST_ADDRESS_SANITIZER 1</span>
+<span id="L24">#elif defined(__has_feature)</span>
+<span id="L25">#if __has_feature(address_sanitizer)</span>
+<span id="L26">#define RTFW_TEST_ADDRESS_SANITIZER 1</span>
+<span id="L27">#endif</span>
+<span id="L28">#endif</span>
+<span id="L29"></span>
+<span id="L30">#if defined(__SANITIZE_THREAD__)</span>
+<span id="L31">#define RTFW_TEST_THREAD_SANITIZER 1</span>
+<span id="L32">#elif defined(__has_feature)</span>
+<span id="L33">#if __has_feature(thread_sanitizer)</span>
+<span id="L34">#define RTFW_TEST_THREAD_SANITIZER 1</span>
+<span id="L35">#endif</span>
+<span id="L36">#endif</span>
+<span id="L37"></span>
+<span id="L38">namespace {</span>
+<span id="L39"></span>
+<span id="L40">constexpr std::size_t kPageBytes = 4096;</span>
+<span id="L41">constexpr std::size_t kProviderBytes = 32 * 1024;</span>
+<span id="L42"></span>
+<span id="L43">enum class EventKind : std::uint32_t {</span>
+<span id="L44">    acquire = 100,</span>
+<span id="L45">    apply = 200,</span>
+<span id="L46">    observe = 300,</span>
+<span id="L47">    rollback = 400,</span>
+<span id="L48">    release = 500,</span>
+<span id="L49">};</span>
+<span id="L50"></span>
+<span id="L51">std::uint32_t event(EventKind kind, rt::MemoryRegionId region) {</span>
+<span id="L52">    return static_cast&lt;std::uint32_t&gt;(kind) + region.value;</span>
+<span id="L53">}</span>
+<span id="L54"></span>
+<span id="L55">std::size_t align_up(std::size_t value, std::size_t alignment) {</span>
+<span id="L56">    return (value + alignment - 1) &amp; ~(alignment - 1);</span>
+<span id="L57">}</span>
+<span id="L58"></span>
+<span id="L59">const rt::MemoryPolicyReport* find_memory(</span>
+<span id="L60">    const rt::CpuMemoryPolicyReport&amp; report,</span>
+<span id="L61">    rt::MemoryRegionId region) {</span>
+<span id="L62">    for (std::size_t index = 0; index &lt; report.memory_count; ++index) {</span>
+<span id="L63">        if (report.memory[index].region == region) {</span>
+<span id="L64">            return &amp;report.memory[index];</span>
+<span id="L65">        }</span>
+<span id="L66">    }</span>
+<span id="L67">    return nullptr;</span>
+<span id="L68">}</span>
+<span id="L69"></span>
+<span id="L70">rt::RuntimeConfig provider_config() {</span>
+<span id="L71">    rt::RuntimeConfig config;</span>
+<span id="L72">    config.callback_capacity = 1;</span>
+<span id="L73">    config.scratch_bytes = 64;</span>
+<span id="L74">    config.trace_capacity = 8;</span>
+<span id="L75">    config.worker_count = 1;</span>
+<span id="L76">    config.executor_queue_capacity = 4;</span>
+<span id="L77">    config.scratch_alignment = 64;</span>
+<span id="L78">    config.task_scratch_bytes = 64;</span>
+<span id="L79">    config.task_scratch_slots = 4;</span>
+<span id="L80">    config.memory_budget_bytes = 1024 * 1024;</span>
+<span id="L81">    return config;</span>
+<span id="L82">}</span>
+<span id="L83"></span>
+<span id="L84">struct CallbackProbe {</span>
+<span id="L85">    std::size_t calls = 0;</span>
+<span id="L86">    std::byte* phase_scratch = nullptr;</span>
+<span id="L87">};</span>
+<span id="L88"></span>
+<span id="L89">rt::CallbackResult record_callback(</span>
+<span id="L90">    void* user_data,</span>
+<span id="L91">    const rt::CallbackContext&amp; context) {</span>
+<span id="L92">    auto&amp; probe = *static_cast&lt;CallbackProbe*&gt;(user_data);</span>
+<span id="L93">    ++probe.calls;</span>
+<span id="L94">    probe.phase_scratch = context.scratch.data();</span>
+<span id="L95">    return rt::CallbackResult::ok;</span>
+<span id="L96">}</span>
+<span id="L97"></span>
+<span id="L98">enum class MalformedAllocation {</span>
+<span id="L99">    none,</span>
+<span id="L100">    undersized,</span>
+<span id="L101">    misaligned,</span>
+<span id="L102">    overflowed_extent,</span>
+<span id="L103">    overlap,</span>
+<span id="L104">    duplicate_token,</span>
+<span id="L105">    guard_before_outside_extent,</span>
+<span id="L106">    guard_after_outside_extent,</span>
+<span id="L107">    invalid_page_rounding,</span>
+<span id="L108">    invalid_page_size,</span>
+<span id="L109">    contradictory_huge_outcome,</span>
+<span id="L110">};</span>
+<span id="L111"></span>
+<span id="L112">class FixedProvider final {</span>
+<span id="L113">public:</span>
+<span id="L114">#if defined(_MSC_VER)</span>
+<span id="L115">#pragma warning(push)</span>
+<span id="L116">#pragma warning(disable : 4324)</span>
+<span id="L117">#endif</span>
+<span id="L118">    struct alignas(kPageBytes) Slot {</span>
+<span id="L119">        std::array&lt;std::byte, kProviderBytes&gt; bytes{};</span>
+<span id="L120">        rt::MemoryRegionId region{};</span>
+<span id="L121">        std::size_t committed = 0;</span>
+<span id="L122">        std::byte* usable = nullptr;</span>
+<span id="L123">    };</span>
+<span id="L124">#if defined(_MSC_VER)</span>
+<span id="L125">#pragma warning(pop)</span>
+<span id="L126">#endif</span>
+<span id="L127"></span>
+<span id="L128">    rt::MemoryProvider table() noexcept {</span>
+<span id="L129">        rt::MemoryProvider provider;</span>
+<span id="L130">        provider.capabilities =</span>
+<span id="L131">            rt::memory_provider_capability_bit(</span>
+<span id="L132">                rt::MemoryProviderCapability::guard_pages) |</span>
+<span id="L133">            rt::memory_provider_capability_bit(</span>
+<span id="L134">                rt::MemoryProviderCapability::explicit_huge_pages) |</span>
+<span id="L135">            rt::memory_provider_capability_bit(</span>
+<span id="L136">                rt::MemoryProviderCapability::policy_operations) |</span>
+<span id="L137">            rt::memory_provider_capability_bit(</span>
+<span id="L138">                rt::MemoryProviderCapability::independent_observation) |</span>
+<span id="L139">            rt::memory_provider_capability_bit(</span>
+<span id="L140">                rt::MemoryProviderCapability::pinning) |</span>
+<span id="L141">            rt::memory_provider_capability_bit(</span>
+<span id="L142">                rt::MemoryProviderCapability::numa_binding);</span>
+<span id="L143">        provider.user_data = this;</span>
+<span id="L144">        provider.acquire = &amp;acquire;</span>
+<span id="L145">        provider.apply = &amp;apply;</span>
+<span id="L146">        provider.observe = &amp;observe;</span>
+<span id="L147">        provider.rollback = &amp;rollback;</span>
+<span id="L148">        provider.release = &amp;release;</span>
+<span id="L149">        return provider;</span>
+<span id="L150">    }</span>
+<span id="L151"></span>
+<span id="L152">    void clear_events() noexcept {</span>
+<span id="L153">        event_count = 0;</span>
+<span id="L154">        events.fill(0);</span>
+<span id="L155">    }</span>
+<span id="L156"></span>
+<span id="L157">    std::size_t count(EventKind kind) const noexcept {</span>
+<span id="L158">        return static_cast&lt;std::size_t&gt;(std::count_if(</span>
+<span id="L159">            events.begin(),</span>
+<span id="L160">            events.begin() + static_cast&lt;std::ptrdiff_t&gt;(event_count),</span>
+<span id="L161">            [&amp;](std::uint32_t value) {</span>
+<span id="L162">                return value &gt;= static_cast&lt;std::uint32_t&gt;(kind) + 1 &amp;&amp;</span>
+<span id="L163">                       value &lt;= static_cast&lt;std::uint32_t&gt;(kind) + 12;</span>
+<span id="L164">            }));</span>
+<span id="L165">    }</span>
+<span id="L166"></span>
+<span id="L167">    std::array&lt;Slot, 3&gt; slots{};</span>
+<span id="L168">    std::array&lt;std::uint32_t, 64&gt; events{};</span>
+<span id="L169">    std::array&lt;rt::MemoryProviderAcquireRequest, 3&gt; requests{};</span>
+<span id="L170">    std::array&lt;rt::RollbackIntent, 3&gt; release_intents{};</span>
+<span id="L171">    std::size_t event_count = 0;</span>
+<span id="L172">    MalformedAllocation malformed = MalformedAllocation::none;</span>
+<span id="L173">    rt::MemoryRegionId malformed_region = rt::memory_region_task_scratch;</span>
+<span id="L174">    rt::MemoryRegionId acquire_failure_region{};</span>
+<span id="L175">    bool acquire_failure_returns_live_token = false;</span>
+<span id="L176">    rt::MemoryRegionId apply_failure_region{};</span>
+<span id="L177">    rt::MemoryRegionId mismatch_region{};</span>
+<span id="L178">    rt::Runtime* reentrant_runtime = nullptr;</span>
+<span id="L179">    rt::Status reentrant_status = rt::Status::ok;</span>
+<span id="L180">    bool reenter_on_release = false;</span>
+<span id="L181">    std::size_t release_reentry_count = 0;</span>
+<span id="L182">    std::size_t rollback_failures_remaining = 0;</span>
+<span id="L183">    bool reentrant_report_available = true;</span>
+<span id="L184">    std::size_t reentrant_callback_count = std::numeric_limits&lt;std::size_t&gt;::max();</span>
+<span id="L185"></span>
+<span id="L186">private:</span>
+<span id="L187">    static FixedProvider&amp; self(void* user_data) noexcept {</span>
+<span id="L188">        return *static_cast&lt;FixedProvider*&gt;(user_data);</span>
+<span id="L189">    }</span>
+<span id="L190"></span>
+<span id="L191">    static std::size_t slot_index(rt::MemoryRegionId region) noexcept {</span>
+<span id="L192">        return static_cast&lt;std::size_t&gt;(</span>
+<span id="L193">            region.value - rt::memory_region_phase_scratch.value);</span>
+<span id="L194">    }</span>
+<span id="L195"></span>
+<span id="L196">    void record(EventKind kind, rt::MemoryRegionId region) noexcept {</span>
+<span id="L197">        if (event_count &lt; events.size()) {</span>
+<span id="L198">            events[event_count++] = event(kind, region);</span>
+<span id="L199">        }</span>
+<span id="L200">    }</span>
+<span id="L201"></span>
+<span id="L202">    static rt::Status acquire(</span>
+<span id="L203">        void* user_data,</span>
+<span id="L204">        const rt::MemoryProviderAcquireRequest&amp; request,</span>
+<span id="L205">        rt::MemoryProviderAllocation&amp; allocation) noexcept {</span>
+<span id="L206">        auto&amp; provider = self(user_data);</span>
+<span id="L207">        provider.record(EventKind::acquire, request.region);</span>
+<span id="L208">        if (provider.reentrant_runtime) {</span>
+<span id="L209">            provider.reentrant_status =</span>
+<span id="L210">                provider.reentrant_runtime-&gt;set_cpu_memory_policy({});</span>
+<span id="L211">            rt::CpuMemoryPolicyReport report;</span>
+<span id="L212">            provider.reentrant_report_available =</span>
+<span id="L213">                provider.reentrant_runtime-&gt;cpu_memory_policy_report(report);</span>
+<span id="L214">            provider.reentrant_callback_count =</span>
+<span id="L215">                provider.reentrant_runtime-&gt;callback_count();</span>
+<span id="L216">        }</span>
+<span id="L217">        if (request.region == provider.acquire_failure_region) {</span>
+<span id="L218">            if (provider.acquire_failure_returns_live_token) {</span>
+<span id="L219">                allocation.token = &amp;provider.slots[0];</span>
+<span id="L220">                allocation.allocation_base = provider.slots[0].bytes.data();</span>
+<span id="L221">                allocation.allocation_bytes = provider.slots[0].bytes.size();</span>
+<span id="L222">            }</span>
+<span id="L223">            allocation.provider_error = 71;</span>
+<span id="L224">            return rt::Status::resource_exhausted;</span>
+<span id="L225">        }</span>
+<span id="L226"></span>
+<span id="L227">        const auto index = slot_index(request.region);</span>
+<span id="L228">        if (index &gt;= provider.slots.size()) {</span>
+<span id="L229">            return rt::Status::invalid_argument;</span>
+<span id="L230">        }</span>
+<span id="L231">        auto&amp; slot = provider.slots[index];</span>
+<span id="L232">        provider.requests[index] = request;</span>
+<span id="L233">        slot.region = request.region;</span>
+<span id="L234">        const std::size_t committed =</span>
+<span id="L235">            request.page_rounding == rt::PageRounding::base_page</span>
+<span id="L236">            ? align_up(request.logical_bytes, kPageBytes)</span>
+<span id="L237">            : request.logical_bytes;</span>
+<span id="L238">        const std::size_t before = request.guard_bytes_before == 0</span>
+<span id="L239">            ? 0</span>
+<span id="L240">            : align_up(request.guard_bytes_before, kPageBytes);</span>
+<span id="L241">        const std::size_t after = request.guard_bytes_after == 0</span>
+<span id="L242">            ? 0</span>
+<span id="L243">            : align_up(request.guard_bytes_after, kPageBytes);</span>
+<span id="L244">        const std::size_t usable_offset = align_up(</span>
+<span id="L245">            before,</span>
+<span id="L246">            std::max(request.required_alignment, std::size_t{1}));</span>
+<span id="L247">        if (usable_offset &gt; slot.bytes.size() ||</span>
+<span id="L248">            committed &gt; slot.bytes.size() - usable_offset ||</span>
+<span id="L249">            after &gt; slot.bytes.size() - usable_offset - committed) {</span>
+<span id="L250">            return rt::Status::resource_exhausted;</span>
+<span id="L251">        }</span>
+<span id="L252">        slot.committed = committed;</span>
+<span id="L253">        slot.usable = slot.bytes.data() + usable_offset;</span>
+<span id="L254"></span>
+<span id="L255">        Slot* token_slot = &amp;slot;</span>
+<span id="L256">        std::byte* allocation_base = slot.bytes.data();</span>
+<span id="L257">        std::byte* usable = slot.usable;</span>
+<span id="L258">        if (request.region == provider.malformed_region) {</span>
+<span id="L259">            if (provider.malformed == MalformedAllocation::misaligned) {</span>
+<span id="L260">                ++usable;</span>
+<span id="L261">            } else if (</span>
+<span id="L262">                provider.malformed == MalformedAllocation::overflowed_extent) {</span>
+<span id="L263">                allocation_base = reinterpret_cast&lt;std::byte*&gt;(</span>
+<span id="L264">                    std::numeric_limits&lt;std::uintptr_t&gt;::max() - 15u);</span>
+<span id="L265">            } else if (provider.malformed == MalformedAllocation::overlap) {</span>
+<span id="L266">                allocation_base = provider.slots[0].bytes.data();</span>
+<span id="L267">                usable = provider.slots[0].bytes.data();</span>
+<span id="L268">            } else if (</span>
+<span id="L269">                provider.malformed == MalformedAllocation::duplicate_token) {</span>
+<span id="L270">                token_slot = &amp;provider.slots[0];</span>
+<span id="L271">            }</span>
+<span id="L272">        }</span>
+<span id="L273"></span>
+<span id="L274">        allocation.token = token_slot;</span>
+<span id="L275">        allocation.allocation_base = allocation_base;</span>
+<span id="L276">        allocation.allocation_bytes =</span>
+<span id="L277">            request.region == provider.malformed_region &amp;&amp;</span>
+<span id="L278">                provider.malformed == MalformedAllocation::overflowed_extent</span>
+<span id="L279">            ? 64u</span>
+<span id="L280">            : usable_offset + committed + after;</span>
+<span id="L281">        if (request.region == provider.malformed_region &amp;&amp;</span>
+<span id="L282">            provider.malformed ==</span>
+<span id="L283">                MalformedAllocation::guard_before_outside_extent) {</span>
+<span id="L284">            allocation_base = usable;</span>
+<span id="L285">            allocation.allocation_base = allocation_base;</span>
+<span id="L286">            allocation.allocation_bytes = committed + after;</span>
+<span id="L287">        } else if (</span>
+<span id="L288">            request.region == provider.malformed_region &amp;&amp;</span>
+<span id="L289">            provider.malformed ==</span>
+<span id="L290">                MalformedAllocation::guard_after_outside_extent) {</span>
+<span id="L291">            allocation.allocation_bytes = usable_offset + committed;</span>
+<span id="L292">        }</span>
+<span id="L293">        allocation.usable_data = usable;</span>
+<span id="L294">        allocation.usable_bytes = committed;</span>
+<span id="L295">        allocation.committed_bytes = committed;</span>
+<span id="L296">        allocation.alignment = request.required_alignment;</span>
+<span id="L297">        allocation.actual_page_bytes = kPageBytes;</span>
+<span id="L298">        allocation.guard_bytes_before = before;</span>
+<span id="L299">        allocation.guard_bytes_after = after;</span>
+<span id="L300">        allocation.explicit_huge_pages = false;</span>
+<span id="L301">        allocation.used_huge_page_fallback =</span>
+<span id="L302">            request.huge_pages == rt::HugePagePreference::prefer;</span>
+<span id="L303">        if (request.region == provider.malformed_region &amp;&amp;</span>
+<span id="L304">            provider.malformed == MalformedAllocation::undersized) {</span>
+<span id="L305">            allocation.usable_bytes = request.logical_bytes - 1;</span>
+<span id="L306">        } else if (</span>
+<span id="L307">            request.region == provider.malformed_region &amp;&amp;</span>
+<span id="L308">            provider.malformed == MalformedAllocation::invalid_page_rounding) {</span>
+<span id="L309">            allocation.actual_page_bytes = 0;</span>
+<span id="L310">        } else if (</span>
+<span id="L311">            request.region == provider.malformed_region &amp;&amp;</span>
+<span id="L312">            provider.malformed == MalformedAllocation::invalid_page_size) {</span>
+<span id="L313">            allocation.actual_page_bytes = 3;</span>
+<span id="L314">        } else if (</span>
+<span id="L315">            request.region == provider.malformed_region &amp;&amp;</span>
+<span id="L316">            provider.malformed ==</span>
+<span id="L317">                MalformedAllocation::contradictory_huge_outcome) {</span>
+<span id="L318">            allocation.explicit_huge_pages = true;</span>
+<span id="L319">        }</span>
+<span id="L320">        return rt::Status::ok;</span>
+<span id="L321">    }</span>
+<span id="L322"></span>
+<span id="L323">    static rt::Status apply(</span>
+<span id="L324">        void* user_data,</span>
+<span id="L325">        void* token,</span>
+<span id="L326">        const rt::MemoryPolicy&amp; resolved,</span>
+<span id="L327">        rt::MemoryProviderObservation&amp; applied) noexcept {</span>
+<span id="L328">        auto&amp; provider = self(user_data);</span>
+<span id="L329">        auto&amp; slot = *static_cast&lt;Slot*&gt;(token);</span>
+<span id="L330">        provider.record(EventKind::apply, slot.region);</span>
+<span id="L331">        if (slot.region == provider.apply_failure_region) {</span>
+<span id="L332">            applied.system_error = 72;</span>
+<span id="L333">            return rt::Status::internal_error;</span>
+<span id="L334">        }</span>
+<span id="L335">        applied.resident_bytes = slot.committed;</span>
+<span id="L336">        applied.locked_bytes = resolved.locking == rt::PolicyToggle::enabled</span>
+<span id="L337">            ? slot.committed</span>
+<span id="L338">            : 0;</span>
+<span id="L339">        applied.pinned_bytes = resolved.pinning == rt::PolicyToggle::enabled</span>
+<span id="L340">            ? slot.committed</span>
+<span id="L341">            : 0;</span>
+<span id="L342">        applied.numa_node = resolved.numa_node;</span>
+<span id="L343">        applied.prefaulted = resolved.prefault == rt::PolicyToggle::enabled;</span>
+<span id="L344">        applied.caller_first_touched =</span>
+<span id="L345">            resolved.first_touch == rt::FirstTouchPolicy::caller;</span>
+<span id="L346">        applied.independently_observed = true;</span>
+<span id="L347">        return rt::Status::ok;</span>
+<span id="L348">    }</span>
+<span id="L349"></span>
+<span id="L350">    static rt::Status observe(</span>
+<span id="L351">        void* user_data,</span>
+<span id="L352">        void* token,</span>
+<span id="L353">        const rt::MemoryPolicy&amp; resolved,</span>
+<span id="L354">        rt::MemoryProviderObservation&amp; observed) noexcept {</span>
+<span id="L355">        auto&amp; provider = self(user_data);</span>
+<span id="L356">        auto&amp; slot = *static_cast&lt;Slot*&gt;(token);</span>
+<span id="L357">        provider.record(EventKind::observe, slot.region);</span>
+<span id="L358">        observed.resident_bytes = slot.committed;</span>
+<span id="L359">        observed.locked_bytes = resolved.locking == rt::PolicyToggle::enabled</span>
+<span id="L360">            ? slot.committed</span>
+<span id="L361">            : 0;</span>
+<span id="L362">        observed.pinned_bytes = resolved.pinning == rt::PolicyToggle::enabled</span>
+<span id="L363">            ? slot.committed</span>
+<span id="L364">            : 0;</span>
+<span id="L365">        observed.numa_node = resolved.numa_node;</span>
+<span id="L366">        observed.prefaulted = resolved.prefault == rt::PolicyToggle::enabled;</span>
+<span id="L367">        observed.caller_first_touched =</span>
+<span id="L368">            resolved.first_touch == rt::FirstTouchPolicy::caller;</span>
+<span id="L369">        observed.independently_observed =</span>
+<span id="L370">            slot.region != provider.mismatch_region;</span>
+<span id="L371">        return rt::Status::ok;</span>
+<span id="L372">    }</span>
+<span id="L373"></span>
+<span id="L374">    static rt::Status rollback(</span>
+<span id="L375">        void* user_data,</span>
+<span id="L376">        void* token,</span>
+<span id="L377">        const rt::MemoryPolicy&amp;,</span>
+<span id="L378">        const rt::MemoryProviderObservation&amp;) noexcept {</span>
+<span id="L379">        auto&amp; provider = self(user_data);</span>
+<span id="L380">        auto&amp; slot = *static_cast&lt;Slot*&gt;(token);</span>
+<span id="L381">        provider.record(EventKind::rollback, slot.region);</span>
+<span id="L382">        if (provider.rollback_failures_remaining != 0) {</span>
+<span id="L383">            --provider.rollback_failures_remaining;</span>
+<span id="L384">            return rt::Status::internal_error;</span>
+<span id="L385">        }</span>
+<span id="L386">        return rt::Status::ok;</span>
+<span id="L387">    }</span>
+<span id="L388"></span>
+<span id="L389">    static void release(</span>
+<span id="L390">        void* user_data,</span>
+<span id="L391">        void* token,</span>
+<span id="L392">        rt::RollbackIntent intent) noexcept {</span>
+<span id="L393">        auto&amp; provider = self(user_data);</span>
+<span id="L394">        auto&amp; slot = *static_cast&lt;Slot*&gt;(token);</span>
+<span id="L395">        provider.record(EventKind::release, slot.region);</span>
+<span id="L396">        provider.release_intents[slot_index(slot.region)] = intent;</span>
+<span id="L397">        if (provider.reenter_on_release &amp;&amp; provider.reentrant_runtime) {</span>
+<span id="L398">            ++provider.release_reentry_count;</span>
+<span id="L399">            provider.reentrant_status = provider.reentrant_runtime-&gt;step(</span>
+<span id="L400">                {0, std::chrono::nanoseconds(1), std::nullopt});</span>
+<span id="L401">        }</span>
+<span id="L402">    }</span>
+<span id="L403">};</span>
+<span id="L404"></span>
+<span id="L405">struct NestedProbe {</span>
+<span id="L406">    std::array&lt;std::byte*, 3&gt; scratch{};</span>
+<span id="L407">    std::size_t calls = 0;</span>
+<span id="L408">};</span>
+<span id="L409"></span>
+<span id="L410">rt::TaskResult nested_grandchild(</span>
+<span id="L411">    void* user_data,</span>
+<span id="L412">    const rt::TaskContext&amp; context,</span>
+<span id="L413">    const rt::TaskRange&amp;) {</span>
+<span id="L414">    auto&amp; probe = *static_cast&lt;NestedProbe*&gt;(user_data);</span>
+<span id="L415">    probe.scratch[2] = context.scratch().data();</span>
+<span id="L416">    ++probe.calls;</span>
+<span id="L417">    return rt::TaskResult::ok;</span>
+<span id="L418">}</span>
+<span id="L419"></span>
+<span id="L420">rt::TaskResult nested_child(</span>
+<span id="L421">    void* user_data,</span>
+<span id="L422">    const rt::TaskContext&amp; context,</span>
+<span id="L423">    const rt::TaskRange&amp;) {</span>
+<span id="L424">    auto&amp; probe = *static_cast&lt;NestedProbe*&gt;(user_data);</span>
+<span id="L425">    probe.scratch[1] = context.scratch().data();</span>
+<span id="L426">    ++probe.calls;</span>
+<span id="L427">    return context.parallel_for(1, 1, &amp;nested_grandchild, &amp;probe) ==</span>
+<span id="L428">            rt::Status::ok</span>
+<span id="L429">        ? rt::TaskResult::ok</span>
+<span id="L430">        : rt::TaskResult::error;</span>
+<span id="L431">}</span>
+<span id="L432"></span>
+<span id="L433">rt::CallbackResult nested_phase(</span>
+<span id="L434">    void* user_data,</span>
+<span id="L435">    const rt::CallbackContext&amp; context) {</span>
+<span id="L436">    auto&amp; probe = *static_cast&lt;NestedProbe*&gt;(user_data);</span>
+<span id="L437">    probe.scratch[0] = context.tasks.scratch().data();</span>
+<span id="L438">    ++probe.calls;</span>
+<span id="L439">    return context.tasks.parallel_for(1, 1, &amp;nested_child, &amp;probe) ==</span>
+<span id="L440">            rt::Status::ok</span>
+<span id="L441">        ? rt::CallbackResult::ok</span>
+<span id="L442">        : rt::CallbackResult::error;</span>
+<span id="L443">}</span>
+<span id="L444"></span>
+<span id="L445">struct InlineHost {</span>
+<span id="L446">    std::array&lt;rt::HostExecutorJob, 16&gt; jobs{};</span>
+<span id="L447">    std::size_t head = 0;</span>
+<span id="L448">    std::size_t tail = 0;</span>
+<span id="L449">    std::size_t size = 0;</span>
+<span id="L450"></span>
+<span id="L451">    static rt::Status submit(</span>
+<span id="L452">        void* user_data,</span>
+<span id="L453">        const rt::HostExecutorJob&amp; job) noexcept {</span>
+<span id="L454">        auto&amp; host = *static_cast&lt;InlineHost*&gt;(user_data);</span>
+<span id="L455">        if (host.size == host.jobs.size()) {</span>
+<span id="L456">            return rt::Status::queue_full;</span>
+<span id="L457">        }</span>
+<span id="L458">        host.jobs[host.tail] = job;</span>
+<span id="L459">        host.tail = (host.tail + 1) % host.jobs.size();</span>
+<span id="L460">        ++host.size;</span>
+<span id="L461">        return rt::Status::ok;</span>
+<span id="L462">    }</span>
+<span id="L463"></span>
+<span id="L464">    static bool try_execute_one(void* user_data) noexcept {</span>
+<span id="L465">        auto&amp; host = *static_cast&lt;InlineHost*&gt;(user_data);</span>
+<span id="L466">        if (host.size == 0) {</span>
+<span id="L467">            return false;</span>
+<span id="L468">        }</span>
+<span id="L469">        const auto job = host.jobs[host.head];</span>
+<span id="L470">        host.head = (host.head + 1) % host.jobs.size();</span>
+<span id="L471">        --host.size;</span>
+<span id="L472">        job.execute(</span>
+<span id="L473">            job.execution_context,</span>
+<span id="L474">            job.completion_context,</span>
+<span id="L475">            job.completion_token,</span>
+<span id="L476">            0);</span>
+<span id="L477">        return true;</span>
+<span id="L478">    }</span>
+<span id="L479">};</span>
+<span id="L480"></span>
+<span id="L481">class FailingExecutorThreadProvider final</span>
+<span id="L482">    : public rt::detail::ThreadPolicyProvider {</span>
+<span id="L483">public:</span>
+<span id="L484">    [[nodiscard]] rt::Status resolve(</span>
+<span id="L485">        rt::ThreadRoleId,</span>
+<span id="L486">        rt::PolicyApplicationMode,</span>
+<span id="L487">        bool active,</span>
+<span id="L488">        bool,</span>
+<span id="L489">        bool,</span>
+<span id="L490">        const rt::ThreadPolicy&amp; requested,</span>
+<span id="L491">        const rt::ThreadPolicy&amp; role_default,</span>
+<span id="L492">        rt::ThreadPolicy&amp; resolved,</span>
+<span id="L493">        rt::PolicyResolutionState&amp; resolution,</span>
+<span id="L494">        std::int32_t&amp; system_error) noexcept override {</span>
+<span id="L495">        resolved = role_default;</span>
+<span id="L496">        resolved.requirement = requested.requirement;</span>
+<span id="L497">        resolution = active</span>
+<span id="L498">            ? rt::PolicyResolutionState::native_supported</span>
+<span id="L499">            : rt::PolicyResolutionState::inactive;</span>
+<span id="L500">        system_error = 0;</span>
+<span id="L501">        return rt::Status::ok;</span>
+<span id="L502">    }</span>
+<span id="L503"></span>
+<span id="L504">    [[nodiscard]] rt::Status before_create(</span>
+<span id="L505">        rt::ThreadRoleId role,</span>
+<span id="L506">        std::size_t instance,</span>
+<span id="L507">        const rt::detail::ThreadRolePlan&amp;,</span>
+<span id="L508">        std::int32_t&amp; system_error) noexcept override {</span>
+<span id="L509">        if (fail_before_create &amp;&amp; role == fail_role &amp;&amp;</span>
+<span id="L510">            instance == failure_instance) {</span>
+<span id="L511">            system_error = ENOMEM;</span>
+<span id="L512">            return rt::Status::resource_exhausted;</span>
+<span id="L513">        }</span>
+<span id="L514">        system_error = 0;</span>
+<span id="L515">        return rt::Status::ok;</span>
+<span id="L516">    }</span>
+<span id="L517"></span>
+<span id="L518">    void apply_and_verify_current(</span>
+<span id="L519">        rt::ThreadRoleId role,</span>
+<span id="L520">        std::size_t,</span>
+<span id="L521">        const rt::detail::ThreadRolePlan&amp; plan,</span>
+<span id="L522">        rt::detail::ThreadStartupResult&amp; result) noexcept override {</span>
+<span id="L523">        result.read_back = plan.resolved;</span>
+<span id="L524">        result.applied = rt::PolicyOperationState::succeeded;</span>
+<span id="L525">        result.verified = rt::PolicyOperationState::succeeded;</span>
+<span id="L526">        if (role == fail_role &amp;&amp; fail_executor) {</span>
+<span id="L527">            result.verified = rt::PolicyOperationState::mismatched;</span>
+<span id="L528">            result.verify_error = 73;</span>
+<span id="L529">        }</span>
+<span id="L530">    }</span>
+<span id="L531"></span>
+<span id="L532">    void verify_current(</span>
+<span id="L533">        rt::ThreadRoleId,</span>
+<span id="L534">        const rt::detail::ThreadRolePlan&amp; plan,</span>
+<span id="L535">        rt::detail::ThreadStartupResult&amp; result) noexcept override {</span>
+<span id="L536">        result.read_back = plan.resolved;</span>
+<span id="L537">        result.applied = rt::PolicyOperationState::not_attempted;</span>
+<span id="L538">        result.verified = rt::PolicyOperationState::succeeded;</span>
+<span id="L539">    }</span>
+<span id="L540"></span>
+<span id="L541">    [[nodiscard]] rt::Status cleanup_stack_current(</span>
+<span id="L542">        rt::ThreadRoleId role,</span>
+<span id="L543">        std::size_t instance,</span>
+<span id="L544">        const rt::detail::ThreadRolePlan&amp; plan,</span>
+<span id="L545">        rt::detail::ThreadStartupResult&amp; result) noexcept override {</span>
+<span id="L546">        if (role == rt::thread_role_executor_worker &amp;&amp;</span>
+<span id="L547">            instance == cleanup_failure_instance) {</span>
+<span id="L548">            ++cleanup_attempt_count;</span>
+<span id="L549">            if (cleanup_failures_remaining != 0) {</span>
+<span id="L550">                --cleanup_failures_remaining;</span>
+<span id="L551">                result.stack_cleanup = rt::PolicyOperationState::failed;</span>
+<span id="L552">                result.stack_cleanup_error = EIO;</span>
+<span id="L553">                return rt::Status::internal_error;</span>
+<span id="L554">            }</span>
+<span id="L555">        }</span>
+<span id="L556">        return ThreadPolicyProvider::cleanup_stack_current(</span>
+<span id="L557">            role,</span>
+<span id="L558">            instance,</span>
+<span id="L559">            plan,</span>
+<span id="L560">            result);</span>
+<span id="L561">    }</span>
+<span id="L562"></span>
+<span id="L563">    void after_join(rt::ThreadRoleId, std::size_t) noexcept override {</span>
+<span id="L564">        if (memory_provider) {</span>
+<span id="L565">            rollback_count_seen_at_join =</span>
+<span id="L566">                memory_provider-&gt;count(EventKind::rollback);</span>
+<span id="L567">        }</span>
+<span id="L568">        ++join_count;</span>
+<span id="L569">    }</span>
+<span id="L570"></span>
+<span id="L571">    bool fail_executor = true;</span>
+<span id="L572">    bool fail_before_create = false;</span>
+<span id="L573">    rt::ThreadRoleId fail_role = rt::thread_role_executor_worker;</span>
+<span id="L574">    std::size_t failure_instance = 0;</span>
+<span id="L575">    std::size_t cleanup_failure_instance = 0;</span>
+<span id="L576">    std::size_t cleanup_failures_remaining = 0;</span>
+<span id="L577">    std::size_t cleanup_attempt_count = 0;</span>
+<span id="L578">    FixedProvider* memory_provider = nullptr;</span>
+<span id="L579">    std::size_t rollback_count_seen_at_join =</span>
+<span id="L580">        std::numeric_limits&lt;std::size_t&gt;::max();</span>
+<span id="L581">    std::size_t join_count = 0;</span>
+<span id="L582">};</span>
+<span id="L583"></span>
+<span id="L584">rt::CpuMemoryPolicy strict_resident_policy() {</span>
+<span id="L585">    rt::CpuMemoryPolicy policy;</span>
+<span id="L586">    const std::array regions{</span>
+<span id="L587">        rt::memory_region_phase_scratch,</span>
+<span id="L588">        rt::memory_region_task_scratch,</span>
+<span id="L589">        rt::memory_region_trace_storage,</span>
+<span id="L590">    };</span>
+<span id="L591">    for (const auto region : regions) {</span>
+<span id="L592">        auto&amp; request =</span>
+<span id="L593">            policy.memory_policies[policy.memory_policy_count++];</span>
+<span id="L594">        request.region = region;</span>
+<span id="L595">        request.policy.requirement = rt::PolicyRequirement::strict;</span>
+<span id="L596">        request.policy.provider = rt::MemoryProviderOwnership::host;</span>
+<span id="L597">        request.policy.page_rounding = rt::PageRounding::base_page;</span>
+<span id="L598">        request.policy.prefault = rt::PolicyToggle::enabled;</span>
+<span id="L599">        request.policy.locking = rt::PolicyToggle::enabled;</span>
+<span id="L600">        request.policy.pinning = rt::PolicyToggle::enabled;</span>
+<span id="L601">        request.policy.huge_pages = rt::HugePagePreference::prefer;</span>
+<span id="L602">        request.policy.huge_page_fallback = rt::PolicyToggle::enabled;</span>
+<span id="L603">        request.policy.numa_node = 2;</span>
+<span id="L604">        request.policy.first_touch = rt::FirstTouchPolicy::caller;</span>
+<span id="L605">        request.policy.residency_verification = rt::PolicyToggle::enabled;</span>
+<span id="L606">        request.policy.rollback = rt::RollbackIntent::release;</span>
+<span id="L607">    }</span>
+<span id="L608">    policy.memory_policies[0].policy.guard_bytes_before = kPageBytes;</span>
+<span id="L609">    policy.memory_policies[0].policy.guard_bytes_after = kPageBytes;</span>
+<span id="L610">    return policy;</span>
+<span id="L611">}</span>
+<span id="L612"></span>
+<span id="L613">void configure_provider_runtime(</span>
+<span id="L614">    rt::Runtime&amp; runtime,</span>
+<span id="L615">    FixedProvider&amp; provider,</span>
+<span id="L616">    CallbackProbe* callback = nullptr,</span>
+<span id="L617">    const rt::CpuMemoryPolicy* policy = nullptr) {</span>
+<span id="L618">    ASSERT_EQ(runtime.configure(provider_config()), rt::Status::ok);</span>
+<span id="L619">    if (callback) {</span>
+<span id="L620">        ASSERT_EQ(</span>
+<span id="L621">            runtime.register_callback(</span>
+<span id="L622">                {&quot;memory.provider&quot;, &amp;record_callback, callback}),</span>
+<span id="L623">            rt::Status::ok);</span>
+<span id="L624">    }</span>
+<span id="L625">    auto table = provider.table();</span>
+<span id="L626">    ASSERT_EQ(runtime.set_memory_provider(table), rt::Status::ok);</span>
+<span id="L627">    if (policy) {</span>
+<span id="L628">        ASSERT_EQ(runtime.set_cpu_memory_policy(*policy), rt::Status::ok);</span>
+<span id="L629">    }</span>
+<span id="L630">}</span>
+<span id="L631"></span>
+<span id="L632">} // namespace</span>
+<span id="L633"></span>
+<span id="L634">TEST(MemoryPolicy, ProviderTableValidatesCopiesAndRejectsReentrancy) {</span>
+<span id="L635">    const auto expect_invalid = [](rt::MemoryProvider provider) {</span>
+<span id="L636">        rt::Runtime runtime;</span>
+<span id="L637">        ASSERT_EQ(runtime.set_memory_provider(provider), rt::Status::ok);</span>
+<span id="L638">        EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L639">        EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L640">    };</span>
+<span id="L641"></span>
+<span id="L642">    FixedProvider invalid_fixture;</span>
+<span id="L643">    auto invalid = invalid_fixture.table();</span>
+<span id="L644">    invalid.struct_size = sizeof(invalid) - 1;</span>
+<span id="L645">    expect_invalid(invalid);</span>
+<span id="L646">    invalid = invalid_fixture.table();</span>
+<span id="L647">    ++invalid.api_version;</span>
+<span id="L648">    expect_invalid(invalid);</span>
+<span id="L649">    invalid = invalid_fixture.table();</span>
+<span id="L650">    invalid.reserved[0] = 1;</span>
+<span id="L651">    expect_invalid(invalid);</span>
+<span id="L652">    invalid = invalid_fixture.table();</span>
+<span id="L653">    invalid.observe = nullptr;</span>
+<span id="L654">    expect_invalid(invalid);</span>
+<span id="L655">    invalid = invalid_fixture.table();</span>
+<span id="L656">    invalid.capabilities &amp;= ~rt::memory_provider_capability_bit(</span>
+<span id="L657">        rt::MemoryProviderCapability::independent_observation);</span>
+<span id="L658">    expect_invalid(invalid);</span>
+<span id="L659"></span>
+<span id="L660">    FixedProvider provider;</span>
+<span id="L661">    rt::Runtime runtime;</span>
+<span id="L662">    ASSERT_EQ(runtime.configure(provider_config()), rt::Status::ok);</span>
+<span id="L663">    CallbackProbe callback;</span>
+<span id="L664">    ASSERT_EQ(</span>
+<span id="L665">        runtime.register_callback(</span>
+<span id="L666">            {&quot;memory.copy&quot;, &amp;record_callback, &amp;callback}),</span>
+<span id="L667">        rt::Status::ok);</span>
+<span id="L668">    auto copied = provider.table();</span>
+<span id="L669">    ASSERT_EQ(runtime.set_memory_provider(copied), rt::Status::ok);</span>
+<span id="L670">    provider.reentrant_runtime = &amp;runtime;</span>
+<span id="L671">    copied.user_data = nullptr;</span>
+<span id="L672">    copied.acquire = nullptr;</span>
+<span id="L673">    copied.release = nullptr;</span>
+<span id="L674">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L675">    EXPECT_EQ(provider.reentrant_status, rt::Status::invalid_state);</span>
+<span id="L676">    EXPECT_FALSE(provider.reentrant_report_available);</span>
+<span id="L677">    EXPECT_EQ(provider.reentrant_callback_count, 0u);</span>
+<span id="L678">    EXPECT_EQ(provider.count(EventKind::acquire), 3u);</span>
+<span id="L679">    EXPECT_EQ(runtime.set_memory_provider(provider.table()), rt::Status::invalid_state);</span>
+<span id="L680">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L681">    EXPECT_EQ(provider.count(EventKind::release), 3u);</span>
+<span id="L682">}</span>
+<span id="L683"></span>
+<span id="L684">TEST(MemoryPolicy, AcquiresStableOrderAndReleasesReverseExactlyOnce) {</span>
+<span id="L685">    FixedProvider provider;</span>
+<span id="L686">    rt::Runtime runtime;</span>
+<span id="L687">    CallbackProbe callback;</span>
+<span id="L688">    const auto policy = strict_resident_policy();</span>
+<span id="L689">    configure_provider_runtime(runtime, provider, &amp;callback, &amp;policy);</span>
+<span id="L690">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L691"></span>
+<span id="L692">    const std::array expected_acquire{</span>
+<span id="L693">        event(EventKind::acquire, rt::memory_region_phase_scratch),</span>
+<span id="L694">        event(EventKind::acquire, rt::memory_region_task_scratch),</span>
+<span id="L695">        event(EventKind::acquire, rt::memory_region_trace_storage),</span>
+<span id="L696">    };</span>
+<span id="L697">    ASSERT_EQ(provider.event_count, expected_acquire.size());</span>
+<span id="L698">    EXPECT_TRUE(std::equal(</span>
+<span id="L699">        expected_acquire.begin(), expected_acquire.end(),</span>
+<span id="L700">        provider.events.begin()));</span>
+<span id="L701"></span>
+<span id="L702">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L703">    const auto events_before_step = provider.event_count;</span>
+<span id="L704">    ASSERT_EQ(</span>
+<span id="L705">        runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L706">        rt::Status::ok);</span>
+<span id="L707">    EXPECT_EQ(callback.calls, 1u);</span>
+<span id="L708">    EXPECT_EQ(provider.event_count, events_before_step);</span>
+<span id="L709">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L710"></span>
+<span id="L711">    const std::array expected_tail{</span>
+<span id="L712">        event(EventKind::rollback, rt::memory_region_trace_storage),</span>
+<span id="L713">        event(EventKind::rollback, rt::memory_region_task_scratch),</span>
+<span id="L714">        event(EventKind::rollback, rt::memory_region_phase_scratch),</span>
+<span id="L715">        event(EventKind::release, rt::memory_region_trace_storage),</span>
+<span id="L716">        event(EventKind::release, rt::memory_region_task_scratch),</span>
+<span id="L717">        event(EventKind::release, rt::memory_region_phase_scratch),</span>
+<span id="L718">    };</span>
+<span id="L719">    ASSERT_GE(provider.event_count, expected_tail.size());</span>
+<span id="L720">    EXPECT_TRUE(std::equal(</span>
+<span id="L721">        expected_tail.begin(), expected_tail.end(),</span>
+<span id="L722">        provider.events.begin() + static_cast&lt;std::ptrdiff_t&gt;(</span>
+<span id="L723">            provider.event_count - expected_tail.size())));</span>
+<span id="L724">    EXPECT_EQ(provider.count(EventKind::rollback), 3u);</span>
+<span id="L725">    EXPECT_EQ(provider.count(EventKind::release), 3u);</span>
+<span id="L726">}</span>
+<span id="L727"></span>
+<span id="L728">TEST(MemoryPolicy, ReleaseCallbackCannotReenterRuntime) {</span>
+<span id="L729">    FixedProvider provider;</span>
+<span id="L730">    rt::Runtime runtime;</span>
+<span id="L731">    CallbackProbe callback;</span>
+<span id="L732">    configure_provider_runtime(runtime, provider, &amp;callback);</span>
+<span id="L733">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L734">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L735">    provider.reentrant_runtime = &amp;runtime;</span>
+<span id="L736">    provider.reenter_on_release = true;</span>
+<span id="L737"></span>
+<span id="L738">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L739">    EXPECT_EQ(provider.release_reentry_count, 3u);</span>
+<span id="L740">    EXPECT_EQ(provider.reentrant_status, rt::Status::invalid_state);</span>
+<span id="L741">    EXPECT_EQ(callback.calls, 0u);</span>
+<span id="L742">    EXPECT_EQ(provider.count(EventKind::release), 3u);</span>
+<span id="L743">}</span>
+<span id="L744"></span>
+<span id="L745">TEST(MemoryPolicy, RollbackFailureRetainsTokensUntilCheckedStopRetry) {</span>
+<span id="L746">    FixedProvider provider;</span>
+<span id="L747">    rt::Runtime runtime;</span>
+<span id="L748">    CallbackProbe callback;</span>
+<span id="L749">    configure_provider_runtime(runtime, provider, &amp;callback);</span>
+<span id="L750">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L751">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L752">    provider.rollback_failures_remaining = 3;</span>
+<span id="L753"></span>
+<span id="L754">    EXPECT_EQ(runtime.stop(), rt::Status::internal_error);</span>
+<span id="L755">    EXPECT_EQ(runtime.state(), rt::RuntimeState::running);</span>
+<span id="L756">    EXPECT_EQ(provider.count(EventKind::rollback), 3u);</span>
+<span id="L757">    EXPECT_EQ(provider.count(EventKind::release), 0u);</span>
+<span id="L758">    EXPECT_EQ(</span>
+<span id="L759">        runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L760">        rt::Status::invalid_state);</span>
+<span id="L761">    rt::CpuMemoryPolicyReport failed_report;</span>
+<span id="L762">    ASSERT_TRUE(runtime.cpu_memory_policy_report(failed_report));</span>
+<span id="L763">    for (const auto region : {</span>
+<span id="L764">             rt::memory_region_phase_scratch,</span>
+<span id="L765">             rt::memory_region_task_scratch,</span>
+<span id="L766">             rt::memory_region_trace_storage}) {</span>
+<span id="L767">        const auto* row = find_memory(failed_report, region);</span>
+<span id="L768">        ASSERT_NE(row, nullptr);</span>
+<span id="L769">        EXPECT_NE(row-&gt;rollback_error, 0);</span>
+<span id="L770">    }</span>
+<span id="L771"></span>
+<span id="L772">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L773">    EXPECT_EQ(runtime.state(), rt::RuntimeState::stopped);</span>
+<span id="L774">    EXPECT_EQ(provider.count(EventKind::rollback), 6u);</span>
+<span id="L775">    EXPECT_EQ(provider.count(EventKind::release), 3u);</span>
+<span id="L776">}</span>
+<span id="L777"></span>
+<span id="L778">TEST(MemoryPolicy, PartialRollbackRetriesOnlyTheUnresolvedRegion) {</span>
+<span id="L779">    FixedProvider provider;</span>
+<span id="L780">    rt::Runtime runtime;</span>
+<span id="L781">    CallbackProbe callback;</span>
+<span id="L782">    configure_provider_runtime(runtime, provider, &amp;callback);</span>
+<span id="L783">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L784">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L785">    provider.clear_events();</span>
+<span id="L786">    provider.rollback_failures_remaining = 1;</span>
+<span id="L787"></span>
+<span id="L788">    EXPECT_EQ(runtime.stop(), rt::Status::internal_error);</span>
+<span id="L789">    EXPECT_EQ(runtime.state(), rt::RuntimeState::running);</span>
+<span id="L790">    const std::array first_attempt{</span>
+<span id="L791">        event(EventKind::rollback, rt::memory_region_trace_storage),</span>
+<span id="L792">        event(EventKind::rollback, rt::memory_region_task_scratch),</span>
+<span id="L793">        event(EventKind::rollback, rt::memory_region_phase_scratch),</span>
+<span id="L794">    };</span>
+<span id="L795">    ASSERT_EQ(provider.event_count, first_attempt.size());</span>
+<span id="L796">    EXPECT_TRUE(std::equal(</span>
+<span id="L797">        first_attempt.begin(),</span>
+<span id="L798">        first_attempt.end(),</span>
+<span id="L799">        provider.events.begin()));</span>
+<span id="L800">    EXPECT_EQ(provider.count(EventKind::release), 0u);</span>
+<span id="L801"></span>
+<span id="L802">    rt::RuntimeTraceCursor cursor;</span>
+<span id="L803">    std::array&lt;rt::RuntimeTraceEvent, 64&gt; trace{};</span>
+<span id="L804">    rt::RuntimeTraceReadResult trace_result;</span>
+<span id="L805">    ASSERT_EQ(</span>
+<span id="L806">        runtime.read_trace(cursor, trace, trace_result),</span>
+<span id="L807">        rt::Status::ok);</span>
+<span id="L808">    EXPECT_EQ(</span>
+<span id="L809">        std::count_if(</span>
+<span id="L810">            trace.begin(),</span>
+<span id="L811">            trace.begin() + static_cast&lt;std::ptrdiff_t&gt;(</span>
+<span id="L812">                trace_result.events_read),</span>
+<span id="L813">            [](const rt::RuntimeTraceEvent&amp; entry) {</span>
+<span id="L814">                return entry.type == rt::RuntimeTraceEventType::stopped;</span>
+<span id="L815">            }),</span>
+<span id="L816">        0);</span>
+<span id="L817"></span>
+<span id="L818">    provider.clear_events();</span>
+<span id="L819">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L820">    EXPECT_EQ(runtime.state(), rt::RuntimeState::stopped);</span>
+<span id="L821">    const std::array retry_and_release{</span>
+<span id="L822">        event(EventKind::rollback, rt::memory_region_trace_storage),</span>
+<span id="L823">        event(EventKind::release, rt::memory_region_trace_storage),</span>
+<span id="L824">        event(EventKind::release, rt::memory_region_task_scratch),</span>
+<span id="L825">        event(EventKind::release, rt::memory_region_phase_scratch),</span>
+<span id="L826">    };</span>
+<span id="L827">    ASSERT_EQ(provider.event_count, retry_and_release.size());</span>
+<span id="L828">    EXPECT_TRUE(std::equal(</span>
+<span id="L829">        retry_and_release.begin(),</span>
+<span id="L830">        retry_and_release.end(),</span>
+<span id="L831">        provider.events.begin()));</span>
+<span id="L832"></span>
+<span id="L833">    provider.clear_events();</span>
+<span id="L834">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L835">    EXPECT_EQ(provider.event_count, 0u);</span>
+<span id="L836">}</span>
+<span id="L837"></span>
+<span id="L838">TEST(MemoryPolicy, AcquisitionFailureReleasesCompletedTokensInReverse) {</span>
+<span id="L839">    const std::array failure_regions{</span>
+<span id="L840">        rt::memory_region_phase_scratch,</span>
+<span id="L841">        rt::memory_region_task_scratch,</span>
+<span id="L842">        rt::memory_region_trace_storage,</span>
+<span id="L843">    };</span>
+<span id="L844">    for (std::size_t failed_index = 0;</span>
+<span id="L845">         failed_index &lt; failure_regions.size();</span>
+<span id="L846">         ++failed_index) {</span>
+<span id="L847">        SCOPED_TRACE(failed_index);</span>
+<span id="L848">        FixedProvider provider;</span>
+<span id="L849">        provider.acquire_failure_region = failure_regions[failed_index];</span>
+<span id="L850">        rt::Runtime runtime;</span>
+<span id="L851">        CallbackProbe callback;</span>
+<span id="L852">        configure_provider_runtime(runtime, provider, &amp;callback);</span>
+<span id="L853">        EXPECT_EQ(runtime.finalize(), rt::Status::resource_exhausted);</span>
+<span id="L854">        EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L855">        rt::CpuMemoryPolicyReport report;</span>
+<span id="L856">        EXPECT_FALSE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L857">        EXPECT_EQ(callback.calls, 0u);</span>
+<span id="L858"></span>
+<span id="L859">        std::array&lt;std::uint32_t, 6&gt; expected{};</span>
+<span id="L860">        std::size_t expected_count = 0;</span>
+<span id="L861">        for (std::size_t index = 0; index &lt;= failed_index; ++index) {</span>
+<span id="L862">            expected[expected_count++] =</span>
+<span id="L863">                event(EventKind::acquire, failure_regions[index]);</span>
+<span id="L864">        }</span>
+<span id="L865">        for (std::size_t index = failed_index; index != 0; --index) {</span>
+<span id="L866">            expected[expected_count++] =</span>
+<span id="L867">                event(EventKind::release, failure_regions[index - 1]);</span>
+<span id="L868">        }</span>
+<span id="L869">        ASSERT_EQ(provider.event_count, expected_count);</span>
+<span id="L870">        EXPECT_TRUE(std::equal(</span>
+<span id="L871">            expected.begin(),</span>
+<span id="L872">            expected.begin() + static_cast&lt;std::ptrdiff_t&gt;(expected_count),</span>
+<span id="L873">            provider.events.begin()));</span>
+<span id="L874"></span>
+<span id="L875">        provider.acquire_failure_region = {};</span>
+<span id="L876">        provider.clear_events();</span>
+<span id="L877">        ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L878">        EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L879">        EXPECT_EQ(provider.count(EventKind::release), 3u);</span>
+<span id="L880">    }</span>
+<span id="L881">}</span>
+<span id="L882"></span>
+<span id="L883">TEST(MemoryPolicy, FailedAcquireCannotReleaseAnotherRuntimesLiveToken) {</span>
+<span id="L884">    FixedProvider provider;</span>
+<span id="L885">    rt::Runtime first;</span>
+<span id="L886">    rt::Runtime second;</span>
+<span id="L887">    CallbackProbe first_callback;</span>
+<span id="L888">    CallbackProbe second_callback;</span>
+<span id="L889">    configure_provider_runtime(first, provider, &amp;first_callback);</span>
+<span id="L890">    configure_provider_runtime(second, provider, &amp;second_callback);</span>
+<span id="L891">    ASSERT_EQ(first.finalize(), rt::Status::ok);</span>
+<span id="L892">    const auto releases_before = provider.count(EventKind::release);</span>
+<span id="L893"></span>
+<span id="L894">    provider.acquire_failure_region = rt::memory_region_phase_scratch;</span>
+<span id="L895">    provider.acquire_failure_returns_live_token = true;</span>
+<span id="L896">    EXPECT_EQ(second.finalize(), rt::Status::resource_exhausted);</span>
+<span id="L897">    EXPECT_EQ(second.state(), rt::RuntimeState::configuring);</span>
+<span id="L898">    EXPECT_EQ(provider.count(EventKind::release), releases_before);</span>
+<span id="L899"></span>
+<span id="L900">    ASSERT_EQ(first.start(), rt::Status::ok);</span>
+<span id="L901">    ASSERT_EQ(</span>
+<span id="L902">        first.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L903">        rt::Status::ok);</span>
+<span id="L904">    EXPECT_EQ(first_callback.calls, 1u);</span>
+<span id="L905">    EXPECT_EQ(first.stop(), rt::Status::ok);</span>
+<span id="L906">    EXPECT_EQ(provider.count(EventKind::release), releases_before + 3u);</span>
+<span id="L907">}</span>
+<span id="L908"></span>
+<span id="L909">TEST(MemoryPolicy, RejectsMalformedProviderAllocationsWithoutPublishing) {</span>
+<span id="L910">    for (const auto malformed : {</span>
+<span id="L911">             MalformedAllocation::undersized,</span>
+<span id="L912">             MalformedAllocation::misaligned,</span>
+<span id="L913">             MalformedAllocation::overflowed_extent,</span>
+<span id="L914">             MalformedAllocation::overlap,</span>
+<span id="L915">             MalformedAllocation::duplicate_token,</span>
+<span id="L916">             MalformedAllocation::contradictory_huge_outcome}) {</span>
+<span id="L917">        SCOPED_TRACE(static_cast&lt;unsigned&gt;(malformed));</span>
+<span id="L918">        FixedProvider provider;</span>
+<span id="L919">        provider.malformed = malformed;</span>
+<span id="L920">        rt::Runtime runtime;</span>
+<span id="L921">        CallbackProbe callback;</span>
+<span id="L922">        configure_provider_runtime(runtime, provider, &amp;callback);</span>
+<span id="L923">        EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L924">        EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L925">        EXPECT_EQ(callback.calls, 0u);</span>
+<span id="L926">        rt::CpuMemoryPolicyReport report;</span>
+<span id="L927">        EXPECT_FALSE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L928">        EXPECT_EQ(provider.count(EventKind::acquire), 2u);</span>
+<span id="L929">        EXPECT_EQ(</span>
+<span id="L930">            provider.count(EventKind::release),</span>
+<span id="L931">            malformed == MalformedAllocation::duplicate_token ? 1u : 2u);</span>
+<span id="L932">    }</span>
+<span id="L933">}</span>
+<span id="L934"></span>
+<span id="L935">TEST(MemoryPolicy, RejectsMalformedPageAndHugeOutcomes) {</span>
+<span id="L936">    for (const auto malformed : {</span>
+<span id="L937">             MalformedAllocation::invalid_page_rounding,</span>
+<span id="L938">             MalformedAllocation::invalid_page_size,</span>
+<span id="L939">             MalformedAllocation::contradictory_huge_outcome}) {</span>
+<span id="L940">        SCOPED_TRACE(static_cast&lt;unsigned&gt;(malformed));</span>
+<span id="L941">        FixedProvider provider;</span>
+<span id="L942">        provider.malformed = malformed;</span>
+<span id="L943">        rt::Runtime runtime;</span>
+<span id="L944">        CallbackProbe callback;</span>
+<span id="L945">        const auto policy = strict_resident_policy();</span>
+<span id="L946">        configure_provider_runtime(runtime, provider, &amp;callback, &amp;policy);</span>
+<span id="L947"></span>
+<span id="L948">        EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L949">        EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L950">        EXPECT_EQ(callback.calls, 0u);</span>
+<span id="L951">        rt::CpuMemoryPolicyReport report;</span>
+<span id="L952">        EXPECT_FALSE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L953">        EXPECT_EQ(provider.count(EventKind::acquire), 2u);</span>
+<span id="L954">        EXPECT_EQ(provider.count(EventKind::release), 2u);</span>
+<span id="L955">    }</span>
+<span id="L956">}</span>
+<span id="L957"></span>
+<span id="L958">TEST(MemoryPolicy, RejectsGuardClaimsOutsideAllocationExtent) {</span>
+<span id="L959">    for (const auto malformed : {</span>
+<span id="L960">             MalformedAllocation::guard_before_outside_extent,</span>
+<span id="L961">             MalformedAllocation::guard_after_outside_extent}) {</span>
+<span id="L962">        SCOPED_TRACE(static_cast&lt;unsigned&gt;(malformed));</span>
+<span id="L963">        FixedProvider provider;</span>
+<span id="L964">        provider.malformed = malformed;</span>
+<span id="L965">        provider.malformed_region = rt::memory_region_phase_scratch;</span>
+<span id="L966">        rt::Runtime runtime;</span>
+<span id="L967">        CallbackProbe callback;</span>
+<span id="L968">        const auto policy = strict_resident_policy();</span>
+<span id="L969">        configure_provider_runtime(runtime, provider, &amp;callback, &amp;policy);</span>
+<span id="L970"></span>
+<span id="L971">        EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L972">        EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L973">        EXPECT_EQ(callback.calls, 0u);</span>
+<span id="L974">        rt::CpuMemoryPolicyReport report;</span>
+<span id="L975">        EXPECT_FALSE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L976">        EXPECT_EQ(provider.count(EventKind::acquire), 1u);</span>
+<span id="L977">        EXPECT_EQ(provider.count(EventKind::release), 1u);</span>
+<span id="L978">    }</span>
+<span id="L979">}</span>
+<span id="L980"></span>
+<span id="L981">TEST(MemoryPolicy, RejectsCapabilityMismatchBeforePublishing) {</span>
+<span id="L982">    FixedProvider provider;</span>
+<span id="L983">    rt::Runtime runtime;</span>
+<span id="L984">    ASSERT_EQ(runtime.configure(provider_config()), rt::Status::ok);</span>
+<span id="L985">    auto table = provider.table();</span>
+<span id="L986">    table.capabilities &amp;= ~rt::memory_provider_capability_bit(</span>
+<span id="L987">        rt::MemoryProviderCapability::guard_pages);</span>
+<span id="L988">    ASSERT_EQ(runtime.set_memory_provider(table), rt::Status::ok);</span>
+<span id="L989">    const auto policy = strict_resident_policy();</span>
+<span id="L990">    ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L991">    EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L992">    EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L993">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L994">    EXPECT_FALSE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L995">    EXPECT_EQ(provider.event_count, 0u);</span>
+<span id="L996">}</span>
+<span id="L997"></span>
+<span id="L998">TEST(MemoryPolicy, InactiveRowsDoNotInvokeProvider) {</span>
+<span id="L999">    FixedProvider provider;</span>
+<span id="L1000">    rt::Runtime runtime;</span>
+<span id="L1001">    auto config = provider_config();</span>
+<span id="L1002">    config.trace_capacity = 0;</span>
+<span id="L1003">    ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L1004">    ASSERT_EQ(runtime.set_memory_provider(provider.table()), rt::Status::ok);</span>
+<span id="L1005">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1006">    EXPECT_EQ(provider.event_count, 1u);</span>
+<span id="L1007">    EXPECT_EQ(</span>
+<span id="L1008">        provider.events[0],</span>
+<span id="L1009">        event(EventKind::acquire, rt::memory_region_task_scratch));</span>
+<span id="L1010">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L1011">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L1012">    const auto* phase = find_memory(report, rt::memory_region_phase_scratch);</span>
+<span id="L1013">    const auto* trace = find_memory(report, rt::memory_region_trace_storage);</span>
+<span id="L1014">    ASSERT_NE(phase, nullptr);</span>
+<span id="L1015">    ASSERT_NE(trace, nullptr);</span>
+<span id="L1016">    EXPECT_EQ(phase-&gt;resolution, rt::PolicyResolutionState::inactive);</span>
+<span id="L1017">    EXPECT_EQ(trace-&gt;resolution, rt::PolicyResolutionState::inactive);</span>
+<span id="L1018">    EXPECT_EQ(phase-&gt;acquired, rt::PolicyOperationState::not_attempted);</span>
+<span id="L1019">    EXPECT_EQ(trace-&gt;acquired, rt::PolicyOperationState::not_attempted);</span>
+<span id="L1020">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1021">    EXPECT_EQ(provider.count(EventKind::release), 1u);</span>
+<span id="L1022">}</span>
+<span id="L1023"></span>
+<span id="L1024">TEST(MemoryPolicy, StrictClosureDoesNotDoubleCountProviderStorage) {</span>
+<span id="L1025">    FixedProvider provider;</span>
+<span id="L1026">    rt::Runtime runtime;</span>
+<span id="L1027">    ASSERT_EQ(runtime.configure(provider_config()), rt::Status::ok);</span>
+<span id="L1028">    ASSERT_EQ(runtime.set_memory_provider(provider.table()), rt::Status::ok);</span>
+<span id="L1029">    rt::CpuMemoryPolicy policy;</span>
+<span id="L1030">    policy.accounting_requirement = rt::PolicyRequirement::strict;</span>
+<span id="L1031">    policy.accounting_declaration_count = 1;</span>
+<span id="L1032">    policy.accounting_declarations[0] = {</span>
+<span id="L1033">        rt::thread_resource_accounting_key(rt::thread_role_frame),</span>
+<span id="L1034">        1,</span>
+<span id="L1035">        8u * 1024u * 1024u,</span>
+<span id="L1036">    };</span>
+<span id="L1037">    ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L1038">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1039"></span>
+<span id="L1040">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L1041">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L1042">    const auto* host_provider = find_memory(</span>
+<span id="L1043">        report,</span>
+<span id="L1044">        rt::memory_region_host_provider);</span>
+<span id="L1045">    ASSERT_NE(host_provider, nullptr);</span>
+<span id="L1046">    EXPECT_EQ(host_provider-&gt;logical_region_count, 0u);</span>
+<span id="L1047">    EXPECT_EQ(host_provider-&gt;accounted_bytes, 0u);</span>
+<span id="L1048">    EXPECT_EQ(</span>
+<span id="L1049">        host_provider-&gt;accounting_exactness,</span>
+<span id="L1050">        rt::ResourceAccountingExactness::not_applicable);</span>
+<span id="L1051"></span>
+<span id="L1052">    const auto start_status = runtime.start();</span>
+<span id="L1053">#if defined(__linux__)</span>
+<span id="L1054">    ASSERT_EQ(start_status, rt::Status::ok);</span>
+<span id="L1055">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L1056">    EXPECT_TRUE(report.accounting_complete);</span>
+<span id="L1057">#else</span>
+<span id="L1058">    EXPECT_EQ(start_status, rt::Status::invalid_config);</span>
+<span id="L1059">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L1060">    EXPECT_FALSE(report.accounting_complete);</span>
+<span id="L1061">#endif</span>
+<span id="L1062">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1063"></span>
+<span id="L1064">    FixedProvider rejected_provider;</span>
+<span id="L1065">    rt::Runtime rejected;</span>
+<span id="L1066">    ASSERT_EQ(rejected.configure(provider_config()), rt::Status::ok);</span>
+<span id="L1067">    ASSERT_EQ(</span>
+<span id="L1068">        rejected.set_memory_provider(rejected_provider.table()),</span>
+<span id="L1069">        rt::Status::ok);</span>
+<span id="L1070">    rt::CpuMemoryPolicy invalid;</span>
+<span id="L1071">    invalid.accounting_declaration_count = 1;</span>
+<span id="L1072">    invalid.accounting_declarations[0] = {</span>
+<span id="L1073">        rt::memory_resource_accounting_key(</span>
+<span id="L1074">            rt::memory_region_host_provider),</span>
+<span id="L1075">        1,</span>
+<span id="L1076">        kProviderBytes,</span>
+<span id="L1077">    };</span>
+<span id="L1078">    ASSERT_EQ(rejected.set_cpu_memory_policy(invalid), rt::Status::ok);</span>
+<span id="L1079">    EXPECT_EQ(rejected.finalize(), rt::Status::invalid_config);</span>
+<span id="L1080">    EXPECT_EQ(rejected_provider.event_count, 0u);</span>
+<span id="L1081">}</span>
+<span id="L1082"></span>
+<span id="L1083">TEST(MemoryPolicy, StrictDeferredRegionFailsBeforeProviderCallbacks) {</span>
+<span id="L1084">    const std::array deferred_regions{</span>
+<span id="L1085">        rt::memory_region_runtime_control,</span>
+<span id="L1086">        rt::memory_region_executor_control,</span>
+<span id="L1087">        rt::memory_region_device_control,</span>
+<span id="L1088">        rt::memory_region_registered_state,</span>
+<span id="L1089">        rt::memory_region_backend_control,</span>
+<span id="L1090">        rt::memory_region_registered_device_buffer,</span>
+<span id="L1091">        rt::memory_region_runtime_thread_stack,</span>
+<span id="L1092">        rt::memory_region_external_thread_stack,</span>
+<span id="L1093">        rt::memory_region_host_provider,</span>
+<span id="L1094">    };</span>
+<span id="L1095">    for (const auto region : deferred_regions) {</span>
+<span id="L1096">        SCOPED_TRACE(region.value);</span>
+<span id="L1097">        FixedProvider provider;</span>
+<span id="L1098">        rt::Runtime runtime;</span>
+<span id="L1099">        ASSERT_EQ(runtime.configure(provider_config()), rt::Status::ok);</span>
+<span id="L1100">        ASSERT_EQ(runtime.set_memory_provider(provider.table()), rt::Status::ok);</span>
+<span id="L1101">        rt::CpuMemoryPolicy policy;</span>
+<span id="L1102">        policy.memory_policy_count = 1;</span>
+<span id="L1103">        policy.memory_policies[0].region = region;</span>
+<span id="L1104">        policy.memory_policies[0].policy.requirement =</span>
+<span id="L1105">            rt::PolicyRequirement::strict;</span>
+<span id="L1106">        policy.memory_policies[0].policy.prefault = rt::PolicyToggle::enabled;</span>
+<span id="L1107">        ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L1108">        EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L1109">        EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L1110">        EXPECT_EQ(provider.event_count, 0u);</span>
+<span id="L1111">    }</span>
+<span id="L1112">}</span>
+<span id="L1113"></span>
+<span id="L1114">TEST(MemoryPolicy, NativeNumaRequiresIndependentProviderObservation) {</span>
+<span id="L1115">    rt::CpuMemoryPolicy policy;</span>
+<span id="L1116">    policy.memory_policy_count = 1;</span>
+<span id="L1117">    policy.memory_policies[0].region = rt::memory_region_phase_scratch;</span>
+<span id="L1118">    policy.memory_policies[0].policy.requirement =</span>
+<span id="L1119">        rt::PolicyRequirement::strict;</span>
+<span id="L1120">    policy.memory_policies[0].policy.numa_node = 0;</span>
+<span id="L1121"></span>
+<span id="L1122">    rt::Runtime strict_runtime;</span>
+<span id="L1123">    ASSERT_EQ(strict_runtime.configure(provider_config()), rt::Status::ok);</span>
+<span id="L1124">    CallbackProbe strict_callback;</span>
+<span id="L1125">    ASSERT_EQ(</span>
+<span id="L1126">        strict_runtime.register_callback(</span>
+<span id="L1127">            {&quot;memory.strict-numa&quot;, &amp;record_callback, &amp;strict_callback}),</span>
+<span id="L1128">        rt::Status::ok);</span>
+<span id="L1129">    ASSERT_EQ(</span>
+<span id="L1130">        strict_runtime.set_cpu_memory_policy(policy),</span>
+<span id="L1131">        rt::Status::ok);</span>
+<span id="L1132">    EXPECT_EQ(strict_runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L1133">    EXPECT_EQ(strict_runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L1134">    EXPECT_EQ(strict_callback.calls, 0u);</span>
+<span id="L1135"></span>
+<span id="L1136">    policy.memory_policies[0].policy.requirement =</span>
+<span id="L1137">        rt::PolicyRequirement::best_effort;</span>
+<span id="L1138">    rt::Runtime best_effort_runtime;</span>
+<span id="L1139">    ASSERT_EQ(</span>
+<span id="L1140">        best_effort_runtime.configure(provider_config()),</span>
+<span id="L1141">        rt::Status::ok);</span>
+<span id="L1142">    CallbackProbe best_effort_callback;</span>
+<span id="L1143">    ASSERT_EQ(</span>
+<span id="L1144">        best_effort_runtime.register_callback(</span>
+<span id="L1145">            {&quot;memory.best-effort-numa&quot;,</span>
+<span id="L1146">             &amp;record_callback,</span>
+<span id="L1147">             &amp;best_effort_callback}),</span>
+<span id="L1148">        rt::Status::ok);</span>
+<span id="L1149">    ASSERT_EQ(</span>
+<span id="L1150">        best_effort_runtime.set_cpu_memory_policy(policy),</span>
+<span id="L1151">        rt::Status::ok);</span>
+<span id="L1152">    ASSERT_EQ(best_effort_runtime.finalize(), rt::Status::ok);</span>
+<span id="L1153">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L1154">    ASSERT_TRUE(best_effort_runtime.cpu_memory_policy_report(report));</span>
+<span id="L1155">    const auto* row = find_memory(</span>
+<span id="L1156">        report,</span>
+<span id="L1157">        rt::memory_region_phase_scratch);</span>
+<span id="L1158">    ASSERT_NE(row, nullptr);</span>
+<span id="L1159">    EXPECT_EQ(</span>
+<span id="L1160">        row-&gt;resolution,</span>
+<span id="L1161">        rt::PolicyResolutionState::native_best_effort_fallback);</span>
+<span id="L1162">    EXPECT_EQ(row-&gt;resolved.numa_node, -1);</span>
+<span id="L1163">    EXPECT_EQ(best_effort_runtime.stop(), rt::Status::ok);</span>
+<span id="L1164">}</span>
+<span id="L1165"></span>
+<span id="L1166">TEST(MemoryPolicy, ReportsRequestedCommittedAndVerifiedProviderState) {</span>
+<span id="L1167">    FixedProvider provider;</span>
+<span id="L1168">    rt::Runtime runtime;</span>
+<span id="L1169">    CallbackProbe callback;</span>
+<span id="L1170">    const auto policy = strict_resident_policy();</span>
+<span id="L1171">    configure_provider_runtime(runtime, provider, &amp;callback, &amp;policy);</span>
+<span id="L1172">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1173">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1174"></span>
+<span id="L1175">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L1176">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L1177">    const auto* phase = find_memory(report, rt::memory_region_phase_scratch);</span>
+<span id="L1178">    const auto* task = find_memory(report, rt::memory_region_task_scratch);</span>
+<span id="L1179">    const auto* trace = find_memory(report, rt::memory_region_trace_storage);</span>
+<span id="L1180">    ASSERT_NE(phase, nullptr);</span>
+<span id="L1181">    ASSERT_NE(task, nullptr);</span>
+<span id="L1182">    ASSERT_NE(trace, nullptr);</span>
+<span id="L1183">    for (const auto* row : {phase, task, trace}) {</span>
+<span id="L1184">        EXPECT_EQ(row-&gt;resolution, rt::PolicyResolutionState::native_supported);</span>
+<span id="L1185">        EXPECT_EQ(row-&gt;resolved.provider, rt::MemoryProviderOwnership::host);</span>
+<span id="L1186">        EXPECT_EQ(row-&gt;acquired, rt::PolicyOperationState::succeeded);</span>
+<span id="L1187">        EXPECT_EQ(row-&gt;applied, rt::PolicyOperationState::succeeded);</span>
+<span id="L1188">        EXPECT_EQ(row-&gt;verified, rt::PolicyOperationState::succeeded);</span>
+<span id="L1189">        EXPECT_EQ(row-&gt;committed_bytes, kPageBytes);</span>
+<span id="L1190">        EXPECT_EQ(row-&gt;resident_bytes, row-&gt;committed_bytes);</span>
+<span id="L1191">        EXPECT_EQ(row-&gt;locked_bytes, row-&gt;committed_bytes);</span>
+<span id="L1192">        EXPECT_EQ(row-&gt;pinned_bytes, row-&gt;committed_bytes);</span>
+<span id="L1193">        EXPECT_EQ(row-&gt;actual_page_bytes, kPageBytes);</span>
+<span id="L1194">        EXPECT_FALSE(row-&gt;used_explicit_huge_pages);</span>
+<span id="L1195">        EXPECT_TRUE(row-&gt;used_huge_page_fallback);</span>
+<span id="L1196">        EXPECT_EQ(row-&gt;provider_error, 0);</span>
+<span id="L1197">        EXPECT_EQ(row-&gt;apply_error, 0);</span>
+<span id="L1198">        EXPECT_EQ(row-&gt;verify_error, 0);</span>
+<span id="L1199">        EXPECT_EQ(row-&gt;resolved.alignment, 64u);</span>
+<span id="L1200">    }</span>
+<span id="L1201">    EXPECT_EQ(phase-&gt;actual_guard_bytes_before, kPageBytes);</span>
+<span id="L1202">    EXPECT_EQ(phase-&gt;actual_guard_bytes_after, kPageBytes);</span>
+<span id="L1203">    const std::array rows{phase, task, trace};</span>
+<span id="L1204">    for (std::size_t index = 0; index &lt; rows.size(); ++index) {</span>
+<span id="L1205">        const auto&amp; request = provider.requests[index];</span>
+<span id="L1206">        EXPECT_EQ(request.region, rows[index]-&gt;region);</span>
+<span id="L1207">        EXPECT_EQ(request.logical_bytes, rows[index]-&gt;accounted_bytes);</span>
+<span id="L1208">        EXPECT_EQ(request.required_alignment, 64u);</span>
+<span id="L1209">        EXPECT_EQ(request.page_rounding, rt::PageRounding::base_page);</span>
+<span id="L1210">        EXPECT_EQ(request.huge_pages, rt::HugePagePreference::prefer);</span>
+<span id="L1211">        EXPECT_EQ(request.huge_page_fallback, rt::PolicyToggle::enabled);</span>
+<span id="L1212">        EXPECT_EQ(request.numa_node, 2);</span>
+<span id="L1213">        EXPECT_EQ(request.rollback, rt::RollbackIntent::release);</span>
+<span id="L1214">    }</span>
+<span id="L1215"></span>
+<span id="L1216">    rt::MemoryPlan plan;</span>
+<span id="L1217">    ASSERT_TRUE(runtime.memory_plan(plan));</span>
+<span id="L1218">    std::size_t planned_sum = 0;</span>
+<span id="L1219">    for (std::size_t index = 0; index &lt; report.memory_count; ++index) {</span>
+<span id="L1220">        if (report.memory[index].accounting_scope ==</span>
+<span id="L1221">            rt::MemoryAccountingScope::planned) {</span>
+<span id="L1222">            planned_sum += report.memory[index].accounted_bytes;</span>
+<span id="L1223">        }</span>
+<span id="L1224">    }</span>
+<span id="L1225">    EXPECT_EQ(planned_sum, plan.planned_bytes);</span>
+<span id="L1226">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1227">}</span>
+<span id="L1228"></span>
+<span id="L1229">TEST(MemoryPolicy, RejectsHugeFallbackWhenRequestForbidsIt) {</span>
+<span id="L1230">    FixedProvider provider;</span>
+<span id="L1231">    rt::Runtime runtime;</span>
+<span id="L1232">    CallbackProbe callback;</span>
+<span id="L1233">    auto policy = strict_resident_policy();</span>
+<span id="L1234">    for (std::size_t index = 0; index &lt; policy.memory_policy_count; ++index) {</span>
+<span id="L1235">        policy.memory_policies[index].policy.huge_page_fallback =</span>
+<span id="L1236">            rt::PolicyToggle::disabled;</span>
+<span id="L1237">    }</span>
+<span id="L1238">    configure_provider_runtime(runtime, provider, &amp;callback, &amp;policy);</span>
+<span id="L1239">    EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L1240">    EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L1241">    EXPECT_EQ(provider.count(EventKind::acquire), 1u);</span>
+<span id="L1242">    EXPECT_EQ(provider.count(EventKind::release), 1u);</span>
+<span id="L1243">}</span>
+<span id="L1244"></span>
+<span id="L1245">TEST(MemoryPolicy, SharedProviderCannotAliasTwoRuntimes) {</span>
+<span id="L1246">    FixedProvider provider;</span>
+<span id="L1247">    rt::Runtime first;</span>
+<span id="L1248">    rt::Runtime second;</span>
+<span id="L1249">    CallbackProbe first_callback;</span>
+<span id="L1250">    CallbackProbe second_callback;</span>
+<span id="L1251">    configure_provider_runtime(first, provider, &amp;first_callback);</span>
+<span id="L1252">    configure_provider_runtime(second, provider, &amp;second_callback);</span>
+<span id="L1253">    ASSERT_EQ(first.finalize(), rt::Status::ok);</span>
+<span id="L1254">    const auto releases_before = provider.count(EventKind::release);</span>
+<span id="L1255">    EXPECT_EQ(second.finalize(), rt::Status::invalid_config);</span>
+<span id="L1256">    EXPECT_EQ(second.state(), rt::RuntimeState::configuring);</span>
+<span id="L1257">    EXPECT_EQ(provider.count(EventKind::release), releases_before);</span>
+<span id="L1258">    ASSERT_EQ(first.start(), rt::Status::ok);</span>
+<span id="L1259">    EXPECT_EQ(first.stop(), rt::Status::ok);</span>
+<span id="L1260">    EXPECT_EQ(provider.count(EventKind::release), 3u);</span>
+<span id="L1261">}</span>
+<span id="L1262"></span>
+<span id="L1263">TEST(MemoryPolicy, ProviderBackedNestedAndHostAdapterScratchRemainDistinct) {</span>
+<span id="L1264">    for (const auto policy : {</span>
+<span id="L1265">             rt::ExecutorPolicy::static_deterministic,</span>
+<span id="L1266">             rt::ExecutorPolicy::host_adapter}) {</span>
+<span id="L1267">        SCOPED_TRACE(static_cast&lt;unsigned&gt;(policy));</span>
+<span id="L1268">        FixedProvider provider;</span>
+<span id="L1269">        InlineHost host;</span>
+<span id="L1270">        rt::Runtime runtime;</span>
+<span id="L1271">        auto config = provider_config();</span>
+<span id="L1272">        config.executor_policy = policy;</span>
+<span id="L1273">        config.task_scratch_slots = 8;</span>
+<span id="L1274">        ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L1275">        if (policy == rt::ExecutorPolicy::host_adapter) {</span>
+<span id="L1276">            ASSERT_EQ(</span>
+<span id="L1277">                runtime.set_host_executor({</span>
+<span id="L1278">                    &amp;host,</span>
+<span id="L1279">                    1,</span>
+<span id="L1280">                    config.executor_queue_capacity,</span>
+<span id="L1281">                    &amp;InlineHost::submit,</span>
+<span id="L1282">                    &amp;InlineHost::try_execute_one,</span>
+<span id="L1283">                }),</span>
+<span id="L1284">                rt::Status::ok);</span>
+<span id="L1285">        }</span>
+<span id="L1286">        ASSERT_EQ(runtime.set_memory_provider(provider.table()), rt::Status::ok);</span>
+<span id="L1287">        NestedProbe probe;</span>
+<span id="L1288">        ASSERT_EQ(</span>
+<span id="L1289">            runtime.register_callback({&quot;memory.nested&quot;, &amp;nested_phase, &amp;probe}),</span>
+<span id="L1290">            rt::Status::ok);</span>
+<span id="L1291">        ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1292">        ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1293">        ASSERT_EQ(</span>
+<span id="L1294">            runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1295">            rt::Status::ok);</span>
+<span id="L1296">        EXPECT_EQ(probe.calls, 3u);</span>
+<span id="L1297">        EXPECT_NE(probe.scratch[0], probe.scratch[1]);</span>
+<span id="L1298">        EXPECT_NE(probe.scratch[0], probe.scratch[2]);</span>
+<span id="L1299">        EXPECT_NE(probe.scratch[1], probe.scratch[2]);</span>
+<span id="L1300">        for (auto* pointer : probe.scratch) {</span>
+<span id="L1301">            ASSERT_NE(pointer, nullptr);</span>
+<span id="L1302">            EXPECT_EQ(reinterpret_cast&lt;std::uintptr_t&gt;(pointer) % 64u, 0u);</span>
+<span id="L1303">            const auto address = reinterpret_cast&lt;std::uintptr_t&gt;(pointer);</span>
+<span id="L1304">            const auto begin = reinterpret_cast&lt;std::uintptr_t&gt;(</span>
+<span id="L1305">                provider.slots[1].usable);</span>
+<span id="L1306">            EXPECT_GE(address, begin);</span>
+<span id="L1307">            EXPECT_LT(address, begin + provider.slots[1].committed);</span>
+<span id="L1308">        }</span>
+<span id="L1309">        EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1310">    }</span>
+<span id="L1311">}</span>
+<span id="L1312"></span>
+<span id="L1313">TEST(MemoryPolicy, ProviderBackedPeriodicWatchdogPreservesTraceLoss) {</span>
+<span id="L1314">    FixedProvider provider;</span>
+<span id="L1315">    rt::Runtime runtime;</span>
+<span id="L1316">    auto config = provider_config();</span>
+<span id="L1317">    config.trace_capacity = 4;</span>
+<span id="L1318">    config.watchdog_timeout_ns = 60&#x27;000&#x27;000&#x27;000ull;</span>
+<span id="L1319">    ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L1320">    ASSERT_EQ(runtime.set_memory_provider(provider.table()), rt::Status::ok);</span>
+<span id="L1321">    CallbackProbe callback;</span>
+<span id="L1322">    ASSERT_EQ(</span>
+<span id="L1323">        runtime.register_callback({&quot;memory.periodic&quot;, &amp;record_callback, &amp;callback}),</span>
+<span id="L1324">        rt::Status::ok);</span>
+<span id="L1325">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1326">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1327">    rt::RuntimeTraceCursor cursor;</span>
+<span id="L1328">    std::array&lt;rt::RuntimeTraceEvent, 4&gt; initial_events{};</span>
+<span id="L1329">    rt::RuntimeTraceReadResult initial_trace;</span>
+<span id="L1330">    ASSERT_EQ(</span>
+<span id="L1331">        runtime.read_trace(cursor, initial_events, initial_trace),</span>
+<span id="L1332">        rt::Status::ok);</span>
+<span id="L1333">    rt::PeriodicRunConfig periodic;</span>
+<span id="L1334">    periodic.frame_count = 3;</span>
+<span id="L1335">    periodic.period = std::chrono::nanoseconds(1);</span>
+<span id="L1336">    periodic.first_release_ns = runtime.now_ns();</span>
+<span id="L1337">    periodic.relative_deadline = std::chrono::seconds(1);</span>
+<span id="L1338">    rt::PeriodicRunResult periodic_result;</span>
+<span id="L1339">    ASSERT_EQ(</span>
+<span id="L1340">        runtime.run_periodic(periodic, nullptr, nullptr, &amp;periodic_result),</span>
+<span id="L1341">        rt::Status::ok);</span>
+<span id="L1342">    EXPECT_EQ(callback.calls, 3u);</span>
+<span id="L1343">    EXPECT_EQ(periodic_result.frames_executed, 3u);</span>
+<span id="L1344">    std::array&lt;rt::RuntimeTraceEvent, 4&gt; events{};</span>
+<span id="L1345">    rt::RuntimeTraceReadResult trace_result;</span>
+<span id="L1346">    ASSERT_EQ(runtime.read_trace(cursor, events, trace_result), rt::Status::ok);</span>
+<span id="L1347">    EXPECT_GT(trace_result.lost_events, 0u);</span>
+<span id="L1348">    EXPECT_GT(trace_result.events_read, 0u);</span>
+<span id="L1349">    EXPECT_LE(trace_result.events_read, events.size());</span>
+<span id="L1350">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1351">}</span>
+<span id="L1352"></span>
+<span id="L1353">TEST(MemoryPolicy, FailedStartDestructionRollsBackBeforeRelease) {</span>
+<span id="L1354">    FixedProvider provider;</span>
+<span id="L1355">    provider.apply_failure_region = rt::memory_region_task_scratch;</span>
+<span id="L1356">    provider.rollback_failures_remaining = 1;</span>
+<span id="L1357">    {</span>
+<span id="L1358">        rt::Runtime runtime;</span>
+<span id="L1359">        CallbackProbe callback;</span>
+<span id="L1360">        const auto policy = strict_resident_policy();</span>
+<span id="L1361">        configure_provider_runtime(runtime, provider, &amp;callback, &amp;policy);</span>
+<span id="L1362">        ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1363">        EXPECT_EQ(runtime.start(), rt::Status::internal_error);</span>
+<span id="L1364">        EXPECT_EQ(runtime.state(), rt::RuntimeState::finalized);</span>
+<span id="L1365">        EXPECT_EQ(provider.count(EventKind::release), 0u);</span>
+<span id="L1366">    }</span>
+<span id="L1367">    EXPECT_GE(provider.count(EventKind::rollback), 3u);</span>
+<span id="L1368">    EXPECT_EQ(provider.count(EventKind::release), 3u);</span>
+<span id="L1369">}</span>
+<span id="L1370"></span>
+<span id="L1371">TEST(MemoryPolicy, StrictApplyAndReadbackFailuresRollbackAndRetry) {</span>
+<span id="L1372">    for (const bool mismatch : {false, true}) {</span>
+<span id="L1373">        SCOPED_TRACE(mismatch);</span>
+<span id="L1374">        FixedProvider provider;</span>
+<span id="L1375">        if (mismatch) {</span>
+<span id="L1376">            provider.mismatch_region = rt::memory_region_task_scratch;</span>
+<span id="L1377">        } else {</span>
+<span id="L1378">            provider.apply_failure_region = rt::memory_region_task_scratch;</span>
+<span id="L1379">        }</span>
+<span id="L1380">        rt::Runtime runtime;</span>
+<span id="L1381">        CallbackProbe callback;</span>
+<span id="L1382">        const auto policy = strict_resident_policy();</span>
+<span id="L1383">        configure_provider_runtime(runtime, provider, &amp;callback, &amp;policy);</span>
+<span id="L1384">        ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1385">        provider.clear_events();</span>
+<span id="L1386"></span>
+<span id="L1387">        EXPECT_EQ(runtime.start(), rt::Status::internal_error);</span>
+<span id="L1388">        EXPECT_EQ(runtime.state(), rt::RuntimeState::finalized);</span>
+<span id="L1389">        EXPECT_EQ(callback.calls, 0u);</span>
+<span id="L1390">        rt::CpuMemoryPolicyReport failed_report;</span>
+<span id="L1391">        ASSERT_TRUE(runtime.cpu_memory_policy_report(failed_report));</span>
+<span id="L1392">        const auto* failed = find_memory(</span>
+<span id="L1393">            failed_report,</span>
+<span id="L1394">            rt::memory_region_task_scratch);</span>
+<span id="L1395">        ASSERT_NE(failed, nullptr);</span>
+<span id="L1396">        EXPECT_EQ(</span>
+<span id="L1397">            failed-&gt;verified,</span>
+<span id="L1398">            mismatch</span>
+<span id="L1399">                ? rt::PolicyOperationState::mismatched</span>
+<span id="L1400">                : rt::PolicyOperationState::not_attempted);</span>
+<span id="L1401">        EXPECT_EQ(provider.count(EventKind::rollback), 2u);</span>
+<span id="L1402"></span>
+<span id="L1403">        provider.apply_failure_region = {};</span>
+<span id="L1404">        provider.mismatch_region = {};</span>
+<span id="L1405">        provider.clear_events();</span>
+<span id="L1406">        ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1407">        ASSERT_EQ(</span>
+<span id="L1408">            runtime.step({1, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1409">            rt::Status::ok);</span>
+<span id="L1410">        EXPECT_EQ(callback.calls, 1u);</span>
+<span id="L1411">        EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1412">        EXPECT_EQ(provider.count(EventKind::release), 3u);</span>
+<span id="L1413">    }</span>
+<span id="L1414">}</span>
+<span id="L1415"></span>
+<span id="L1416">TEST(MemoryPolicy, LaterThreadFailureRollsBackThreadsThenMemoryAndRetries) {</span>
+<span id="L1417">    FixedProvider provider;</span>
+<span id="L1418">    FailingExecutorThreadProvider thread_provider;</span>
+<span id="L1419">    thread_provider.memory_provider = &amp;provider;</span>
+<span id="L1420">    rt::Runtime runtime;</span>
+<span id="L1421">    rt::detail::RuntimeThreadPolicyTestAccess::set_provider(</span>
+<span id="L1422">        runtime,</span>
+<span id="L1423">        thread_provider);</span>
+<span id="L1424">    CallbackProbe callback;</span>
+<span id="L1425">    auto policy = strict_resident_policy();</span>
+<span id="L1426">    auto&amp; executor_request =</span>
+<span id="L1427">        policy.thread_policies[policy.thread_policy_count++];</span>
+<span id="L1428">    executor_request.role = rt::thread_role_executor_worker;</span>
+<span id="L1429">    executor_request.policy.requirement = rt::PolicyRequirement::strict;</span>
+<span id="L1430">    configure_provider_runtime(runtime, provider, &amp;callback, &amp;policy);</span>
+<span id="L1431">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1432">    provider.clear_events();</span>
+<span id="L1433"></span>
+<span id="L1434">    EXPECT_EQ(runtime.start(), rt::Status::internal_error);</span>
+<span id="L1435">    EXPECT_EQ(runtime.state(), rt::RuntimeState::finalized);</span>
+<span id="L1436">    EXPECT_EQ(callback.calls, 0u);</span>
+<span id="L1437">    EXPECT_GE(thread_provider.join_count, 1u);</span>
+<span id="L1438">    EXPECT_EQ(thread_provider.rollback_count_seen_at_join, 0u);</span>
+<span id="L1439">    EXPECT_EQ(provider.count(EventKind::rollback), 3u);</span>
+<span id="L1440">    EXPECT_EQ(provider.count(EventKind::release), 0u);</span>
+<span id="L1441"></span>
+<span id="L1442">    thread_provider.fail_executor = false;</span>
+<span id="L1443">    provider.clear_events();</span>
+<span id="L1444">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1445">    ASSERT_EQ(</span>
+<span id="L1446">        runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1447">        rt::Status::ok);</span>
+<span id="L1448">    EXPECT_EQ(callback.calls, 1u);</span>
+<span id="L1449">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1450">    EXPECT_EQ(provider.count(EventKind::release), 3u);</span>
+<span id="L1451">}</span>
+<span id="L1452"></span>
+<span id="L1453">TEST(MemoryPolicy, WatchdogFailureJoinsBeforeMemoryRollbackAndRetries) {</span>
+<span id="L1454">    FixedProvider provider;</span>
+<span id="L1455">    FailingExecutorThreadProvider thread_provider;</span>
+<span id="L1456">    thread_provider.fail_role = rt::thread_role_watchdog;</span>
+<span id="L1457">    thread_provider.memory_provider = &amp;provider;</span>
+<span id="L1458">    rt::Runtime runtime;</span>
+<span id="L1459">    rt::detail::RuntimeThreadPolicyTestAccess::set_provider(</span>
+<span id="L1460">        runtime,</span>
+<span id="L1461">        thread_provider);</span>
+<span id="L1462">    auto config = provider_config();</span>
+<span id="L1463">    config.watchdog_timeout_ns = 60&#x27;000&#x27;000&#x27;000ull;</span>
+<span id="L1464">    ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L1465">    CallbackProbe callback;</span>
+<span id="L1466">    ASSERT_EQ(</span>
+<span id="L1467">        runtime.register_callback({&quot;memory.watchdog&quot;, &amp;record_callback, &amp;callback}),</span>
+<span id="L1468">        rt::Status::ok);</span>
+<span id="L1469">    ASSERT_EQ(runtime.set_memory_provider(provider.table()), rt::Status::ok);</span>
+<span id="L1470">    auto policy = strict_resident_policy();</span>
+<span id="L1471">    auto&amp; watchdog = policy.thread_policies[policy.thread_policy_count++];</span>
+<span id="L1472">    watchdog.role = rt::thread_role_watchdog;</span>
+<span id="L1473">    watchdog.policy.requirement = rt::PolicyRequirement::strict;</span>
+<span id="L1474">    ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L1475">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1476">    provider.clear_events();</span>
+<span id="L1477"></span>
+<span id="L1478">    EXPECT_EQ(runtime.start(), rt::Status::internal_error);</span>
+<span id="L1479">    EXPECT_EQ(runtime.state(), rt::RuntimeState::finalized);</span>
+<span id="L1480">    EXPECT_EQ(callback.calls, 0u);</span>
+<span id="L1481">    EXPECT_GE(thread_provider.join_count, 1u);</span>
+<span id="L1482">    EXPECT_EQ(thread_provider.rollback_count_seen_at_join, 0u);</span>
+<span id="L1483">    EXPECT_EQ(provider.count(EventKind::rollback), 3u);</span>
+<span id="L1484"></span>
+<span id="L1485">    thread_provider.fail_executor = false;</span>
+<span id="L1486">    provider.clear_events();</span>
+<span id="L1487">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1488">    ASSERT_EQ(</span>
+<span id="L1489">        runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1490">        rt::Status::ok);</span>
+<span id="L1491">    EXPECT_EQ(callback.calls, 1u);</span>
+<span id="L1492">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1493">    EXPECT_EQ(provider.count(EventKind::release), 3u);</span>
+<span id="L1494">}</span>
+<span id="L1495"></span>
+<span id="L1496">TEST(MemoryPolicy, ExecutorStackCleanupRetriesWithWatchdogStillAccounted) {</span>
+<span id="L1497">    FixedProvider provider;</span>
+<span id="L1498">    FailingExecutorThreadProvider thread_provider;</span>
+<span id="L1499">    thread_provider.fail_executor = false;</span>
+<span id="L1500">    thread_provider.cleanup_failure_instance = 1;</span>
+<span id="L1501">    thread_provider.cleanup_failures_remaining = 1;</span>
+<span id="L1502">    thread_provider.memory_provider = &amp;provider;</span>
+<span id="L1503">    rt::Runtime runtime;</span>
+<span id="L1504">    rt::detail::RuntimeThreadPolicyTestAccess::set_provider(</span>
+<span id="L1505">        runtime,</span>
+<span id="L1506">        thread_provider);</span>
+<span id="L1507">    auto config = provider_config();</span>
+<span id="L1508">    config.worker_count = 2;</span>
+<span id="L1509">    config.watchdog_timeout_ns = 60&#x27;000&#x27;000&#x27;000ull;</span>
+<span id="L1510">    ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L1511">    ASSERT_EQ(runtime.set_memory_provider(provider.table()), rt::Status::ok);</span>
+<span id="L1512">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1513">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1514">    provider.clear_events();</span>
+<span id="L1515"></span>
+<span id="L1516">    EXPECT_EQ(runtime.stop(), rt::Status::internal_error);</span>
+<span id="L1517">    EXPECT_EQ(runtime.state(), rt::RuntimeState::running);</span>
+<span id="L1518">    EXPECT_EQ(thread_provider.cleanup_attempt_count, 1u);</span>
+<span id="L1519">    EXPECT_EQ(thread_provider.join_count, 2u);</span>
+<span id="L1520">    EXPECT_EQ(provider.count(EventKind::rollback), 0u);</span>
+<span id="L1521">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L1522">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L1523">    const auto* stack = find_memory(</span>
+<span id="L1524">        report,</span>
+<span id="L1525">        rt::memory_region_runtime_thread_stack);</span>
+<span id="L1526">    ASSERT_NE(stack, nullptr);</span>
+<span id="L1527">    EXPECT_EQ(stack-&gt;logical_region_count, 3u);</span>
+<span id="L1528">    EXPECT_EQ(stack-&gt;rollback_error, EIO);</span>
+<span id="L1529"></span>
+<span id="L1530">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1531">    EXPECT_EQ(runtime.state(), rt::RuntimeState::stopped);</span>
+<span id="L1532">    EXPECT_EQ(thread_provider.cleanup_attempt_count, 2u);</span>
+<span id="L1533">    EXPECT_EQ(thread_provider.join_count, 3u);</span>
+<span id="L1534">    EXPECT_EQ(provider.count(EventKind::rollback), 2u);</span>
+<span id="L1535">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L1536">    stack = find_memory(report, rt::memory_region_runtime_thread_stack);</span>
+<span id="L1537">    ASSERT_NE(stack, nullptr);</span>
+<span id="L1538">    EXPECT_EQ(stack-&gt;rollback_error, 0);</span>
+<span id="L1539">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1540">}</span>
+<span id="L1541"></span>
+<span id="L1542">TEST(MemoryPolicy, StartupRetainsFirstErrorWhenRollbackAlsoFails) {</span>
+<span id="L1543">    FixedProvider provider;</span>
+<span id="L1544">    provider.rollback_failures_remaining = 1;</span>
+<span id="L1545">    FailingExecutorThreadProvider thread_provider;</span>
+<span id="L1546">    thread_provider.fail_executor = false;</span>
+<span id="L1547">    thread_provider.fail_before_create = true;</span>
+<span id="L1548">    rt::Runtime runtime;</span>
+<span id="L1549">    rt::detail::RuntimeThreadPolicyTestAccess::set_provider(</span>
+<span id="L1550">        runtime,</span>
+<span id="L1551">        thread_provider);</span>
+<span id="L1552">    CallbackProbe callback;</span>
+<span id="L1553">    auto policy = strict_resident_policy();</span>
+<span id="L1554">    auto&amp; executor_request =</span>
+<span id="L1555">        policy.thread_policies[policy.thread_policy_count++];</span>
+<span id="L1556">    executor_request.role = rt::thread_role_executor_worker;</span>
+<span id="L1557">    executor_request.policy.requirement = rt::PolicyRequirement::strict;</span>
+<span id="L1558">    configure_provider_runtime(runtime, provider, &amp;callback, &amp;policy);</span>
+<span id="L1559">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1560">    provider.clear_events();</span>
+<span id="L1561"></span>
+<span id="L1562">    EXPECT_EQ(runtime.start(), rt::Status::resource_exhausted);</span>
+<span id="L1563">    EXPECT_EQ(runtime.state(), rt::RuntimeState::finalized);</span>
+<span id="L1564">    EXPECT_EQ(callback.calls, 0u);</span>
+<span id="L1565">    EXPECT_EQ(provider.count(EventKind::rollback), 3u);</span>
+<span id="L1566">    EXPECT_EQ(provider.count(EventKind::release), 0u);</span>
+<span id="L1567"></span>
+<span id="L1568">    thread_provider.fail_before_create = false;</span>
+<span id="L1569">    provider.clear_events();</span>
+<span id="L1570">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1571">    ASSERT_EQ(</span>
+<span id="L1572">        runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1573">        rt::Status::ok);</span>
+<span id="L1574">    EXPECT_EQ(callback.calls, 1u);</span>
+<span id="L1575">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1576">    EXPECT_EQ(provider.count(EventKind::release), 3u);</span>
+<span id="L1577">}</span>
+<span id="L1578"></span>
+<span id="L1579">TEST(MemoryPolicy, BestEffortApplyFailureIsReportedAndRuntimeContinues) {</span>
+<span id="L1580">    FixedProvider provider;</span>
+<span id="L1581">    provider.apply_failure_region = rt::memory_region_task_scratch;</span>
+<span id="L1582">    rt::Runtime runtime;</span>
+<span id="L1583">    CallbackProbe callback;</span>
+<span id="L1584">    configure_provider_runtime(runtime, provider, &amp;callback);</span>
+<span id="L1585">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1586">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1587"></span>
+<span id="L1588">    rt::CpuMemoryPolicyReport report;</span>
+<span id="L1589">    ASSERT_TRUE(runtime.cpu_memory_policy_report(report));</span>
+<span id="L1590">    const auto* task = find_memory(report, rt::memory_region_task_scratch);</span>
+<span id="L1591">    ASSERT_NE(task, nullptr);</span>
+<span id="L1592">    EXPECT_EQ(task-&gt;applied, rt::PolicyOperationState::failed);</span>
+<span id="L1593">    EXPECT_EQ(task-&gt;verified, rt::PolicyOperationState::not_attempted);</span>
+<span id="L1594">    EXPECT_EQ(task-&gt;apply_error, 72);</span>
+<span id="L1595">    EXPECT_EQ(task-&gt;resident_bytes, 0u);</span>
+<span id="L1596">    EXPECT_EQ(task-&gt;locked_bytes, 0u);</span>
+<span id="L1597">    EXPECT_EQ(task-&gt;pinned_bytes, 0u);</span>
+<span id="L1598">    ASSERT_EQ(</span>
+<span id="L1599">        runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1600">        rt::Status::ok);</span>
+<span id="L1601">    EXPECT_EQ(callback.calls, 1u);</span>
+<span id="L1602">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1603">}</span>
+<span id="L1604"></span>
+<span id="L1605">TEST(MemoryPolicy, RuntimeInstancesIsolateTokensBackingReportsAndRollback) {</span>
+<span id="L1606">    FixedProvider first_provider;</span>
+<span id="L1607">    FixedProvider second_provider;</span>
+<span id="L1608">    rt::Runtime first;</span>
+<span id="L1609">    rt::Runtime second;</span>
+<span id="L1610">    CallbackProbe first_callback;</span>
+<span id="L1611">    CallbackProbe second_callback;</span>
+<span id="L1612">    const auto policy = strict_resident_policy();</span>
+<span id="L1613">    configure_provider_runtime(first, first_provider, &amp;first_callback, &amp;policy);</span>
+<span id="L1614">    configure_provider_runtime(second, second_provider, &amp;second_callback, &amp;policy);</span>
+<span id="L1615">    ASSERT_EQ(first.finalize(), rt::Status::ok);</span>
+<span id="L1616">    ASSERT_EQ(second.finalize(), rt::Status::ok);</span>
+<span id="L1617">    ASSERT_EQ(first.start(), rt::Status::ok);</span>
+<span id="L1618">    ASSERT_EQ(second.start(), rt::Status::ok);</span>
+<span id="L1619">    ASSERT_EQ(</span>
+<span id="L1620">        first.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1621">        rt::Status::ok);</span>
+<span id="L1622">    ASSERT_EQ(</span>
+<span id="L1623">        second.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1624">        rt::Status::ok);</span>
+<span id="L1625">    EXPECT_NE(first_callback.phase_scratch, second_callback.phase_scratch);</span>
+<span id="L1626">    EXPECT_EQ(first_callback.phase_scratch, first_provider.slots[0].usable);</span>
+<span id="L1627">    EXPECT_EQ(second_callback.phase_scratch, second_provider.slots[0].usable);</span>
+<span id="L1628"></span>
+<span id="L1629">    rt::CpuMemoryPolicyReport first_report;</span>
+<span id="L1630">    rt::CpuMemoryPolicyReport second_report;</span>
+<span id="L1631">    ASSERT_TRUE(first.cpu_memory_policy_report(first_report));</span>
+<span id="L1632">    ASSERT_TRUE(second.cpu_memory_policy_report(second_report));</span>
+<span id="L1633">    first_report.memory[0].committed_bytes =</span>
+<span id="L1634">        std::numeric_limits&lt;std::size_t&gt;::max();</span>
+<span id="L1635">    rt::CpuMemoryPolicyReport fresh_first_report;</span>
+<span id="L1636">    ASSERT_TRUE(first.cpu_memory_policy_report(fresh_first_report));</span>
+<span id="L1637">    EXPECT_NE(</span>
+<span id="L1638">        fresh_first_report.memory[0].committed_bytes,</span>
+<span id="L1639">        first_report.memory[0].committed_bytes);</span>
+<span id="L1640"></span>
+<span id="L1641">    ASSERT_EQ(first.stop(), rt::Status::ok);</span>
+<span id="L1642">    EXPECT_EQ(first_provider.count(EventKind::release), 3u);</span>
+<span id="L1643">    EXPECT_EQ(second_provider.count(EventKind::release), 0u);</span>
+<span id="L1644">    ASSERT_EQ(</span>
+<span id="L1645">        second.step({1, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1646">        rt::Status::ok);</span>
+<span id="L1647">    EXPECT_EQ(second_callback.calls, 2u);</span>
+<span id="L1648">    EXPECT_EQ(second.stop(), rt::Status::ok);</span>
+<span id="L1649">    EXPECT_EQ(second_provider.count(EventKind::release), 3u);</span>
+<span id="L1650">}</span>
+<span id="L1651"></span>
+<span id="L1652">TEST(MemoryPolicy, NativeLinuxPageBackingIsRoundedGuardedAndObserved) {</span>
+<span id="L1653">    rt::Runtime runtime;</span>
+<span id="L1654">    auto config = provider_config();</span>
+<span id="L1655">    config.scratch_bytes = 73;</span>
+<span id="L1656">    ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L1657">    CallbackProbe callback;</span>
+<span id="L1658">    ASSERT_EQ(</span>
+<span id="L1659">        runtime.register_callback(</span>
+<span id="L1660">            {&quot;memory.native&quot;, &amp;record_callback, &amp;callback}),</span>
+<span id="L1661">        rt::Status::ok);</span>
+<span id="L1662">    rt::CpuMemoryPolicy policy;</span>
+<span id="L1663">    policy.memory_policy_count = 1;</span>
+<span id="L1664">    auto&amp; request = policy.memory_policies[0];</span>
+<span id="L1665">    request.region = rt::memory_region_phase_scratch;</span>
+<span id="L1666">    request.policy.requirement = rt::PolicyRequirement::strict;</span>
+<span id="L1667">    request.policy.provider = rt::MemoryProviderOwnership::runtime;</span>
+<span id="L1668">    request.policy.page_rounding = rt::PageRounding::base_page;</span>
+<span id="L1669">    request.policy.guard_bytes_before = kPageBytes;</span>
+<span id="L1670">    request.policy.guard_bytes_after = kPageBytes;</span>
+<span id="L1671">    request.policy.prefault = rt::PolicyToggle::enabled;</span>
+<span id="L1672">    request.policy.huge_pages = rt::HugePagePreference::prefer;</span>
+<span id="L1673">    request.policy.huge_page_fallback = rt::PolicyToggle::enabled;</span>
+<span id="L1674">    request.policy.first_touch = rt::FirstTouchPolicy::caller;</span>
+<span id="L1675">    request.policy.residency_verification = rt::PolicyToggle::enabled;</span>
+<span id="L1676">    request.policy.rollback = rt::RollbackIntent::release;</span>
+<span id="L1677">    ASSERT_EQ(runtime.set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L1678"></span>
+<span id="L1679">#if defined(__linux__)</span>
+<span id="L1680">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1681">    rt::CpuMemoryPolicyReport finalized;</span>
+<span id="L1682">    ASSERT_TRUE(runtime.cpu_memory_policy_report(finalized));</span>
+<span id="L1683">    const auto* acquired = find_memory(</span>
+<span id="L1684">        finalized,</span>
+<span id="L1685">        rt::memory_region_phase_scratch);</span>
+<span id="L1686">    ASSERT_NE(acquired, nullptr);</span>
+<span id="L1687">    const long native_page = ::sysconf(_SC_PAGESIZE);</span>
+<span id="L1688">    ASSERT_GT(native_page, 0);</span>
+<span id="L1689">    EXPECT_EQ(</span>
+<span id="L1690">        acquired-&gt;committed_bytes,</span>
+<span id="L1691">        align_up(acquired-&gt;accounted_bytes, static_cast&lt;std::size_t&gt;(native_page)));</span>
+<span id="L1692">    EXPECT_GE(acquired-&gt;actual_guard_bytes_before, kPageBytes);</span>
+<span id="L1693">    EXPECT_GE(acquired-&gt;actual_guard_bytes_after, kPageBytes);</span>
+<span id="L1694">    EXPECT_NE(</span>
+<span id="L1695">        acquired-&gt;used_explicit_huge_pages,</span>
+<span id="L1696">        acquired-&gt;used_huge_page_fallback);</span>
+<span id="L1697"></span>
+<span id="L1698">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1699">    rt::CpuMemoryPolicyReport started;</span>
+<span id="L1700">    ASSERT_TRUE(runtime.cpu_memory_policy_report(started));</span>
+<span id="L1701">    const auto* observed = find_memory(</span>
+<span id="L1702">        started,</span>
+<span id="L1703">        rt::memory_region_phase_scratch);</span>
+<span id="L1704">    ASSERT_NE(observed, nullptr);</span>
+<span id="L1705">    EXPECT_EQ(observed-&gt;applied, rt::PolicyOperationState::succeeded);</span>
+<span id="L1706">    EXPECT_EQ(observed-&gt;verified, rt::PolicyOperationState::succeeded);</span>
+<span id="L1707">    EXPECT_EQ(observed-&gt;resident_bytes, observed-&gt;committed_bytes);</span>
+<span id="L1708">    EXPECT_EQ(observed-&gt;locked_bytes, 0u);</span>
+<span id="L1709">    EXPECT_EQ(observed-&gt;pinned_bytes, 0u);</span>
+<span id="L1710">    ASSERT_EQ(</span>
+<span id="L1711">        runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1712">        rt::Status::ok);</span>
+<span id="L1713">    ASSERT_EQ(callback.calls, 1u);</span>
+<span id="L1714">    ASSERT_NE(callback.phase_scratch, nullptr);</span>
+<span id="L1715">    auto* usable = callback.phase_scratch;</span>
+<span id="L1716">    const auto committed = observed-&gt;committed_bytes;</span>
+<span id="L1717">    const auto usable_address = reinterpret_cast&lt;std::uintptr_t&gt;(usable);</span>
+<span id="L1718">#if defined(RTFW_TEST_THREAD_SANITIZER) || \</span>
+<span id="L1719">    defined(RTFW_TEST_ADDRESS_SANITIZER)</span>
+<span id="L1720">    std::byte readable{};</span>
+<span id="L1721">    ::iovec local{&amp;readable, sizeof(readable)};</span>
+<span id="L1722">    ::iovec usable_remote{usable, sizeof(readable)};</span>
+<span id="L1723">    errno = 0;</span>
+<span id="L1724">    ASSERT_EQ(</span>
+<span id="L1725">        ::process_vm_readv(</span>
+<span id="L1726">            ::getpid(), &amp;local, 1, &amp;usable_remote, 1, 0),</span>
+<span id="L1727">        1);</span>
+<span id="L1728"></span>
+<span id="L1729">    ::iovec before_guard_remote{</span>
+<span id="L1730">        reinterpret_cast&lt;void*&gt;(usable_address - 1),</span>
+<span id="L1731">        sizeof(readable)};</span>
+<span id="L1732">    errno = 0;</span>
+<span id="L1733">    EXPECT_EQ(</span>
+<span id="L1734">        ::process_vm_readv(</span>
+<span id="L1735">            ::getpid(), &amp;local, 1, &amp;before_guard_remote, 1, 0),</span>
+<span id="L1736">        -1);</span>
+<span id="L1737">    EXPECT_EQ(errno, EFAULT);</span>
+<span id="L1738"></span>
+<span id="L1739">    ::iovec after_guard_remote{</span>
+<span id="L1740">        reinterpret_cast&lt;void*&gt;(usable_address + committed),</span>
+<span id="L1741">        sizeof(readable)};</span>
+<span id="L1742">    errno = 0;</span>
+<span id="L1743">    EXPECT_EQ(</span>
+<span id="L1744">        ::process_vm_readv(</span>
+<span id="L1745">            ::getpid(), &amp;local, 1, &amp;after_guard_remote, 1, 0),</span>
+<span id="L1746">        -1);</span>
+<span id="L1747">    EXPECT_EQ(errno, EFAULT);</span>
+<span id="L1748">#elif GTEST_HAS_DEATH_TEST</span>
+<span id="L1749">    const auto previous_death_test_style =</span>
+<span id="L1750">        ::testing::GTEST_FLAG(death_test_style);</span>
+<span id="L1751">    ::testing::GTEST_FLAG(death_test_style) = &quot;threadsafe&quot;;</span>
+<span id="L1752">    auto* before_guard = reinterpret_cast&lt;volatile std::byte*&gt;(</span>
+<span id="L1753">        usable_address - 1);</span>
+<span id="L1754">    auto* after_guard = reinterpret_cast&lt;volatile std::byte*&gt;(</span>
+<span id="L1755">        usable_address + committed);</span>
+<span id="L1756">    EXPECT_EXIT(</span>
+<span id="L1757">        {</span>
+<span id="L1758">            volatile auto value = *before_guard;</span>
+<span id="L1759">            (void)value;</span>
+<span id="L1760">            std::_Exit(0);</span>
+<span id="L1761">        },</span>
+<span id="L1762">        ::testing::KilledBySignal(SIGSEGV),</span>
+<span id="L1763">        &quot;&quot;);</span>
+<span id="L1764">    EXPECT_EXIT(</span>
+<span id="L1765">        {</span>
+<span id="L1766">            volatile auto value = *after_guard;</span>
+<span id="L1767">            (void)value;</span>
+<span id="L1768">            std::_Exit(0);</span>
+<span id="L1769">        },</span>
+<span id="L1770">        ::testing::KilledBySignal(SIGSEGV),</span>
+<span id="L1771">        &quot;&quot;);</span>
+<span id="L1772">    ::testing::GTEST_FLAG(death_test_style) = previous_death_test_style;</span>
+<span id="L1773">#endif</span>
+<span id="L1774">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1775">#else</span>
+<span id="L1776">    EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L1777">    EXPECT_EQ(runtime.state(), rt::RuntimeState::configuring);</span>
+<span id="L1778">#endif</span>
+<span id="L1779">}</span>
+<span id="L1780"></span>
+<span id="L1781">TEST(MemoryPolicy, NativeLockingUsesIsolatedPagesAndNeverReportsPinning) {</span>
+<span id="L1782">#if defined(__linux__)</span>
+<span id="L1783">    std::array&lt;rt::Runtime, 2&gt; runtimes;</span>
+<span id="L1784">    std::array&lt;CallbackProbe, 2&gt; callbacks{};</span>
+<span id="L1785">    for (std::size_t index = 0; index &lt; runtimes.size(); ++index) {</span>
+<span id="L1786">        auto config = provider_config();</span>
+<span id="L1787">        ASSERT_EQ(runtimes[index].configure(config), rt::Status::ok);</span>
+<span id="L1788">        ASSERT_EQ(</span>
+<span id="L1789">            runtimes[index].register_callback(</span>
+<span id="L1790">                {&quot;memory.lock&quot;, &amp;record_callback, &amp;callbacks[index]}),</span>
+<span id="L1791">            rt::Status::ok);</span>
+<span id="L1792">        rt::CpuMemoryPolicy policy;</span>
+<span id="L1793">        policy.memory_policy_count = 1;</span>
+<span id="L1794">        policy.memory_policies[0].region = rt::memory_region_phase_scratch;</span>
+<span id="L1795">        policy.memory_policies[0].policy.locking = rt::PolicyToggle::enabled;</span>
+<span id="L1796">        ASSERT_EQ(runtimes[index].set_cpu_memory_policy(policy), rt::Status::ok);</span>
+<span id="L1797">        ASSERT_EQ(runtimes[index].finalize(), rt::Status::ok);</span>
+<span id="L1798">        ASSERT_EQ(runtimes[index].start(), rt::Status::ok);</span>
+<span id="L1799">        ASSERT_EQ(</span>
+<span id="L1800">            runtimes[index].step(</span>
+<span id="L1801">                {index, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1802">            rt::Status::ok);</span>
+<span id="L1803">        rt::CpuMemoryPolicyReport report;</span>
+<span id="L1804">        ASSERT_TRUE(runtimes[index].cpu_memory_policy_report(report));</span>
+<span id="L1805">        const auto* row = find_memory(report, rt::memory_region_phase_scratch);</span>
+<span id="L1806">        ASSERT_NE(row, nullptr);</span>
+<span id="L1807">        EXPECT_EQ(row-&gt;pinned_bytes, 0u);</span>
+<span id="L1808">        EXPECT_EQ(row-&gt;locked_bytes, 0u);</span>
+<span id="L1809">        EXPECT_EQ(row-&gt;actual_page_bytes, static_cast&lt;std::size_t&gt;(::sysconf(_SC_PAGESIZE)));</span>
+<span id="L1810">        if (row-&gt;applied == rt::PolicyOperationState::succeeded) {</span>
+<span id="L1811">            EXPECT_EQ(row-&gt;verified, rt::PolicyOperationState::mismatched);</span>
+<span id="L1812">        } else {</span>
+<span id="L1813">            EXPECT_EQ(row-&gt;applied, rt::PolicyOperationState::failed);</span>
+<span id="L1814">            EXPECT_NE(row-&gt;apply_error, 0);</span>
+<span id="L1815">        }</span>
+<span id="L1816">    }</span>
+<span id="L1817">    const auto page = static_cast&lt;std::uintptr_t&gt;(::sysconf(_SC_PAGESIZE));</span>
+<span id="L1818">    ASSERT_NE(callbacks[0].phase_scratch, nullptr);</span>
+<span id="L1819">    ASSERT_NE(callbacks[1].phase_scratch, nullptr);</span>
+<span id="L1820">    EXPECT_NE(</span>
+<span id="L1821">        reinterpret_cast&lt;std::uintptr_t&gt;(callbacks[0].phase_scratch) / page,</span>
+<span id="L1822">        reinterpret_cast&lt;std::uintptr_t&gt;(callbacks[1].phase_scratch) / page);</span>
+<span id="L1823">    EXPECT_EQ(runtimes[0].stop(), rt::Status::ok);</span>
+<span id="L1824">    EXPECT_EQ(runtimes[1].stop(), rt::Status::ok);</span>
+<span id="L1825">#endif</span>
+<span id="L1826">}</span></pre></html>

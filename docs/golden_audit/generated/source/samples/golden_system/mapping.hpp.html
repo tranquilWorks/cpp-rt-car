@@ -1,0 +1,148 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_system/mapping.hpp</title><h1>samples/golden_system/mapping.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">// Derived platform ownership primitives from the unchanged M25-04 kit.</span>
+<span id="L2">#pragma once</span>
+<span id="L3">#include &quot;channel.hpp&quot;</span>
+<span id="L4">#include &lt;exception&gt;</span>
+<span id="L5">#include &lt;string_view&gt;</span>
+<span id="L6">#if !defined(_WIN32)</span>
+<span id="L7">#include &lt;cerrno&gt;</span>
+<span id="L8">#include &lt;fcntl.h&gt;</span>
+<span id="L9">#include &lt;sys/mman.h&gt;</span>
+<span id="L10">#include &lt;sys/stat.h&gt;</span>
+<span id="L11">#include &lt;unistd.h&gt;</span>
+<span id="L12">#endif</span>
+<span id="L13">namespace golden::cil {</span>
+<span id="L14">inline bool valid_key(std::string_view key) noexcept {</span>
+<span id="L15">  return !key.empty() &amp;&amp; key.size() &lt;= 48 &amp;&amp;</span>
+<span id="L16">         std::all_of(key.begin(), key.end(), [](char c) {</span>
+<span id="L17">           return (c &gt;= &#x27;a&#x27; &amp;&amp; c &lt;= &#x27;z&#x27;) || (c &gt;= &#x27;A&#x27; &amp;&amp; c &lt;= &#x27;Z&#x27;) ||</span>
+<span id="L18">                  (c &gt;= &#x27;0&#x27; &amp;&amp; c &lt;= &#x27;9&#x27;) || c == &#x27;_&#x27;;</span>
+<span id="L19">         });</span>
+<span id="L20">}</span>
+<span id="L21">// Control-thread OS ownership only. No methods here are Runtime callbacks.</span>
+<span id="L22">class Mapping {</span>
+<span id="L23">  Region *region_ = nullptr;</span>
+<span id="L24">  bool owner_name_ = false, fail_close_ = false;</span>
+<span id="L25">#if defined(_WIN32)</span>
+<span id="L26">  HANDLE handle_ = nullptr;</span>
+<span id="L27">  std::array&lt;wchar_t, 80&gt; name_{};</span>
+<span id="L28">#else</span>
+<span id="L29">  int fd_ = -1;</span>
+<span id="L30">  std::array&lt;char, 80&gt; name_{};</span>
+<span id="L31">#endif</span>
+<span id="L32">public:</span>
+<span id="L33">  Mapping() = default;</span>
+<span id="L34">  Mapping(const Mapping &amp;) = delete;</span>
+<span id="L35">  Mapping &amp;operator=(const Mapping &amp;) = delete;</span>
+<span id="L36">  ~Mapping() {</span>
+<span id="L37">    if (close() != Code::ok)</span>
+<span id="L38">      std::terminate();</span>
+<span id="L39">  }</span>
+<span id="L40">  Region *region() noexcept { return region_; }</span>
+<span id="L41">  bool owns_resources() const noexcept {</span>
+<span id="L42">#if defined(_WIN32)</span>
+<span id="L43">    return region_ || handle_;</span>
+<span id="L44">#else</span>
+<span id="L45">    return region_ || fd_ &gt;= 0 || owner_name_;</span>
+<span id="L46">#endif</span>
+<span id="L47">  }</span>
+<span id="L48">  void fail_next_close_for_test() noexcept { fail_close_ = true; }</span>
+<span id="L49">  // On partial failure resources remain visible and close() is mandatory.</span>
+<span id="L50">  Code open(std::string_view key, bool create) noexcept {</span>
+<span id="L51">    if (owns_resources() || !valid_key(key))</span>
+<span id="L52">      return Code::invalid;</span>
+<span id="L53">#if defined(_WIN32)</span>
+<span id="L54">    constexpr std::wstring_view prefix = L&quot;Local\\rtfw_golden_&quot;;</span>
+<span id="L55">    name_.fill(L&#x27;\0&#x27;);</span>
+<span id="L56">    std::copy(prefix.begin(), prefix.end(), name_.begin());</span>
+<span id="L57">    for (std::size_t i = 0; i &lt; key.size(); ++i)</span>
+<span id="L58">      name_[prefix.size() + i] = static_cast&lt;wchar_t&gt;(key[i]);</span>
+<span id="L59">    if (create) {</span>
+<span id="L60">      handle_ =</span>
+<span id="L61">          CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,</span>
+<span id="L62">                             static_cast&lt;DWORD&gt;(sizeof(Region)), name_.data());</span>
+<span id="L63">      if (!handle_)</span>
+<span id="L64">        return Code::io;</span>
+<span id="L65">      if (GetLastError() == ERROR_ALREADY_EXISTS)</span>
+<span id="L66">        return Code::exists;</span>
+<span id="L67">    } else {</span>
+<span id="L68">      handle_ =</span>
+<span id="L69">          OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, FALSE, name_.data());</span>
+<span id="L70">      if (!handle_)</span>
+<span id="L71">        return GetLastError() == ERROR_FILE_NOT_FOUND ? Code::not_found</span>
+<span id="L72">                                                      : Code::io;</span>
+<span id="L73">    }</span>
+<span id="L74">    region_ = static_cast&lt;Region *&gt;(MapViewOfFile(</span>
+<span id="L75">        handle_, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, sizeof(Region)));</span>
+<span id="L76">    if (!region_)</span>
+<span id="L77">      return Code::schema;</span>
+<span id="L78">#else</span>
+<span id="L79">    constexpr std::string_view prefix = &quot;/rtfw_golden_&quot;;</span>
+<span id="L80">    name_.fill(&#x27;\0&#x27;);</span>
+<span id="L81">    std::copy(prefix.begin(), prefix.end(), name_.begin());</span>
+<span id="L82">    std::copy(key.begin(), key.end(),</span>
+<span id="L83">              name_.begin() + static_cast&lt;std::ptrdiff_t&gt;(prefix.size()));</span>
+<span id="L84">    fd_ = shm_open(name_.data(), create ? O_RDWR | O_CREAT | O_EXCL : O_RDWR,</span>
+<span id="L85">                   0600);</span>
+<span id="L86">    if (fd_ &lt; 0)</span>
+<span id="L87">      return errno == EEXIST ? Code::exists</span>
+<span id="L88">                             : (errno == ENOENT ? Code::not_found : Code::io);</span>
+<span id="L89">    owner_name_ = create;</span>
+<span id="L90">    if (create &amp;&amp; ftruncate(fd_, static_cast&lt;off_t&gt;(sizeof(Region))) != 0)</span>
+<span id="L91">      return Code::io;</span>
+<span id="L92">    struct stat metadata {};</span>
+<span id="L93">    if (fstat(fd_, &amp;metadata) != 0)</span>
+<span id="L94">      return Code::io;</span>
+<span id="L95">    if (metadata.st_size == 0)</span>
+<span id="L96">      return Code::not_ready;</span>
+<span id="L97">    if (metadata.st_size != static_cast&lt;off_t&gt;(sizeof(Region)))</span>
+<span id="L98">      return Code::schema;</span>
+<span id="L99">    void *memory = mmap(nullptr, sizeof(Region), PROT_READ | PROT_WRITE,</span>
+<span id="L100">                        MAP_SHARED, fd_, 0);</span>
+<span id="L101">    if (memory == MAP_FAILED)</span>
+<span id="L102">      return Code::io;</span>
+<span id="L103">    region_ = static_cast&lt;Region *&gt;(memory);</span>
+<span id="L104">#endif</span>
+<span id="L105">    return Code::ok;</span>
+<span id="L106">  }</span>
+<span id="L107">  // Endpoints and all local callers MUST already be detached/joined. Remote</span>
+<span id="L108">  // views have independent OS lifetimes; this never forcibly unmaps a peer.</span>
+<span id="L109">  Code close() noexcept {</span>
+<span id="L110">    if (fail_close_) {</span>
+<span id="L111">      fail_close_ = false;</span>
+<span id="L112">      return Code::io;</span>
+<span id="L113">    }</span>
+<span id="L114">#if defined(_WIN32)</span>
+<span id="L115">    if (region_) {</span>
+<span id="L116">      if (!UnmapViewOfFile(region_))</span>
+<span id="L117">        return Code::io;</span>
+<span id="L118">      region_ = nullptr;</span>
+<span id="L119">    }</span>
+<span id="L120">    if (handle_) {</span>
+<span id="L121">      if (!CloseHandle(handle_))</span>
+<span id="L122">        return Code::io;</span>
+<span id="L123">      handle_ = nullptr;</span>
+<span id="L124">    }</span>
+<span id="L125">#else</span>
+<span id="L126">    if (owner_name_) {</span>
+<span id="L127">      if (shm_unlink(name_.data()) != 0 &amp;&amp; errno != ENOENT)</span>
+<span id="L128">        return Code::io;</span>
+<span id="L129">      owner_name_ = false;</span>
+<span id="L130">    }</span>
+<span id="L131">    if (region_) {</span>
+<span id="L132">      if (munmap(region_, sizeof(Region)) != 0)</span>
+<span id="L133">        return Code::io;</span>
+<span id="L134">      region_ = nullptr;</span>
+<span id="L135">    }</span>
+<span id="L136">    if (fd_ &gt;= 0) {</span>
+<span id="L137">      const int fd = fd_;</span>
+<span id="L138">      fd_ = -1;</span>
+<span id="L139">      // Linux releases the descriptor even on close errors. Retrying that</span>
+<span id="L140">      // numeric fd could close an unrelated subsequently acquired object.</span>
+<span id="L141">      if (::close(fd) != 0)</span>
+<span id="L142">        return Code::io;</span>
+<span id="L143">    }</span>
+<span id="L144">#endif</span>
+<span id="L145">    return Code::ok;</span>
+<span id="L146">  }</span>
+<span id="L147">};</span>
+<span id="L148">} // namespace golden::cil</span></pre></html>

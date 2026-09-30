@@ -1,0 +1,260 @@
+# M19-01 retained evidence — 2026-08-12
+
+## Scope and baseline
+
+- Batch: M19-01, size-versioned extension registration ABI.
+- Branch: `agent/m19-01`.
+- Exact target baseline and current HEAD during implementation:
+  `5eb8f101f692b2aff85f82f4a1660630db750706`.
+- `bdc97d0` (M17-04) is an ancestor. The M17-05 blocker remains documented:
+  native CUDA/XDMA command-capability discovery rejects the canonical zeroed
+  input header. This batch did not repair, bypass, or relabel it.
+- Every retained M15-01 through M18-01 evidence file named by the batch was
+  present before editing. The legacy experimental plugin API, manager,
+  implementation, tests, and fixtures were byte unchanged from the baseline.
+- Initial worktree state contained only the control-plane activation edits to
+  `contracts/active-batch.yaml` and `contracts/repo-profile.yaml`; these were
+  preserved. No unrelated user change was overwritten.
+- All implementation changes are within the active-batch allowlist. No
+  forbidden path changed. No commit, push, pull request, release, deployment,
+  secret, setting, support matrix, or qualification workflow was performed.
+
+## Acceptance mapping
+
+| Acceptance area | Implemented evidence |
+| --- | --- |
+| Independent C ABI | Installed C11 `rt/extension_abi.h`, ABI/current-minimum 1, fixed-width records, cdecl on MSVC, direct symbol `rtfw_extension_entry_v1`, no stable C export |
+| Negotiation and malformed input | Highest common version-1 selection; exact required prefixes; larger known prefixes copied; short, unsupported, reversed/zero, count mismatch/overflow, malformed name/status/enum/boolean, null callback/instance, nonzero reserved, unknown status, and exception rejection |
+| Transactionality | Fixed staging transaction and provisional handles; every attempt consumes a generation; complete name/capacity/device/graph validation; replacement storage prepared before nonthrowing swap; allocation and late failure publish nothing and recover |
+| CPU phases | Stable C-ABI-v8 callback context/result and task table, ordinary compiled graph/resource semantics, fixed scratch, existing executor dispatch, exception containment |
+| Device-v1 backends | Complete copied device-ABI-v1 table routed through `DeviceV1CompatibilityAdapter`; existing DeviceManager initialization, health/reset, completion, cancellation/timeout, reverse retry cleanup gates remain mandatory; no native HAL-v2 extension table |
+| Services | Copied name/interface/version and table prefix; required initialize/request-stop/quiesce/shutdown plus optional status; host-control-only execution; registration-order initialize/request and reverse cleanup; startup recovery, malformed status output preservation, and fail-closed shutdown ownership |
+| Ownership and handles | Copied metadata and borrowed callables/instances; Runtime owner/kind/slot/generation validation; zero/foreign/wrong-kind/failed-attempt/stale/detached rejection; address-free `ExtensionInfo` rows |
+| Stop and detach | Admission closes first; first error retained while independent device/executor/watchdog/service cleanup continues; service/backend relationships retain enclosing services; retry only unresolved work; detach requires successful stop, clears borrowed pointers, retires generation, then reports readiness |
+| Bounds and allocation | Per-extension capacities 64 phases, 16 backends, 16 services, 64 resources, 256 relationships; 16 Runtime extension records; exact runtime/device control ledger; no new MemoryPlan row/provider region; measured zero ordinary allocation for execute/inspect/stop/detach |
+| Identity and isolation | Copied semantic metadata participates conditionally in config/graph/replay identity; pointers, owner/generation, mutable state, and counters do not; identical semantic entries with distinct instances produce identical identities; two Runtime owners reject cross-use |
+| Package and compatibility | Exactly one default installed-header delta; no target/component/alias or loader dependency delta; direct C/C++ package consumers; legacy plugin bytes unchanged; C ABI v8 remains 70 exports/fingerprint/SONAME 8 |
+| Documentation and governance | Exact layouts/offsets, ownership matrix, state/order/retry/evolution/security/claim boundaries in `docs/extension_registration.md`; permanent docs/release checkers and CI filters updated without a moving-frontier assertion |
+
+## ABI v1 matrix
+
+Host current/minimum is 1/1. An extension 1/1 negotiates 1; 2/1 negotiates
+the known version-1 prefix; 2/2 has no overlap and returns `incompatible_abi`.
+Zero or minimum-greater-than-current ranges are malformed. Known suffix bytes
+of a record declaring a larger `struct_size` are never read or interpreted.
+
+LP64/LLP64 test assertions:
+
+| Type | Size | Align | Required offsets |
+| --- | ---: | ---: | --- |
+| handle | 16 | 4 | owner/kind/slot/generation 0/4/8/12 |
+| phase | 120 | 8 | name/callback/user/reserved 8/72/80/88 |
+| backend | 264 | 8 | name/API/reserved 8/72/232 |
+| service status | 64 | 8 | healthy/status/value/reserved 8/16/24/32 |
+| service API | 88 | 8 | instance/callbacks/reserved 8/16–48/56 |
+| service | 264 | 8 | name/interface/version/API/reserved 8/72/136/144/232 |
+| resource | 104 | 8 | name/reserved 8/72 |
+| relationship | 80 | 8 | kind/access/handles/reserved 8/12/16–32/48 |
+| host API | 136 | 8 | context/capacities/callbacks/reserved 16/24–56/64–96/104 |
+| descriptor | 216 | 8 | name/version/counts/reserved 16/80/144–176/184 |
+
+The C fixture compiles these as native C11 static assertions where supported
+and uses the repository's compile-time typedef assertion pattern plus
+`__alignof` under MSVC. Windows v143 execution of the repaired tree remains a
+required external CI rerun and was not available locally.
+
+## Commands and results
+
+| Command | Result | Evidence class |
+| --- | --- | --- |
+| `git status --short`; baseline/ancestry/evidence/plugin-path checks | pass; exact baseline, ancestry and retained records confirmed | static |
+| `./scripts/agent-verify.sh contract` | pass; 28 release-tool tests and frozen 70-symbol ABI | deterministic local |
+| `./scripts/agent-verify.sh quick` | pass; 24/24 CTest tests including `m19_extension_registration` | deterministic local |
+| `cmake -S . -B build/agent-full -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_TESTS=ON -DRTFW_BUILD_EXPERIMENTAL=ON -DENABLE_RAPIDCHECK=ON -DSIM_SANITIZERS= -DSIM_WERROR=ON` | pass | build |
+| `cmake --build build/agent-full --parallel 2` | pass | build |
+| `./build/agent-full/tests/simcore_tests --gtest_filter='ExtensionAbi.*:ExtensionRegistration.*:ExtensionLifecycle.*:MemoryPlan.*Extension*:DeterminismReplay.*Extension*:TraceNoAlloc.*Extension*'` | pass, 15/15 focused tests | deterministic local, mock/protocol |
+| `ExtensionLifecycle.ServiceShutdownFailureRetriesOnlyUnresolvedOwner` before and after the review repair | failed before repair because service `INVALID_STATE` was promoted to released; pass after repair with `cleanup_pending`, false readiness, and unresolved-only retry | deterministic local, negative lifecycle |
+| focused CTest regex for M19 plus permanent M15/M16/M17 gates | pass, 11/11 | deterministic local, mock/protocol |
+| release package configure/build/install and installed consumer configure/build/CTest | pass, 13/13 consumers including C and C++ extension consumers | package |
+| `python3 tools/check_c_abi.py --library build/agent-full/librtfw.so` | pass, exactly 70 exports and fingerprint `0xd0e7a5a14bf35f97` | static ABI |
+| `readelf -d build/agent-full/librtfw.so \| rg 'SONAME.*librtfw.so.8'` | pass, SONAME 8 | static ABI |
+| undefined-symbol loader scan of `librtfw_runtime.a` | pass, no `dlopen`, `dlsym`, `dlclose`, `LoadLibrary`, `GetProcAddress`, or `FreeLibrary` | static dependency |
+| active-batch allowlist/forbidden-path and exact-one-EOF-newline audit over all 42 changed paths; `git diff --check` | pass | static scope/format |
+| `./scripts/agent-verify.sh full` (initial run) | failed only because `simcore_all` exceeded its 180-second CTest timeout while the last parameterized case was running; M19 passed and 27/28 completed | deterministic local |
+| `cmake --build build/agent-full --target test_extension_fixture test_extension_fixture_bad rtfw_tests -j2` | configured target ran 28/28 tests successfully; `simcore_all` completed in 33.38 seconds | deterministic local |
+| `ctest --test-dir build/agent-full -R '^m19_extension_registration$' --output-on-failure` | pass, 1/1 after final C11 layout assertions | deterministic local |
+| `./scripts/agent-verify.sh full` (final reviewed tree) | pass; contract, quick 24/24, demo, Werror experimental/RapidCheck build, full 28/28; log `docs/evidence/local/verify-full-20260812T073045Z.log` | deterministic local |
+| `gh api -H 'Accept: application/vnd.github+json' /repos/kpbianco/cpp-rt-car/actions/jobs/94043456910/logs`; `gh api -H 'Accept: application/vnd.github+json' /repos/kpbianco/cpp-rt-car/actions/jobs/94043457053/logs` | first causal CI failure recovered from run `31574495904`: MSVC C errors begin at `tests/extension_fixture.c:11` on `_Static_assert`, followed by `_Alignof` parse errors; the only other failed job begins at the same unsupported spelling in `tests/package_consumer/extension_consumer.c:5` | external CI diagnosis |
+| `cc -std=c11 -Wall -Wextra -Werror -Iinclude -Irt/include -fsyntax-only tests/extension_fixture.c`; `cc -std=c11 -Wall -Wextra -Werror -Iinclude -Irt/include -fsyntax-only tests/package_consumer/extension_consumer.c`; both exact commands repeated with `-D_MSC_VER=1930 -D__cdecl=` before the include flags | pass for native C11 and the selected MSVC compatibility branches; this is syntax evidence, not an MSVC runner | deterministic local, static |
+| `cmake --build build/agent-full --target test_extension_fixture test_extension_fixture_bad rtfw_tests --parallel 2`; `ctest --test-dir build/agent-full --output-on-failure -R '^m19_extension_registration$'` | fixture rebuilt; focused M19 test passed 1/1 | deterministic local |
+| `cmake --build build/m19-01-package-consumer --target rtfw_consumer_extension_c --parallel 2`; `ctest --test-dir build/m19-01-package-consumer --output-on-failure -R '^installed_extension_c$'` | installed C extension consumer rebuilt and passed 1/1 | package |
+| `./scripts/agent-verify.sh full` before refreshing reviewed digests | stopped at the first contract gate because both modified test-source digests were stale; no test failure | deterministic local, negative contract |
+| `./scripts/agent-verify.sh contract` after refreshing the two reviewed test-source digests | pass; 28 release-tool tests and frozen 70-symbol ABI; log `docs/evidence/local/verify-contract-20260812T074141Z.log` | deterministic local |
+| `./scripts/agent-verify.sh full` after CI repair | pass; contract, quick 24/24, demo, Werror experimental/RapidCheck build, full 28/28; log `docs/evidence/local/verify-full-20260812T074148Z.log` | deterministic local |
+| `cmake --build build/agent-full --target test_extension_fixture test_extension_fixture_bad rtfw_tests --parallel 2`; native C11 and forced `_MSC_VER=1930`/empty-`__cdecl` `cc -fsyntax-only` checks for both repaired C sources; focused M19 and installed-C-consumer build/CTest | pass; configured suite 28/28, M19 1/1, and installed C extension consumer 1/1 | deterministic local, package, static compatibility-branch |
+| `./scripts/agent-verify.sh full` during repair follow-up on `e7d2a244826a7fd2429b5c1a64e51a2e6a1823b1` | pass; contract, quick 24/24, demo, Werror experimental/RapidCheck build, full 28/28; log `docs/evidence/local/verify-full-20260812T075036Z.log` | deterministic local |
+| inspection of `/home/kbianco/.local/state/portfolio-control/logs/cpp-rt-car/20260812T035431Z/M19-01-ci-failure-3.log` | first causal failure in run `31575390838` is MSVC `C4996` on `std::strncpy` at `tests/test_extension_registration.cpp:72`, promoted by `/WX` to `C2220`; the same translation unit also reports `C4297` because the deliberate exception fixture throws from `extern "C"` under `/EHc` | external CI diagnosis |
+| `cmake --build build/agent-full --target simcore_tests --parallel 2`; `ctest --test-dir build/agent-full --output-on-failure -R '^m19_extension_registration$'` | pass; the strict test executable rebuilt and focused M19 passed 1/1 after replacing the deprecated copy and retaining exception containment through a C++-linkage test callback with the ABI calling convention | deterministic local |
+| `./scripts/agent-verify.sh full` after the MSVC warnings repair | pass; contract, quick 24/24, demo, Werror experimental/RapidCheck build, full 28/28; log `docs/evidence/local/verify-full-20260812T075718Z.log` | deterministic local |
+| `./scripts/agent-verify.sh contract` after retaining repair evidence | pass; documentation/release contracts, 28 release-tool tests, and frozen 70-symbol C ABI; log `docs/evidence/local/verify-contract-20260812T075857Z.log` | deterministic local |
+| inspection of `/home/kbianco/.local/state/portfolio-control/logs/cpp-rt-car/20260812T035431Z/M19-01-ci-failure-4.log` | first causal failure in run `31576388091` is Windows Debug process termination in `ExtensionRegistration.AllocationFailurePublishesNothingAndRecovers`; `simcore_all` and `m19_extension_registration` are duplicate executions of that same failure | external CI diagnosis |
+| `cmake --build build/agent-full --target simcore_tests --parallel 2 && ctest --test-dir build/agent-full --output-on-failure -R '^m19_extension_registration$'` | pass; repaired strict test executable rebuilt and focused M19 CTest passed 1/1 | deterministic local |
+| `./scripts/agent-verify.sh full` after the Windows Debug allocation-boundary repair | pass; contract, quick 24/24, demo, Werror experimental/RapidCheck build, full 28/28; log `docs/evidence/local/verify-full-20260812T081327Z.log` | deterministic local |
+| `./scripts/agent-verify.sh contract` after retaining the fourth CI repair evidence | pass; documentation/release contracts, 28 release-tool tests, and frozen 70-symbol C ABI; log `docs/evidence/local/verify-contract-20260812T081504Z.log` | deterministic local |
+| `sha256sum .../M19-01-ci-failure-{4,5}.log`; `cmp -s .../M19-01-ci-failure-4.log .../M19-01-ci-failure-5.log` | pass; both logs have SHA-256 `4e282acfedf05019679136871babe5e9c1b63495e7a560c74eae4de82447b790` and `cmp` exited 0, so failure 5 is the already diagnosed run `31576388091`, not a new causal failure | external CI diagnosis, static |
+| `cmake --build build/agent-full --target simcore_tests --parallel 2 && ctest --test-dir build/agent-full --output-on-failure -R '^m19_extension_registration$'` on clean head `8f21747297dd42589849c138910080445cfe0ed6` | pass; repaired strict test executable built and focused M19 CTest passed 1/1 | deterministic local |
+| `./scripts/agent-verify.sh full` after retaining the duplicate-log diagnosis | pass; contract, quick 24/24, demo, Werror experimental/RapidCheck build, full 28/28; log `docs/evidence/local/verify-full-20260812T082003Z.log` | deterministic local |
+| `./scripts/agent-verify.sh contract` after recording the fresh full result | pass; documentation/release contracts, 28 release-tool tests, and frozen 70-symbol C ABI; log `docs/evidence/local/verify-contract-20260812T082103Z.log` | deterministic local |
+| inspection and SHA-256 of `/home/kbianco/.local/state/portfolio-control/logs/cpp-rt-car/20260812T035431Z/M19-01-ci-failure-6.log` | first causal failure in fresh run `31578068639` is Windows Debug process termination in `ExtensionRegistration.AllocationFailurePublishesNothingAndRecovers`; `simcore_all` and `m19_extension_registration` duplicate the same failure; log SHA-256 `afe2111c81c844741343ded71641a47ff38b7faf3b7b6e6f2513a4628b9f301d` | external CI diagnosis, static |
+| `cmake --build build/agent-full --target simcore_tests --parallel 2 && ctest --test-dir build/agent-full --output-on-failure -R '^m19_extension_registration$'` | pass; strict executable rebuilt and focused M19 CTest passed 1/1 after the transaction-owner allocation repair | deterministic local |
+| `./scripts/agent-verify.sh full` after the fresh Windows Debug repair | pass; contract, quick 24/24, demo, Werror experimental/RapidCheck build, full 28/28; log `docs/evidence/local/verify-full-20260812T083358Z.log` | deterministic local |
+| `./scripts/agent-verify.sh contract` after retaining the sixth CI repair evidence | pass; documentation/release contracts, 28 release-tool tests, and frozen 70-symbol C ABI | deterministic local |
+| `sha256sum .../M19-01-ci-failure-{6,7}.log`; `cmp -s .../M19-01-ci-failure-6.log .../M19-01-ci-failure-7.log` | pass; both logs have SHA-256 `afe2111c81c844741343ded71641a47ff38b7faf3b7b6e6f2513a4628b9f301d` and `cmp` exited 0, so failure 7 is the already diagnosed run `31578068639`, not a new causal failure | external CI diagnosis, static |
+| `cmake --build build/agent-full --target simcore_tests --parallel 2 && ctest --test-dir build/agent-full --output-on-failure -R '^m19_extension_registration$'` on clean head `50c9db4f5ba8db84a43b448dd38cf4e15eb2a4ff` | pass; strict executable built and focused M19 CTest passed 1/1 | deterministic local |
+| `./scripts/agent-verify.sh full` after retaining the duplicate failure-7 diagnosis | pass; contract, quick 24/24, demo, Werror experimental/RapidCheck build, full 28/28; log `docs/evidence/local/verify-full-20260812T083906Z.log` | deterministic local |
+
+The allocation-failure test injects `std::bad_alloc` into registration, proves
+zero published extension/phase rows and a cleared output handle, then registers
+successfully. The no-allocation test tracks global ordinary allocations around
+extension phase execution, inspection, checked stop, and detach and observes
+zero. Device behavior is exercised through the existing deterministic mock and
+canonical adapter gates; it is simulated/protocol evidence only.
+
+## Lifecycle and isolation observations
+
+- The full fixture observed service-one initialize, service-two initialize,
+  backend initialize, and only then phase execution.
+- Stop requested both services before backend shutdown. An injected first
+  backend shutdown failure left the extension `cleanup_pending`, readiness
+  false, and dependent service callable ownership retained. A second stop
+  retried the backend and then shut service two before service one.
+- An injected service request-stop failure was the returned first error while
+  backend and independent service cleanup continued; retry invoked only the
+  unresolved request and owner.
+- An injected service shutdown `INVALID_STATE` remained a failure and retained
+  ownership/readiness false. Retry did not repeat the successful quiesce or
+  independently completed service shutdown and invoked only the unresolved
+  shutdown owner.
+- An injected service initialize failure rolled back without phase admission;
+  the same finalized Runtime subsequently started and stopped successfully.
+- Detach incremented the inspector generation, cleared callable tables, marked
+  the row detached/readiness true, and caused the prior handle to fail without
+  output mutation.
+- Two Runtime instances using the same entry semantics received different
+  owners, rejected cross-instance handles, held different service/backend
+  instances, and produced the same semantic config/graph/replay IDs.
+
+## Changed and preserved invariants
+
+Changed: one installed extension ABI header; additive C++ Runtime registration,
+inspection, service-status, and detach operations; fixed runtime-owned
+transaction/owner records; conditional identity/accounting; fixtures, tests,
+CI, docs, and reviewed release digests.
+
+Preserved: release 1.2.1; stable C ABI v8, 70 exports, fingerprint and SONAME 8;
+device ABI v1 declarations/layout/values; HAL core v2 and memory/command
+extensions; Runtime status values; profile schema 7/25 keys; observability,
+rate, checkpoint and input-log schemas/IDs; six MemoryPlan rows and three
+provider regions; target/component/alias inventory; CUDA/XDMA/support and
+qualification matrices/workflows; Apache-2.0; instance isolation; no ordinary
+RT-lane allocation, hidden thread, file/network I/O, blocking mutex, unbounded
+wait, or spill execution. M17-05, M17/CAP-M17, M18/CAP-M18, and M19/CAP-M19
+remain incomplete.
+
+## Review, residual risk, and unperformed validation
+
+Three bounded read-only agent audits reviewed ABI layout/packaging, Runtime
+lifecycle/accounting, and validation/governance before integration. A later
+independent system-risk review found that service shutdown
+`RTFW_STATUS_INVALID_STATE` was incorrectly treated as proof of release. That
+could report unload readiness while service ownership remained uncertain. The
+review repair permits only `RTFW_STATUS_OK` to release a service, adds the
+negative retry test above, and refreshes the reviewed release digests. These
+agent audits are not the required human ABI/API, concurrency/lifetime/security,
+or package/claim reviews.
+
+GitHub CI run `31574495904`, jobs `94043456910` and `94043457053`, on head
+`2ad488d` supplied the failing Windows-v143 fixture and installed-consumer
+evidence. Those were the run's only failed jobs and share the same unsupported
+C assertion spelling. At repair follow-up, the already repaired head
+`e7d2a244826a7fd2429b5c1a64e51a2e6a1823b1` was present on both the local and
+tracked `agent/m19-01` branch; this follow-up performed no commit, push, merge,
+release, or deployment. An MSVC rerun of the repaired tree and the required
+human reviews remain unperformed external pre-merge gates. Jobs from the
+original run do not validate the repaired files. Local GCC builds and
+compatibility-branch syntax checks do not substitute for Windows LLP64/MSVC
+calling-convention execution, CI ASan/UBSan/TSan, or cross-compiler artifact
+exchange.
+
+GitHub CI run `31575390838` then exposed two warnings in the M19 C++ test under
+MSVC `/WX`: deprecated `strncpy` was the first causal failure, followed by the
+invalid deliberate throw from an `extern "C"` function under `/EHc`. The repair
+zero-fills and bounded-copies fixture names without suppressing diagnostics and
+keeps the exception-containment assertion through a C++-linkage callback with
+the same `RTFW_EXTENSION_CALL` convention. It changes no production callback,
+ABI declaration, runtime behavior, or test expectation. Windows v143 execution
+of this repair remains an external CI gate; no local MSVC toolchain was
+available.
+
+GitHub CI run `31576388091` next reached the allocation-failure test but the
+Windows Debug process terminated before GoogleTest could report an assertion.
+Both failed CTests end at the same test because the complete executable and the
+focused filter execute it separately. The first injected allocation occurs
+while MSVC checked-iterator vectors allocate their empty-container proxies;
+those staging vectors were default-constructed before the registration
+`try`/`catch`, so `std::bad_alloc` escaped the `noexcept` operation. The repair
+defers construction of every staging/replacement container into the existing
+allocation-failure boundary while leaving the prepared, nonthrowing publication
+swap outside it. The original failure-injection expectation remains unchanged:
+registration returns `resource_exhausted`, publishes no extension or phase, and
+then succeeds on correction. Local GCC focused and full verification passed;
+Windows v143 Debug execution of this repair remains an external CI rerun and is
+not claimed here.
+
+The subsequently retained `M19-01-ci-failure-5.log` is byte-identical to
+`M19-01-ci-failure-4.log` and reports the same run `31576388091`. The current
+clean branch head already contains the allocation-boundary repair described
+above; no second production defect or cascading test failure was inferred from
+the duplicate log. Fresh local focused and full verification results above
+validate that repaired head, but do not substitute for a Windows v143 rerun.
+
+Fresh GitHub CI run `31578068639` showed that constructing the aggregate through
+`optional::emplace` was still insufficient on Windows Debug. The default
+constructors of its checked-iterator `std::vector` members are `noexcept`, so a
+proxy allocation failure can terminate before the surrounding catch observes
+`std::bad_alloc`. The bounded repair allocates the aggregate owner with
+`make_unique` inside the existing failure boundary; the injected first
+allocation is therefore catchable before any vector constructor begins. The
+staging records, prepared nonthrowing publication swaps, failure expectation,
+transaction semantics, and every public or protected interface remain
+unchanged. Local focused and full verification passed. Windows v143 Debug and
+RelWithDebInfo execution remain mandatory external CI reruns and are not
+claimed by this local repair.
+
+The subsequently retained `M19-01-ci-failure-7.log` is byte-identical to
+`M19-01-ci-failure-6.log` and reports that same run `31578068639`. The
+then-clean branch head already contained the transaction-owner allocation
+repair described above, so the repeated log supplies no new causal failure and
+does not authorize an additional production or test change. Fresh focused and
+full verification of that exact head is retained in the table above; it does
+not substitute for the still-mandatory Windows v143 rerun.
+
+No Unreal/world/module lifecycle, actual arbitrary-module unload or long-run
+reload, sandboxing, authentication/provenance, physical CUDA/FPGA/XDMA,
+combined path, peer DMA, HIL, field, controlled latency, thermal, endurance,
+RT1, RT2, signing, release, staging, deployment, production, or support
+promotion validation was performed or claimed. In-process extensions remain
+trusted native code capable of corrupting the process.
+
+Residual risk is concentrated in external ABI review across compilers,
+serialized host-control discipline, malicious trusted-code behavior, and host
+module-lifetime orchestration deferred to M19-03.
+
+## Rollback
+
+Before rollback in an integration, require successful checked Runtime stop and
+checked detach for every registered extension. Then revert the header, Runtime
+surface/implementation, tests/fixtures/CI, package inventory, documentation,
+checkers, release digest ledger, and this evidence as one coherent unit. Do not
+unload code while readiness is false and do not reuse ABI version 1 for an
+incompatible contract. There is no repository data migration or release action.

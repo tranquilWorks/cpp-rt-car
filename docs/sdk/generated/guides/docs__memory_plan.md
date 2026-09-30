@@ -152,7 +152,7 @@ close logical byte/cardinality facts that device ABI v1 or an external host
 does not expose, but never authorize mutation or establish residency, locking,
 pinning, or qualification. Borrowed registered state/device buffers and
 backend-owned storage are not mutated. See
-[the CPU/memory policy contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/cpu_memory_policy.md).
+[the CPU/memory policy contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/cpu_memory_policy.md).
 
 ## M16-01 rate-plan accounting
 

@@ -1,0 +1,700 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>bench/src/benchmark.cpp</title><h1>bench/src/benchmark.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;rtfw/benchmark.hpp&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;array&gt;</span>
+<span id="L5">#include &lt;chrono&gt;</span>
+<span id="L6">#include &lt;cstring&gt;</span>
+<span id="L7">#include &lt;ctime&gt;</span>
+<span id="L8">#include &lt;fstream&gt;</span>
+<span id="L9">#include &lt;limits&gt;</span>
+<span id="L10">#include &lt;map&gt;</span>
+<span id="L11">#include &lt;random&gt;</span>
+<span id="L12">#include &lt;stdexcept&gt;</span>
+<span id="L13">#include &lt;utility&gt;</span>
+<span id="L14"></span>
+<span id="L15">#ifdef _WIN32</span>
+<span id="L16">#ifndef NOMINMAX</span>
+<span id="L17">#define NOMINMAX</span>
+<span id="L18">#endif</span>
+<span id="L19">#include &lt;windows.h&gt;</span>
+<span id="L20">#else</span>
+<span id="L21">#include &lt;fcntl.h&gt;</span>
+<span id="L22">#include &lt;sys/stat.h&gt;</span>
+<span id="L23">#include &lt;sys/utsname.h&gt;</span>
+<span id="L24">#include &lt;unistd.h&gt;</span>
+<span id="L25">#ifdef __linux__</span>
+<span id="L26">#include &lt;sys/syscall.h&gt;</span>
+<span id="L27">#endif</span>
+<span id="L28">#endif</span>
+<span id="L29"></span>
+<span id="L30">#ifndef RTFW_BENCH_SOURCE_COMMIT</span>
+<span id="L31">#define RTFW_BENCH_SOURCE_COMMIT &quot;unknown&quot;</span>
+<span id="L32">#define RTFW_BENCH_SOURCE_TREE &quot;unknown&quot;</span>
+<span id="L33">#define RTFW_BENCH_SOURCE_DIRTY &quot;unknown&quot;</span>
+<span id="L34">#define RTFW_BENCH_COMPILER &quot;unknown&quot;</span>
+<span id="L35">#define RTFW_BENCH_COMPILER_VERSION &quot;unknown&quot;</span>
+<span id="L36">#define RTFW_BENCH_BUILD_CONFIG &quot;unknown&quot;</span>
+<span id="L37">#define RTFW_BENCH_BUILD_FLAGS &quot;unknown&quot;</span>
+<span id="L38">#endif</span>
+<span id="L39"></span>
+<span id="L40">namespace rtfw::benchmark {</span>
+<span id="L41">namespace {</span>
+<span id="L42">bool identifier(std::string_view text, std::size_t maximum = 64) noexcept {</span>
+<span id="L43">    if (text.empty() || text.size() &gt; maximum) return false;</span>
+<span id="L44">    const auto alnum = [](char c) { return (c &gt;= &#x27;a&#x27; &amp;&amp; c &lt;= &#x27;z&#x27;) ||</span>
+<span id="L45">        (c &gt;= &#x27;A&#x27; &amp;&amp; c &lt;= &#x27;Z&#x27;) || (c &gt;= &#x27;0&#x27; &amp;&amp; c &lt;= &#x27;9&#x27;); };</span>
+<span id="L46">    if (!alnum(text.front())) return false;</span>
+<span id="L47">    for (const char c : text) if (!alnum(c) &amp;&amp; c != &#x27;.&#x27; &amp;&amp; c != &#x27;_&#x27; &amp;&amp; c != &#x27;-&#x27;) return false;</span>
+<span id="L48">    return text.find(&quot;..&quot;) == std::string_view::npos;</span>
+<span id="L49">}</span>
+<span id="L50">bool label(std::string_view text) noexcept {</span>
+<span id="L51">    if (text.empty() || text.size() &gt; 128 || text.front() == &#x27; &#x27; || text.back() == &#x27; &#x27;) return false;</span>
+<span id="L52">    for (const char c : text) {</span>
+<span id="L53">        if (!((c &gt;= &#x27;a&#x27; &amp;&amp; c &lt;= &#x27;z&#x27;) || (c &gt;= &#x27;A&#x27; &amp;&amp; c &lt;= &#x27;Z&#x27;) ||</span>
+<span id="L54">              (c &gt;= &#x27;0&#x27; &amp;&amp; c &lt;= &#x27;9&#x27;) || c == &#x27; &#x27; || c == &#x27;.&#x27; || c == &#x27;_&#x27; ||</span>
+<span id="L55">              c == &#x27;-&#x27; || c == &#x27;(&#x27; || c == &#x27;)&#x27; || c == &#x27;+&#x27;)) return false;</span>
+<span id="L56">    }</span>
+<span id="L57">    return text.find(&quot;..&quot;) == std::string_view::npos;</span>
+<span id="L58">}</span>
+<span id="L59">bool hex(std::string_view value, std::size_t count) noexcept {</span>
+<span id="L60">    return value.size() == count &amp;&amp; std::all_of(value.begin(), value.end(),</span>
+<span id="L61">        [](char c) { return (c &gt;= &#x27;0&#x27; &amp;&amp; c &lt;= &#x27;9&#x27;) || (c &gt;= &#x27;a&#x27; &amp;&amp; c &lt;= &#x27;f&#x27;); });</span>
+<span id="L62">}</span>
+<span id="L63">[[maybe_unused]] std::string sanitize(std::string value) {</span>
+<span id="L64">    return label(value) ? value : &quot;not_available&quot;;</span>
+<span id="L65">}</span>
+<span id="L66">std::string json_quote(std::string_view s) {</span>
+<span id="L67">    std::string out{&quot;\&quot;&quot;};</span>
+<span id="L68">    for (const char character : s) {</span>
+<span id="L69">        const auto c = static_cast&lt;unsigned char&gt;(character);</span>
+<span id="L70">        if (c == &#x27;\\&#x27; || c == &#x27;&quot;&#x27;) { out += &#x27;\\&#x27;; out += static_cast&lt;char&gt;(c); }</span>
+<span id="L71">        else if (c &lt; 32 || c &gt; 126) throw std::invalid_argument(&quot;non-ASCII artifact string&quot;);</span>
+<span id="L72">        else out += static_cast&lt;char&gt;(c);</span>
+<span id="L73">    }</span>
+<span id="L74">    return out + &#x27;&quot;&#x27;;</span>
+<span id="L75">}</span>
+<span id="L76">using Object = std::map&lt;std::string, std::string&gt;;</span>
+<span id="L77">std::string object(const Object&amp; fields) {</span>
+<span id="L78">    std::string out{&quot;{&quot;};</span>
+<span id="L79">    for (const auto&amp; [key, value] : fields) {</span>
+<span id="L80">        if (out.size() &gt; 1) out += &#x27;,&#x27;;</span>
+<span id="L81">        out += json_quote(key) + &#x27;:&#x27; + value;</span>
+<span id="L82">    }</span>
+<span id="L83">    return out + &#x27;}&#x27;;</span>
+<span id="L84">}</span>
+<span id="L85">std::string array(const std::vector&lt;std::string&gt;&amp; values) {</span>
+<span id="L86">    std::string out{&quot;[&quot;};</span>
+<span id="L87">    for (const auto&amp; v : values) { if (out.size() &gt; 1) out += &#x27;,&#x27;; out += v; }</span>
+<span id="L88">    return out + &#x27;]&#x27;;</span>
+<span id="L89">}</span>
+<span id="L90">std::string number(std::uint64_t n) {</span>
+<span id="L91">    if (n &gt; max_integer) throw std::invalid_argument(&quot;integer exceeds schema bound&quot;);</span>
+<span id="L92">    return std::to_string(n);</span>
+<span id="L93">}</span>
+<span id="L94">std::string known_number(std::uint64_t n) { return n ? number(n) : json_quote(&quot;not_available&quot;); }</span>
+<span id="L95">const char* kind_name(ClockKind k) { return k == ClockKind::fake ? &quot;fake&quot; : &quot;steady&quot;; }</span>
+<span id="L96">const char* evidence(ClockKind k) {</span>
+<span id="L97">    return k == ClockKind::fake ? &quot;structural_fixture&quot; : &quot;portable_characterization&quot;;</span>
+<span id="L98">}</span>
+<span id="L99">std::string utc(ClockKind kind) {</span>
+<span id="L100">    if (kind == ClockKind::fake) return &quot;1970-01-01T00:00:00Z&quot;;</span>
+<span id="L101">    const std::time_t now = std::time(nullptr);</span>
+<span id="L102">    std::tm value{};</span>
+<span id="L103">#ifdef _WIN32</span>
+<span id="L104">    if (gmtime_s(&amp;value, &amp;now) != 0) return &quot;not_available&quot;;</span>
+<span id="L105">#else</span>
+<span id="L106">    if (!gmtime_r(&amp;now, &amp;value)) return &quot;not_available&quot;;</span>
+<span id="L107">#endif</span>
+<span id="L108">    char bytes[32]{};</span>
+<span id="L109">    if (std::strftime(bytes, sizeof(bytes), &quot;%Y-%m-%dT%H:%M:%SZ&quot;, &amp;value) == 0)</span>
+<span id="L110">        return &quot;not_available&quot;;</span>
+<span id="L111">    return bytes;</span>
+<span id="L112">}</span>
+<span id="L113">std::string identity_json(const Identity&amp; i) {</span>
+<span id="L114">    return object({{&quot;architecture&quot;, json_quote(i.architecture)}, {&quot;backend&quot;, json_quote(i.backend)},</span>
+<span id="L115">        {&quot;build_configuration&quot;, json_quote(i.build_configuration)}, {&quot;build_flags_sha256&quot;, json_quote(i.build_flags_sha256)},</span>
+<span id="L116">        {&quot;compiler&quot;, json_quote(i.compiler)}, {&quot;compiler_version&quot;, json_quote(i.compiler_version)},</span>
+<span id="L117">        {&quot;cpu_model&quot;, json_quote(i.cpu_model)}, {&quot;driver&quot;, json_quote(i.driver)},</span>
+<span id="L118">        {&quot;frequency&quot;, json_quote(&quot;not_available&quot;)}, {&quot;host_label&quot;, json_quote(i.host_label)},</span>
+<span id="L119">        {&quot;kernel&quot;, json_quote(i.kernel)}, {&quot;logical_cpus&quot;, known_number(i.logical_cpus)},</span>
+<span id="L120">        {&quot;memory_policy&quot;, json_quote(i.memory_policy)}, {&quot;os&quot;, json_quote(i.os)},</span>
+<span id="L121">        {&quot;page_size&quot;, known_number(i.page_size)}, {&quot;policy_origin&quot;, json_quote(&quot;caller_declared_or_unavailable&quot;)},</span>
+<span id="L122">        {&quot;source_commit&quot;, json_quote(i.source_commit)}, {&quot;source_dirty&quot;, json_quote(i.source_dirty)},</span>
+<span id="L123">        {&quot;source_tree&quot;, json_quote(i.source_tree)}, {&quot;temperature&quot;, json_quote(&quot;not_available&quot;)},</span>
+<span id="L124">        {&quot;thread_policy&quot;, json_quote(i.thread_policy)}, {&quot;total_memory_bytes&quot;, known_number(i.total_memory_bytes)}});</span>
+<span id="L125">}</span>
+<span id="L126">std::string descriptor_json(const Result&amp; r) {</span>
+<span id="L127">    const auto&amp; d = r.descriptor;</span>
+<span id="L128">    std::vector&lt;std::string&gt; params, counters;</span>
+<span id="L129">    for (const auto&amp; p : d.parameters) params.push_back(object({{&quot;maximum&quot;, number(p.maximum)},</span>
+<span id="L130">        {&quot;minimum&quot;, number(p.minimum)}, {&quot;name&quot;, json_quote(p.name)}, {&quot;value&quot;, number(p.value)}}));</span>
+<span id="L131">    for (const auto&amp; c : d.counters) counters.push_back(object({{&quot;maximum&quot;, number(c.maximum)},</span>
+<span id="L132">        {&quot;minimum&quot;, number(c.minimum)}, {&quot;name&quot;, json_quote(c.name)}, {&quot;unit&quot;, json_quote(c.unit)}}));</span>
+<span id="L133">    return object({{&quot;case_id&quot;, json_quote(d.case_id)}, {&quot;clock&quot;, json_quote(kind_name(r.clock))},</span>
+<span id="L134">        {&quot;comparison_policy&quot;, json_quote(&quot;none&quot;)}, {&quot;configuration&quot;, json_quote(d.configuration)},</span>
+<span id="L135">        {&quot;counters&quot;, array(counters)}, {&quot;evidence_class&quot;, json_quote(evidence(r.clock))},</span>
+<span id="L136">        {&quot;implementation&quot;, json_quote(d.implementation)}, {&quot;parameters&quot;, array(params)},</span>
+<span id="L137">        {&quot;provider_id&quot;, json_quote(r.provider_id)}, {&quot;provider_version&quot;, number(r.provider_version)},</span>
+<span id="L138">        {&quot;raw_policy&quot;, json_quote(&quot;all_measured&quot;)}, {&quot;repetitions&quot;, number(d.repetitions)},</span>
+<span id="L139">        {&quot;schema_version&quot;, &quot;1&quot;}, {&quot;subsystem&quot;, json_quote(d.subsystem)}, {&quot;unit&quot;, json_quote(&quot;ns&quot;)},</span>
+<span id="L140">        {&quot;warmup&quot;, number(d.warmup)}, {&quot;workload_kind&quot;, json_quote(d.workload_kind)},</span>
+<span id="L141">        {&quot;workload_sha256&quot;, json_quote(d.workload_sha256)}}) + &#x27;\n&#x27;;</span>
+<span id="L142">}</span>
+<span id="L143">bool read_clock(void*, std::uint64_t&amp; value) {</span>
+<span id="L144">    const auto ticks = std::chrono::duration_cast&lt;std::chrono::nanoseconds&gt;(</span>
+<span id="L145">        std::chrono::steady_clock::now().time_since_epoch()).count();</span>
+<span id="L146">    if (ticks &lt; 0) return false;</span>
+<span id="L147">    value = static_cast&lt;std::uint64_t&gt;(ticks);</span>
+<span id="L148">    return value &lt;= max_integer;</span>
+<span id="L149">}</span>
+<span id="L150">bool good_observation(const Descriptor&amp; d, const Observation&amp; o) noexcept {</span>
+<span id="L151">    if (!o.correct || o.checksum &gt; max_integer || o.counters.size() != d.counters.size()) return false;</span>
+<span id="L152">    for (std::size_t n = 0; n &lt; o.counters.size(); ++n)</span>
+<span id="L153">        if (o.counters[n] &lt; d.counters[n].minimum || o.counters[n] &gt; d.counters[n].maximum) return false;</span>
+<span id="L154">    return true;</span>
+<span id="L155">}</span>
+<span id="L156">struct ActiveGuard { bool&amp; flag; ~ActiveGuard() { flag = false; } };</span>
+<span id="L157">}</span>
+<span id="L158"></span>
+<span id="L159">const char* status_name(Status s) noexcept {</span>
+<span id="L160">    switch (s) {</span>
+<span id="L161">#define RTFW_STATUS(x) case Status::x: return #x</span>
+<span id="L162">        RTFW_STATUS(ok); RTFW_STATUS(invalid); RTFW_STATUS(duplicate); RTFW_STATUS(capacity);</span>
+<span id="L163">        RTFW_STATUS(not_found); RTFW_STATUS(stale); RTFW_STATUS(busy); RTFW_STATUS(provider_error);</span>
+<span id="L164">        RTFW_STATUS(clock_error); RTFW_STATUS(invariant_failed); RTFW_STATUS(not_run);</span>
+<span id="L165">        RTFW_STATUS(io_error); RTFW_STATUS(exists);</span>
+<span id="L166">#undef RTFW_STATUS</span>
+<span id="L167">    }</span>
+<span id="L168">    return &quot;invalid&quot;;</span>
+<span id="L169">}</span>
+<span id="L170">Status validate(const Descriptor&amp; d) noexcept {</span>
+<span id="L171">    if (d.version != schema_version || !identifier(d.case_id) || !identifier(d.subsystem) ||</span>
+<span id="L172">        !identifier(d.implementation) || !identifier(d.configuration) || !identifier(d.workload_kind) ||</span>
+<span id="L173">        !hex(d.workload_sha256, 64) || !d.retain_raw || d.warmup &gt; max_warmup ||</span>
+<span id="L174">        d.repetitions == 0 || d.repetitions &gt; max_repetitions || d.parameters.size() &gt; max_parameters ||</span>
+<span id="L175">        d.counters.empty() || d.counters.size() &gt; max_counters) return Status::invalid;</span>
+<span id="L176">    for (std::size_t n = 0; n &lt; d.parameters.size(); ++n) {</span>
+<span id="L177">        const auto&amp; p = d.parameters[n];</span>
+<span id="L178">        if (!identifier(p.name) || p.minimum &gt; p.value || p.value &gt; p.maximum || p.maximum &gt; max_integer)</span>
+<span id="L179">            return Status::invalid;</span>
+<span id="L180">        for (std::size_t j = 0; j &lt; n; ++j) if (d.parameters[j].name == p.name) return Status::duplicate;</span>
+<span id="L181">    }</span>
+<span id="L182">    for (std::size_t n = 0; n &lt; d.counters.size(); ++n) {</span>
+<span id="L183">        const auto&amp; c = d.counters[n];</span>
+<span id="L184">        if (!identifier(c.name) || !identifier(c.unit) || c.minimum &gt; c.maximum || c.maximum &gt; max_integer)</span>
+<span id="L185">            return Status::invalid;</span>
+<span id="L186">        for (std::size_t j = 0; j &lt; n; ++j) if (d.counters[j].name == c.name) return Status::duplicate;</span>
+<span id="L187">    }</span>
+<span id="L188">    return Status::ok;</span>
+<span id="L189">}</span>
+<span id="L190">Status validate(const Identity&amp; i) noexcept {</span>
+<span id="L191">    if ((i.source_commit != &quot;unknown&quot; &amp;&amp; !hex(i.source_commit, 40)) ||</span>
+<span id="L192">        (i.source_tree != &quot;unknown&quot; &amp;&amp; !hex(i.source_tree, 40)) ||</span>
+<span id="L193">        (i.build_flags_sha256 != &quot;unknown&quot; &amp;&amp; !hex(i.build_flags_sha256, 64)) ||</span>
+<span id="L194">        (i.source_dirty != &quot;true&quot; &amp;&amp; i.source_dirty != &quot;false&quot; &amp;&amp; i.source_dirty != &quot;unknown&quot;) ||</span>
+<span id="L195">        i.logical_cpus &gt; 1048576 || i.total_memory_bytes &gt; max_integer || i.page_size &gt; max_integer)</span>
+<span id="L196">        return Status::invalid;</span>
+<span id="L197">    const std::string* fields[]{&amp;i.compiler, &amp;i.compiler_version, &amp;i.build_configuration,</span>
+<span id="L198">        &amp;i.os, &amp;i.kernel, &amp;i.architecture, &amp;i.cpu_model, &amp;i.host_label,</span>
+<span id="L199">        &amp;i.thread_policy, &amp;i.memory_policy, &amp;i.backend, &amp;i.driver};</span>
+<span id="L200">    for (const auto* value : fields) if (!label(*value)) return Status::invalid;</span>
+<span id="L201">    if (!identifier(i.host_label)) return Status::invalid;</span>
+<span id="L202">    return Status::ok;</span>
+<span id="L203">}</span>
+<span id="L204">ClockV1 steady_clock() noexcept { ClockV1 c; c.read_ns = read_clock; return c; }</span>
+<span id="L205"></span>
+<span id="L206">Status Runner::register_provider(const ProviderV1&amp; p, ProviderHandle&amp; handle) {</span>
+<span id="L207">    handle = {};</span>
+<span id="L208">    if (active_) return Status::busy;</span>
+<span id="L209">    if (p.size != sizeof(p) || p.version != 1 || !p.id || !p.describe || !p.invoke ||</span>
+<span id="L210">        !p.implementation_version || !p.case_count || p.case_count &gt; max_cases || p.reserved[0] || p.reserved[1])</span>
+<span id="L211">        return Status::invalid;</span>
+<span id="L212">    // Borrowed C strings must be valid for inspection; scan only the declared bound.</span>
+<span id="L213">    std::size_t length = 0;</span>
+<span id="L214">    while (length &lt;= 64 &amp;&amp; p.id[length]) ++length;</span>
+<span id="L215">    if (length &gt; 64 || !identifier(std::string_view(p.id, length))) return Status::invalid;</span>
+<span id="L216">    for (const auto&amp; existing : providers_) if (existing.id == p.id) return Status::duplicate;</span>
+<span id="L217">    std::size_t count = p.case_count;</span>
+<span id="L218">    for (const auto&amp; existing : providers_) count += existing.cases.size();</span>
+<span id="L219">    if (providers_.size() &gt;= max_providers || count &gt; max_cases || next_generation_ == max_integer)</span>
+<span id="L220">        return Status::capacity;</span>
+<span id="L221">    active_ = true;</span>
+<span id="L222">    ActiveGuard guard{active_};</span>
+<span id="L223">    Registered candidate{p, std::string(p.id, length), {}, next_generation_};</span>
+<span id="L224">    candidate.table.id = nullptr;  // copied string is the only retained name</span>
+<span id="L225">    try {</span>
+<span id="L226">        for (std::size_t n = 0; n &lt; p.case_count; ++n) {</span>
+<span id="L227">            Descriptor d;</span>
+<span id="L228">            const auto status = p.describe(p.user, n, d);</span>
+<span id="L229">            if (status != Status::ok) return Status::provider_error;</span>
+<span id="L230">            const auto checked = validate(d);</span>
+<span id="L231">            if (checked != Status::ok) return checked;</span>
+<span id="L232">            std::sort(d.parameters.begin(), d.parameters.end(), [](const auto&amp; a, const auto&amp; b) { return a.name &lt; b.name; });</span>
+<span id="L233">            // Counter order is part of the invocation ABI and remains unchanged.</span>
+<span id="L234">            candidate.cases.push_back(std::move(d));</span>
+<span id="L235">        }</span>
+<span id="L236">    } catch (...) { return Status::provider_error; }</span>
+<span id="L237">    std::sort(candidate.cases.begin(), candidate.cases.end(), [](const auto&amp; a, const auto&amp; b) { return a.case_id &lt; b.case_id; });</span>
+<span id="L238">    for (std::size_t n = 1; n &lt; candidate.cases.size(); ++n)</span>
+<span id="L239">        if (candidate.cases[n - 1].case_id == candidate.cases[n].case_id) return Status::duplicate;</span>
+<span id="L240">    providers_.push_back(std::move(candidate));</span>
+<span id="L241">    handle = {this, next_generation_++};</span>
+<span id="L242">    return Status::ok;</span>
+<span id="L243">}</span>
+<span id="L244">Status Runner::unregister_provider(ProviderHandle h) noexcept {</span>
+<span id="L245">    if (active_) return Status::busy;</span>
+<span id="L246">    if (h.owner != this || !h.generation) return Status::stale;</span>
+<span id="L247">    for (auto it = providers_.begin(); it != providers_.end(); ++it)</span>
+<span id="L248">        if (it-&gt;generation == h.generation) { providers_.erase(it); return Status::ok; }</span>
+<span id="L249">    return Status::stale;</span>
+<span id="L250">}</span>
+<span id="L251">std::vector&lt;std::string&gt; Runner::list() const {</span>
+<span id="L252">    std::vector&lt;std::string&gt; result;</span>
+<span id="L253">    for (const auto&amp; p : providers_) for (const auto&amp; d : p.cases) result.push_back(p.id + &quot;:&quot; + d.case_id);</span>
+<span id="L254">    std::sort(result.begin(), result.end());</span>
+<span id="L255">    return result;</span>
+<span id="L256">}</span>
+<span id="L257">Status Runner::describe(std::string_view provider, std::string_view id, Descriptor&amp; out) const {</span>
+<span id="L258">    for (const auto&amp; p : providers_) if (p.id == provider)</span>
+<span id="L259">        for (const auto&amp; d : p.cases) if (d.case_id == id) { out = d; return Status::ok; }</span>
+<span id="L260">    return Status::not_found;</span>
+<span id="L261">}</span>
+<span id="L262">Result Runner::run(std::string_view provider, std::string_view id, const ClockV1&amp; c, const Identity&amp; identity) {</span>
+<span id="L263">    Result r;</span>
+<span id="L264">    if (active_) { r.status = Status::busy; return r; }</span>
+<span id="L265">    if (c.size != sizeof(c) || c.version != 1 || !c.read_ns ||</span>
+<span id="L266">        (c.kind != ClockKind::fake &amp;&amp; c.kind != ClockKind::steady) || validate(identity) != Status::ok) return r;</span>
+<span id="L267">    const Registered* selected = nullptr;</span>
+<span id="L268">    for (const auto&amp; p : providers_) if (p.id == provider) selected = &amp;p;</span>
+<span id="L269">    if (!selected || describe(provider, id, r.descriptor) != Status::ok) { r.status = Status::not_found; return r; }</span>
+<span id="L270">    r.provider_id = selected-&gt;id; r.provider_version = selected-&gt;table.implementation_version;</span>
+<span id="L271">    r.identity = identity; r.clock = c.kind; r.start_utc = utc(c.kind);</span>
+<span id="L272">    r.samples.reserve(r.descriptor.repetitions);</span>
+<span id="L273">    active_ = true; ActiveGuard guard{active_};</span>
+<span id="L274">    r.status = Status::ok;</span>
+<span id="L275">    std::uint64_t previous = 0;</span>
+<span id="L276">    bool first = true;</span>
+<span id="L277">    std::uint64_t duration_sum = 0;</span>
+<span id="L278">    std::vector&lt;std::uint64_t&gt; totals(r.descriptor.counters.size(), 0);</span>
+<span id="L279">    const auto finish = [&amp;r] { r.end_utc = utc(r.clock); return r; };</span>
+<span id="L280">    for (std::uint64_t n = 0; n &lt; static_cast&lt;std::uint64_t&gt;(r.descriptor.warmup) + r.descriptor.repetitions; ++n) {</span>
+<span id="L281">        std::uint64_t begin{}, end{};</span>
+<span id="L282">        try {</span>
+<span id="L283">            if (!c.read_ns(c.user, begin) || begin &gt; max_integer || (!first &amp;&amp; begin &lt; previous)) {</span>
+<span id="L284">                r.status = Status::clock_error; r.diagnostic = &quot;invalid start clock&quot;; return finish();</span>
+<span id="L285">            }</span>
+<span id="L286">        } catch (...) { r.status = Status::clock_error; r.diagnostic = &quot;clock callback threw&quot;; return finish(); }</span>
+<span id="L287">        Observation observation;</span>
+<span id="L288">        Status invocation;</span>
+<span id="L289">        try { invocation = selected-&gt;table.invoke(selected-&gt;table.user, r.descriptor.case_id, n, observation); }</span>
+<span id="L290">        catch (...) { r.status = Status::provider_error; r.diagnostic = &quot;provider callback threw&quot;; return finish(); }</span>
+<span id="L291">        if (invocation != Status::ok) {</span>
+<span id="L292">            r.status = invocation == Status::not_run &amp;&amp; n == 0 ? Status::not_run : Status::provider_error;</span>
+<span id="L293">            r.diagnostic = r.status == Status::not_run ? &quot;prerequisite unavailable&quot; : &quot;provider invocation failed&quot;;</span>
+<span id="L294">            return finish();</span>
+<span id="L295">        }</span>
+<span id="L296">        try {</span>
+<span id="L297">            if (!c.read_ns(c.user, end) || end &gt; max_integer || end &lt; begin) {</span>
+<span id="L298">                r.status = Status::clock_error; r.diagnostic = &quot;invalid end clock&quot;; return finish();</span>
+<span id="L299">            }</span>
+<span id="L300">        } catch (...) { r.status = Status::clock_error; r.diagnostic = &quot;clock callback threw&quot;; return finish(); }</span>
+<span id="L301">        previous = end; first = false;</span>
+<span id="L302">        if (!good_observation(r.descriptor, observation)) {</span>
+<span id="L303">            r.status = Status::invariant_failed; r.diagnostic = &quot;counter or correctness invariant failed&quot;;</span>
+<span id="L304">            return finish();</span>
+<span id="L305">        }</span>
+<span id="L306">        if (n &lt; r.descriptor.warmup) { ++r.warmup_completed; continue; }</span>
+<span id="L307">        for (std::size_t k = 0; k &lt; totals.size(); ++k) {</span>
+<span id="L308">            if (observation.counters[k] &gt; max_integer - totals[k]) {</span>
+<span id="L309">                r.status = Status::invariant_failed; r.diagnostic = &quot;counter aggregate overflow&quot;; return finish();</span>
+<span id="L310">            }</span>
+<span id="L311">            totals[k] += observation.counters[k];</span>
+<span id="L312">        }</span>
+<span id="L313">        if (end - begin &gt; max_integer - duration_sum) {</span>
+<span id="L314">            r.status = Status::invariant_failed; r.diagnostic = &quot;duration aggregate overflow&quot;; return finish();</span>
+<span id="L315">        }</span>
+<span id="L316">        duration_sum += end - begin;</span>
+<span id="L317">        r.samples.push_back({n - r.descriptor.warmup, begin, end, std::move(observation), true});</span>
+<span id="L318">    }</span>
+<span id="L319">    return finish();</span>
+<span id="L320">}</span>
+<span id="L321"></span>
+<span id="L322">std::string sha256(std::string_view input) {</span>
+<span id="L323">    if (input.size() &gt; 64U * 1024U * 1024U) throw std::length_error(&quot;hash input bound&quot;);</span>
+<span id="L324">    constexpr std::uint32_t k[64] = {</span>
+<span id="L325">        0x428a2f98U,0x71374491U,0xb5c0fbcfU,0xe9b5dba5U,0x3956c25bU,0x59f111f1U,0x923f82a4U,0xab1c5ed5U,</span>
+<span id="L326">        0xd807aa98U,0x12835b01U,0x243185beU,0x550c7dc3U,0x72be5d74U,0x80deb1feU,0x9bdc06a7U,0xc19bf174U,</span>
+<span id="L327">        0xe49b69c1U,0xefbe4786U,0x0fc19dc6U,0x240ca1ccU,0x2de92c6fU,0x4a7484aaU,0x5cb0a9dcU,0x76f988daU,</span>
+<span id="L328">        0x983e5152U,0xa831c66dU,0xb00327c8U,0xbf597fc7U,0xc6e00bf3U,0xd5a79147U,0x06ca6351U,0x14292967U,</span>
+<span id="L329">        0x27b70a85U,0x2e1b2138U,0x4d2c6dfcU,0x53380d13U,0x650a7354U,0x766a0abbU,0x81c2c92eU,0x92722c85U,</span>
+<span id="L330">        0xa2bfe8a1U,0xa81a664bU,0xc24b8b70U,0xc76c51a3U,0xd192e819U,0xd6990624U,0xf40e3585U,0x106aa070U,</span>
+<span id="L331">        0x19a4c116U,0x1e376c08U,0x2748774cU,0x34b0bcb5U,0x391c0cb3U,0x4ed8aa4aU,0x5b9cca4fU,0x682e6ff3U,</span>
+<span id="L332">        0x748f82eeU,0x78a5636fU,0x84c87814U,0x8cc70208U,0x90befffaU,0xa4506cebU,0xbef9a3f7U,0xc67178f2U};</span>
+<span id="L333">    std::array&lt;std::uint32_t,8&gt; h{0x6a09e667U,0xbb67ae85U,0x3c6ef372U,0xa54ff53aU,</span>
+<span id="L334">        0x510e527fU,0x9b05688cU,0x1f83d9abU,0x5be0cd19U};</span>
+<span id="L335">    std::vector&lt;unsigned char&gt; bytes(input.size());</span>
+<span id="L336">    if (!input.empty()) std::memcpy(bytes.data(),input.data(),input.size());</span>
+<span id="L337">    const auto bits = static_cast&lt;std::uint64_t&gt;(bytes.size()) * 8;</span>
+<span id="L338">    bytes.push_back(0x80);</span>
+<span id="L339">    while (bytes.size() % 64 != 56) bytes.push_back(0);</span>
+<span id="L340">    for (int shift = 56; shift &gt;= 0; shift -= 8) bytes.push_back(static_cast&lt;unsigned char&gt;(bits &gt;&gt; shift));</span>
+<span id="L341">    const auto rotate = [](std::uint32_t x, unsigned n) { return (x &gt;&gt; n) | (x &lt;&lt; (32 - n)); };</span>
+<span id="L342">    for (std::size_t offset = 0; offset &lt; bytes.size(); offset += 64) {</span>
+<span id="L343">        std::uint32_t w[64]{};</span>
+<span id="L344">        for (std::size_t n = 0; n &lt; 16; ++n)</span>
+<span id="L345">            for (std::size_t j = 0; j &lt; 4; ++j) w[n] = (w[n] &lt;&lt; 8) | bytes[offset + 4*n + j];</span>
+<span id="L346">        for (std::size_t n = 16; n &lt; 64; ++n) {</span>
+<span id="L347">            const auto a = rotate(w[n-15],7) ^ rotate(w[n-15],18) ^ (w[n-15] &gt;&gt; 3);</span>
+<span id="L348">            const auto b = rotate(w[n-2],17) ^ rotate(w[n-2],19) ^ (w[n-2] &gt;&gt; 10);</span>
+<span id="L349">            w[n] = w[n-16] + a + w[n-7] + b;</span>
+<span id="L350">        }</span>
+<span id="L351">        auto a=h[0], b=h[1], c=h[2], d=h[3], e=h[4], f=h[5], g=h[6], hh=h[7];</span>
+<span id="L352">        for (std::size_t n = 0; n &lt; 64; ++n) {</span>
+<span id="L353">            const auto s1 = rotate(e,6) ^ rotate(e,11) ^ rotate(e,25);</span>
+<span id="L354">            const auto t1 = hh + s1 + ((e&amp;f) ^ (~e&amp;g)) + k[n] + w[n];</span>
+<span id="L355">            const auto s0 = rotate(a,2) ^ rotate(a,13) ^ rotate(a,22);</span>
+<span id="L356">            const auto t2 = s0 + ((a&amp;b) ^ (a&amp;c) ^ (b&amp;c));</span>
+<span id="L357">            hh=g; g=f; f=e; e=d+t1; d=c; c=b; b=a; a=t1+t2;</span>
+<span id="L358">        }</span>
+<span id="L359">        h[0]+=a; h[1]+=b; h[2]+=c; h[3]+=d; h[4]+=e; h[5]+=f; h[6]+=g; h[7]+=hh;</span>
+<span id="L360">    }</span>
+<span id="L361">    constexpr char digits[]=&quot;0123456789abcdef&quot;;</span>
+<span id="L362">    std::string output;</span>
+<span id="L363">    for (const auto value : h) for (int shift=28; shift&gt;=0; shift-=4) output += digits[(value &gt;&gt; shift)&amp;15];</span>
+<span id="L364">    return output;</span>
+<span id="L365">}</span>
+<span id="L366"></span>
+<span id="L367">Identity capture_identity() {</span>
+<span id="L368">    Identity i;</span>
+<span id="L369">    i.source_commit=RTFW_BENCH_SOURCE_COMMIT; i.source_tree=RTFW_BENCH_SOURCE_TREE;</span>
+<span id="L370">    i.source_dirty=RTFW_BENCH_SOURCE_DIRTY; i.compiler=RTFW_BENCH_COMPILER;</span>
+<span id="L371">    i.compiler_version=RTFW_BENCH_COMPILER_VERSION; i.build_configuration=RTFW_BENCH_BUILD_CONFIG;</span>
+<span id="L372">    i.build_flags_sha256=RTFW_BENCH_BUILD_FLAGS;</span>
+<span id="L373">#ifdef _WIN32</span>
+<span id="L374">    i.os=&quot;Windows&quot;;</span>
+<span id="L375">    SYSTEM_INFO info{}; GetNativeSystemInfo(&amp;info);</span>
+<span id="L376">    i.logical_cpus=info.dwNumberOfProcessors; i.page_size=info.dwPageSize;</span>
+<span id="L377">    i.architecture=info.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ? &quot;x86_64&quot; : &quot;unknown&quot;;</span>
+<span id="L378">    MEMORYSTATUSEX memory{}; memory.dwLength=static_cast&lt;DWORD&gt;(sizeof(memory));</span>
+<span id="L379">    if (GlobalMemoryStatusEx(&amp;memory)) i.total_memory_bytes=memory.ullTotalPhys;</span>
+<span id="L380">#else</span>
+<span id="L381">    struct utsname info{};</span>
+<span id="L382">    if (uname(&amp;info) == 0) {</span>
+<span id="L383">        i.os=sanitize(info.sysname); i.kernel=sanitize(info.release); i.architecture=sanitize(info.machine);</span>
+<span id="L384">        // Deliberately never inspect nodename/domainname.</span>
+<span id="L385">    }</span>
+<span id="L386">    const long cpus = sysconf(_SC_NPROCESSORS_ONLN);</span>
+<span id="L387">    const long page = sysconf(_SC_PAGESIZE);</span>
+<span id="L388">    if (cpus &gt; 0) i.logical_cpus=static_cast&lt;std::uint64_t&gt;(cpus);</span>
+<span id="L389">    if (page &gt; 0) i.page_size=static_cast&lt;std::uint64_t&gt;(page);</span>
+<span id="L390">#ifdef _SC_PHYS_PAGES</span>
+<span id="L391">    const long pages = sysconf(_SC_PHYS_PAGES);</span>
+<span id="L392">    if (pages &gt; 0 &amp;&amp; i.page_size &amp;&amp; static_cast&lt;std::uint64_t&gt;(pages) &lt;= max_integer/i.page_size)</span>
+<span id="L393">        i.total_memory_bytes=static_cast&lt;std::uint64_t&gt;(pages)*i.page_size;</span>
+<span id="L394">#endif</span>
+<span id="L395">#ifdef __linux__</span>
+<span id="L396">    // Read one fixed allowlisted field, not CPU serials, IDs, or environment.</span>
+<span id="L397">    std::ifstream cpu(&quot;/proc/cpuinfo&quot;);</span>
+<span id="L398">    char bounded_line[512]{};</span>
+<span id="L399">    for (unsigned n=0; n&lt;256 &amp;&amp; cpu.getline(bounded_line,sizeof(bounded_line)); ++n) {</span>
+<span id="L400">        std::string line(bounded_line);</span>
+<span id="L401">        if (line.rfind(&quot;model name&quot;,0) != 0) continue;</span>
+<span id="L402">        const auto colon=line.find(&#x27;:&#x27;);</span>
+<span id="L403">        if (colon != std::string::npos) {</span>
+<span id="L404">            const auto begin=line.find_first_not_of(&quot; \t&quot;,colon+1);</span>
+<span id="L405">            if (begin != std::string::npos) {</span>
+<span id="L406">                auto model=line.substr(begin);</span>
+<span id="L407">                const auto at=model.find(&#x27;@&#x27;);</span>
+<span id="L408">                if (at!=std::string::npos) model.replace(at,1,&quot;at&quot;);</span>
+<span id="L409">                i.cpu_model=sanitize(model);</span>
+<span id="L410">            }</span>
+<span id="L411">        }</span>
+<span id="L412">        break;</span>
+<span id="L413">    }</span>
+<span id="L414">#endif</span>
+<span id="L415">#endif</span>
+<span id="L416">    return i;</span>
+<span id="L417">}</span>
+<span id="L418"></span>
+<span id="L419">std::string encode_descriptor(std::string_view provider, std::uint32_t provider_version,</span>
+<span id="L420">                              const Descriptor&amp; d, ClockKind clock) {</span>
+<span id="L421">    if (!identifier(provider) || !provider_version || validate(d) != Status::ok ||</span>
+<span id="L422">        (clock != ClockKind::fake &amp;&amp; clock != ClockKind::steady)) throw std::invalid_argument(&quot;invalid descriptor&quot;);</span>
+<span id="L423">    Result r; r.descriptor=d; r.provider_id=provider; r.provider_version=provider_version; r.clock=clock;</span>
+<span id="L424">    std::sort(r.descriptor.parameters.begin(),r.descriptor.parameters.end(),</span>
+<span id="L425">        [](const auto&amp; a,const auto&amp; b) { return a.name&lt;b.name; });</span>
+<span id="L426">    return descriptor_json(r);</span>
+<span id="L427">}</span>
+<span id="L428">Artifacts encode(const Result&amp; r) {</span>
+<span id="L429">    const auto invalid = [] { throw std::invalid_argument(&quot;invalid benchmark result&quot;); };</span>
+<span id="L430">    if (validate(r.identity) != Status::ok || r.warmup_completed &gt; r.descriptor.warmup ||</span>
+<span id="L431">        r.samples.size() &gt; r.descriptor.repetitions || r.diagnostic.size() &gt; 128) invalid();</span>
+<span id="L432">    const auto utc_ok = [](std::string_view s) {</span>
+<span id="L433">        if (s == &quot;not_available&quot;) return true;</span>
+<span id="L434">        if (s.size()!=20 || s[4]!=&#x27;-&#x27; || s[7]!=&#x27;-&#x27; || s[10]!=&#x27;T&#x27; || s[13]!=&#x27;:&#x27; || s[16]!=&#x27;:&#x27; || s[19]!=&#x27;Z&#x27;) return false;</span>
+<span id="L435">        for (std::size_t n=0; n&lt;s.size(); ++n) {</span>
+<span id="L436">            if (n==4 || n==7 || n==10 || n==13 || n==16 || n==19) continue;</span>
+<span id="L437">            if (s[n]&lt;&#x27;0&#x27; || s[n]&gt;&#x27;9&#x27;) return false;</span>
+<span id="L438">        }</span>
+<span id="L439">        const auto two=[s](std::size_t n) { return (s[n]-&#x27;0&#x27;)*10+s[n+1]-&#x27;0&#x27;; };</span>
+<span id="L440">        const int year=two(0)*100+two(2), month=two(5), day=two(8);</span>
+<span id="L441">        const int days[]{31,28,31,30,31,30,31,31,30,31,30,31};</span>
+<span id="L442">        if (year&lt;1 || month&lt;1 || month&gt;12 || day&lt;1 || two(11)&gt;23 || two(14)&gt;59 || two(17)&gt;59) return false;</span>
+<span id="L443">        const bool leap=year%4==0 &amp;&amp; (year%100!=0 || year%400==0);</span>
+<span id="L444">        return day&lt;=days[month-1]+(month==2 &amp;&amp; leap ? 1 : 0);</span>
+<span id="L445">    };</span>
+<span id="L446">    if (!utc_ok(r.start_utc) || !utc_ok(r.end_utc) ||</span>
+<span id="L447">        (r.start_utc!=&quot;not_available&quot; &amp;&amp; r.end_utc!=&quot;not_available&quot; &amp;&amp; r.end_utc &lt; r.start_utc)) invalid();</span>
+<span id="L448">    if (r.clock==ClockKind::fake &amp;&amp; (r.start_utc!=&quot;1970-01-01T00:00:00Z&quot; || r.end_utc!=r.start_utc)) invalid();</span>
+<span id="L449">    if (r.status==Status::ok) {</span>
+<span id="L450">        if (r.warmup_completed!=r.descriptor.warmup || r.samples.size()!=r.descriptor.repetitions || !r.diagnostic.empty()) invalid();</span>
+<span id="L451">    } else if (r.status==Status::not_run) {</span>
+<span id="L452">        if (r.warmup_completed || !r.samples.empty() || r.diagnostic!=&quot;prerequisite unavailable&quot;) invalid();</span>
+<span id="L453">    } else if (r.status!=Status::provider_error &amp;&amp; r.status!=Status::clock_error &amp;&amp; r.status!=Status::invariant_failed) invalid();</span>
+<span id="L454">    if (r.status!=Status::ok &amp;&amp; (r.samples.size()&gt;=r.descriptor.repetitions || r.diagnostic.empty())) invalid();</span>
+<span id="L455">    if (r.status==Status::provider_error &amp;&amp; r.diagnostic!=&quot;provider callback threw&quot; &amp;&amp;</span>
+<span id="L456">        r.diagnostic!=&quot;provider invocation failed&quot;) invalid();</span>
+<span id="L457">    if (r.status==Status::clock_error &amp;&amp; r.diagnostic!=&quot;invalid start clock&quot; &amp;&amp;</span>
+<span id="L458">        r.diagnostic!=&quot;invalid end clock&quot; &amp;&amp; r.diagnostic!=&quot;clock callback threw&quot;) invalid();</span>
+<span id="L459">    if (r.status==Status::invariant_failed &amp;&amp; r.diagnostic!=&quot;counter or correctness invariant failed&quot; &amp;&amp;</span>
+<span id="L460">        r.diagnostic!=&quot;counter aggregate overflow&quot; &amp;&amp; r.diagnostic!=&quot;duration aggregate overflow&quot;) invalid();</span>
+<span id="L461">    if (!r.samples.empty() &amp;&amp; r.warmup_completed!=r.descriptor.warmup) invalid();</span>
+<span id="L462">    Artifacts artifacts;</span>
+<span id="L463">    artifacts.descriptor=encode_descriptor(r.provider_id,r.provider_version,r.descriptor,r.clock);</span>
+<span id="L464">    const auto descriptor_hash=sha256(artifacts.descriptor);</span>
+<span id="L465">    const auto identity=identity_json(r.identity);</span>
+<span id="L466">    const auto context=sha256(object({{&quot;descriptor_sha256&quot;,json_quote(descriptor_hash)},</span>
+<span id="L467">        {&quot;identity&quot;,identity},{&quot;start_utc&quot;,json_quote(r.start_utc)}}));</span>
+<span id="L468">    std::vector&lt;std::string&gt; samples;</span>
+<span id="L469">    std::vector&lt;std::uint64_t&gt; durations, totals(r.descriptor.counters.size(),0);</span>
+<span id="L470">    std::uint64_t previous=0, total_ns=0;</span>
+<span id="L471">    for (std::size_t n=0; n&lt;r.samples.size(); ++n) {</span>
+<span id="L472">        const auto&amp; s=r.samples[n];</span>
+<span id="L473">        if (s.index!=n || s.start_ns &lt; previous || s.end_ns &lt; s.start_ns || s.end_ns&gt;max_integer ||</span>
+<span id="L474">            !s.invariants_passed || !good_observation(r.descriptor,s.observation)) invalid();</span>
+<span id="L475">        previous=s.end_ns;</span>
+<span id="L476">        const auto duration=s.end_ns-s.start_ns;</span>
+<span id="L477">        if (duration&gt;max_integer-total_ns) invalid();</span>
+<span id="L478">        total_ns+=duration; durations.push_back(duration);</span>
+<span id="L479">        Object counters;</span>
+<span id="L480">        for (std::size_t c=0; c&lt;totals.size(); ++c) {</span>
+<span id="L481">            if (s.observation.counters[c]&gt;max_integer-totals[c]) invalid();</span>
+<span id="L482">            totals[c]+=s.observation.counters[c];</span>
+<span id="L483">            counters.emplace(r.descriptor.counters[c].name,number(s.observation.counters[c]));</span>
+<span id="L484">        }</span>
+<span id="L485">        samples.push_back(object({{&quot;checksum&quot;,number(s.observation.checksum)}, {&quot;counters&quot;,object(counters)},</span>
+<span id="L486">            {&quot;duration_ns&quot;,number(duration)}, {&quot;end_ns&quot;,number(s.end_ns)}, {&quot;index&quot;,number(s.index)},</span>
+<span id="L487">            {&quot;invariants_passed&quot;,&quot;true&quot;}, {&quot;start_ns&quot;,number(s.start_ns)}}));</span>
+<span id="L488">    }</span>
+<span id="L489">    artifacts.raw=object({{&quot;descriptor_sha256&quot;,json_quote(descriptor_hash)}, {&quot;run_context_sha256&quot;,json_quote(context)},</span>
+<span id="L490">        {&quot;samples&quot;,array(samples)}, {&quot;schema_version&quot;,&quot;1&quot;}})+&#x27;\n&#x27;;</span>
+<span id="L491">    std::string statistics=&quot;null&quot;;</span>
+<span id="L492">    if (r.status==Status::ok) {</span>
+<span id="L493">        std::sort(durations.begin(),durations.end());</span>
+<span id="L494">        const auto percentile=[&amp;durations](std::size_t percent) { return durations[(percent*durations.size()+99)/100-1]; };</span>
+<span id="L495">        Object counters;</span>
+<span id="L496">        for (std::size_t n=0; n&lt;totals.size(); ++n) counters.emplace(r.descriptor.counters[n].name,number(totals[n]));</span>
+<span id="L497">        statistics=object({{&quot;counter_totals&quot;,object(counters)}, {&quot;max_ns&quot;,number(durations.back())},</span>
+<span id="L498">            {&quot;min_ns&quot;,number(durations.front())}, {&quot;p50_ns&quot;,number(percentile(50))},</span>
+<span id="L499">            {&quot;p95_ns&quot;,number(percentile(95))}, {&quot;p99_ns&quot;,number(percentile(99))},</span>
+<span id="L500">            {&quot;percentile_method&quot;,json_quote(&quot;nearest_rank&quot;)}, {&quot;total_ns&quot;,number(total_ns)}});</span>
+<span id="L501">    }</span>
+<span id="L502">    Object summary{{&quot;clock&quot;,json_quote(kind_name(r.clock))}, {&quot;descriptor_file&quot;,json_quote(&quot;descriptor.json&quot;)},</span>
+<span id="L503">        {&quot;descriptor_sha256&quot;,json_quote(descriptor_hash)}, {&quot;diagnostic&quot;,json_quote(r.diagnostic)},</span>
+<span id="L504">        {&quot;end_utc&quot;,json_quote(r.end_utc)}, {&quot;evidence_class&quot;,json_quote(evidence(r.clock))},</span>
+<span id="L505">        {&quot;identity&quot;,identity}, {&quot;measured_completed&quot;,number(r.samples.size())},</span>
+<span id="L506">        {&quot;qualification&quot;,json_quote(&quot;none&quot;)}, {&quot;raw_file&quot;,json_quote(&quot;raw.json&quot;)},</span>
+<span id="L507">        {&quot;raw_sha256&quot;,json_quote(sha256(artifacts.raw))}, {&quot;run_context_sha256&quot;,json_quote(context)},</span>
+<span id="L508">        {&quot;runner_version&quot;,json_quote(&quot;1&quot;)}, {&quot;schema_version&quot;,&quot;1&quot;}, {&quot;start_utc&quot;,json_quote(r.start_utc)},</span>
+<span id="L509">        {&quot;statistics&quot;,statistics}, {&quot;status&quot;,json_quote(status_name(r.status))},</span>
+<span id="L510">        {&quot;warmup_completed&quot;,number(r.warmup_completed)}, {&quot;workload_sha256&quot;,json_quote(r.descriptor.workload_sha256)}};</span>
+<span id="L511">    summary.emplace(&quot;result_sha256&quot;,json_quote(sha256(object(summary)+&#x27;\n&#x27;)));</span>
+<span id="L512">    artifacts.summary=object(summary)+&#x27;\n&#x27;;</span>
+<span id="L513">    for (const auto* text : {&amp;artifacts.descriptor,&amp;artifacts.raw,&amp;artifacts.summary})</span>
+<span id="L514">        if (text-&gt;size()&gt;32U*1024U*1024U) throw std::length_error(&quot;artifact extent&quot;);</span>
+<span id="L515">    return artifacts;</span>
+<span id="L516">}</span>
+<span id="L517"></span>
+<span id="L518">namespace {</span>
+<span id="L519">constexpr const char* files[]{&quot;descriptor.json&quot;,&quot;raw.json&quot;,&quot;result.json&quot;};</span>
+<span id="L520">bool safe_path(const std::filesystem::path&amp; output) {</span>
+<span id="L521">    if (output.empty() || !identifier(output.filename().string())) return false;</span>
+<span id="L522">    for (const auto&amp; part : output) if (part==&quot;..&quot;) return false;</span>
+<span id="L523">#ifdef _WIN32</span>
+<span id="L524">    // UNC and device paths can contact a network or bypass normal path rules.</span>
+<span id="L525">    const auto native=output.native();</span>
+<span id="L526">    const auto slash=[](wchar_t c) { return c==L&#x27;/&#x27; || c==L&#x27;\\&#x27;; };</span>
+<span id="L527">    if ((native.size()&gt;1 &amp;&amp; slash(native[0]) &amp;&amp; slash(native[1])) ||</span>
+<span id="L528">        native.find(L&#x27;:&#x27;,2)!=std::wstring::npos ||</span>
+<span id="L529">        (output.has_root_name() &amp;&amp; !output.is_absolute())) return false;</span>
+<span id="L530">    auto name=output.filename().string();</span>
+<span id="L531">    if (name.back()==&#x27;.&#x27;) return false;</span>
+<span id="L532">    name=name.substr(0,name.find(&#x27;.&#x27;));</span>
+<span id="L533">    for (auto&amp; c:name) if (c&gt;=&#x27;a&#x27; &amp;&amp; c&lt;=&#x27;z&#x27;) c=static_cast&lt;char&gt;(c-&#x27;a&#x27;+&#x27;A&#x27;);</span>
+<span id="L534">    if (name==&quot;CON&quot; || name==&quot;PRN&quot; || name==&quot;AUX&quot; || name==&quot;NUL&quot; ||</span>
+<span id="L535">        (name.size()==4 &amp;&amp; (name.substr(0,3)==&quot;COM&quot; || name.substr(0,3)==&quot;LPT&quot;) &amp;&amp;</span>
+<span id="L536">         name[3]&gt;=&#x27;0&#x27; &amp;&amp; name[3]&lt;=&#x27;9&#x27;)) return false;</span>
+<span id="L537">#endif</span>
+<span id="L538">    return true;</span>
+<span id="L539">}</span>
+<span id="L540">std::string temporary_name() {</span>
+<span id="L541">    std::random_device random;</span>
+<span id="L542">    std::string result=&quot;.rtfw-bench-&quot;;</span>
+<span id="L543">    constexpr char digits[]=&quot;0123456789abcdef&quot;;</span>
+<span id="L544">    for (unsigned n=0; n&lt;24; ++n) result+=digits[random()&amp;15U];</span>
+<span id="L545">    return result;</span>
+<span id="L546">}</span>
+<span id="L547">#ifndef _WIN32</span>
+<span id="L548">struct Fd {</span>
+<span id="L549">    int value{-1};</span>
+<span id="L550">    explicit Fd(int fd=-1):value(fd) {}</span>
+<span id="L551">    ~Fd() { if (value&gt;=0) ::close(value); }</span>
+<span id="L552">    Fd(const Fd&amp;)=delete; Fd&amp; operator=(const Fd&amp;)=delete;</span>
+<span id="L553">};</span>
+<span id="L554">int parent_fd(const std::filesystem::path&amp; output) {</span>
+<span id="L555">    Fd current(::open(output.is_absolute()?&quot;/&quot;:&quot;.&quot;,O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NOFOLLOW));</span>
+<span id="L556">    if (current.value&lt;0) return -1;</span>
+<span id="L557">    for (const auto&amp; part : output.parent_path().relative_path()) {</span>
+<span id="L558">        if (part.empty() || part==&quot;.&quot;) continue;</span>
+<span id="L559">        const int next=::openat(current.value,part.c_str(),O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NOFOLLOW);</span>
+<span id="L560">        if (next&lt;0) return -1;</span>
+<span id="L561">        ::close(current.value); current.value=next;</span>
+<span id="L562">    }</span>
+<span id="L563">    const int result=current.value; current.value=-1; return result;</span>
+<span id="L564">}</span>
+<span id="L565">bool write_file(int directory,const char* name,std::string_view content) {</span>
+<span id="L566">    Fd file(::openat(directory,name,O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC|O_NOFOLLOW,0600));</span>
+<span id="L567">    if (file.value&lt;0) return false;</span>
+<span id="L568">    std::size_t offset=0;</span>
+<span id="L569">    unsigned interrupts=0;</span>
+<span id="L570">    while (offset&lt;content.size()) {</span>
+<span id="L571">        const auto written=::write(file.value,content.data()+offset,content.size()-offset);</span>
+<span id="L572">        if (written&lt;0 &amp;&amp; errno==EINTR &amp;&amp; ++interrupts&lt;=32) continue;</span>
+<span id="L573">        if (written&lt;=0) return false;</span>
+<span id="L574">        offset+=static_cast&lt;std::size_t&gt;(written);</span>
+<span id="L575">    }</span>
+<span id="L576">    return ::fsync(file.value)==0;</span>
+<span id="L577">}</span>
+<span id="L578">#else</span>
+<span id="L579">struct WinHandles {</span>
+<span id="L580">    std::vector&lt;HANDLE&gt; handles;</span>
+<span id="L581">    ~WinHandles() { for (const auto h:handles) if (h!=INVALID_HANDLE_VALUE) CloseHandle(h); }</span>
+<span id="L582">};</span>
+<span id="L583">bool lock_parents(const std::filesystem::path&amp; output,WinHandles&amp; locks) {</span>
+<span id="L584">    auto parent=std::filesystem::absolute(output).parent_path();</span>
+<span id="L585">    auto current=parent.root_path();</span>
+<span id="L586">    for (const auto&amp; part:parent.relative_path()) {</span>
+<span id="L587">        current/=part;</span>
+<span id="L588">        const HANDLE h=CreateFileW(current.c_str(),FILE_READ_ATTRIBUTES,</span>
+<span id="L589">            FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_EXISTING,</span>
+<span id="L590">            FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_OPEN_REPARSE_POINT,nullptr);</span>
+<span id="L591">        if (h==INVALID_HANDLE_VALUE) return false;</span>
+<span id="L592">        locks.handles.push_back(h);</span>
+<span id="L593">        BY_HANDLE_FILE_INFORMATION info{};</span>
+<span id="L594">        if (!GetFileInformationByHandle(h,&amp;info) || (info.dwFileAttributes&amp;FILE_ATTRIBUTE_REPARSE_POINT) ||</span>
+<span id="L595">            !(info.dwFileAttributes&amp;FILE_ATTRIBUTE_DIRECTORY)) return false;</span>
+<span id="L596">    }</span>
+<span id="L597">    return true;</span>
+<span id="L598">}</span>
+<span id="L599">bool write_file(const std::filesystem::path&amp; name,std::string_view content) {</span>
+<span id="L600">    const HANDLE file=CreateFileW(name.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,</span>
+<span id="L601">        FILE_ATTRIBUTE_NORMAL|FILE_FLAG_OPEN_REPARSE_POINT,nullptr);</span>
+<span id="L602">    if (file==INVALID_HANDLE_VALUE) return false;</span>
+<span id="L603">    std::size_t offset=0;</span>
+<span id="L604">    bool good=true;</span>
+<span id="L605">    while (offset&lt;content.size()) {</span>
+<span id="L606">        DWORD written=0;</span>
+<span id="L607">        if (!WriteFile(file,content.data()+offset,static_cast&lt;DWORD&gt;(content.size()-offset),&amp;written,nullptr) || !written) {</span>
+<span id="L608">            good=false; break;</span>
+<span id="L609">        }</span>
+<span id="L610">        offset+=written;</span>
+<span id="L611">    }</span>
+<span id="L612">    if (good) good=FlushFileBuffers(file)!=0;</span>
+<span id="L613">    return CloseHandle(file)!=0 &amp;&amp; good;</span>
+<span id="L614">}</span>
+<span id="L615">#endif</span>
+<span id="L616">}</span>
+<span id="L617"></span>
+<span id="L618">Status check_destination(const std::filesystem::path&amp; output) noexcept {</span>
+<span id="L619">    try {</span>
+<span id="L620">        if (!safe_path(output)) return Status::invalid;</span>
+<span id="L621">#ifdef _WIN32</span>
+<span id="L622">        WinHandles parents;</span>
+<span id="L623">        if (!lock_parents(output,parents)) return Status::io_error;</span>
+<span id="L624">        const DWORD attributes=GetFileAttributesW(output.c_str());</span>
+<span id="L625">        if (attributes!=INVALID_FILE_ATTRIBUTES) return Status::exists;</span>
+<span id="L626">        return GetLastError()==ERROR_FILE_NOT_FOUND ? Status::ok : Status::io_error;</span>
+<span id="L627">#else</span>
+<span id="L628">        Fd parent(parent_fd(output));</span>
+<span id="L629">        if (parent.value&lt;0) return Status::io_error;</span>
+<span id="L630">        struct stat info{};</span>
+<span id="L631">        if (::fstatat(parent.value,output.filename().c_str(),&amp;info,AT_SYMLINK_NOFOLLOW)==0) return Status::exists;</span>
+<span id="L632">        return errno==ENOENT ? Status::ok : Status::io_error;</span>
+<span id="L633">#endif</span>
+<span id="L634">    } catch (...) { return Status::invalid; }</span>
+<span id="L635">}</span>
+<span id="L636">Status publish(const Result&amp; result,const std::filesystem::path&amp; output) {</span>
+<span id="L637">    const auto checked=check_destination(output);</span>
+<span id="L638">    if (checked!=Status::ok) return checked;</span>
+<span id="L639">    Artifacts a;</span>
+<span id="L640">    try { a=encode(result); } catch (...) { return Status::invalid; }</span>
+<span id="L641">    const std::string* content[]{&amp;a.descriptor,&amp;a.raw,&amp;a.summary};</span>
+<span id="L642">    const auto temporary=temporary_name();</span>
+<span id="L643">    [[maybe_unused]] const auto leaf=output.filename();</span>
+<span id="L644">#ifdef _WIN32</span>
+<span id="L645">    WinHandles parents;</span>
+<span id="L646">    if (!lock_parents(output,parents)) return Status::io_error;</span>
+<span id="L647">    const auto temporary_path=output.parent_path()/temporary;</span>
+<span id="L648">    const std::filesystem::path paths[]{temporary_path/files[0],temporary_path/files[1],temporary_path/files[2]};</span>
+<span id="L649">    const auto target=std::filesystem::absolute(output).native();</span>
+<span id="L650">    if (target.size()&gt;32767) return Status::invalid;</span>
+<span id="L651">    const auto extent=sizeof(FILE_RENAME_INFO)+target.size()*sizeof(wchar_t);</span>
+<span id="L652">    std::vector&lt;std::max_align_t&gt; storage((extent+sizeof(std::max_align_t)-1)/sizeof(std::max_align_t));</span>
+<span id="L653">    auto* rename=reinterpret_cast&lt;FILE_RENAME_INFO*&gt;(storage.data());</span>
+<span id="L654">    std::memset(rename,0,extent);</span>
+<span id="L655">    rename-&gt;FileNameLength=static_cast&lt;DWORD&gt;(target.size()*sizeof(wchar_t));</span>
+<span id="L656">    std::memcpy(rename-&gt;FileName,target.data(),target.size()*sizeof(wchar_t));</span>
+<span id="L657">    if (!CreateDirectoryW(temporary_path.c_str(),nullptr)) return Status::io_error;</span>
+<span id="L658">    const HANDLE directory=CreateFileW(temporary_path.c_str(),DELETE|FILE_READ_ATTRIBUTES,</span>
+<span id="L659">        FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_EXISTING,</span>
+<span id="L660">        FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_OPEN_REPARSE_POINT,nullptr);</span>
+<span id="L661">    if (directory==INVALID_HANDLE_VALUE) { RemoveDirectoryW(temporary_path.c_str()); return Status::io_error; }</span>
+<span id="L662">    bool good=true;</span>
+<span id="L663">    for (std::size_t n=0; n&lt;3 &amp;&amp; good; ++n) good=write_file(paths[n],*content[n]);</span>
+<span id="L664">    Status status=Status::io_error;</span>
+<span id="L665">    if (good) {</span>
+<span id="L666">        if (SetFileInformationByHandle(directory,FileRenameInfo,rename,static_cast&lt;DWORD&gt;(extent))) status=Status::ok;</span>
+<span id="L667">        else { const DWORD error=GetLastError();</span>
+<span id="L668">            if (error==ERROR_ALREADY_EXISTS || error==ERROR_FILE_EXISTS) status=Status::exists; }</span>
+<span id="L669">    }</span>
+<span id="L670">    CloseHandle(directory);</span>
+<span id="L671">    if (status!=Status::ok) {</span>
+<span id="L672">        for (const auto&amp; path:paths) DeleteFileW(path.c_str());</span>
+<span id="L673">        RemoveDirectoryW(temporary_path.c_str());</span>
+<span id="L674">    }</span>
+<span id="L675">    return status;</span>
+<span id="L676">#elif defined(__linux__) &amp;&amp; defined(SYS_renameat2)</span>
+<span id="L677">    Fd parent(parent_fd(output));</span>
+<span id="L678">    if (parent.value&lt;0 || ::mkdirat(parent.value,temporary.c_str(),0700)!=0) return Status::io_error;</span>
+<span id="L679">    Fd directory(::openat(parent.value,temporary.c_str(),O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NOFOLLOW));</span>
+<span id="L680">    const auto cleanup=[&amp;] {</span>
+<span id="L681">        if (directory.value&gt;=0) for (const auto* name:files) ::unlinkat(directory.value,name,0);</span>
+<span id="L682">        ::unlinkat(parent.value,temporary.c_str(),AT_REMOVEDIR);</span>
+<span id="L683">    };</span>
+<span id="L684">    if (directory.value&lt;0) { cleanup(); return Status::io_error; }</span>
+<span id="L685">    for (std::size_t n=0; n&lt;3; ++n) if (!write_file(directory.value,files[n],*content[n])) {</span>
+<span id="L686">        cleanup(); return Status::io_error;</span>
+<span id="L687">    }</span>
+<span id="L688">    if (::fsync(directory.value)!=0) { cleanup(); return Status::io_error; }</span>
+<span id="L689">    // RENAME_NOREPLACE = 1. Never replace an existing empty directory, even in a race.</span>
+<span id="L690">    if (::syscall(SYS_renameat2,parent.value,temporary.c_str(),parent.value,leaf.c_str(),1U)!=0) {</span>
+<span id="L691">        const auto status=errno==EEXIST ? Status::exists : Status::io_error;</span>
+<span id="L692">        cleanup(); return status;</span>
+<span id="L693">    }</span>
+<span id="L694">    return Status::ok;</span>
+<span id="L695">#else</span>
+<span id="L696">    // A check followed by POSIX rename is not create-new atomic publication.</span>
+<span id="L697">    return Status::io_error;</span>
+<span id="L698">#endif</span>
+<span id="L699">}</span>
+<span id="L700">}  // namespace rtfw::benchmark</span></pre></html>

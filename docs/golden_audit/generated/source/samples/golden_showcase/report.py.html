@@ -1,0 +1,135 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_showcase/report.py</title><h1>samples/golden_showcase/report.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">&quot;&quot;&quot;Recompute showcase coverage; reports never certify their own source inputs.&quot;&quot;&quot;</span>
+<span id="L2">import argparse</span>
+<span id="L3">import json</span>
+<span id="L4">from pathlib import Path</span>
+<span id="L5">import artifacts as a</span>
+<span id="L6"></span>
+<span id="L7"></span>
+<span id="L8">def experiment(path,lever,value):</span>
+<span id="L9">    e=a.load(path)</span>
+<span id="L10">    a.require(e[&#x27;schema&#x27;]==1 and e[&#x27;lever&#x27;]==lever and e[&#x27;requested&#x27;]==e[&#x27;effective&#x27;]==value,&#x27;requested/effective lever&#x27;)</span>
+<span id="L11">    a.require(e[&#x27;correct&#x27;] is True and e[&#x27;cleanup&#x27;] is True,&#x27;experiment failed/unclean&#x27;)</span>
+<span id="L12">    for key,item in e.items():</span>
+<span id="L13">        if key not in (&#x27;lever&#x27;,&#x27;scope&#x27;,&#x27;correct&#x27;,&#x27;cleanup&#x27;,&#x27;status&#x27;,&#x27;has_state&#x27;):a.require(type(item) is int and 0&lt;=item&lt;2**64,&#x27;experiment integer&#x27;)</span>
+<span id="L14">    a.require(type(e[&#x27;status&#x27;]) is int,&#x27;experiment status&#x27;)</span>
+<span id="L15">    if lever in (&#x27;workers&#x27;,&#x27;grain&#x27;,&#x27;cuda_graph&#x27;):</span>
+<span id="L16">        a.require(e[&#x27;scope&#x27;]==&#x27;frozen-golden-loop&#x27; and e[&#x27;operations&#x27;]==24 and e[&#x27;calls&#x27;]==108 and e[&#x27;checks&#x27;]==18432 and e[&#x27;status&#x27;]==0,&#x27;golden experiment workload&#x27;)</span>
+<span id="L17">        a.require(e[&#x27;runtime_id&#x27;]&gt;0 and e[&#x27;config_id&#x27;]&gt;0 and e[&#x27;bytes&#x27;]&gt;0,&#x27;golden experiment identities&#x27;)</span>
+<span id="L18">        if lever==&#x27;cuda_graph&#x27;:a.require(e[&#x27;accepted&#x27;]==24,&#x27;actual CUDA dispatches&#x27;)</span>
+<span id="L19">    elif lever==&#x27;control_burst&#x27;:</span>
+<span id="L20">        a.require(e[&#x27;scope&#x27;]==&#x27;public-control-boundary&#x27; and e[&#x27;operations&#x27;]==value and e[&#x27;accepted&#x27;]==min(16,value) and e[&#x27;rejected&#x27;]==max(0,value-16) and e[&#x27;replaced&#x27;]==min(16,value)-1,&#x27;control sequence conservation&#x27;)</span>
+<span id="L21">        a.require(e[&#x27;calls&#x27;]==8 and e[&#x27;checks&#x27;]==768 and e[&#x27;status&#x27;]==0,&#x27;control boundary&#x27;)</span>
+<span id="L22">    elif lever in (&#x27;device_depth&#x27;,&#x27;transfer_batch&#x27;,&#x27;staging_slots&#x27;):</span>
+<span id="L23">        depth=value if lever==&#x27;device_depth&#x27; else 2</span>
+<span id="L24">        batch=value if lever==&#x27;transfer_batch&#x27; else 4</span>
+<span id="L25">        slots=value if lever==&#x27;staging_slots&#x27; else 2</span>
+<span id="L26">        a.require(e[&#x27;scope&#x27;]==&#x27;public-hal-v2-loopback-batch-copy&#x27; and e[&#x27;operations&#x27;]==64 and e[&#x27;bytes&#x27;]==65536,&#x27;equal HAL payload work&#x27;)</span>
+<span id="L27">        a.require(e[&#x27;accepted&#x27;]==e[&#x27;calls&#x27;]==64//batch and e[&#x27;rejected&#x27;]==64//batch//depth and e[&#x27;capacity&#x27;]==depth and e[&#x27;scratch&#x27;]==slots and e[&#x27;checks&#x27;]==slots*1024 and e[&#x27;status&#x27;]==0,&#x27;actual HAL capacities/copies&#x27;)</span>
+<span id="L28">    else:</span>
+<span id="L29">        a.require(e[&#x27;scope&#x27;]==&#x27;public-runtime-task-rate-telemetry&#x27; and e[&#x27;checks&#x27;]==64 and e[&#x27;runtime_id&#x27;]&gt;0 and e[&#x27;config_id&#x27;]&gt;0,&#x27;public Runtime experiment&#x27;)</span>
+<span id="L30">        rejected=lever==&#x27;queue_slots&#x27; and value==4</span>
+<span id="L31">        failed=lever==&#x27;overload_policy&#x27; and value==0</span>
+<span id="L32">        a.require(e[&#x27;operations&#x27;]==(1 if rejected else 7 if failed else 24) and e[&#x27;calls&#x27;]==(1 if rejected else 6 if failed else 24),&#x27;bounded work/failure count&#x27;)</span>
+<span id="L33">        a.require(e[&#x27;status&#x27;]==(-5 if rejected or failed else 0) and e[&#x27;rejected&#x27;]==int(rejected or failed),&#x27;failure outcome retained&#x27;)</span>
+<span id="L34">        if rejected:a.require(0&lt;=e[&#x27;checksum&#x27;]&lt;=2080,&#x27;bounded partial task execution&#x27;)</span>
+<span id="L35">        else:a.require(e[&#x27;checksum&#x27;]==e[&#x27;calls&#x27;]*2080,&#x27;task scalar oracle&#x27;)</span>
+<span id="L36">        a.require(e[&#x27;capacity&#x27;]==(value if lever==&#x27;queue_slots&#x27; else 32) and e[&#x27;scratch&#x27;]==(value if lever==&#x27;scratch_bytes&#x27; else 64),&#x27;effective queue/scratch&#x27;)</span>
+<span id="L37">        if lever==&#x27;telemetry_capacity&#x27;:</span>
+<span id="L38">            # Zero capacity is disabled capture; the raw sequence gap is</span>
+<span id="L39">            # retained as unavailable events, never classified as pressure.</span>
+<span id="L40">            a.require(e[&#x27;gaps&#x27;]==(96 if value==0 else 32 if value==64 else 0),&#x27;trace cursor accounting&#x27;)</span>
+<span id="L41">    has_state=lever in (&#x27;workers&#x27;,&#x27;grain&#x27;,&#x27;cuda_graph&#x27;,&#x27;control_burst&#x27;)</span>
+<span id="L42">    a.require(e[&#x27;has_state&#x27;] is has_state,&#x27;experiment state inventory&#x27;)</span>
+<span id="L43">    if has_state:</span>
+<span id="L44">        config=dict(count=16,ticks=24,workers=value if lever==&#x27;workers&#x27; else 2,grain=value if lever==&#x27;grain&#x27; else 4,mode=&#x27;native&#x27;,external=False,campaign=&#x27;nominal&#x27;,peer_responses=0,phase_calls=[24,24,24,12,8,8,4,4])</span>
+<span id="L45">        data=Path(str(path)+&#x27;.state.bin&#x27;).read_bytes()</span>
+<span id="L46">        a.require(a.fnv(data)==e[&#x27;checksum&#x27;],&#x27;experiment actual state binding&#x27;)</span>
+<span id="L47">        if lever!=&#x27;control_burst&#x27;:</span>
+<span id="L48">            state=a.module(&#x27;showcase_experiment_state&#x27;,a.HERE/&#x27;state.py&#x27;)</span>
+<span id="L49">            state.inspect_state(path.parent,config,path.name+&#x27;.state.bin&#x27;)</span>
+<span id="L50">        else:</span>
+<span id="L51">            import struct</span>
+<span id="L52">            a.state_header(data,config)</span>
+<span id="L53">            body,sums,configuration,stale,missing=a.cpu.reference(dict(config,ticks=1))</span>
+<span id="L54">            a.require(list(struct.unpack_from(&#x27;&lt;4608i&#x27;,data,512))==body,&#x27;control burst complete state oracle&#x27;)</span>
+<span id="L55">            a.require(struct.unpack_from(&#x27;&lt;4i&#x27;,data,40)==configuration and struct.unpack_from(&#x27;&lt;Q&#x27;,data,56)[0]==1 and struct.unpack_from(&#x27;&lt;Q&#x27;,data,64)[0]&gt;0,&#x27;control burst state boundary&#x27;)</span>
+<span id="L56">            a.require(struct.unpack_from(&#x27;&lt;8Q&#x27;,data,72)==(1,)*8 and struct.unpack_from(&#x27;&lt;5Q&#x27;,data,136)==(1,)*5 and struct.unpack_from(&#x27;&lt;5Q&#x27;,data,176)==(1,)*5,&#x27;control burst phase/channel counts&#x27;)</span>
+<span id="L57">            a.require(not any(data[216:256]) and struct.unpack_from(&#x27;&lt;5Q&#x27;,data,256)==(2,2,2,1,2) and not any(data[296:392]),&#x27;control burst selection metadata&#x27;)</span>
+<span id="L58">            a.require(struct.unpack_from(&#x27;&lt;Q&#x27;,data,392)[0]==1 and struct.unpack_from(&#x27;&lt;6q&#x27;,data,400)==tuple(sums),&#x27;control burst survivor state&#x27;)</span>
+<span id="L59">        e=dict(e,state_sha256=a.sha(data))</span>
+<span id="L60">    e=dict(e,record_sha256=a.sha(path.read_bytes()),outcome=&#x27;bounded_rejection&#x27; if e[&#x27;status&#x27;] else &#x27;completed&#x27;)</span>
+<span id="L61">    e[&#x27;measurement&#x27;]=&#x27;disabled_capture&#x27; if lever==&#x27;telemetry_capacity&#x27; and value==0 else &#x27;actual_public_api_execution&#x27;</span>
+<span id="L62">    return e</span>
+<span id="L63"></span>
+<span id="L64">def telemetry(directory):</span>
+<span id="L65">    e=a.load(directory/&#x27;evidence.json&#x27;)</span>
+<span id="L66">    a.require(e[&#x27;schema&#x27;]==1 and e[&#x27;fault&#x27;]==&#x27;telemetry_loss&#x27; and e[&#x27;injected_tick&#x27;]==6 and e[&#x27;detected_tick&#x27;]==12 and e[&#x27;capacity&#x27;]==64,&#x27;telemetry fault boundary&#x27;)</span>
+<span id="L67">    a.require(e[&#x27;lost&#x27;]==20 and e[&#x27;first_sequence&#x27;]-e[&#x27;consumer_before&#x27;]==e[&#x27;lost&#x27;] and e[&#x27;next_sequence&#x27;]-e[&#x27;first_sequence&#x27;]==64 and e[&#x27;emitted&#x27;]==266,&#x27;exact real retention gap&#x27;)</span>
+<span id="L68">    a.require(e[&#x27;refusal_status&#x27;]==-6 and e[&#x27;state_unchanged&#x27;] is True and e[&#x27;replay_calls_before_refusal&#x27;]==0,&#x27;pre-effect replay refusal&#x27;)</span>
+<span id="L69">    a.require(e[&#x27;original_runtime&#x27;]&gt;0 and e[&#x27;recovery_runtime&#x27;]&gt;0 and e[&#x27;original_runtime&#x27;]!=e[&#x27;recovery_runtime&#x27;] and e[&#x27;recovery_frames&#x27;]==18,&#x27;fresh-owner recovery&#x27;)</span>
+<span id="L70">    a.require(e[&#x27;cleanup&#x27;] is True and e[&#x27;correct&#x27;] is True and e[&#x27;memory_acquired&#x27;]==e[&#x27;memory_released&#x27;]==6,&#x27;fault cleanup&#x27;)</span>
+<span id="L71">    state=a.module(&#x27;showcase_loss_state&#x27;,a.HERE/&#x27;state.py&#x27;)</span>
+<span id="L72">    config=dict(count=16,ticks=24,workers=2,grain=4,mode=&#x27;native&#x27;,external=False,campaign=&#x27;nominal&#x27;,peer_responses=0,phase_calls=[24,24,24,12,8,8,4,4])</span>
+<span id="L73">    state.inspect_state(directory,config)</span>
+<span id="L74">    a.replay_pair(directory,dict(runtime_id=e[&#x27;original_runtime&#x27;]))</span>
+<span id="L75">    trusted=(directory/&#x27;recovery_trusted.bin&#x27;).read_bytes()</span>
+<span id="L76">    a.require(trusted[:8]==b&#x27;RTFWLCR2&#x27; and len(trusted)&gt;=400,&#x27;recovery schema&#x27;)</span>
+<span id="L77">    import struct</span>
+<span id="L78">    word=lambda n:struct.unpack_from(&#x27;&lt;Q&#x27;,trusted,n)[0]</span>
+<span id="L79">    a.require(word(32)==e[&#x27;recovery_runtime&#x27;] and word(16)==len(trusted),&#x27;fresh replay pairing&#x27;)</span>
+<span id="L80">    checked=bytearray(trusted);checked[24:32]=bytes(8)</span>
+<span id="L81">    a.require(a.fnv(checked)==word(24),&#x27;recovery checksum&#x27;)</span>
+<span id="L82">    for name,off,size in [(&#x27;recovery_checkpoint.bin&#x27;,96,104),(&#x27;recovery_active.bin&#x27;,120,128)]:</span>
+<span id="L83">        a.require(trusted[word(off):word(off)+word(size)]==(directory/name).read_bytes(),&#x27;fresh nested pairing&#x27;)</span>
+<span id="L84">    return e</span>
+<span id="L85"></span>
+<span id="L86">def validate(directory,provenance,publish=False,binaries=None):</span>
+<span id="L87">    a.require(not directory.is_symlink() and all(not path.is_symlink() for path in directory.rglob(&#x27;*&#x27;)),&#x27;symlink evidence is not admitted&#x27;)</span>
+<span id="L88">    source=a.provenance(provenance);inputs=a.load(directory/&#x27;inputs.json&#x27;)</span>
+<span id="L89">    a.require(inputs[&#x27;schema&#x27;]==1 and inputs[&#x27;source&#x27;]==source and inputs[&#x27;clock&#x27;] in (&#x27;fake&#x27;,&#x27;steady&#x27;),&#x27;run source/clock binding&#x27;)</span>
+<span id="L90">    names={&#x27;golden_showcase&#x27;,&#x27;golden_experiment&#x27;,&#x27;golden_telemetry_loss&#x27;,&#x27;golden_system&#x27;,&#x27;golden_cuda&#x27;,&#x27;golden_xdma&#x27;,&#x27;golden_controller&#x27;}</span>
+<span id="L91">    a.require(set(inputs[&#x27;executables&#x27;])==names and binaries is not None and set(binaries)==names,&#x27;provide all seven actual executables for byte binding&#x27;)</span>
+<span id="L92">    a.require(inputs[&#x27;executables&#x27;]=={name:a.sha(path.read_bytes()) for name,path in binaries.items()},&#x27;executable byte binding&#x27;)</span>
+<span id="L93">    expected=set(a.IDS)|{f&#x27;{variant}-{dispatch}-{mode}&#x27; for variant,dispatch in [(&#x27;sim_cuda&#x27;,&#x27;kernel&#x27;),(&#x27;sim_cuda&#x27;,&#x27;graph&#x27;),(&#x27;sim_xdma&#x27;,&#x27;cpu&#x27;),(&#x27;sim_combined&#x27;,&#x27;kernel&#x27;),(&#x27;sim_combined&#x27;,&#x27;graph&#x27;)] for mode in (&#x27;native&#x27;,&#x27;host&#x27;)}</span>
+<span id="L94">    a.require({x.name for x in (directory/&#x27;benchmarks&#x27;).iterdir()}==expected,&#x27;benchmark matrix coverage&#x27;)</span>
+<span id="L95">    benchmarks={name:a.benchmark(directory/&#x27;benchmarks&#x27;/name) for name in sorted(expected)}</span>
+<span id="L96">    a.require(all(v[&#x27;clock&#x27;]==inputs[&#x27;clock&#x27;] for v in benchmarks.values()),&#x27;mixed clock evidence&#x27;)</span>
+<span id="L97">    a.require(all(v[&#x27;identity&#x27;][&#x27;source_commit&#x27;]==source[&#x27;source_commit&#x27;] and v[&#x27;identity&#x27;][&#x27;source_tree&#x27;]==source[&#x27;source_tree&#x27;] for v in benchmarks.values()),&#x27;benchmark/source commit and tree binding&#x27;)</span>
+<span id="L98">    contract=a.cpu.contract();experiments=[]</span>
+<span id="L99">    expected_experiments={f&#x27;{lever[&quot;id&quot;]}-{value}.json&#x27; for lever in contract[&#x27;levers&#x27;] for value in lever[&#x27;values&#x27;]}</span>
+<span id="L100">    expected_experiments|={name+&#x27;.state.bin&#x27; for name in list(expected_experiments) if name.split(&#x27;-&#x27;)[0] in (&#x27;workers&#x27;,&#x27;grain&#x27;,&#x27;cuda_graph&#x27;,&#x27;control_burst&#x27;)}</span>
+<span id="L101">    a.require({x.name for x in (directory/&#x27;experiments&#x27;).iterdir()}==expected_experiments,&#x27;every frozen lever/value&#x27;)</span>
+<span id="L102">    for lever in contract[&#x27;levers&#x27;]:</span>
+<span id="L103">        for value in lever[&#x27;values&#x27;]:experiments.append(experiment(directory/&#x27;experiments&#x27;/f&#x27;{lever[&quot;id&quot;]}-{value}.json&#x27;,lever[&#x27;id&#x27;],value))</span>
+<span id="L104">    faults={};expected_faults={v[&#x27;id&#x27;] for v in contract[&#x27;faults&#x27;]}</span>
+<span id="L105">    a.require({x.name for x in (directory/&#x27;faults&#x27;).iterdir()}==expected_faults,&#x27;every frozen fault&#x27;)</span>
+<span id="L106">    for name in sorted(expected_faults):</span>
+<span id="L107">        path=directory/&#x27;faults&#x27;/name</span>
+<span id="L108">        if name==&#x27;telemetry_loss&#x27;:e=telemetry(path)</span>
+<span id="L109">        elif name in (&#x27;underflow&#x27;,&#x27;overrun&#x27;,&#x27;stop_failure&#x27;,&#x27;device_loss&#x27;,&#x27;reset_failure&#x27;):e=a.variant_inspect(path,&#x27;sim_combined&#x27;)</span>
+<span id="L110">        else:e=a.cpu.inspect(path)</span>
+<span id="L111">        faults[name]=dict(execution=e,files={p.name:a.sha(p.read_bytes()) for p in path.iterdir() if p.is_file()})</span>
+<span id="L112">    external={}</span>
+<span id="L113">    expected_external={f&#x27;{kit}-{dispatch}&#x27; for kit,ds in [(&#x27;golden_cuda&#x27;,(&#x27;kernel&#x27;,&#x27;graph&#x27;)),(&#x27;golden_xdma&#x27;,(&#x27;cpu&#x27;,&#x27;kernel&#x27;,&#x27;graph&#x27;))] for dispatch in ds}</span>
+<span id="L114">    a.require({x.name for x in (directory/&#x27;external&#x27;).iterdir()}==expected_external,&#x27;external variant matrix&#x27;)</span>
+<span id="L115">    for name in sorted(expected_external):</span>
+<span id="L116">        path=directory/&#x27;external&#x27;/name</span>
+<span id="L117">        e=a.variant_inspect(path,&#x27;sim_cuda&#x27; if name.startswith(&#x27;golden_cuda&#x27;) else &#x27;sim_xdma&#x27; if name.endswith(&#x27;cpu&#x27;) else &#x27;sim_combined&#x27;)</span>
+<span id="L118">        a.require(e[&#x27;external&#x27;] is True and e[&#x27;peer_responses&#x27;]==8,&#x27;actual external responses&#x27;)</span>
+<span id="L119">        external[name]=dict(execution=e,files={p.name:a.sha(p.read_bytes()) for p in path.iterdir() if p.is_file()})</span>
+<span id="L120">    coverage=dict(schema=1,contract_sha256=a.FROZEN,batch=&#x27;M26-05&#x27;,status=&#x27;PASS&#x27;,source=source,executables=inputs[&#x27;executables&#x27;],benchmark_cases=list(a.IDS),benchmark_runs=25,raw_measured_samples=125,warmup_invocations=50,levers={v[&#x27;id&#x27;]:v[&#x27;values&#x27;] for v in contract[&#x27;levers&#x27;]},faults=sorted(expected_faults),external_variants=sorted(external),final_cap_m26_audit=&#x27;M26-06_NOT_RUN&#x27;,physical=&#x27;NOT_RUN&#x27;,controlled_performance=&#x27;NOT_RUN&#x27;,rt_qualification=&#x27;NOT_RUN&#x27;)</span>
+<span id="L121">    report=dict(coverage=coverage,benchmarks=benchmarks,experiments=experiments,external=external)</span>
+<span id="L122">    for name,value in [(&#x27;report.json&#x27;,report),(&#x27;faults.json&#x27;,faults),(&#x27;coverage.json&#x27;,coverage)]:</span>
+<span id="L123">        path=directory/name</span>
+<span id="L124">        if publish:a.require(not path.exists(),&#x27;report exists&#x27;);path.write_text(json.dumps(value,sort_keys=True,indent=2)+&#x27;\n&#x27;)</span>
+<span id="L125">        else:a.require(a.load(path)==value,&#x27;fabricated or stale &#x27;+name)</span>
+<span id="L126">    return coverage</span>
+<span id="L127"></span>
+<span id="L128">def main():</span>
+<span id="L129">    p=argparse.ArgumentParser();p.add_argument(&#x27;directory&#x27;,type=Path);p.add_argument(&#x27;--provenance&#x27;,type=Path,default=a.HERE/&#x27;provenance.json&#x27;);p.add_argument(&#x27;--binaries-build&#x27;,type=Path,required=True);p.add_argument(&#x27;--config&#x27;);args=p.parse_args()</span>
+<span id="L130">    import run</span>
+<span id="L131">    names=(&#x27;golden_showcase&#x27;,&#x27;golden_experiment&#x27;,&#x27;golden_telemetry_loss&#x27;,&#x27;golden_system&#x27;,&#x27;golden_cuda&#x27;,&#x27;golden_xdma&#x27;,&#x27;golden_controller&#x27;)</span>
+<span id="L132">    try:validate(args.directory,args.provenance,binaries={name:run.executable(args.binaries_build,name,args.config) for name in names})</span>
+<span id="L133">    except (OSError,ValueError,KeyError,TypeError) as e:p.exit(1,str(e)+&#x27;\n&#x27;)</span>
+<span id="L134">    print(&#x27;PASS independently recomputed report, faults, coverage and executable/source binding&#x27;)</span>
+<span id="L135">if __name__==&#x27;__main__&#x27;:main()</span></pre></html>

@@ -1,0 +1,59 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_xdma/codec.hpp</title><h1>samples/golden_xdma/codec.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;../golden_system/world.hpp&quot;</span>
+<span id="L3">#include &lt;cstring&gt;</span>
+<span id="L4"></span>
+<span id="L5">namespace golden::xdma {</span>
+<span id="L6">inline constexpr std::uint64_t clock_origin = 1000;</span>
+<span id="L7">inline constexpr std::uint64_t completion_ns = 500&#x27;000;</span>
+<span id="L8">inline constexpr std::uint64_t safe_timeout_ns = 8&#x27;000&#x27;000;</span>
+<span id="L9">// Both formats have 120-byte headers, but different checksum seeds, sequence</span>
+<span id="L10">// origins, generation, status and timestamp semantics. Never reinterpret one</span>
+<span id="L11">// as the other or edit a Runtime replay artifact to make it fit.</span>
+<span id="L12">inline void sampled_header(Frame &amp;f, std::size_t channel,</span>
+<span id="L13">                           std::uint64_t sequence, std::uint64_t generation,</span>
+<span id="L14">                           std::uint64_t timestamp,</span>
+<span id="L15">                           rt::SampledIoFrameStatus status) noexcept {</span>
+<span id="L16">  rt::SampledIoFrameHeader h;</span>
+<span id="L17">  h.channel_identity = 26001 + channel;</span>
+<span id="L18">  h.sequence = sequence;</span>
+<span id="L19">  h.release_generation = generation;</span>
+<span id="L20">  h.sample_count = 1;</span>
+<span id="L21">  h.encoding =</span>
+<span id="L22">      static_cast&lt;std::uint32_t&gt;(rt::SampledIoEncoding::signed_int32_le);</span>
+<span id="L23">  h.timestamp_domain_identity = 1;</span>
+<span id="L24">  h.first_sample_timestamp = timestamp;</span>
+<span id="L25">  h.sample_interval_ns = fixed::tick_ns;</span>
+<span id="L26">  h.trigger_identity = h.calibration_identity = 1;</span>
+<span id="L27">  h.trigger_sequence = sequence;</span>
+<span id="L28">  h.status = static_cast&lt;std::uint32_t&gt;(status);</span>
+<span id="L29">  h.payload_checksum = rt::sampled_io_payload_checksum(</span>
+<span id="L30">      frame_span(f, channel).subspan(header_bytes));</span>
+<span id="L31">  std::memcpy(f.data(), &amp;h, sizeof(h));</span>
+<span id="L32">}</span>
+<span id="L33">inline bool application_frame(const Frame &amp;sampled, Frame &amp;application,</span>
+<span id="L34">                              std::size_t channel, std::size_t count) noexcept {</span>
+<span id="L35">  rt::SampledIoFrameHeader h;</span>
+<span id="L36">  std::memcpy(&amp;h, sampled.data(), sizeof(h));</span>
+<span id="L37">  if (h.struct_size != 120 || h.version != 1 ||</span>
+<span id="L38">      h.channel_identity != 26001 + channel || !h.sequence ||</span>
+<span id="L39">      h.sample_count != 1 || h.encoding != 3 ||</span>
+<span id="L40">      h.timestamp_domain_identity != 1 ||</span>
+<span id="L41">      h.sample_interval_ns != fixed::tick_ns || h.trigger_identity != 1 ||</span>
+<span id="L42">      h.calibration_identity != 1 || h.reserved0 || h.reserved[0] ||</span>
+<span id="L43">      h.reserved[1] || h.status &lt; 1 || h.status &gt; 3 ||</span>
+<span id="L44">      h.payload_checksum !=</span>
+<span id="L45">          rt::sampled_io_payload_checksum(</span>
+<span id="L46">              frame_span(sampled, channel).subspan(header_bytes)))</span>
+<span id="L47">    return false;</span>
+<span id="L48">  const auto logical = h.first_sample_timestamp &gt;= clock_origin</span>
+<span id="L49">                           ? h.first_sample_timestamp - clock_origin</span>
+<span id="L50">                           : 0;</span>
+<span id="L51">  if (logical % fixed::tick_ns)</span>
+<span id="L52">    return false;</span>
+<span id="L53">  application = sampled;</span>
+<span id="L54">  // Application-only codec. Real channel/action headers are retained unchanged.</span>
+<span id="L55">  seal(application, channel, logical / fixed::tick_ns,</span>
+<span id="L56">       h.status == 2 ? h.release_generation : 1);</span>
+<span id="L57">  return valid_frame(application, channel, count);</span>
+<span id="L58">}</span>
+<span id="L59">} // namespace golden::xdma</span></pre></html>

@@ -1,0 +1,300 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/backend_authoring/test_backend.cpp</title><h1>tests/backend_authoring/test_backend.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;../../samples/backend_authoring/backend.hpp&quot;</span>
+<span id="L2">#include &quot;../../samples/backend_authoring/conformance.hpp&quot;</span>
+<span id="L3">#include &quot;../../samples/backend_authoring/runtime_example.hpp&quot;</span>
+<span id="L4">#include &lt;iostream&gt;</span>
+<span id="L5">#include &lt;thread&gt;</span>
+<span id="L6">#include &quot;../cuda_physics/allocation_guard.hpp&quot;</span>
+<span id="L7"></span>
+<span id="L8">namespace kit = backend_kit;</span>
+<span id="L9">using S = kit::Status;</span>
+<span id="L10">#define CHECK(x) do { if (!(x)) { std::cerr &lt;&lt; __func__ &lt;&lt; &#x27;:&#x27; &lt;&lt; __LINE__ &lt;&lt; &quot; failed: &quot; #x &lt;&lt; &#x27;\n&#x27;; return false; } } while (false)</span>
+<span id="L11">kit::Profile profile(kit::Backend&amp; b) {</span>
+<span id="L12">    return {kit::copy_opcode, &amp;b,</span>
+<span id="L13">        [](void* p, kit::Fault f) noexcept { static_cast&lt;kit::Backend*&gt;(p)-&gt;inject(f); },</span>
+<span id="L14">        [](void* p) noexcept { return static_cast&lt;kit::Backend*&gt;(p)-&gt;owns_setup(); },</span>
+<span id="L15">        [](void* p) noexcept { return static_cast&lt;kit::Backend*&gt;(p)-&gt;registered(); }};</span>
+<span id="L16">}</span>
+<span id="L17">bool baseline() {</span>
+<span id="L18">    kit::Backend b; kit::Storage s;</span>
+<span id="L19">    const auto r = kit::run(b.api(), profile(b), s);</span>
+<span id="L20">    for (std::size_t i = 0; i &lt; r.count; ++i) if (!r.checks[i].passed) std::cerr &lt;&lt; r.checks[i].name &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L21">    CHECK(r.passed()); CHECK(r.count &gt; 60 &amp;&amp; r.count &lt;= 128);</span>
+<span id="L22">    return true;</span>
+<span id="L23">}</span>
+<span id="L24">// Independent protocol corrupter: each defect changes one observable contract.</span>
+<span id="L25">// Stored real tokens allow test teardown without pretending malformed output is safe.</span>
+<span id="L26">enum class Defect { capabilities, capacity, token, identity, count, content,</span>
+<span id="L27">                    failure, reset, unregister_success, shutdown_success };</span>
+<span id="L28">struct Broken {</span>
+<span id="L29">    kit::Backend backend;</span>
+<span id="L30">    Defect defect;</span>
+<span id="L31">    std::array&lt;std::uint64_t, 8&gt; acquired{};</span>
+<span id="L32">    std::byte* destination = nullptr;</span>
+<span id="L33">    explicit Broken(Defect d) : defect(d) {}</span>
+<span id="L34">    static Broken&amp; get(void* p) { return *static_cast&lt;Broken*&gt;(p); }</span>
+<span id="L35">    rt::HalV2BackendApi api() {</span>
+<span id="L36">        rt::HalV2BackendApi a; a.instance = this;</span>
+<span id="L37">        a.get_capabilities = [](void* p, rt::HalV2Capabilities* c) {</span>
+<span id="L38">            auto&amp; b = get(p); auto x = b.backend.api(); auto result = x.get_capabilities(x.instance, c);</span>
+<span id="L39">            if (b.defect == Defect::capabilities) c-&gt;reserved[0] = 1;</span>
+<span id="L40">            return result;</span>
+<span id="L41">        };</span>
+<span id="L42">        a.initialize = [](void* p, const rt::HalV2InitializeConfig* c) {</span>
+<span id="L43">            auto&amp; b = get(p); auto x = b.backend.api(); auto changed = *c;</span>
+<span id="L44">            if (b.defect == Defect::capacity) changed.requested_registered_buffers = 2;</span>
+<span id="L45">            return x.initialize(x.instance, &amp;changed);</span>
+<span id="L46">        };</span>
+<span id="L47">        a.register_buffer = [](void* p, const rt::HalV2BufferRegistration* r, std::uint64_t* token) {</span>
+<span id="L48">            auto&amp; b = get(p); auto x = b.backend.api(); auto result = x.register_buffer(x.instance, r, token);</span>
+<span id="L49">            if (result == S::ok) {</span>
+<span id="L50">                if (b.backend.registered() == 2) b.destination = static_cast&lt;std::byte*&gt;(r-&gt;data);</span>
+<span id="L51">                for (auto&amp; saved : b.acquired) if (!saved) { saved = *token; break; }</span>
+<span id="L52">                if (b.defect == Defect::token) *token = 0;</span>
+<span id="L53">            }</span>
+<span id="L54">            return result;</span>
+<span id="L55">        };</span>
+<span id="L56">        a.unregister_buffer = [](void* p, std::uint64_t token) {</span>
+<span id="L57">            auto&amp; b = get(p); auto x = b.backend.api();</span>
+<span id="L58">            if (b.defect == Defect::unregister_success) return S::ok;</span>
+<span id="L59">            return x.unregister_buffer(x.instance, token);</span>
+<span id="L60">        };</span>
+<span id="L61">        a.submit = [](void* p, const rt::HalV2Submission* c) { auto x = get(p).backend.api(); return x.submit(x.instance, c); };</span>
+<span id="L62">        a.poll = [](void* p, rt::HalV2Completion* c, std::uint64_t cap, std::uint64_t* count) {</span>
+<span id="L63">            auto&amp; b = get(p); auto x = b.backend.api(); const auto result = x.poll(x.instance, c, cap, count);</span>
+<span id="L64">            if (*count) {</span>
+<span id="L65">                if (b.defect == Defect::identity) ++c-&gt;submission_id;</span>
+<span id="L66">                if (b.defect == Defect::count) *count = cap + 1;</span>
+<span id="L67">                if (b.defect == Defect::content &amp;&amp; b.destination) b.destination[0] ^= std::byte{1};</span>
+<span id="L68">                if (b.defect == Defect::failure) c-&gt;status = 0;</span>
+<span id="L69">            }</span>
+<span id="L70">            return result;</span>
+<span id="L71">        };</span>
+<span id="L72">        a.cancel = [](void* p, std::uint64_t id) { auto x = get(p).backend.api(); return x.cancel(x.instance, id); };</span>
+<span id="L73">        a.get_health = [](void* p, rt::HalV2Health* h) { auto x = get(p).backend.api(); return x.get_health(x.instance, h); };</span>
+<span id="L74">        a.reset = [](void* p) {</span>
+<span id="L75">            auto&amp; b = get(p); auto x = b.backend.api(); rt::HalV2Health h;</span>
+<span id="L76">            (void)x.get_health(x.instance, &amp;h);</span>
+<span id="L77">            return b.defect == Defect::reset &amp;&amp; h.outstanding == 0 ? S::ok : x.reset(x.instance);</span>
+<span id="L78">        };</span>
+<span id="L79">        a.shutdown = [](void* p) { auto&amp; b = get(p); auto x = b.backend.api(); return b.defect == Defect::shutdown_success ? S::ok : x.shutdown(x.instance); };</span>
+<span id="L80">        return a;</span>
+<span id="L81">    }</span>
+<span id="L82">    bool repair_cleanup() {</span>
+<span id="L83">        backend.inject(kit::Fault::none);</span>
+<span id="L84">        auto a = backend.api();</span>
+<span id="L85">        for (auto token : acquired) if (token) (void)a.unregister_buffer(a.instance, token);</span>
+<span id="L86">        if (backend.owns_setup()) (void)a.shutdown(a.instance);</span>
+<span id="L87">        return !backend.owns_setup() &amp;&amp; backend.registered() == 0;</span>
+<span id="L88">    }</span>
+<span id="L89">};</span>
+<span id="L90">bool negative_controls() {</span>
+<span id="L91">    for (auto d : {Defect::capabilities, Defect::capacity, Defect::token, Defect::identity, Defect::count,</span>
+<span id="L92">                   Defect::content, Defect::failure, Defect::reset, Defect::unregister_success, Defect::shutdown_success}) {</span>
+<span id="L93">        Broken b(d); kit::Storage s;</span>
+<span id="L94">        const auto r = kit::run(b.api(), profile(b.backend), s);</span>
+<span id="L95">        CHECK(!r.passed() &amp;&amp; r.failures &gt; 0);</span>
+<span id="L96">        if (d == Defect::token || d == Defect::unregister_success || d == Defect::shutdown_success)</span>
+<span id="L97">            CHECK(!r.cleanup_complete);</span>
+<span id="L98">        CHECK(b.repair_cleanup()); // Storage still alive during fixture repair.</span>
+<span id="L99">    }</span>
+<span id="L100">    kit::Backend b; kit::Storage s; auto a = b.api(); a.poll = nullptr;</span>
+<span id="L101">    CHECK(!kit::run(a, profile(b), s).passed());</span>
+<span id="L102">    return true;</span>
+<span id="L103">}</span>
+<span id="L104">bool setup(kit::Backend&amp; b, kit::Storage&amp; s) {</span>
+<span id="L105">    const auto a = b.api(); rt::HalV2InitializeConfig c;</span>
+<span id="L106">    c.requested_in_flight = 1; c.requested_registered_buffers = 2;</span>
+<span id="L107">    s.setup_attempted = true; CHECK(a.initialize(a.instance, &amp;c) == S::ok);</span>
+<span id="L108">    auto src = kit::registration(s.source.data()); auto dst = kit::registration(s.destination.data());</span>
+<span id="L109">    CHECK(a.register_buffer(a.instance, &amp;src, &amp;s.tokens[0]) == S::ok);</span>
+<span id="L110">    CHECK(a.register_buffer(a.instance, &amp;dst, &amp;s.tokens[1]) == S::ok);</span>
+<span id="L111">    s.source.fill(std::byte{0x69}); return true;</span>
+<span id="L112">}</span>
+<span id="L113">bool registration_boundaries() {</span>
+<span id="L114">    kit::Backend b; const auto a = b.api();</span>
+<span id="L115">    rt::HalV2InitializeConfig c; c.requested_in_flight = 1; c.requested_registered_buffers = 2;</span>
+<span id="L116">    auto invalid_config = c; invalid_config.requested_in_flight = 2;</span>
+<span id="L117">    CHECK(a.initialize(a.instance, &amp;invalid_config) == S::invalid_argument &amp;&amp; !b.owns_setup());</span>
+<span id="L118">    CHECK(a.initialize(a.instance, &amp;c) == S::ok);</span>
+<span id="L119">    std::array&lt;std::byte, 256&gt; source{}, destination{};</span>
+<span id="L120">    auto r = kit::registration(source.data(), source.size());</span>
+<span id="L121">    std::uint64_t token = 99;</span>
+<span id="L122">    for (unsigned kind = 0; kind &lt; 8; ++kind) {</span>
+<span id="L123">        auto bad = r;</span>
+<span id="L124">        switch (kind) {</span>
+<span id="L125">        case 0: bad.struct_size = 0; break;</span>
+<span id="L126">        case 1: bad.bytes = 257; break;</span>
+<span id="L127">        case 2: bad.bytes = 0; break;</span>
+<span id="L128">        case 3: bad.data = nullptr; break;</span>
+<span id="L129">        case 4: bad.flags = 16; break;</span>
+<span id="L130">        case 5: bad.name.fill(&#x27;x&#x27;); break;</span>
+<span id="L131">        case 6: bad.name.fill(&#x27;\0&#x27;); break;</span>
+<span id="L132">        default: bad.reserved[3] = 1; break;</span>
+<span id="L133">        }</span>
+<span id="L134">        CHECK(a.register_buffer(a.instance, &amp;bad, &amp;token) == S::invalid_argument &amp;&amp; token == 0 &amp;&amp; b.registered() == 0);</span>
+<span id="L135">    }</span>
+<span id="L136">    r.flags = RTFW_DEVICE_BUFFER_HOST_READ;</span>
+<span id="L137">    CHECK(a.register_buffer(a.instance, &amp;r, &amp;token) == S::ok);</span>
+<span id="L138">    auto d = kit::registration(destination.data(), destination.size()); std::uint64_t dst = 0;</span>
+<span id="L139">    CHECK(a.register_buffer(a.instance, &amp;d, &amp;dst) == S::ok);</span>
+<span id="L140">    kit::Storage handles; handles.tokens[0] = token; handles.tokens[1] = dst;</span>
+<span id="L141">    auto command = kit::submission(handles, kit::copy_opcode);</span>
+<span id="L142">    CHECK(a.submit(a.instance, &amp;command) == S::invalid_argument); // Device permission absent.</span>
+<span id="L143">    CHECK(a.unregister_buffer(a.instance, token) == S::ok);</span>
+<span id="L144">    r.flags = 15; CHECK(a.register_buffer(a.instance, &amp;r, &amp;token) == S::ok);</span>
+<span id="L145">    command.buffers[0].buffer_token = token;</span>
+<span id="L146">    command.buffers[0].bytes = 256; command.buffers[1].bytes = 256;</span>
+<span id="L147">    for (std::size_t i = 0; i &lt; source.size(); ++i) source[i] = static_cast&lt;std::byte&gt;(i);</span>
+<span id="L148">    CHECK(a.submit(a.instance, &amp;command) == S::ok);</span>
+<span id="L149">    rt::HalV2Completion out; std::uint64_t count = 0;</span>
+<span id="L150">    CHECK(a.poll(a.instance, &amp;out, 1, &amp;count) == S::ok &amp;&amp; count == 1 &amp;&amp; out.value == 256 &amp;&amp; source == destination);</span>
+<span id="L151">    CHECK(a.unregister_buffer(a.instance, token) == S::ok);</span>
+<span id="L152">    CHECK(a.unregister_buffer(a.instance, dst) == S::ok);</span>
+<span id="L153">    CHECK(a.shutdown(a.instance) == S::ok);</span>
+<span id="L154">    return true;</span>
+<span id="L155">}</span>
+<span id="L156">bool boundaries_and_allocations() {</span>
+<span id="L157">    kit::Backend b; kit::Storage s; CHECK(setup(b, s)); auto a = b.api();</span>
+<span id="L158">    auto command = kit::submission(s, kit::copy_opcode);</span>
+<span id="L159">    auto invalid = command;</span>
+<span id="L160">    invalid.struct_size = 0; CHECK(a.submit(a.instance, &amp;invalid) == S::invalid_argument);</span>
+<span id="L161">    invalid = command; invalid.api_version = 1; CHECK(a.submit(a.instance, &amp;invalid) == S::invalid_argument);</span>
+<span id="L162">    invalid = command; invalid.timeout_ns = 0; CHECK(a.submit(a.instance, &amp;invalid) == S::invalid_argument);</span>
+<span id="L163">    invalid = command; invalid.submission_id = 0; CHECK(a.submit(a.instance, &amp;invalid) == S::invalid_argument);</span>
+<span id="L164">    invalid = command; invalid.buffer_count = 9; CHECK(a.submit(a.instance, &amp;invalid) == S::invalid_argument);</span>
+<span id="L165">    invalid = command; invalid.payload_size = 129; CHECK(a.submit(a.instance, &amp;invalid) == S::invalid_argument);</span>
+<span id="L166">    invalid = command; invalid.buffers[1].bytes = 33; CHECK(a.submit(a.instance, &amp;invalid) == S::invalid_argument);</span>
+<span id="L167">    invalid = command; invalid.buffers[1].reserved0 = 1; CHECK(a.submit(a.instance, &amp;invalid) == S::invalid_argument);</span>
+<span id="L168">    rt::HalV2Completion out; std::uint64_t count = 99;</span>
+<span id="L169">    CHECK(a.poll(a.instance, &amp;out, 0, &amp;count) == S::invalid_argument &amp;&amp; count == 0);</span>
+<span id="L170">    CHECK(a.submit(nullptr, &amp;command) == S::invalid_argument);</span>
+<span id="L171">    CHECK(a.submit(a.instance, nullptr) == S::invalid_argument);</span>
+<span id="L172">    bool success = true;</span>
+<span id="L173">    rtfw_physics_allocation::begin();</span>
+<span id="L174">    for (std::uint64_t id = 1; id &lt;= 1000; ++id) {</span>
+<span id="L175">        command.submission_id = id;</span>
+<span id="L176">        success = success &amp;&amp; a.submit(a.instance, &amp;command) == S::ok &amp;&amp;</span>
+<span id="L177">            a.poll(a.instance, &amp;out, 1, &amp;count) == S::ok &amp;&amp; count == 1 &amp;&amp; out.submission_id == id &amp;&amp; out.status == 0;</span>
+<span id="L178">    }</span>
+<span id="L179">    const auto allocations = rtfw_physics_allocation::end();</span>
+<span id="L180">    CHECK(success &amp;&amp; allocations == 0 &amp;&amp; s.source == s.destination);</span>
+<span id="L181">    const auto old = s.tokens;</span>
+<span id="L182">    CHECK(kit::cleanup(a, profile(b), s));</span>
+<span id="L183">    for (unsigned generation = 0; generation &lt; 32; ++generation) {</span>
+<span id="L184">        CHECK(setup(b, s)); CHECK(s.tokens[0] &gt; old[1]);</span>
+<span id="L185">        invalid = kit::submission(s, kit::copy_opcode); invalid.buffers[0].buffer_token = old[0];</span>
+<span id="L186">        CHECK(a.submit(a.instance, &amp;invalid) == S::invalid_argument);</span>
+<span id="L187">        CHECK(kit::cleanup(a, profile(b), s));</span>
+<span id="L188">    }</span>
+<span id="L189">    return true;</span>
+<span id="L190">}</span>
+<span id="L191">bool concurrency() {</span>
+<span id="L192">    kit::Backend b; kit::Storage s; CHECK(setup(b, s)); const auto a = b.api();</span>
+<span id="L193">    constexpr std::uint64_t total = 10000;</span>
+<span id="L194">    std::atomic&lt;bool&gt; failed{false}, submitted{false};</span>
+<span id="L195">    std::uint64_t accepted = 0, completed = 0;</span>
+<span id="L196">    std::thread producer([&amp;] {</span>
+<span id="L197">        auto c = kit::submission(s, kit::copy_opcode);</span>
+<span id="L198">        for (std::uint64_t attempt = 0; attempt &lt; 5&#x27;000&#x27;000 &amp;&amp; accepted &lt; total; ++attempt) {</span>
+<span id="L199">            c.submission_id = accepted + 1; const auto result = a.submit(a.instance, &amp;c);</span>
+<span id="L200">            if (result == S::ok) ++accepted;</span>
+<span id="L201">            else if (result != S::queue_full) { failed.store(true); break; }</span>
+<span id="L202">            // Fixture scheduling only: give the peer a turn on saturation.</span>
+<span id="L203">            if (result == S::queue_full) std::this_thread::yield();</span>
+<span id="L204">        }</span>
+<span id="L205">        if (accepted != total) failed.store(true);</span>
+<span id="L206">        submitted.store(true);</span>
+<span id="L207">    });</span>
+<span id="L208">    std::thread consumer([&amp;] {</span>
+<span id="L209">        std::array&lt;bool, total + 1&gt; seen{};</span>
+<span id="L210">        for (std::uint64_t attempt = 0; attempt &lt; 5&#x27;000&#x27;000 &amp;&amp; completed &lt; total; ++attempt) {</span>
+<span id="L211">            rt::HalV2Completion c; std::uint64_t count = 0;</span>
+<span id="L212">            if (a.poll(a.instance, &amp;c, 1, &amp;count) != S::ok || count &gt; 1) { failed.store(true); break; }</span>
+<span id="L213">            if (count) {</span>
+<span id="L214">                if (c.submission_id == 0 || c.submission_id &gt; total || seen[c.submission_id] || c.status != 0) { failed.store(true); break; }</span>
+<span id="L215">                seen[c.submission_id] = true; ++completed;</span>
+<span id="L216">            }</span>
+<span id="L217">            if (submitted.load() &amp;&amp; failed.load()) break;</span>
+<span id="L218">            if (count == 0) std::this_thread::yield();</span>
+<span id="L219">        }</span>
+<span id="L220">    });</span>
+<span id="L221">    producer.join(); consumer.join();</span>
+<span id="L222">    if (failed.load() || accepted != total || completed != total)</span>
+<span id="L223">        std::cerr &lt;&lt; &quot;concurrency accepted=&quot; &lt;&lt; accepted &lt;&lt; &quot; completed=&quot; &lt;&lt; completed</span>
+<span id="L224">                  &lt;&lt; &quot; failed=&quot; &lt;&lt; failed.load() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L225">    CHECK(!failed.load() &amp;&amp; accepted == total &amp;&amp; completed == total &amp;&amp; s.source == s.destination);</span>
+<span id="L226">    rt::HalV2Health h; CHECK(a.get_health(a.instance, &amp;h) == S::ok);</span>
+<span id="L227">    CHECK(h.outstanding == 0 &amp;&amp; h.submissions == total &amp;&amp; h.completions == total);</span>
+<span id="L228">    CHECK(kit::cleanup(a, profile(b), s)); return true;</span>
+<span id="L229">}</span>
+<span id="L230">bool cancel_race() {</span>
+<span id="L231">    kit::Backend b; kit::Storage s; CHECK(setup(b, s)); const auto a = b.api();</span>
+<span id="L232">    for (std::uint64_t id = 1; id &lt;= 128; ++id) {</span>
+<span id="L233">        s.destination.fill(std::byte{0});</span>
+<span id="L234">        auto c = kit::submission(s, kit::copy_opcode, id);</span>
+<span id="L235">        CHECK(a.submit(a.instance, &amp;c) == S::ok);</span>
+<span id="L236">        rt::HalV2Completion out; std::uint64_t count = 0;</span>
+<span id="L237">        S polled = S::error;</span>
+<span id="L238">        std::thread poller([&amp;] { polled = a.poll(a.instance, &amp;out, 1, &amp;count); });</span>
+<span id="L239">        const auto canceled = a.cancel(a.instance, id);</span>
+<span id="L240">        poller.join();</span>
+<span id="L241">        CHECK(polled == S::ok);</span>
+<span id="L242">        if (canceled == S::ok) {</span>
+<span id="L243">            CHECK(count == 0 &amp;&amp; std::all_of(s.destination.begin(), s.destination.end(), [](auto x) { return x == std::byte{0}; }));</span>
+<span id="L244">        } else {</span>
+<span id="L245">            CHECK(canceled == S::invalid_state &amp;&amp; count == 1 &amp;&amp; out.submission_id == id &amp;&amp; out.status == 0 &amp;&amp; s.destination == s.source);</span>
+<span id="L246">        }</span>
+<span id="L247">        const auto bytes = s.destination;</span>
+<span id="L248">        CHECK(a.poll(a.instance, &amp;out, 1, &amp;count) == S::ok &amp;&amp; count == 0 &amp;&amp; bytes == s.destination);</span>
+<span id="L249">    }</span>
+<span id="L250">    CHECK(kit::cleanup(a, profile(b), s)); return true;</span>
+<span id="L251">}</span>
+<span id="L252">bool runtime_case(kit::Fault fault = kit::Fault::none, rt::Status expected = rt::Status::ok, bool measure = true) {</span>
+<span id="L253">    kit::Backend native; rt::MockDeviceBackend legacy({1, 1, 1, 1000});</span>
+<span id="L254">    kit::RuntimeState state; rt::Runtime runtime;</span>
+<span id="L255">    CHECK(kit::configure(runtime, native, legacy, state) == rt::Status::ok);</span>
+<span id="L256">    rt::sdk::CheckedStopGuard stop(runtime);</span>
+<span id="L257">    CHECK(runtime.start() == rt::Status::ok);</span>
+<span id="L258">    native.inject(fault);</span>
+<span id="L259">    CHECK(runtime.step({0, std::chrono::milliseconds(1)}) == expected);</span>
+<span id="L260">    CHECK(state.verified == (expected == rt::Status::ok ? 1u : 0u));</span>
+<span id="L261">    if (expected == rt::Status::ok) {</span>
+<span id="L262">        bool success = true; if (measure) rtfw_physics_allocation::begin();</span>
+<span id="L263">        for (std::uint64_t i = 1; i &lt; 100; ++i)</span>
+<span id="L264">            success = success &amp;&amp; runtime.step({i, std::chrono::milliseconds(1)}) == rt::Status::ok;</span>
+<span id="L265">        const auto count = measure ? rtfw_physics_allocation::end() : 0;</span>
+<span id="L266">        CHECK(success &amp;&amp; count == 0 &amp;&amp; state.verified == 100);</span>
+<span id="L267">    }</span>
+<span id="L268">    native.inject(kit::Fault::unregister);</span>
+<span id="L269">    CHECK(stop.close() != rt::Status::ok);</span>
+<span id="L270">    CHECK(native.owns_setup() &amp;&amp; native.registered() != 0);</span>
+<span id="L271">    native.inject(kit::Fault::shutdown);</span>
+<span id="L272">    CHECK(stop.close() != rt::Status::ok);</span>
+<span id="L273">    CHECK(native.owns_setup() &amp;&amp; native.registered() == 0);</span>
+<span id="L274">    CHECK(stop.close() == rt::Status::ok);</span>
+<span id="L275">    CHECK(!native.owns_setup() &amp;&amp; native.registered() == 0);</span>
+<span id="L276">    return true;</span>
+<span id="L277">}</span>
+<span id="L278">bool start_failure(kit::Fault fault) {</span>
+<span id="L279">    kit::Backend native; rt::MockDeviceBackend legacy({1, 1, 1, 1000});</span>
+<span id="L280">    kit::RuntimeState state; rt::Runtime runtime;</span>
+<span id="L281">    CHECK(kit::configure(runtime, native, legacy, state) == rt::Status::ok);</span>
+<span id="L282">    rt::sdk::CheckedStopGuard stop(runtime); native.inject(fault);</span>
+<span id="L283">    CHECK(runtime.start() != rt::Status::ok);</span>
+<span id="L284">    CHECK(stop.close() == rt::Status::ok);</span>
+<span id="L285">    CHECK(!native.owns_setup() &amp;&amp; native.registered() == 0);</span>
+<span id="L286">    return true;</span>
+<span id="L287">}</span>
+<span id="L288">int main() {</span>
+<span id="L289">    if (!baseline() || !negative_controls() || !registration_boundaries() || !boundaries_and_allocations() || !concurrency() || !cancel_race() ||</span>
+<span id="L290">        !runtime_case() || !runtime_case(kit::Fault::completion_error, rt::Status::device_error) ||</span>
+<span id="L291">        !runtime_case(kit::Fault::completion_timeout, rt::Status::device_timeout) ||</span>
+<span id="L292">        !runtime_case(kit::Fault::completion_loss, rt::Status::device_lost) ||</span>
+<span id="L293">        !start_failure(kit::Fault::initialize) || !start_failure(kit::Fault::registration)) return 1;</span>
+<span id="L294">    bool first = false, second = false;</span>
+<span id="L295">    std::thread a([&amp;] { first = runtime_case(kit::Fault::none, rt::Status::ok, false); });</span>
+<span id="L296">    std::thread b([&amp;] { second = runtime_case(kit::Fault::none, rt::Status::ok, false); });</span>
+<span id="L297">    a.join(); b.join();</span>
+<span id="L298">    if (!first || !second) return 1;</span>
+<span id="L299">    std::cout &lt;&lt; &quot;backend conformance, 10 negative controls, boundaries, generations, concurrency, Runtime, ownership and allocation passed\n&quot;;</span>
+<span id="L300">}</span></pre></html>

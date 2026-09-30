@@ -624,3 +624,17 @@ following its retained300s timeout and complete453.64s measured pass. Every chil
 bound, prior test, Runtime deadline and instrumentation remains unchanged.
 M26-06 audit remains separate/inactive; no CAP-M26/human/physical/RT/Unreal/
 controlled-performance/release claim. Standing scoped integration authority persists.
+
+## M26-06 living documentation and capability audit activation
+
+Canonical plan [579](https://github.com/tranquilWorks/portfolio-control/pull/579)
+merged at 14d624e25e7038fae18d4ab0af5122d4577c4564, blob 7a676271265c1d6038ff117561900286cb107c14. Baseline is M26-05 target284
+merged912ce878ad311d38e452a5d2916ee0daa6ee3f72 with all32 exact-head gates.
+Only M26-06 is active. Deliver source-linked installed documentation, exhaustive
+CAP-M15 through CAP-M26 accounting and fresh relocated replay/fault/soak evidence.
+Preserve all prior Runtime/native/kit/test/ABI sources and failed evidence.
+Disclose open engineering, human-review and qualification actions; do not infer
+universal feature completion from passing golden scenarios. All32 target checks,
+full local validation and guarded integration remain mandatory under standing
+scoped publication/merge authority. No later batch, hardware, RT, Unreal, signing,
+release or deployment activity is activated. Earlier activation notes are history.

@@ -5,7 +5,7 @@
 # Release and Compatibility Policy
 
 RTFW 1.2 is a portable RT0 runtime release. It supports the named build and
-test tuples in [the portable support matrix](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/portable_support_matrix.json).
+test tuples in [the portable support matrix](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/portable_support_matrix.json).
 Passing those gates establishes functional behavior and bounded-capacity API
 semantics; it does not establish a latency bound, RT1 measurement result, RT2
 qualification, or hardware-backend qualification.
@@ -118,8 +118,8 @@ archive and checksum files.
 Portable 1.2 completion does not promote M9 or M10 and does not create an RT2
 record. PREEMPT_RT, CUDA, and XDMA evidence is admitted only through the
 versioned matrices and procedures linked from the
-[real-time readiness checklist](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/real_time_readiness_checklist.md),
-[CUDA contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/cuda_backend.md), and [XDMA contract](docs__xdma_backend.md).
+[real-time readiness checklist](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/real_time_readiness_checklist.md),
+[CUDA contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/cuda_backend.md), and [XDMA contract](docs__xdma_backend.md).
 Raw evidence marked `evidence_only` is an input to review, not a qualification.
 The opt-in CUDA/XDMA workflows validate that evidence schema, then bind every
 raw file to the complete source commit with a SHA-256 manifest before upload.
@@ -133,12 +133,12 @@ deterministic `proposal_only` handoff. The reviewer name and timestamp are not
 authentication or cryptographic chronology, and the proposal never edits a
 support matrix. A human must verify external pre-run plan provenance and review
 the separate matrix change. Synthetic fixtures and portable CI are never
-eligible. See [the qualification contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/qualification.md).
+eligible. See [the qualification contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/qualification.md).
 
 ## Security and lifecycle
 
 Supported release lines and reporting instructions are in
-[the repository security policy](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/SECURITY.md). Release checksums detect
+[the repository security policy](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/SECURITY.md). Release checksums detect
 artifact corruption or substitution only when the manifest itself is obtained
 from a trusted channel. RTFW 1.2 does not claim signed releases,
 bit-for-bit-reproducible builds, plugin isolation, or safe execution of

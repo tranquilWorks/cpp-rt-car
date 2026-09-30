@@ -1,0 +1,356 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_sampled_io_recovery.cpp</title><h1>tests/test_sampled_io_recovery.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;rt/src/snapshot_codec.hpp&quot;</span>
+<span id="L2">#include &quot;sampled_io_recovery/fixture.hpp&quot;</span>
+<span id="L3">#include &lt;future&gt;</span>
+<span id="L4">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L5">namespace {</span>
+<span id="L6">using rt::Status;</span>
+<span id="L7">using sampled_recovery::Fixture;</span>
+<span id="L8">void ready(Fixture &amp;f) {</span>
+<span id="L9">  ASSERT_EQ(f.configure(), Status::ok) &lt;&lt; f.runtime.last_error();</span>
+<span id="L10">  ASSERT_EQ(f.start(), Status::ok) &lt;&lt; f.runtime.last_error();</span>
+<span id="L11">}</span>
+<span id="L12">std::vector&lt;std::byte&gt;</span>
+<span id="L13">corrupt_produced_frame(const std::vector&lt;std::byte&gt; &amp;original, unsigned field) {</span>
+<span id="L14">  rt::CheckpointMetadata metadata;</span>
+<span id="L15">  if (rt::inspect_checkpoint_artifact(original, metadata) != Status::ok)</span>
+<span id="L16">    return {};</span>
+<span id="L17">  rt::detail::CheckpointRecordCursor cursor;</span>
+<span id="L18">  std::vector&lt;rt::detail::StateWriteView&gt; records;</span>
+<span id="L19">  std::vector&lt;std::byte&gt; changed;</span>
+<span id="L20">  for (unsigned i = 0; i &lt; metadata.state_count; ++i) {</span>
+<span id="L21">    rt::detail::CheckpointRecordView r;</span>
+<span id="L22">    if (!rt::detail::next_checkpoint_record(original, metadata, cursor, r))</span>
+<span id="L23">      return {};</span>
+<span id="L24">    if (r.name == &quot;rtfw.rate-dispatch&quot;) {</span>
+<span id="L25">      changed.assign(r.payload.begin(), r.payload.end());</span>
+<span id="L26">      // Three frozen channel records; sampled device producer is channel1.</span>
+<span id="L27">      constexpr std::size_t at = 96 + 3 * 64 + 128;</span>
+<span id="L28">      rt::SampledIoFrameHeader h;</span>
+<span id="L29">      std::memcpy(&amp;h, changed.data() + at, sizeof(h));</span>
+<span id="L30">      switch (field) {</span>
+<span id="L31">      case 0:</span>
+<span id="L32">        h.channel_identity ^= 1;</span>
+<span id="L33">        break;</span>
+<span id="L34">      case 1:</span>
+<span id="L35">        --h.sequence;</span>
+<span id="L36">        break;</span>
+<span id="L37">      case 2:</span>
+<span id="L38">        h.release_generation = 0;</span>
+<span id="L39">        break;</span>
+<span id="L40">      case 3:</span>
+<span id="L41">        h.release_generation += 100;</span>
+<span id="L42">        h.sequence += 100;</span>
+<span id="L43">        h.trigger_sequence += 100;</span>
+<span id="L44">        break;</span>
+<span id="L45">      case 4:</span>
+<span id="L46">        h.timestamp_domain_identity = 99;</span>
+<span id="L47">        break;</span>
+<span id="L48">      case 5:</span>
+<span id="L49">        h.status = static_cast&lt;unsigned&gt;(rt::SampledIoFrameStatus::safe);</span>
+<span id="L50">        break;</span>
+<span id="L51">      case 6:</span>
+<span id="L52">        h.reserved[0] = 1;</span>
+<span id="L53">        break;</span>
+<span id="L54">      case 7:</span>
+<span id="L55">        h.payload_checksum ^= 1;</span>
+<span id="L56">        break;</span>
+<span id="L57">      case 8:</span>
+<span id="L58">        h.sample_count += 1;</span>
+<span id="L59">        break;</span>
+<span id="L60">      case 9:</span>
+<span id="L61">        h.trigger_sequence += 1;</span>
+<span id="L62">        break;</span>
+<span id="L63">      case 10:</span>
+<span id="L64">        h.calibration_identity += 1;</span>
+<span id="L65">        break;</span>
+<span id="L66">      case 11:</span>
+<span id="L67">        h.release_generation = UINT64_MAX;</span>
+<span id="L68">        h.sequence = UINT64_MAX;</span>
+<span id="L69">        break;</span>
+<span id="L70">      default:</span>
+<span id="L71">        return {};</span>
+<span id="L72">      }</span>
+<span id="L73">      std::memcpy(changed.data() + at, &amp;h, sizeof(h));</span>
+<span id="L74">      records.push_back({r.name, r.schema_version, changed});</span>
+<span id="L75">    } else</span>
+<span id="L76">      records.push_back({r.name, r.schema_version, r.payload});</span>
+<span id="L77">  }</span>
+<span id="L78">  std::vector&lt;std::byte&gt; result(original.size());</span>
+<span id="L79">  const auto provider = [](void *p, std::size_t i,</span>
+<span id="L80">                           rt::detail::StateWriteView &amp;out) noexcept {</span>
+<span id="L81">    auto &amp;r = *static_cast&lt;std::vector&lt;rt::detail::StateWriteView&gt; *&gt;(p);</span>
+<span id="L82">    if (i &gt;= r.size())</span>
+<span id="L83">      return false;</span>
+<span id="L84">    out = r[i];</span>
+<span id="L85">    return true;</span>
+<span id="L86">  };</span>
+<span id="L87">  rt::ArtifactWriteResult write;</span>
+<span id="L88">  if (rt::detail::encode_checkpoint_artifact(metadata, records.size(), provider,</span>
+<span id="L89">                                             &amp;records, 1024 * 1024, result,</span>
+<span id="L90">                                             write) != Status::ok)</span>
+<span id="L91">    return {};</span>
+<span id="L92">  return result;</span>
+<span id="L93">}</span>
+<span id="L94">} // namespace</span>
+<span id="L95">TEST(CommandBatch, SampledIoRecoveryNativeShutdownRetryDoesNotResubmit) {</span>
+<span id="L96">  Fixture f;</span>
+<span id="L97">  ready(f);</span>
+<span id="L98">  ASSERT_EQ(f.step(0), Status::ok);</span>
+<span id="L99">  f.backend.card.fail_shutdown = true;</span>
+<span id="L100">  EXPECT_EQ(f.runtime.stop(), Status::device_error);</span>
+<span id="L101">  const auto acks = f.backend.card.acks.load(),</span>
+<span id="L102">             uploads = f.backend.card.uploads.load();</span>
+<span id="L103">  EXPECT_TRUE(f.backend.card.live);</span>
+<span id="L104">  EXPECT_EQ(f.backend.card.shutdown_calls, 1u);</span>
+<span id="L105">  EXPECT_EQ(f.runtime.state(), rt::RuntimeState::running);</span>
+<span id="L106">  EXPECT_EQ(f.step(1), Status::invalid_state);</span>
+<span id="L107">  EXPECT_EQ(f.runtime.reset_device(f.device), Status::invalid_state);</span>
+<span id="L108">  EXPECT_TRUE(f.checkpoint().empty());</span>
+<span id="L109">  rt::SampledIoChannelStatus safety;</span>
+<span id="L110">  ASSERT_TRUE(f.runtime.sampled_io_channel_status(f.output, safety));</span>
+<span id="L111">  EXPECT_EQ(safety.safety_state,</span>
+<span id="L112">            rt::SampledIoSafetyState::shutdown_acknowledged);</span>
+<span id="L113">  EXPECT_EQ(f.runtime.stop(), Status::ok) &lt;&lt; f.runtime.last_error();</span>
+<span id="L114">  EXPECT_FALSE(f.backend.card.live);</span>
+<span id="L115">  EXPECT_EQ(f.backend.card.acks, acks);</span>
+<span id="L116">  EXPECT_EQ(f.backend.card.uploads, uploads);</span>
+<span id="L117">  EXPECT_EQ(f.backend.card.shutdown_calls, 2u);</span>
+<span id="L118">  EXPECT_EQ(f.backend.card.shutdowns, 1u);</span>
+<span id="L119">  EXPECT_EQ(f.runtime.stop(), Status::ok);</span>
+<span id="L120">  EXPECT_EQ(f.backend.card.shutdown_calls, 2u);</span>
+<span id="L121">}</span>
+<span id="L122">TEST(CommandBatch, SampledIoRecoveryMissingAckMustExecuteBeforeTeardown) {</span>
+<span id="L123">  Fixture f;</span>
+<span id="L124">  ready(f);</span>
+<span id="L125">  const auto startup = f.backend.card.acks.load();</span>
+<span id="L126">  f.backend.card.missing_ack = true;</span>
+<span id="L127">  EXPECT_EQ(f.runtime.stop(), Status::device_timeout);</span>
+<span id="L128">  EXPECT_TRUE(f.backend.card.live);</span>
+<span id="L129">  EXPECT_EQ(f.backend.card.shutdown_calls, 0u);</span>
+<span id="L130">  EXPECT_EQ(f.backend.card.acks, startup);</span>
+<span id="L131">  rt::SampledIoChannelStatus safety;</span>
+<span id="L132">  ASSERT_TRUE(f.runtime.sampled_io_channel_status(f.output, safety));</span>
+<span id="L133">  EXPECT_EQ(safety.safety_state, rt::SampledIoSafetyState::unknown);</span>
+<span id="L134">  f.backend.card.missing_ack = false;</span>
+<span id="L135">  EXPECT_EQ(f.runtime.stop(), Status::ok) &lt;&lt; f.runtime.last_error();</span>
+<span id="L136">  EXPECT_EQ(f.backend.card.acks, startup + 1);</span>
+<span id="L137">  EXPECT_EQ(f.backend.card.shutdowns, 1u);</span>
+<span id="L138">}</span>
+<span id="L139">TEST(CommandBatch, SampledIoRecoveryFinalizedStopRequiresNoSafeSubmission) {</span>
+<span id="L140">  Fixture f;</span>
+<span id="L141">  ASSERT_EQ(f.configure(), Status::ok);</span>
+<span id="L142">  ASSERT_EQ(f.runtime.finalize(), Status::ok);</span>
+<span id="L143">  EXPECT_EQ(f.runtime.stop(), Status::ok);</span>
+<span id="L144">  EXPECT_EQ(f.backend.card.acks, 0u);</span>
+<span id="L145">  EXPECT_FALSE(f.backend.card.live);</span>
+<span id="L146">}</span>
+<span id="L147">TEST(MixedRateReplay, SampledIoRecoveryFreshAndSameOwnerReadPriorDeviceFrame) {</span>
+<span id="L148">  Fixture original;</span>
+<span id="L149">  ready(original);</span>
+<span id="L150">  for (unsigned i = 0; i &lt;= 6; ++i) {</span>
+<span id="L151">    ASSERT_EQ(original.step(i), Status::ok);</span>
+<span id="L152">    ASSERT_TRUE(original.valid(i));</span>
+<span id="L153">  }</span>
+<span id="L154">  auto checkpoint = original.checkpoint(6);</span>
+<span id="L155">  ASSERT_FALSE(checkpoint.empty());</span>
+<span id="L156">  ASSERT_EQ(original.step(7), Status::ok);</span>
+<span id="L157">  ASSERT_TRUE(original.valid(7));</span>
+<span id="L158">  const auto expected = original.state;</span>
+<span id="L159">  const auto read = original.read;</span>
+<span id="L160">  Fixture fresh;</span>
+<span id="L161">  ready(fresh);</span>
+<span id="L162">  const auto startup = fresh.backend.card.acks.load();</span>
+<span id="L163">  ASSERT_EQ(fresh.runtime.restore_checkpoint(checkpoint), Status::ok);</span>
+<span id="L164">  EXPECT_EQ(fresh.backend.card.acks, startup);</span>
+<span id="L165">  ASSERT_EQ(fresh.step(7), Status::ok) &lt;&lt; fresh.runtime.last_error();</span>
+<span id="L166">  EXPECT_TRUE(fresh.valid(7));</span>
+<span id="L167">  EXPECT_EQ(fresh.state, expected);</span>
+<span id="L168">  EXPECT_EQ(fresh.read.producer_timestamp, read.producer_timestamp);</span>
+<span id="L169">  EXPECT_EQ(fresh.read.producer_timestamp_domain_identity,</span>
+<span id="L170">            read.producer_timestamp_domain_identity);</span>
+<span id="L171">  EXPECT_EQ(fresh.read.producer_release_sequence, 3u);</span>
+<span id="L172">  EXPECT_EQ(fresh.read.producer_timestamp, 9000 + 6 * sampled_recovery::period);</span>
+<span id="L173">  EXPECT_NE(fresh.read.producer_timestamp, fresh.clock.now.load());</span>
+<span id="L174">  ASSERT_EQ(original.runtime.restore_checkpoint(checkpoint), Status::ok);</span>
+<span id="L175">  ASSERT_EQ(original.step(7), Status::ok);</span>
+<span id="L176">  EXPECT_EQ(original.state, expected);</span>
+<span id="L177">  for (unsigned i = 8; i &lt; 18; ++i) {</span>
+<span id="L178">    ASSERT_EQ(original.step(i), Status::ok);</span>
+<span id="L179">    ASSERT_EQ(fresh.step(i), Status::ok);</span>
+<span id="L180">    EXPECT_TRUE(fresh.valid(i));</span>
+<span id="L181">    EXPECT_EQ(original.state, fresh.state);</span>
+<span id="L182">  }</span>
+<span id="L183">  EXPECT_EQ(original.runtime.stop(), Status::ok);</span>
+<span id="L184">  EXPECT_EQ(fresh.runtime.stop(), Status::ok);</span>
+<span id="L185">}</span>
+<span id="L186">TEST(MixedRateReplay,</span>
+<span id="L187">     SampledIoRecoveryUnderflowPayloadAndFollowingNormalRelease) {</span>
+<span id="L188">  Fixture original;</span>
+<span id="L189">  ready(original);</span>
+<span id="L190">  for (unsigned i = 0; i &lt; 6; ++i)</span>
+<span id="L191">    ASSERT_EQ(original.step(i), Status::ok);</span>
+<span id="L192">  original.skip = true;</span>
+<span id="L193">  ASSERT_EQ(original.step(6), Status::ok);</span>
+<span id="L194">  auto checkpoint = original.checkpoint(6);</span>
+<span id="L195">  ASSERT_FALSE(checkpoint.empty());</span>
+<span id="L196">  ASSERT_EQ(original.step(7), Status::ok);</span>
+<span id="L197">  auto expected = original.state;</span>
+<span id="L198">  EXPECT_TRUE(std::all_of(expected.begin() + 120, expected.begin() + 128,</span>
+<span id="L199">                          [](auto b) { return b == std::byte{}; }));</span>
+<span id="L200">  Fixture fresh;</span>
+<span id="L201">  ready(fresh);</span>
+<span id="L202">  ASSERT_EQ(fresh.runtime.restore_checkpoint(checkpoint), Status::ok);</span>
+<span id="L203">  ASSERT_EQ(fresh.step(7), Status::ok);</span>
+<span id="L204">  EXPECT_EQ(fresh.state, expected);</span>
+<span id="L205">  EXPECT_EQ(fresh.read.producer_release_sequence, 3u);</span>
+<span id="L206">  EXPECT_EQ(fresh.read.producer_completion_status, Status::ok);</span>
+<span id="L207">  original.skip = false;</span>
+<span id="L208">  ASSERT_EQ(original.step(8), Status::ok);</span>
+<span id="L209">  ASSERT_EQ(fresh.step(8), Status::ok);</span>
+<span id="L210">  EXPECT_EQ(original.state, fresh.state);</span>
+<span id="L211">  EXPECT_TRUE(fresh.valid(8));</span>
+<span id="L212">  EXPECT_EQ(original.runtime.stop(), Status::ok);</span>
+<span id="L213">  EXPECT_EQ(fresh.runtime.stop(), Status::ok);</span>
+<span id="L214">}</span>
+<span id="L215">TEST(MixedRateReplay,</span>
+<span id="L216">     SampledIoRecoveryMalformedProducedMetadataRejectsBeforeEffects) {</span>
+<span id="L217">  Fixture f;</span>
+<span id="L218">  ready(f);</span>
+<span id="L219">  for (unsigned i = 0; i &lt;= 6; ++i)</span>
+<span id="L220">    ASSERT_EQ(f.step(i), Status::ok);</span>
+<span id="L221">  auto checkpoint = f.checkpoint(6);</span>
+<span id="L222">  ASSERT_FALSE(checkpoint.empty());</span>
+<span id="L223">  const auto state = f.state;</span>
+<span id="L224">  const auto acks = f.backend.card.acks.load();</span>
+<span id="L225">  for (unsigned field = 0; field &lt; 12; ++field) {</span>
+<span id="L226">    auto malformed = corrupt_produced_frame(checkpoint, field);</span>
+<span id="L227">    ASSERT_FALSE(malformed.empty());</span>
+<span id="L228">    rt::CheckpointMetadata metadata;</span>
+<span id="L229">    ASSERT_EQ(rt::inspect_checkpoint_artifact(malformed, metadata), Status::ok);</span>
+<span id="L230">    EXPECT_EQ(f.runtime.restore_checkpoint(malformed),</span>
+<span id="L231">              Status::incompatible_artifact)</span>
+<span id="L232">        &lt;&lt; field;</span>
+<span id="L233">    EXPECT_EQ(f.state, state);</span>
+<span id="L234">    EXPECT_EQ(f.backend.card.acks, acks);</span>
+<span id="L235">    EXPECT_EQ(f.checkpoint(6), checkpoint) &lt;&lt; field;</span>
+<span id="L236">  }</span>
+<span id="L237">  ASSERT_EQ(f.step(7), Status::ok);</span>
+<span id="L238">  EXPECT_TRUE(f.valid(7));</span>
+<span id="L239">  EXPECT_EQ(f.runtime.stop(), Status::ok);</span>
+<span id="L240">}</span>
+<span id="L241">TEST(MixedRateReplay, SampledIoRecoveryInitialReplayAndIncompatibleStorage) {</span>
+<span id="L242">  Fixture f;</span>
+<span id="L243">  ready(f);</span>
+<span id="L244">  auto initial = f.checkpoint();</span>
+<span id="L245">  ASSERT_FALSE(initial.empty());</span>
+<span id="L246">  for (unsigned i = 0; i &lt; 16; ++i)</span>
+<span id="L247">    ASSERT_EQ(f.step(i), Status::ok);</span>
+<span id="L248">  auto expected = f.state;</span>
+<span id="L249">  auto active = f.artifact(initial, 16);</span>
+<span id="L250">  ASSERT_FALSE(active.empty());</span>
+<span id="L251">  ASSERT_EQ(f.runtime.replay_active(active, Fixture::apply, &amp;f), Status::ok)</span>
+<span id="L252">      &lt;&lt; f.runtime.last_error();</span>
+<span id="L253">  EXPECT_EQ(f.state, expected);</span>
+<span id="L254">  Fixture other;</span>
+<span id="L255">  ASSERT_EQ(other.configure(2, 2), Status::ok);</span>
+<span id="L256">  ASSERT_EQ(other.start(), Status::ok);</span>
+<span id="L257">  auto before = other.state;</span>
+<span id="L258">  auto acks = other.backend.card.acks.load();</span>
+<span id="L259">  EXPECT_EQ(other.runtime.restore_checkpoint(initial),</span>
+<span id="L260">            Status::incompatible_artifact);</span>
+<span id="L261">  EXPECT_EQ(other.runtime.replay_active(active, Fixture::apply, &amp;other),</span>
+<span id="L262">            Status::incompatible_artifact);</span>
+<span id="L263">  EXPECT_EQ(other.state, before);</span>
+<span id="L264">  EXPECT_EQ(other.backend.card.acks, acks);</span>
+<span id="L265">  EXPECT_EQ(f.runtime.stop(), Status::ok);</span>
+<span id="L266">  EXPECT_EQ(other.runtime.stop(), Status::ok);</span>
+<span id="L267">}</span>
+<span id="L268">TEST(CommandBatch, SampledIoRecoveryIndependentConcurrentOwners) {</span>
+<span id="L269">  const auto work = [](bool fail) {</span>
+<span id="L270">    Fixture f;</span>
+<span id="L271">    if (f.configure() != Status::ok || f.start() != Status::ok)</span>
+<span id="L272">      return false;</span>
+<span id="L273">    for (unsigned i = 0; i &lt; 32; ++i)</span>
+<span id="L274">      if (f.step(i) != Status::ok || !f.valid(i))</span>
+<span id="L275">        return false;</span>
+<span id="L276">    f.backend.card.fail_shutdown = fail;</span>
+<span id="L277">    auto s = f.runtime.stop();</span>
+<span id="L278">    if (fail &amp;&amp; s != Status::device_error)</span>
+<span id="L279">      return false;</span>
+<span id="L280">    if (fail)</span>
+<span id="L281">      s = f.runtime.stop();</span>
+<span id="L282">    return s == Status::ok &amp;&amp; !f.backend.card.live &amp;&amp;</span>
+<span id="L283">           f.backend.card.shutdowns == 1;</span>
+<span id="L284">  };</span>
+<span id="L285">  auto first = std::async(std::launch::async, work, true);</span>
+<span id="L286">  auto second = std::async(std::launch::async, work, false);</span>
+<span id="L287">  EXPECT_TRUE(first.get());</span>
+<span id="L288">  EXPECT_TRUE(second.get());</span>
+<span id="L289">}</span>
+<span id="L290"></span>
+<span id="L291">TEST(MixedRateReplay,</span>
+<span id="L292">     SampledIoRecoverySubstepsAndIntermediateOriginatingReplay) {</span>
+<span id="L293">  Fixture f;</span>
+<span id="L294">  f.substeps = 3;</span>
+<span id="L295">  ready(f);</span>
+<span id="L296">  for (unsigned i = 0; i &lt;= 6; ++i) {</span>
+<span id="L297">    ASSERT_EQ(f.step(i), Status::ok);</span>
+<span id="L298">    ASSERT_TRUE(f.valid(i));</span>
+<span id="L299">  }</span>
+<span id="L300">  auto checkpoint = f.checkpoint(6);</span>
+<span id="L301">  ASSERT_FALSE(checkpoint.empty());</span>
+<span id="L302">  for (unsigned i = 7; i &lt; 16; ++i) {</span>
+<span id="L303">    ASSERT_EQ(f.step(i), Status::ok);</span>
+<span id="L304">    ASSERT_TRUE(f.valid(i));</span>
+<span id="L305">  }</span>
+<span id="L306">  auto expected = f.state;</span>
+<span id="L307">  auto active = f.artifact(checkpoint, 9, 7);</span>
+<span id="L308">  ASSERT_FALSE(active.empty());</span>
+<span id="L309">  ASSERT_EQ(f.runtime.replay_active(active, Fixture::apply, &amp;f), Status::ok)</span>
+<span id="L310">      &lt;&lt; f.runtime.last_error();</span>
+<span id="L311">  EXPECT_EQ(f.state, expected);</span>
+<span id="L312">  EXPECT_EQ(f.read.producer_substep_ordinal, 2u);</span>
+<span id="L313">  Fixture other;</span>
+<span id="L314">  other.substeps = 3;</span>
+<span id="L315">  ready(other);</span>
+<span id="L316">  ASSERT_EQ(other.runtime.restore_checkpoint(checkpoint), Status::ok);</span>
+<span id="L317">  ASSERT_EQ(other.step(7), Status::ok);</span>
+<span id="L318">  EXPECT_TRUE(other.valid(7));</span>
+<span id="L319">  EXPECT_EQ(other.read.producer_release_sequence, 3u);</span>
+<span id="L320">  EXPECT_EQ(other.read.producer_substep_ordinal, 2u);</span>
+<span id="L321">  EXPECT_EQ(other.runtime.stop(), Status::ok);</span>
+<span id="L322">  EXPECT_EQ(f.runtime.stop(), Status::ok);</span>
+<span id="L323">}</span>
+<span id="L324"></span>
+<span id="L325">TEST(CommandBatch,</span>
+<span id="L326">     SampledIoRecoveryPartialInitializationRetainsCorrectStopStage) {</span>
+<span id="L327">  Fixture f;</span>
+<span id="L328">  ASSERT_EQ(f.configure(), Status::ok);</span>
+<span id="L329">  f.backend.card.fail_initialize = true;</span>
+<span id="L330">  EXPECT_EQ(f.start(), Status::device_error);</span>
+<span id="L331">  EXPECT_FALSE(f.backend.card.live);</span>
+<span id="L332">  EXPECT_EQ(f.backend.card.acks, 0u);</span>
+<span id="L333">  EXPECT_EQ(f.runtime.stop(), Status::ok) &lt;&lt; f.runtime.last_error();</span>
+<span id="L334">  EXPECT_EQ(f.backend.card.acks, 0u);</span>
+<span id="L335">}</span>
+<span id="L336"></span>
+<span id="L337">TEST(CommandBatch, SampledIoRecoveryPartialMultiBackendTeardown) {</span>
+<span id="L338">  Fixture f;</span>
+<span id="L339">  f.companion = std::make_unique&lt;sampled_recovery::Backend&gt;();</span>
+<span id="L340">  ready(f);</span>
+<span id="L341">  ASSERT_EQ(f.step(0), Status::ok);</span>
+<span id="L342">  f.companion-&gt;card.fail_shutdown = true;</span>
+<span id="L343">  EXPECT_EQ(f.runtime.stop(), Status::device_error);</span>
+<span id="L344">  const auto acknowledged = f.backend.card.acks.load();</span>
+<span id="L345">  EXPECT_FALSE(f.backend.card.live);</span>
+<span id="L346">  EXPECT_TRUE(f.companion-&gt;card.live);</span>
+<span id="L347">  EXPECT_EQ(f.backend.card.shutdowns, 1u);</span>
+<span id="L348">  EXPECT_EQ(f.companion-&gt;card.shutdowns, 0u);</span>
+<span id="L349">  EXPECT_EQ(f.step(1), Status::invalid_state);</span>
+<span id="L350">  EXPECT_EQ(f.runtime.stop(), Status::ok) &lt;&lt; f.runtime.last_error();</span>
+<span id="L351">  EXPECT_EQ(f.backend.card.acks, acknowledged);</span>
+<span id="L352">  EXPECT_EQ(f.backend.card.shutdowns, 1u);</span>
+<span id="L353">  EXPECT_EQ(f.companion-&gt;card.shutdowns, 1u);</span>
+<span id="L354">  EXPECT_FALSE(f.companion-&gt;card.live);</span>
+<span id="L355">  EXPECT_EQ(f.runtime.stop(), Status::ok);</span>
+<span id="L356">}</span></pre></html>

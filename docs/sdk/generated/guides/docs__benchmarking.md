@@ -75,14 +75,14 @@ of the measured region; no hidden subtraction or outlier removal is applied.
 
 ## Closed version-1 schemas and bounds
 
-[Descriptor schema](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/bench/schemas/descriptor.schema.json) binds provider and
+[Descriptor schema](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/bench/schemas/descriptor.schema.json) binds provider and
 case identity/version, subsystem, implementation/configuration, workload kind
 and SHA-256, integer parameters/ranges, counters/units/ranges, exact warm-up and
 repetition counts, clock/unit, all-measured raw retention, evidence class, and
 comparison policy `none`. Correctness and counter ranges are structural
 invariants, not performance thresholds.
 
-[Result schema](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/bench/schemas/result.schema.json) includes the raw schema in
+[Result schema](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/bench/schemas/result.schema.json) includes the raw schema in
 `$defs.raw`. It binds the descriptor and raw filenames/digests, run-context
 identity, runner/schema versions, source/build/host/policy/backend/workload
 identity, UTC metadata, clock/evidence class, complete/partial counts, status,
@@ -221,7 +221,7 @@ build/bench/bench/rtfw-bench run --provider rtfw.cpu --case host-adapter-64 --cl
 python3 tools/check_benchmark_artifact.py --artifact-root build/cpu-evidence
 ```
 
-The finite [inventory](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/bench/fixtures/cpu_cases.json) has 51 cases, two warm-ups
+The finite [inventory](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/bench/fixtures/cpu_cases.json) has 51 cases, two warm-ups
 and five retained samples each. It covers the thirteen contracted areas; memory
 and native residency use separate catalog family labels. Bounds are four
 workers, 64 phases, 4096 entities, 256 nested tasks and 16 parameters/counters.
@@ -398,7 +398,7 @@ stack. It does not change Runtime-owned stack policy or any ordinary workload.
 ## Device source-example provider
 
 The optional `rtfw.device` catalog covers public HAL, CUDA, XDMA, explicit host
-staging and complete Runtime pipelines. See [device benchmarking](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/device_benchmarking.md)
+staging and complete Runtime pipelines. See [device benchmarking](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/device_benchmarking.md)
 for timing boundaries, protocol versus real-driver identity, optional native
 hosts, caller-owned session lifetimes and missing-hardware NOT RUN behavior.
 

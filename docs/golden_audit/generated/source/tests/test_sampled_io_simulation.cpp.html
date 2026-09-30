@@ -1,0 +1,49 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_sampled_io_simulation.cpp</title><h1>tests/test_sampled_io_simulation.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;sampled_io_simulation/fixture.hpp&quot;</span>
+<span id="L2">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L3">namespace {</span>
+<span id="L4">TEST(CommandBatch, SampledSimulationStartup) {</span>
+<span id="L5">  EXPECT_TRUE(sampled_simulation::run_case(0));</span>
+<span id="L6">}</span>
+<span id="L7">TEST(CommandBatch, SampledSimulationShutdown) {</span>
+<span id="L8">  EXPECT_TRUE(sampled_simulation::run_case(1));</span>
+<span id="L9">}</span>
+<span id="L10">TEST(CommandBatch, SampledSimulationFailureStop) {</span>
+<span id="L11">  EXPECT_TRUE(sampled_simulation::run_case(2));</span>
+<span id="L12">}</span>
+<span id="L13">TEST(CommandBatch, SampledSimulationRegularRelease) {</span>
+<span id="L14">  EXPECT_TRUE(sampled_simulation::run_case(3));</span>
+<span id="L15">}</span>
+<span id="L16">TEST(CommandBatch, SampledSimulationUnselectedMock) {</span>
+<span id="L17">  EXPECT_TRUE(sampled_simulation::run_case(4));</span>
+<span id="L18">}</span>
+<span id="L19">TEST(CommandBatch, SampledSimulationUnselectedNative) {</span>
+<span id="L20">  EXPECT_TRUE(sampled_simulation::run_case(5));</span>
+<span id="L21">}</span>
+<span id="L22">TEST(CommandBatch, SampledSimulationLogicalExpiry) {</span>
+<span id="L23">  EXPECT_TRUE(sampled_simulation::run_case(6));</span>
+<span id="L24">}</span>
+<span id="L25">TEST(CommandBatch, SampledSimulationHostExpiry) {</span>
+<span id="L26">  EXPECT_TRUE(sampled_simulation::run_case(7));</span>
+<span id="L27">}</span>
+<span id="L28">TEST(CommandBatch, SampledSimulationMissingAck) {</span>
+<span id="L29">  EXPECT_TRUE(sampled_simulation::run_case(8));</span>
+<span id="L30">}</span>
+<span id="L31">TEST(CommandBatch, SampledSimulationNativeOptInRejected) {</span>
+<span id="L32">  EXPECT_TRUE(sampled_simulation::run_case(9));</span>
+<span id="L33">}</span>
+<span id="L34">TEST(CommandBatch, SampledSimulationLateCompletionCleanup) {</span>
+<span id="L35">  EXPECT_TRUE(sampled_simulation::run_case(10));</span>
+<span id="L36">}</span>
+<span id="L37">TEST(CommandBatch, SampledSimulationDefaultLateCompletionCleanup) {</span>
+<span id="L38">  EXPECT_TRUE(sampled_simulation::run_case(11));</span>
+<span id="L39">}</span>
+<span id="L40">TEST(CommandBatch, SampledSimulationOwnersRemainIndependent) {</span>
+<span id="L41">  bool first = false, second = false;</span>
+<span id="L42">  std::thread a([&amp;] { first = sampled_simulation::run_case(0); });</span>
+<span id="L43">  std::thread b([&amp;] { second = sampled_simulation::run_case(1); });</span>
+<span id="L44">  a.join();</span>
+<span id="L45">  b.join();</span>
+<span id="L46">  EXPECT_TRUE(first);</span>
+<span id="L47">  EXPECT_TRUE(second);</span>
+<span id="L48">}</span>
+<span id="L49">} // namespace</span></pre></html>

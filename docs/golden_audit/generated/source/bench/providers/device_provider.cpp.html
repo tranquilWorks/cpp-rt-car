@@ -1,0 +1,777 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>bench/providers/device_provider.cpp</title><h1>bench/providers/device_provider.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;device_provider.hpp&quot;</span>
+<span id="L2">#include &quot;device_cases/fake_cuda.hpp&quot;</span>
+<span id="L3">#include &quot;device_cases/fake_xdma.hpp&quot;</span>
+<span id="L4"></span>
+<span id="L5">#include &lt;algorithm&gt;</span>
+<span id="L6">#include &lt;array&gt;</span>
+<span id="L7">#include &lt;chrono&gt;</span>
+<span id="L8">#include &lt;cstring&gt;</span>
+<span id="L9">#include &lt;exception&gt;</span>
+<span id="L10">#include &lt;stdexcept&gt;</span>
+<span id="L11">#include &lt;thread&gt;</span>
+<span id="L12">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L13"></span>
+<span id="L14">namespace rtfw::benchmark::device {</span>
+<span id="L15">namespace {</span>
+<span id="L16">constexpr std::array catalog{</span>
+<span id="L17">    Case{&quot;hal-cuda-v1-depth-1&quot;, &quot;hal-cuda-v1&quot;, 64, 1, false, true},</span>
+<span id="L18">    Case{&quot;hal-cuda-v1-depth-4&quot;, &quot;hal-cuda-v1&quot;, 64, 4, false, true},</span>
+<span id="L19">    Case{&quot;hal-cuda-v2-depth-1&quot;, &quot;hal-cuda-v2&quot;, 64, 1, false, true},</span>
+<span id="L20">    Case{&quot;hal-cuda-v2-depth-4&quot;, &quot;hal-cuda-v2&quot;, 64, 4, false, true},</span>
+<span id="L21">    Case{&quot;hal-xdma-v1-depth-1&quot;, &quot;hal-xdma-v1&quot;, 64, 1, false, true},</span>
+<span id="L22">    Case{&quot;hal-xdma-v1-depth-4&quot;, &quot;hal-xdma-v1&quot;, 64, 4, false, true},</span>
+<span id="L23">    Case{&quot;hal-xdma-v2-depth-1&quot;, &quot;hal-xdma-v2&quot;, 64, 1, false, true},</span>
+<span id="L24">    Case{&quot;hal-xdma-v2-depth-4&quot;, &quot;hal-xdma-v2&quot;, 64, 4, false, true},</span>
+<span id="L25">    Case{&quot;pipeline-kernel-64-frames-1&quot;, &quot;pipeline-kernel&quot;, 64, 1, false, true},</span>
+<span id="L26">    Case{&quot;pipeline-kernel-64-frames-4&quot;, &quot;pipeline-kernel&quot;, 64, 4, false, true},</span>
+<span id="L27">    Case{&quot;pipeline-kernel-4096-frames-1&quot;, &quot;pipeline-kernel&quot;, 4096, 1, false, true},</span>
+<span id="L28">    Case{&quot;pipeline-kernel-4096-frames-4&quot;, &quot;pipeline-kernel&quot;, 4096, 4, false, true},</span>
+<span id="L29">    Case{&quot;pipeline-graph-64-frames-1&quot;, &quot;pipeline-graph&quot;, 64, 1, false, true},</span>
+<span id="L30">    Case{&quot;pipeline-graph-64-frames-4&quot;, &quot;pipeline-graph&quot;, 64, 4, false, true},</span>
+<span id="L31">    Case{&quot;pipeline-graph-4096-frames-1&quot;, &quot;pipeline-graph&quot;, 4096, 1, false, true},</span>
+<span id="L32">    Case{&quot;pipeline-graph-4096-frames-4&quot;, &quot;pipeline-graph&quot;, 4096, 4, false, true},</span>
+<span id="L33">    Case{&quot;real-pipeline-kernel-64&quot;, &quot;pipeline-kernel&quot;, 64, 1, true, true},</span>
+<span id="L34">    Case{&quot;real-pipeline-kernel-4096&quot;, &quot;pipeline-kernel&quot;, 4096, 1, true, true},</span>
+<span id="L35">    Case{&quot;real-pipeline-graph-64&quot;, &quot;pipeline-graph&quot;, 64, 1, true, true},</span>
+<span id="L36">    Case{&quot;real-pipeline-graph-4096&quot;, &quot;pipeline-graph&quot;, 4096, 1, true, true},</span>
+<span id="L37">    Case{&quot;host-staging-64&quot;, &quot;host-staging&quot;, 64, 1, false, true},</span>
+<span id="L38">    Case{&quot;host-staging-4096&quot;, &quot;host-staging&quot;, 4096, 1, false, true},</span>
+<span id="L39">    Case{&quot;pipeline-graph-failure&quot;, &quot;pipeline-graph&quot;, 64, 1, false, false},</span>
+<span id="L40">    Case{&quot;cuda-roundtrip-64&quot;, &quot;roundtrip&quot;, 64, 1, false, true},</span>
+<span id="L41">    Case{&quot;cuda-roundtrip-4096&quot;, &quot;roundtrip&quot;, 4096, 1, false, true},</span>
+<span id="L42">    Case{&quot;cuda-kernel-64&quot;, &quot;kernel&quot;, 64, 1, false, true},</span>
+<span id="L43">    Case{&quot;cuda-kernel-4096&quot;, &quot;kernel&quot;, 4096, 1, false, true},</span>
+<span id="L44">    Case{&quot;cuda-device-copy-64&quot;, &quot;device-copy&quot;, 64, 1, false, true},</span>
+<span id="L45">    Case{&quot;cuda-device-copy-4096&quot;, &quot;device-copy&quot;, 4096, 1, false, true},</span>
+<span id="L46">    Case{&quot;cuda-memset-64&quot;, &quot;memset&quot;, 64, 1, false, true},</span>
+<span id="L47">    Case{&quot;cuda-memset-4096&quot;, &quot;memset&quot;, 4096, 1, false, true},</span>
+<span id="L48">    Case{&quot;cuda-graph-64&quot;, &quot;graph&quot;, 64, 1, false, true},</span>
+<span id="L49">    Case{&quot;cuda-graph-4096&quot;, &quot;graph&quot;, 4096, 1, false, true},</span>
+<span id="L50">    Case{&quot;real-cuda-graph-64&quot;, &quot;graph&quot;, 64, 1, true, true},</span>
+<span id="L51">    Case{&quot;real-cuda-graph-4096&quot;, &quot;graph&quot;, 4096, 1, true, true},</span>
+<span id="L52">    Case{&quot;cuda-depth-1&quot;, &quot;depth&quot;, 64, 1, false, true},</span>
+<span id="L53">    Case{&quot;cuda-depth-4&quot;, &quot;depth&quot;, 64, 4, false, true},</span>
+<span id="L54">    Case{&quot;cuda-invalid-inputs&quot;, &quot;invalid-inputs&quot;, 64, 1, false, false},</span>
+<span id="L55">    Case{&quot;xdma-invalid-inputs&quot;, &quot;xdma-invalid-inputs&quot;, 64, 1, false, false},</span>
+<span id="L56">    Case{&quot;cuda-empty-poll&quot;, &quot;empty-poll&quot;, 64, 1, false, true},</span>
+<span id="L57">    Case{&quot;cuda-not-ready-poll&quot;, &quot;not-ready-poll&quot;, 64, 1, false, true},</span>
+<span id="L58">    Case{&quot;cuda-timeout&quot;, &quot;timeout&quot;, 64, 1, false, true},</span>
+<span id="L59">    Case{&quot;cuda-submit-failure-recovery&quot;, &quot;fault-submit&quot;, 64, 1, false, false},</span>
+<span id="L60">    Case{&quot;cuda-context-loss&quot;, &quot;fault-context&quot;, 64, 1, false, false},</span>
+<span id="L61">    Case{&quot;cuda-cleanup-retry&quot;, &quot;fault-cleanup&quot;, 64, 1, false, false},</span>
+<span id="L62">    Case{&quot;real-cuda-roundtrip-64&quot;, &quot;roundtrip&quot;, 64, 1, true, true},</span>
+<span id="L63">    Case{&quot;real-cuda-roundtrip-4096&quot;, &quot;roundtrip&quot;, 4096, 1, true, true},</span>
+<span id="L64">    Case{&quot;real-cuda-kernel-64&quot;, &quot;kernel&quot;, 64, 1, true, true},</span>
+<span id="L65">    Case{&quot;real-cuda-kernel-4096&quot;, &quot;kernel&quot;, 4096, 1, true, true},</span>
+<span id="L66">    Case{&quot;real-cuda-device-copy-64&quot;, &quot;device-copy&quot;, 64, 1, true, true},</span>
+<span id="L67">    Case{&quot;real-cuda-device-copy-4096&quot;, &quot;device-copy&quot;, 4096, 1, true, true},</span>
+<span id="L68">    Case{&quot;real-cuda-memset-64&quot;, &quot;memset&quot;, 64, 1, true, true},</span>
+<span id="L69">    Case{&quot;real-cuda-memset-4096&quot;, &quot;memset&quot;, 4096, 1, true, true},</span>
+<span id="L70">    Case{&quot;xdma-roundtrip-64&quot;, &quot;xdma-roundtrip&quot;, 64, 1, false, true},</span>
+<span id="L71">    Case{&quot;xdma-roundtrip-4096&quot;, &quot;xdma-roundtrip&quot;, 4096, 1, false, true},</span>
+<span id="L72">    Case{&quot;xdma-depth-1&quot;, &quot;xdma-depth&quot;, 64, 1, false, true},</span>
+<span id="L73">    Case{&quot;xdma-depth-4&quot;, &quot;xdma-depth&quot;, 64, 4, false, true},</span>
+<span id="L74">    Case{&quot;xdma-control-roundtrip&quot;, &quot;xdma-control&quot;, 64, 1, false, true},</span>
+<span id="L75">    Case{&quot;xdma-event&quot;, &quot;xdma-event&quot;, 64, 1, false, true},</span>
+<span id="L76">    Case{&quot;xdma-io-failure&quot;, &quot;xdma-fault-io&quot;, 64, 1, false, false},</span>
+<span id="L77">    Case{&quot;xdma-loss&quot;, &quot;xdma-fault-loss&quot;, 64, 1, false, false},</span>
+<span id="L78">    Case{&quot;xdma-cleanup-retry&quot;, &quot;xdma-fault-cleanup&quot;, 64, 1, false, false},</span>
+<span id="L79">    Case{&quot;xdma-event-timeout&quot;, &quot;xdma-fault-event&quot;, 64, 1, false, false},</span>
+<span id="L80">    Case{&quot;xdma-short-transfer&quot;, &quot;xdma-fault-short&quot;, 64, 1, false, false},</span>
+<span id="L81">    Case{&quot;xdma-reset-recovery&quot;, &quot;xdma-fault-reset&quot;, 64, 1, false, false},</span>
+<span id="L82">    Case{&quot;xdma-event-cancel&quot;, &quot;xdma-fault-cancel&quot;, 64, 1, false, false},</span>
+<span id="L83">    Case{&quot;real-xdma-roundtrip-64&quot;, &quot;xdma-roundtrip&quot;, 64, 1, true, true},</span>
+<span id="L84">    Case{&quot;real-xdma-roundtrip-4096&quot;, &quot;xdma-roundtrip&quot;, 4096, 1, true, true},</span>
+<span id="L85">};</span>
+<span id="L86">struct Measures {</span>
+<span id="L87">    std::uint64_t submissions{}, completions{}, polls{}, rejected{}, copied_bytes{},</span>
+<span id="L88">        kernels{}, checked_elements{}, peak_outstanding{}, timeouts{}, failed{}, resets{}, cleanup_retries{},</span>
+<span id="L89">        control_reads{}, control_writes{}, events{}, canceled{};</span>
+<span id="L90">    std::array&lt;std::uint64_t, 16&gt; values() const noexcept {</span>
+<span id="L91">        return {submissions, completions, polls, rejected, copied_bytes, kernels,</span>
+<span id="L92">                checked_elements, peak_outstanding, timeouts, failed, resets, cleanup_retries,</span>
+<span id="L93">                control_reads, control_writes, events, canceled};</span>
+<span id="L94">    }</span>
+<span id="L95">};</span>
+<span id="L96">void require(bool condition) {</span>
+<span id="L97">    if (!condition) throw std::runtime_error(&quot;device benchmark invariant&quot;);</span>
+<span id="L98">}</span>
+<span id="L99"></span>
+<span id="L100">struct CudaFixture {</span>
+<span id="L101">    const Case&amp; spec;</span>
+<span id="L102">    // Fixed driver storage and buffers live on the heap with this fixture.</span>
+<span id="L103">    detail::FakeCudaDriver fake;</span>
+<span id="L104">    std::array&lt;rt::CudaStream, 1&gt; streams{};</span>
+<span id="L105">    std::unique_ptr&lt;rt::CudaDeviceBackend&gt; backend;</span>
+<span id="L106">    rtfw_device_backend_api api{};</span>
+<span id="L107">    std::array&lt;std::int32_t, 1024&gt; values{};</span>
+<span id="L108">    std::array&lt;std::int32_t, 1024&gt; destination{};</span>
+<span id="L109">    std::uint64_t token{}, destination_token{}, kernel{}, sequence{};</span>
+<span id="L110">    bool initialized{}, initialization_succeeded{};</span>
+<span id="L111"></span>
+<span id="L112">    explicit CudaFixture(const Case&amp; requested) : spec(requested) {}</span>
+<span id="L113">    ~CudaFixture() { if (finish() != Status::ok) std::terminate(); }</span>
+<span id="L114"></span>
+<span id="L115">    Status setup(const CudaSession* session) {</span>
+<span id="L116">        rt::CudaBackendConfig config;</span>
+<span id="L117">        config.context = session ? session-&gt;context : detail::FakeCudaDriver::context;</span>
+<span id="L118">        streams[0] = session ? session-&gt;stream : 0x51u;</span>
+<span id="L119">        config.streams = streams;</span>
+<span id="L120">        config.queue_capacity = spec.depth;</span>
+<span id="L121">        config.buffer_capacity = 2;</span>
+<span id="L122">        config.kernel_capacity = 1;</span>
+<span id="L123">        fake.complete_on_record.store(true);</span>
+<span id="L124">        backend = std::make_unique&lt;rt::CudaDeviceBackend&gt;(</span>
+<span id="L125">            session ? session-&gt;driver : fake.api(), config);</span>
+<span id="L126">        api = backend-&gt;api();</span>
+<span id="L127">        if (std::string_view(spec.operation) == &quot;kernel&quot;) {</span>
+<span id="L128">            require(backend-&gt;register_kernel(session ? session-&gt;increment_kernel :</span>
+<span id="L129">                detail::FakeCudaDriver::add_one_function, kernel) == RTFW_DEVICE_STATUS_OK);</span>
+<span id="L130">        }</span>
+<span id="L131">        rtfw_device_init_config init{};</span>
+<span id="L132">        init.struct_size = sizeof(init);</span>
+<span id="L133">        init.abi_version = RTFW_DEVICE_ABI_VERSION;</span>
+<span id="L134">        init.requested_in_flight = spec.depth;</span>
+<span id="L135">        init.requested_registered_buffers = 2;</span>
+<span id="L136">        // Failed initialization may still own partial resources. shutdown is</span>
+<span id="L137">        // checked even on the failing path before the host can release them.</span>
+<span id="L138">        initialized = true;</span>
+<span id="L139">        initialization_succeeded = api.initialize(api.instance, &amp;init) == RTFW_DEVICE_STATUS_OK;</span>
+<span id="L140">        require(initialization_succeeded);</span>
+<span id="L141">        rtfw_device_buffer_registration registration{};</span>
+<span id="L142">        registration.struct_size = sizeof(registration);</span>
+<span id="L143">        registration.flags = RTFW_DEVICE_BUFFER_HOST_READ | RTFW_DEVICE_BUFFER_HOST_WRITE |</span>
+<span id="L144">            RTFW_DEVICE_BUFFER_DEVICE_READ | RTFW_DEVICE_BUFFER_DEVICE_WRITE;</span>
+<span id="L145">        registration.data = values.data();</span>
+<span id="L146">        registration.bytes = spec.bytes;</span>
+<span id="L147">        std::memcpy(registration.name, &quot;benchmark.cuda&quot;, sizeof(&quot;benchmark.cuda&quot;));</span>
+<span id="L148">        require(api.register_buffer(api.instance, &amp;registration, &amp;token) == RTFW_DEVICE_STATUS_OK);</span>
+<span id="L149">        registration.data = destination.data();</span>
+<span id="L150">        std::memcpy(registration.name, &quot;benchmark.dest&quot;, sizeof(&quot;benchmark.dest&quot;));</span>
+<span id="L151">        require(api.register_buffer(api.instance, &amp;registration, &amp;destination_token) == RTFW_DEVICE_STATUS_OK);</span>
+<span id="L152">        return Status::ok;</span>
+<span id="L153">    }</span>
+<span id="L154"></span>
+<span id="L155">    Status finish() noexcept {</span>
+<span id="L156">        if (!initialized) return Status::ok;</span>
+<span id="L157">        const auto result = api.shutdown(api.instance);</span>
+<span id="L158">        // The serialized failed-initialize path can report invalid_state only</span>
+<span id="L159">        // when neither initialized nor incomplete-shutdown ownership remains.</span>
+<span id="L160">        if (result != RTFW_DEVICE_STATUS_OK &amp;&amp;</span>
+<span id="L161">            !(result == RTFW_DEVICE_STATUS_INVALID_STATE &amp;&amp; !initialization_succeeded))</span>
+<span id="L162">            return Status::provider_error;</span>
+<span id="L163">        initialized = false;</span>
+<span id="L164">        return Status::ok;</span>
+<span id="L165">    }</span>
+<span id="L166"></span>
+<span id="L167">    rt::DeviceSubmission request(std::uint32_t opcode, std::uint32_t access = 0) {</span>
+<span id="L168">        auto result = rt::make_device_submission();</span>
+<span id="L169">        result.submission_id = ++sequence;</span>
+<span id="L170">        result.timeout_ns = 5&#x27;000&#x27;000&#x27;000ULL;</span>
+<span id="L171">        result.opcode = opcode;</span>
+<span id="L172">        if (access != 0) {</span>
+<span id="L173">            result.buffer_count = 1;</span>
+<span id="L174">            result.buffers[0].buffer_token = token;</span>
+<span id="L175">            result.buffers[0].access = access;</span>
+<span id="L176">            result.buffers[0].bytes = spec.bytes;</span>
+<span id="L177">        }</span>
+<span id="L178">        return result;</span>
+<span id="L179">    }</span>
+<span id="L180"></span>
+<span id="L181">    void submit(const rt::DeviceSubmission&amp; requested, Measures&amp; m) {</span>
+<span id="L182">        require(api.submit(api.instance, &amp;requested) == RTFW_DEVICE_STATUS_OK);</span>
+<span id="L183">        ++m.submissions;</span>
+<span id="L184">        auto health = rt::make_device_health();</span>
+<span id="L185">        require(api.get_health(api.instance, &amp;health) == RTFW_DEVICE_STATUS_OK);</span>
+<span id="L186">        m.peak_outstanding = std::max(m.peak_outstanding, health.outstanding);</span>
+<span id="L187">    }</span>
+<span id="L188"></span>
+<span id="L189">    rtfw_device_completion poll(Measures&amp; m, bool must_complete = true) {</span>
+<span id="L190">        rtfw_device_completion completion{};</span>
+<span id="L191">        std::uint64_t count = 0;</span>
+<span id="L192">        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);</span>
+<span id="L193">        do {</span>
+<span id="L194">            require(api.poll(api.instance, &amp;completion, 1, &amp;count) == RTFW_DEVICE_STATUS_OK);</span>
+<span id="L195">            ++m.polls;</span>
+<span id="L196">            if (count == 1) {</span>
+<span id="L197">                ++m.completions;</span>
+<span id="L198">                if (completion.status == RTFW_DEVICE_STATUS_TIMEOUT) ++m.timeouts;</span>
+<span id="L199">                return completion;</span>
+<span id="L200">            }</span>
+<span id="L201">            require(count == 0);</span>
+<span id="L202">            if (!must_complete) return completion;</span>
+<span id="L203">            std::this_thread::yield();</span>
+<span id="L204">        } while (std::chrono::steady_clock::now() &lt; deadline);</span>
+<span id="L205">        throw std::runtime_error(&quot;device completion deadline&quot;);</span>
+<span id="L206">    }</span>
+<span id="L207"></span>
+<span id="L208">    void transact(const rt::DeviceSubmission&amp; requested, Measures&amp; m) {</span>
+<span id="L209">        submit(requested, m);</span>
+<span id="L210">        const auto completion = poll(m);</span>
+<span id="L211">        require(completion.submission_id == requested.submission_id &amp;&amp;</span>
+<span id="L212">                completion.status == RTFW_DEVICE_STATUS_OK);</span>
+<span id="L213">    }</span>
+<span id="L214"></span>
+<span id="L215">    std::uint64_t invoke(std::uint64_t ordinal, Measures&amp; m) {</span>
+<span id="L216">        const std::string_view operation = spec.operation;</span>
+<span id="L217">        if(operation==&quot;invalid-inputs&quot;) {</span>
+<span id="L218">            const auto before=values;</span>
+<span id="L219">            auto invalid=request(rt::cuda_device_opcode_copy_host_to_device,RTFW_DEVICE_ACCESS_READ);</span>
+<span id="L220">            invalid.buffers[0].bytes=spec.bytes+1;</span>
+<span id="L221">            require(api.submit(api.instance,&amp;invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;</span>
+<span id="L222">            invalid.buffers[0].bytes=spec.bytes; invalid.buffers[0].access=RTFW_DEVICE_ACCESS_WRITE;</span>
+<span id="L223">            require(api.submit(api.instance,&amp;invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;</span>
+<span id="L224">            require(api.unregister_buffer(api.instance,destination_token)==RTFW_DEVICE_STATUS_OK);</span>
+<span id="L225">            invalid.buffers[0].access=RTFW_DEVICE_ACCESS_READ; invalid.buffers[0].buffer_token=destination_token;</span>
+<span id="L226">            require(api.submit(api.instance,&amp;invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;</span>
+<span id="L227">            require(values==before &amp;&amp; fake.launches.load()==0 &amp;&amp; fake.frees.load()==1);</span>
+<span id="L228">        }</span>
+<span id="L229">        if (operation.starts_with(&quot;fault-&quot;)) {</span>
+<span id="L230">            auto requested = request(rt::cuda_device_opcode_noop);</span>
+<span id="L231">            fake.complete_on_record.store(false);</span>
+<span id="L232">            if (operation == &quot;fault-submit&quot;) {</span>
+<span id="L233">                fake.fail_next_event_record.store(true);</span>
+<span id="L234">                require(api.submit(api.instance, &amp;requested) == RTFW_DEVICE_STATUS_ERROR);</span>
+<span id="L235">                ++m.failed;</span>
+<span id="L236">                auto health = rt::make_device_health();</span>
+<span id="L237">                require(api.get_health(api.instance, &amp;health) == RTFW_DEVICE_STATUS_OK);</span>
+<span id="L238">                require(health.state == RTFW_DEVICE_HEALTH_RESET_REQUIRED &amp;&amp; health.outstanding == 1);</span>
+<span id="L239">                m.peak_outstanding = health.outstanding;</span>
+<span id="L240">                require(api.reset(api.instance) == RTFW_DEVICE_STATUS_OK);</span>
+<span id="L241">                require(api.get_health(api.instance, &amp;health) == RTFW_DEVICE_STATUS_OK);</span>
+<span id="L242">                require(health.state == RTFW_DEVICE_HEALTH_HEALTHY &amp;&amp; health.outstanding == 0 &amp;&amp; health.resets == 1);</span>
+<span id="L243">                m.resets = health.resets;</span>
+<span id="L244">                fake.complete_on_record.store(true);</span>
+<span id="L245">                transact(request(rt::cuda_device_opcode_noop), m);</span>
+<span id="L246">            } else {</span>
+<span id="L247">                submit(requested,m);</span>
+<span id="L248">                if (operation == &quot;fault-context&quot;) {</span>
+<span id="L249">                    fake.lose_context_on_query.store(true);</span>
+<span id="L250">                    const auto completion = poll(m);</span>
+<span id="L251">                    require(completion.submission_id == requested.submission_id &amp;&amp; completion.status == RTFW_DEVICE_STATUS_LOST);</span>
+<span id="L252">                    ++m.failed;</span>
+<span id="L253">                    require(api.reset(api.instance) == RTFW_DEVICE_STATUS_LOST);</span>
+<span id="L254">                    auto health = rt::make_device_health();</span>
+<span id="L255">                    require(api.get_health(api.instance, &amp;health) == RTFW_DEVICE_STATUS_OK);</span>
+<span id="L256">                    require(health.state == RTFW_DEVICE_HEALTH_LOST &amp;&amp; health.outstanding == 1);</span>
+<span id="L257">                } else {</span>
+<span id="L258">                    fake.fail_next_event_sync.store(true);</span>
+<span id="L259">                    require(finish() == Status::provider_error);</span>
+<span id="L260">                    ++m.failed; ++m.cleanup_retries;</span>
+<span id="L261">                    require(fake.frees.load() == 0 &amp;&amp; fake.host_unregistrations.load() == 0);</span>
+<span id="L262">                    require(api.submit(api.instance, &amp;requested) == RTFW_DEVICE_STATUS_INVALID_STATE);</span>
+<span id="L263">                    ++m.rejected;</span>
+<span id="L264">                }</span>
+<span id="L265">            }</span>
+<span id="L266">            require(finish() == Status::ok);</span>
+<span id="L267">            require(fake.allocations.load() == fake.frees.load() &amp;&amp;</span>
+<span id="L268">                    fake.host_registrations.load() == fake.host_unregistrations.load());</span>
+<span id="L269">            return m.failed + m.resets + m.cleanup_retries;</span>
+<span id="L270">        }</span>
+<span id="L271">        if (operation == &quot;empty-poll&quot;) {</span>
+<span id="L272">            (void)poll(m, false);</span>
+<span id="L273">            require(m.completions == 0);</span>
+<span id="L274">            return 0;</span>
+<span id="L275">        }</span>
+<span id="L276">        if (operation == &quot;depth&quot; || operation == &quot;not-ready-poll&quot; || operation == &quot;timeout&quot;) {</span>
+<span id="L277">            fake.complete_on_record.store(false);</span>
+<span id="L278">            std::array&lt;std::uint64_t, 4&gt; ids{};</span>
+<span id="L279">            for (std::size_t i = 0; i &lt; spec.depth; ++i) {</span>
+<span id="L280">                auto requested = request(rt::cuda_device_opcode_noop);</span>
+<span id="L281">                if (operation == &quot;timeout&quot;) requested.timeout_ns = 10;</span>
+<span id="L282">                ids[i] = requested.submission_id;</span>
+<span id="L283">                submit(requested, m);</span>
+<span id="L284">            }</span>
+<span id="L285">            require(m.peak_outstanding == spec.depth);</span>
+<span id="L286">            if (operation == &quot;depth&quot;) {</span>
+<span id="L287">                const auto rejected = request(rt::cuda_device_opcode_noop);</span>
+<span id="L288">                require(api.submit(api.instance, &amp;rejected) == RTFW_DEVICE_STATUS_QUEUE_FULL);</span>
+<span id="L289">                ++m.rejected;</span>
+<span id="L290">            }</span>
+<span id="L291">            if (operation == &quot;timeout&quot;) fake.advance(11);</span>
+<span id="L292">            (void)poll(m, false);</span>
+<span id="L293">            require(m.completions == 0);</span>
+<span id="L294">            fake.make_events_ready();</span>
+<span id="L295">            std::array&lt;bool, 4&gt; seen{};</span>
+<span id="L296">            for (std::size_t i = 0; i &lt; spec.depth; ++i) {</span>
+<span id="L297">                const auto completion = poll(m);</span>
+<span id="L298">                auto found = std::find(ids.begin(), ids.begin() + static_cast&lt;std::ptrdiff_t&gt;(spec.depth),</span>
+<span id="L299">                                       completion.submission_id);</span>
+<span id="L300">                require(found != ids.begin() + static_cast&lt;std::ptrdiff_t&gt;(spec.depth));</span>
+<span id="L301">                const auto index = static_cast&lt;std::size_t&gt;(found - ids.begin());</span>
+<span id="L302">                require(!seen[index]); seen[index] = true;</span>
+<span id="L303">                require(completion.status == (operation == &quot;timeout&quot; ?</span>
+<span id="L304">                    RTFW_DEVICE_STATUS_TIMEOUT : RTFW_DEVICE_STATUS_OK));</span>
+<span id="L305">            }</span>
+<span id="L306">            auto health = rt::make_device_health();</span>
+<span id="L307">            require(api.get_health(api.instance, &amp;health) == RTFW_DEVICE_STATUS_OK &amp;&amp; health.outstanding == 0);</span>
+<span id="L308">            fake.complete_on_record.store(true);</span>
+<span id="L309">            // Prove a fresh transaction can reuse the drained capacity.</span>
+<span id="L310">            transact(request(rt::cuda_device_opcode_noop), m);</span>
+<span id="L311">            return m.completions;</span>
+<span id="L312">        }</span>
+<span id="L313">        const auto count = spec.bytes / sizeof(std::int32_t);</span>
+<span id="L314">        for (std::size_t i = 0; i &lt; count; ++i)</span>
+<span id="L315">            values[i] = static_cast&lt;std::int32_t&gt;(ordinal * 7 + i * 3);</span>
+<span id="L316">        transact(request(rt::cuda_device_opcode_copy_host_to_device, RTFW_DEVICE_ACCESS_READ), m);</span>
+<span id="L317">        m.copied_bytes += spec.bytes;</span>
+<span id="L318">        if (operation == &quot;kernel&quot;) {</span>
+<span id="L319">            auto requested = request(rt::cuda_device_opcode_launch_kernel, RTFW_DEVICE_ACCESS_READ_WRITE);</span>
+<span id="L320">            rt::CudaKernelLaunch launch{};</span>
+<span id="L321">            launch.kernel_token = kernel;</span>
+<span id="L322">            launch.block_x = 64;</span>
+<span id="L323">            launch.grid_x = static_cast&lt;std::uint32_t&gt;((count + 63) / 64);</span>
+<span id="L324">            require(rt::cuda_kernel_add_buffer_argument(launch, 0));</span>
+<span id="L325">            require(rt::cuda_kernel_add_scalar_argument(launch, static_cast&lt;std::uint32_t&gt;(count)));</span>
+<span id="L326">            rt::set_cuda_kernel_launch(requested, launch);</span>
+<span id="L327">            transact(requested, m);</span>
+<span id="L328">            ++m.kernels;</span>
+<span id="L329">        }</span>
+<span id="L330">        auto output_token = token;</span>
+<span id="L331">        if (operation == &quot;device-copy&quot;) {</span>
+<span id="L332">            auto requested = request(rt::cuda_device_opcode_copy_device_to_device, RTFW_DEVICE_ACCESS_READ);</span>
+<span id="L333">            requested.buffer_count = 2;</span>
+<span id="L334">            requested.buffers[1] = requested.buffers[0];</span>
+<span id="L335">            requested.buffers[1].buffer_token = destination_token;</span>
+<span id="L336">            requested.buffers[1].access = RTFW_DEVICE_ACCESS_WRITE;</span>
+<span id="L337">            transact(requested, m);</span>
+<span id="L338">            m.copied_bytes += spec.bytes;</span>
+<span id="L339">            output_token = destination_token;</span>
+<span id="L340">        }</span>
+<span id="L341">        if (operation == &quot;memset&quot;) {</span>
+<span id="L342">            auto requested = request(rt::cuda_device_opcode_memset_d8, RTFW_DEVICE_ACCESS_WRITE);</span>
+<span id="L343">            requested.payload_size = 1;</span>
+<span id="L344">            requested.payload[0] = 0x2a;</span>
+<span id="L345">            transact(requested, m);</span>
+<span id="L346">        }</span>
+<span id="L347">        std::fill_n(values.begin(), count, -1);</span>
+<span id="L348">        std::fill_n(destination.begin(), count, -1);</span>
+<span id="L349">        auto download = request(rt::cuda_device_opcode_copy_device_to_host, RTFW_DEVICE_ACCESS_WRITE);</span>
+<span id="L350">        download.buffers[0].buffer_token = output_token;</span>
+<span id="L351">        transact(download, m);</span>
+<span id="L352">        m.copied_bytes += spec.bytes;</span>
+<span id="L353">        std::uint64_t checksum = 0;</span>
+<span id="L354">        for (std::size_t i = 0; i &lt; count; ++i) {</span>
+<span id="L355">            const auto value = operation == &quot;device-copy&quot; ? destination[i] : values[i];</span>
+<span id="L356">            const auto expected = operation == &quot;memset&quot; ? 0x2a2a2a2a :</span>
+<span id="L357">                static_cast&lt;std::int32_t&gt;(ordinal * 7 + i * 3 + (operation == &quot;kernel&quot; ? 1 : 0));</span>
+<span id="L358">            require(value == expected);</span>
+<span id="L359">            ++m.checked_elements;</span>
+<span id="L360">            checksum += static_cast&lt;std::uint64_t&gt;(value);</span>
+<span id="L361">        }</span>
+<span id="L362">        return checksum;</span>
+<span id="L363">    }</span>
+<span id="L364">};</span>
+<span id="L365">#include &quot;device_cases/cuda_graph.inc&quot;</span>
+<span id="L366"></span>
+<span id="L367">struct XdmaFixture {</span>
+<span id="L368">    const Case&amp; spec;</span>
+<span id="L369">    detail::FakeXdmaDriver fake;</span>
+<span id="L370">    struct alignas(4096) Buffer { std::array&lt;std::byte,4096&gt; bytes{}; };</span>
+<span id="L371">    std::unique_ptr&lt;Buffer&gt; storage = std::make_unique&lt;Buffer&gt;();</span>
+<span id="L372">    std::unique_ptr&lt;rt::XdmaDeviceBackend&gt; backend;</span>
+<span id="L373">    rtfw_device_backend_api api{};</span>
+<span id="L374">    rt::HalV2BackendRegistration registration{};</span>
+<span id="L375">    std::uint64_t token{}, sequence{}, offset{};</span>
+<span id="L376">    bool native{}, initialized{}, initialization_succeeded{};</span>
+<span id="L377">    explicit XdmaFixture(const Case&amp; c) : spec(c) {}</span>
+<span id="L378">    ~XdmaFixture() { if (finish()!=Status::ok) std::terminate(); }</span>
+<span id="L379"></span>
+<span id="L380">    Status setup(const XdmaSession* session) {</span>
+<span id="L381">        const std::string_view op=spec.operation;</span>
+<span id="L382">        native=op==&quot;xdma-control&quot; || op==&quot;xdma-event&quot; || op==&quot;xdma-fault-event&quot; || op==&quot;xdma-fault-cancel&quot;;</span>
+<span id="L383">        rt::XdmaBackendConfig config;</span>
+<span id="L384">        config.queue_capacity=spec.depth; config.buffer_capacity=1; config.worker_count=1;</span>
+<span id="L385">        config.max_transfer_bytes=4096; config.max_buffer_bytes=4096;</span>
+<span id="L386">        config.control_aperture_bytes=256; config.user_event_count=1;</span>
+<span id="L387">        if(session) {</span>
+<span id="L388">            require(session-&gt;confirmed_window_bytes&gt;=spec.bytes &amp;&amp;</span>
+<span id="L389">                    session-&gt;device_offset&lt;=UINT64_MAX-spec.bytes);</span>
+<span id="L390">            config=session-&gt;config; offset=session-&gt;device_offset;</span>
+<span id="L391">            require(config.queue_capacity&gt;=spec.depth &amp;&amp; config.queue_capacity&lt;=4 &amp;&amp;</span>
+<span id="L392">                    config.buffer_capacity&gt;=1 &amp;&amp; config.buffer_capacity&lt;=4 &amp;&amp; config.max_buffer_bytes&lt;=4*4096 &amp;&amp;</span>
+<span id="L393">                    config.worker_count&gt;=1 &amp;&amp; config.worker_count&lt;=2 &amp;&amp; config.max_transfer_bytes&gt;=spec.bytes &amp;&amp; config.max_transfer_bytes&lt;=4096);</span>
+<span id="L394">        }</span>
+<span id="L395">        backend=std::make_unique&lt;rt::XdmaDeviceBackend&gt;(session ? session-&gt;driver : fake.api_v2(),config);</span>
+<span id="L396">        initialized=true;</span>
+<span id="L397">        if(native) {</span>
+<span id="L398">            registration=backend-&gt;hal_v2_registration(&quot;benchmark.xdma&quot;);</span>
+<span id="L399">            rt::HalV2InitializeConfig init{};</span>
+<span id="L400">            init.requested_in_flight=spec.depth; init.requested_registered_buffers=1;</span>
+<span id="L401">            initialization_succeeded=registration.api.initialize(registration.api.instance,&amp;init)==rt::HalV2Status::ok;</span>
+<span id="L402">            require(initialization_succeeded);</span>
+<span id="L403">            rt::HalV2BufferRegistration buffer{};</span>
+<span id="L404">            buffer.flags=RTFW_DEVICE_BUFFER_HOST_READ|RTFW_DEVICE_BUFFER_HOST_WRITE|</span>
+<span id="L405">                RTFW_DEVICE_BUFFER_DEVICE_READ|RTFW_DEVICE_BUFFER_DEVICE_WRITE;</span>
+<span id="L406">            buffer.data=storage-&gt;bytes.data(); buffer.bytes=spec.bytes;</span>
+<span id="L407">            std::memcpy(buffer.name.data(),&quot;benchmark.xdma&quot;,sizeof(&quot;benchmark.xdma&quot;));</span>
+<span id="L408">            require(registration.api.register_buffer(registration.api.instance,&amp;buffer,&amp;token)==rt::HalV2Status::ok);</span>
+<span id="L409">        } else {</span>
+<span id="L410">            api=backend-&gt;api();</span>
+<span id="L411">            rtfw_device_init_config init{}; init.struct_size=sizeof(init); init.abi_version=RTFW_DEVICE_ABI_VERSION;</span>
+<span id="L412">            init.requested_in_flight=spec.depth; init.requested_registered_buffers=1;</span>
+<span id="L413">            initialization_succeeded=api.initialize(api.instance,&amp;init)==RTFW_DEVICE_STATUS_OK;</span>
+<span id="L414">            require(initialization_succeeded);</span>
+<span id="L415">            rtfw_device_buffer_registration buffer{}; buffer.struct_size=sizeof(buffer);</span>
+<span id="L416">            buffer.flags=RTFW_DEVICE_BUFFER_HOST_READ|RTFW_DEVICE_BUFFER_HOST_WRITE|</span>
+<span id="L417">                RTFW_DEVICE_BUFFER_DEVICE_READ|RTFW_DEVICE_BUFFER_DEVICE_WRITE;</span>
+<span id="L418">            buffer.data=storage-&gt;bytes.data(); buffer.bytes=spec.bytes;</span>
+<span id="L419">            std::memcpy(buffer.name,&quot;benchmark.xdma&quot;,sizeof(&quot;benchmark.xdma&quot;));</span>
+<span id="L420">            require(api.register_buffer(api.instance,&amp;buffer,&amp;token)==RTFW_DEVICE_STATUS_OK);</span>
+<span id="L421">        }</span>
+<span id="L422">        return Status::ok;</span>
+<span id="L423">    }</span>
+<span id="L424">    Status finish() noexcept {</span>
+<span id="L425">        if(!initialized) return Status::ok;</span>
+<span id="L426">        fake.blocked.store(false,std::memory_order_release); fake.blocked.notify_all();</span>
+<span id="L427">        const auto status=native ? static_cast&lt;std::int32_t&gt;(registration.api.shutdown(registration.api.instance)) :</span>
+<span id="L428">            api.shutdown(api.instance);</span>
+<span id="L429">        if(status!=RTFW_DEVICE_STATUS_OK &amp;&amp; !(status==RTFW_DEVICE_STATUS_INVALID_STATE &amp;&amp; !initialization_succeeded))</span>
+<span id="L430">            return Status::provider_error;</span>
+<span id="L431">        initialized=false;</span>
+<span id="L432">        return Status::ok;</span>
+<span id="L433">    }</span>
+<span id="L434">    rt::DeviceSubmission request(rt::XdmaDirection direction) {</span>
+<span id="L435">        auto r=rt::make_device_submission(); r.submission_id=++sequence; r.timeout_ns=5&#x27;000&#x27;000&#x27;000ULL;</span>
+<span id="L436">        rt::XdmaTransfer transfer{}; transfer.device_offset=offset;</span>
+<span id="L437">        rt::set_xdma_transfer(r,direction,transfer); r.buffer_count=1;</span>
+<span id="L438">        r.buffers[0].buffer_token=token; r.buffers[0].bytes=spec.bytes;</span>
+<span id="L439">        r.buffers[0].access=direction==rt::XdmaDirection::host_to_card ? RTFW_DEVICE_ACCESS_READ : RTFW_DEVICE_ACCESS_WRITE;</span>
+<span id="L440">        return r;</span>
+<span id="L441">    }</span>
+<span id="L442">    void submit(const rt::DeviceSubmission&amp; r,Measures&amp; m) {</span>
+<span id="L443">        require(api.submit(api.instance,&amp;r)==RTFW_DEVICE_STATUS_OK); ++m.submissions;</span>
+<span id="L444">        auto health=rt::make_device_health();</span>
+<span id="L445">        require(api.get_health(api.instance,&amp;health)==RTFW_DEVICE_STATUS_OK);</span>
+<span id="L446">        m.peak_outstanding=std::max(m.peak_outstanding,health.outstanding);</span>
+<span id="L447">    }</span>
+<span id="L448">    rtfw_device_completion poll(Measures&amp; m) {</span>
+<span id="L449">        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);</span>
+<span id="L450">        do {</span>
+<span id="L451">            rtfw_device_completion result{}; std::uint64_t count=0;</span>
+<span id="L452">            require(api.poll(api.instance,&amp;result,1,&amp;count)==RTFW_DEVICE_STATUS_OK); ++m.polls;</span>
+<span id="L453">            if(count==1) { ++m.completions; return result; }</span>
+<span id="L454">            require(count==0); std::this_thread::yield();</span>
+<span id="L455">        } while(std::chrono::steady_clock::now()&lt;deadline);</span>
+<span id="L456">        throw std::runtime_error(&quot;XDMA completion deadline&quot;);</span>
+<span id="L457">    }</span>
+<span id="L458">    void transfer(rt::XdmaDirection direction,Measures&amp; m) {</span>
+<span id="L459">        const auto r=request(direction); submit(r,m); const auto completion=poll(m);</span>
+<span id="L460">        require(completion.submission_id==r.submission_id &amp;&amp; completion.status==RTFW_DEVICE_STATUS_OK &amp;&amp; completion.value==spec.bytes);</span>
+<span id="L461">        m.copied_bytes+=completion.value;</span>
+<span id="L462">    }</span>
+<span id="L463">    std::uint64_t invoke(std::uint64_t ordinal,Measures&amp; m) {</span>
+<span id="L464">        const std::string_view op=spec.operation;</span>
+<span id="L465">        for(std::size_t i=0;i&lt;spec.bytes;++i) storage-&gt;bytes[i]=static_cast&lt;std::byte&gt;((ordinal*7+i*3)%251);</span>
+<span id="L466">        if(native) {</span>
+<span id="L467">            const auto reads_before=fake.control_reads.load(),writes_before=fake.control_writes.load(),events_before=fake.event_waits.load();</span>
+<span id="L468">            const auto expected=static_cast&lt;std::uint32_t&gt;(0x12340000u+ordinal);</span>
+<span id="L469">            const auto before=storage-&gt;bytes;</span>
+<span id="L470">            const bool unsuccessful=op==&quot;xdma-fault-event&quot; || op==&quot;xdma-fault-cancel&quot;;</span>
+<span id="L471">            rt::DeviceCommandBatch batch{}; batch.batch_id=++sequence; batch.timeout_ns=5&#x27;000&#x27;000&#x27;000ULL;</span>
+<span id="L472">            batch.signal_count=1; batch.signals[0].timeline_handle=1; batch.signals[0].value=sequence;</span>
+<span id="L473">            rt::HalV2BufferReference output{}; output.buffer_token=token; output.access=RTFW_DEVICE_ACCESS_WRITE; output.bytes=4;</span>
+<span id="L474">            if(op==&quot;xdma-control&quot;) {</span>
+<span id="L475">                batch.command_count=2;</span>
+<span id="L476">                require(rt::set_xdma_control_write(batch.commands[0],12,expected));</span>
+<span id="L477">                require(rt::set_xdma_control_read(batch.commands[1],12,output));</span>
+<span id="L478">            } else {</span>
+<span id="L479">                fake.event_ready.store(!unsuccessful); fake.event_value.store(expected);</span>
+<span id="L480">                fake.blocked.store(op==&quot;xdma-fault-cancel&quot;);</span>
+<span id="L481">                batch.command_count=1; require(rt::set_xdma_user_event_wait(batch.commands[0],0,output));</span>
+<span id="L482">            }</span>
+<span id="L483">            auto&amp; command=*registration.command_timeline;</span>
+<span id="L484">            require(command.submit(command.instance,&amp;batch)==rt::HalV2Status::ok); ++m.submissions;</span>
+<span id="L485">            rt::HalV2Health health{};</span>
+<span id="L486">            require(registration.api.get_health(registration.api.instance,&amp;health)==rt::HalV2Status::ok);</span>
+<span id="L487">            m.peak_outstanding=health.outstanding;</span>
+<span id="L488">            if(op==&quot;xdma-fault-cancel&quot;) {</span>
+<span id="L489">                const auto stop_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);</span>
+<span id="L490">                while(!fake.event_waiting.load(std::memory_order_acquire)) {</span>
+<span id="L491">                    require(std::chrono::steady_clock::now()&lt;stop_deadline);</span>
+<span id="L492">                    std::this_thread::yield();</span>
+<span id="L493">                }</span>
+<span id="L494">                require(command.request_stop(command.instance)==rt::HalV2Status::ok);</span>
+<span id="L495">                require(command.request_stop(command.instance)==rt::HalV2Status::ok);</span>
+<span id="L496">                require(fake.stop_requests.load()&gt;=1);</span>
+<span id="L497">            }</span>
+<span id="L498">            rt::HalV2BatchCompletion completion{}; std::uint64_t count=0;</span>
+<span id="L499">            const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);</span>
+<span id="L500">            do {</span>
+<span id="L501">                require(command.poll(command.instance,&amp;completion,1,&amp;count)==rt::HalV2Status::ok); ++m.polls;</span>
+<span id="L502">                if(count==1) break;</span>
+<span id="L503">                require(count==0); std::this_thread::yield();</span>
+<span id="L504">            } while(std::chrono::steady_clock::now()&lt;deadline);</span>
+<span id="L505">            require(count==1 &amp;&amp; completion.batch_id==batch.batch_id); ++m.completions;</span>
+<span id="L506">            if(unsuccessful) {</span>
+<span id="L507">                require(completion.status==static_cast&lt;std::int32_t&gt;(op==&quot;xdma-fault-cancel&quot; ?</span>
+<span id="L508">                    rt::HalV2Status::canceled : rt::HalV2Status::timeout));</span>
+<span id="L509">                require(storage-&gt;bytes==before);</span>
+<span id="L510">                ++m.failed;</span>
+<span id="L511">                if(op==&quot;xdma-fault-cancel&quot;) ++m.canceled; else ++m.timeouts;</span>
+<span id="L512">            } else {</span>
+<span id="L513">                require(completion.status==static_cast&lt;std::int32_t&gt;(rt::HalV2Status::ok) &amp;&amp;</span>
+<span id="L514">                        completion.signal_count==1 &amp;&amp; completion.signals[0].value==batch.signals[0].value);</span>
+<span id="L515">                std::uint32_t observed=0; std::memcpy(&amp;observed,storage-&gt;bytes.data(),sizeof(observed));</span>
+<span id="L516">                require(observed==expected); ++m.checked_elements;</span>
+<span id="L517">            }</span>
+<span id="L518">            m.control_reads=fake.control_reads.load()-reads_before;</span>
+<span id="L519">            m.control_writes=fake.control_writes.load()-writes_before;</span>
+<span id="L520">            m.events=fake.event_waits.load()-events_before;</span>
+<span id="L521">            return unsuccessful ? 0 : expected;</span>
+<span id="L522">        }</span>
+<span id="L523">        if(op==&quot;xdma-invalid-inputs&quot;) {</span>
+<span id="L524">            const auto before=storage-&gt;bytes;</span>
+<span id="L525">            auto invalid=request(rt::XdmaDirection::host_to_card);</span>
+<span id="L526">            rt::XdmaTransfer transfer{}; transfer.channel=1;</span>
+<span id="L527">            rt::set_xdma_transfer(invalid,rt::XdmaDirection::host_to_card,transfer);</span>
+<span id="L528">            require(api.submit(api.instance,&amp;invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;</span>
+<span id="L529">            invalid=request(rt::XdmaDirection::host_to_card); transfer.channel=0; transfer.device_offset=UINT64_MAX;</span>
+<span id="L530">            rt::set_xdma_transfer(invalid,rt::XdmaDirection::host_to_card,transfer);</span>
+<span id="L531">            require(api.submit(api.instance,&amp;invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;</span>
+<span id="L532">            invalid=request(rt::XdmaDirection::host_to_card); invalid.buffers[0].bytes=spec.bytes+1;</span>
+<span id="L533">            require(api.submit(api.instance,&amp;invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;</span>
+<span id="L534">            invalid=request(rt::XdmaDirection::host_to_card); invalid.buffers[0].access=RTFW_DEVICE_ACCESS_WRITE;</span>
+<span id="L535">            require(api.submit(api.instance,&amp;invalid)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;</span>
+<span id="L536">            require(storage-&gt;bytes==before &amp;&amp; fake.transfers.load()==0);</span>
+<span id="L537">        }</span>
+<span id="L538">        if(op==&quot;xdma-depth&quot;) {</span>
+<span id="L539">            fake.blocked.store(true);</span>
+<span id="L540">            std::array&lt;std::uint64_t,4&gt; ids{};</span>
+<span id="L541">            for(std::size_t i=0;i&lt;spec.depth;++i) { const auto r=request(rt::XdmaDirection::host_to_card);ids[i]=r.submission_id;submit(r,m); }</span>
+<span id="L542">            require(m.peak_outstanding==spec.depth);</span>
+<span id="L543">            const auto extra=request(rt::XdmaDirection::host_to_card);</span>
+<span id="L544">            require(api.submit(api.instance,&amp;extra)==RTFW_DEVICE_STATUS_QUEUE_FULL); ++m.rejected;</span>
+<span id="L545">            fake.blocked.store(false,std::memory_order_release);fake.blocked.notify_all();</span>
+<span id="L546">            std::array&lt;bool,4&gt; seen{};</span>
+<span id="L547">            for(std::size_t i=0;i&lt;spec.depth;++i) {</span>
+<span id="L548">                const auto completion=poll(m);</span>
+<span id="L549">                const auto end=ids.begin()+static_cast&lt;std::ptrdiff_t&gt;(spec.depth);</span>
+<span id="L550">                const auto found=std::find(ids.begin(),end,completion.submission_id);</span>
+<span id="L551">                require(found!=end &amp;&amp; completion.status==RTFW_DEVICE_STATUS_OK &amp;&amp; completion.value==spec.bytes);</span>
+<span id="L552">                const auto index=static_cast&lt;std::size_t&gt;(found-ids.begin());require(!seen[index]);seen[index]=true;</span>
+<span id="L553">                m.copied_bytes+=completion.value;</span>
+<span id="L554">            }</span>
+<span id="L555">            transfer(rt::XdmaDirection::host_to_card,m);</span>
+<span id="L556">            return m.completions;</span>
+<span id="L557">        }</span>
+<span id="L558">        if(op==&quot;xdma-fault-io&quot; || op==&quot;xdma-fault-loss&quot; || op==&quot;xdma-fault-short&quot; || op==&quot;xdma-fault-reset&quot;) {</span>
+<span id="L559">            const bool short_transfer=op==&quot;xdma-fault-short&quot;, reset=op==&quot;xdma-fault-reset&quot;;</span>
+<span id="L560">            if(short_transfer) fake.short_transfer_once.store(true);</span>
+<span id="L561">            else fake.next_result.store(static_cast&lt;std::int32_t&gt;(reset ? rt::XdmaDriverResult::reset_required :</span>
+<span id="L562">                op==&quot;xdma-fault-io&quot; ? rt::XdmaDriverResult::io_error : rt::XdmaDriverResult::device_lost));</span>
+<span id="L563">            const auto r=request(rt::XdmaDirection::host_to_card);submit(r,m); const auto completion=poll(m);</span>
+<span id="L564">            const auto expected_status=reset ? RTFW_DEVICE_STATUS_RESET_REQUIRED :</span>
+<span id="L565">                op==&quot;xdma-fault-loss&quot; ? RTFW_DEVICE_STATUS_LOST : RTFW_DEVICE_STATUS_ERROR;</span>
+<span id="L566">            require(completion.submission_id==r.submission_id &amp;&amp; completion.status==expected_status);</span>
+<span id="L567">            require(fake.transfers.load()==(short_transfer ? 1u : 0u));</span>
+<span id="L568">            if(short_transfer) {</span>
+<span id="L569">                require(std::equal(storage-&gt;bytes.begin(),storage-&gt;bytes.begin()+static_cast&lt;std::ptrdiff_t&gt;(spec.bytes-1),fake.device.begin()));</span>
+<span id="L570">                require(fake.device[spec.bytes-1]==std::byte{0});</span>
+<span id="L571">            }</span>
+<span id="L572">            ++m.failed;</span>
+<span id="L573">            if(!reset) return 1;</span>
+<span id="L574">            auto health=rt::make_device_health();</span>
+<span id="L575">            require(api.get_health(api.instance,&amp;health)==RTFW_DEVICE_STATUS_OK &amp;&amp; health.state==RTFW_DEVICE_HEALTH_RESET_REQUIRED);</span>
+<span id="L576">            require(api.reset(api.instance)==RTFW_DEVICE_STATUS_OK); ++m.resets;</span>
+<span id="L577">            require(fake.resets.load()==1);</span>
+<span id="L578">            // A complete round trip below proves that reset restores useful work.</span>
+<span id="L579">        }</span>
+<span id="L580">        transfer(rt::XdmaDirection::host_to_card,m);</span>
+<span id="L581">        std::fill_n(storage-&gt;bytes.begin(),spec.bytes,std::byte{0xff});</span>
+<span id="L582">        transfer(rt::XdmaDirection::card_to_host,m);</span>
+<span id="L583">        std::uint64_t checksum=0;</span>
+<span id="L584">        for(std::size_t i=0;i&lt;spec.bytes;++i) {</span>
+<span id="L585">            const auto value=static_cast&lt;unsigned&gt;(storage-&gt;bytes[i]);</span>
+<span id="L586">            require(value==(ordinal*7+i*3)%251);checksum+=value;++m.checked_elements;</span>
+<span id="L587">        }</span>
+<span id="L588">        if(op==&quot;xdma-invalid-inputs&quot;) {</span>
+<span id="L589">            require(api.unregister_buffer(api.instance,token)==RTFW_DEVICE_STATUS_OK);</span>
+<span id="L590">            auto stale=request(rt::XdmaDirection::host_to_card);</span>
+<span id="L591">            require(api.submit(api.instance,&amp;stale)==RTFW_DEVICE_STATUS_INVALID_ARGUMENT); ++m.rejected;</span>
+<span id="L592">            require(fake.transfers.load()==2);</span>
+<span id="L593">        }</span>
+<span id="L594">        if(op==&quot;xdma-fault-cleanup&quot;) {</span>
+<span id="L595">            fake.fail_shutdown_once.store(true);</span>
+<span id="L596">            require(finish()==Status::provider_error);++m.cleanup_retries;++m.failed;</span>
+<span id="L597">            require(fake.initialized.load()); require(finish()==Status::ok);require(!fake.initialized.load());</span>
+<span id="L598">        }</span>
+<span id="L599">        return checksum;</span>
+<span id="L600">    }</span>
+<span id="L601">};</span>
+<span id="L602">#include &quot;device_cases/pipeline.inc&quot;</span>
+<span id="L603">#include &quot;device_cases/hal.inc&quot;</span>
+<span id="L604">} // namespace</span>
+<span id="L605"></span>
+<span id="L606">std::span&lt;const Case&gt; cases() noexcept { return catalog; }</span>
+<span id="L607">struct StagingFixture {</span>
+<span id="L608">    std::array&lt;std::byte,4096&gt; source{},destination{};</span>
+<span id="L609">    std::uint64_t invoke(const Case&amp; c,std::uint64_t ordinal,Measures&amp; m) {</span>
+<span id="L610">        for(std::size_t i=0;i&lt;c.bytes;++i) source[i]=static_cast&lt;std::byte&gt;((ordinal*7+i*3)%251);</span>
+<span id="L611">        std::fill(destination.begin(),destination.end(),std::byte{0xff});</span>
+<span id="L612">        std::memcpy(destination.data(),source.data(),c.bytes);</span>
+<span id="L613">        std::uint64_t checksum=0;</span>
+<span id="L614">        for(std::size_t i=0;i&lt;c.bytes;++i) {</span>
+<span id="L615">            const auto value=static_cast&lt;unsigned&gt;(destination[i]);</span>
+<span id="L616">            require(value==(ordinal*7+i*3)%251); checksum+=value; ++m.checked_elements;</span>
+<span id="L617">        }</span>
+<span id="L618">        require(std::all_of(destination.begin()+static_cast&lt;std::ptrdiff_t&gt;(c.bytes),destination.end(),[](std::byte v){return v==std::byte{0xff};}));</span>
+<span id="L619">        m.copied_bytes=c.bytes; return checksum;</span>
+<span id="L620">    }</span>
+<span id="L621">};</span>
+<span id="L622">struct Provider::State {</span>
+<span id="L623">    const CudaSession* session{};</span>
+<span id="L624">    const XdmaSession* xdma_session{};</span>
+<span id="L625">    const Case* selected{};</span>
+<span id="L626">    std::unique_ptr&lt;CudaFixture&gt; fixture;</span>
+<span id="L627">    std::unique_ptr&lt;GraphFixture&gt; graph;</span>
+<span id="L628">    std::unique_ptr&lt;PipelineFixture&gt; pipeline;</span>
+<span id="L629">    std::unique_ptr&lt;StagingFixture&gt; staging;</span>
+<span id="L630">    std::unique_ptr&lt;HalFixture&gt; hal;</span>
+<span id="L631">    std::unique_ptr&lt;XdmaFixture&gt; xdma;</span>
+<span id="L632">    std::uint64_t ordinal{};</span>
+<span id="L633">    bool unavailable{}, failed{};</span>
+<span id="L634">};</span>
+<span id="L635">Provider::Provider(const CudaSession* session, const XdmaSession* xdma) : state_(std::make_unique&lt;State&gt;()) {</span>
+<span id="L636">    state_-&gt;session = session; state_-&gt;xdma_session=xdma;</span>
+<span id="L637">}</span>
+<span id="L638">Provider::~Provider() { if (finish() != Status::ok) std::terminate(); }</span>
+<span id="L639">ProviderV1 Provider::table() noexcept {</span>
+<span id="L640">    ProviderV1 result;</span>
+<span id="L641">    result.id = &quot;rtfw.device&quot;; result.case_count = catalog.size(); result.user = this;</span>
+<span id="L642">    result.describe = describe; result.invoke = invoke;</span>
+<span id="L643">    return result;</span>
+<span id="L644">}</span>
+<span id="L645">Status Provider::describe(void*, std::size_t index, Descriptor&amp; d) {</span>
+<span id="L646">    if (index &gt;= catalog.size()) return Status::not_found;</span>
+<span id="L647">    const auto&amp; c = catalog[index];</span>
+<span id="L648">    d = {};</span>
+<span id="L649">    d.case_id = c.id; d.subsystem = std::string_view(c.operation).starts_with(&quot;xdma-&quot;) ? &quot;xdma&quot; : &quot;cuda&quot;;</span>
+<span id="L650">    if(std::string_view(c.operation).starts_with(&quot;pipeline-&quot;)) d.subsystem=&quot;pipeline&quot;;</span>
+<span id="L651">    if(std::string_view(c.operation)==&quot;host-staging&quot;) d.subsystem=&quot;host-staging&quot;;</span>
+<span id="L652">    if(std::string_view(c.operation).starts_with(&quot;hal-&quot;)) d.subsystem=&quot;hal&quot;;</span>
+<span id="L653">    d.implementation = d.subsystem+(c.real ? &quot;-supplied-session-v1&quot; : &quot;-fake-protocol-v1&quot;);</span>
+<span id="L654">    d.configuration = &quot;bytes-&quot; + std::to_string(c.bytes) + &quot;-depth-&quot; + std::to_string(c.depth);</span>
+<span id="L655">    if(d.subsystem==&quot;pipeline&quot;) d.configuration=&quot;bytes-&quot;+std::to_string(c.bytes)+&quot;-frames-&quot;+</span>
+<span id="L656">        std::to_string(c.depth)+&quot;-workers-&quot;+std::to_string(c.depth)+&quot;-queue-4&quot;;</span>
+<span id="L657">    d.workload_kind = c.allocation_free ? &quot;complete-transaction-with-output-validation&quot; : &quot;lifecycle-fault-recovery-with-cleanup&quot;;</span>
+<span id="L658">    if(d.subsystem==&quot;hal&quot;) d.workload_kind=&quot;public-capability-and-topology-inspection&quot;;</span>
+<span id="L659">    d.workload_sha256 = sha256(std::string(c.id) + &quot;;&quot; + d.configuration + &quot;;&quot; + ((d.subsystem==&quot;xdma&quot; || d.subsystem==&quot;host-staging&quot;) ? &quot;byte-pattern-v1&quot; : &quot;integer-increment-v1&quot;));</span>
+<span id="L660">    d.parameters = {{&quot;bytes&quot;,c.bytes,c.bytes,c.bytes},{&quot;depth&quot;,c.depth,c.depth,c.depth}};</span>
+<span id="L661">    if(d.subsystem==&quot;hal&quot;) d.parameters={{&quot;depth&quot;,c.depth,c.depth,c.depth}};</span>
+<span id="L662">    if(d.subsystem==&quot;pipeline&quot;) {</span>
+<span id="L663">        d.parameters[1]={&quot;queue_depth&quot;,4,4,4};</span>
+<span id="L664">        d.parameters.push_back({&quot;frames&quot;,c.depth,c.depth,c.depth});</span>
+<span id="L665">        d.parameters.push_back({&quot;cpu_workers&quot;,c.depth,c.depth,c.depth});</span>
+<span id="L666">    }</span>
+<span id="L667">    for (const char* name : {&quot;submissions&quot;,&quot;completions&quot;,&quot;polls&quot;,&quot;rejected&quot;,&quot;copied_bytes&quot;,</span>
+<span id="L668">                            &quot;kernels&quot;,&quot;checked_elements&quot;,&quot;peak_outstanding&quot;,&quot;timeouts&quot;,&quot;failed&quot;,&quot;resets&quot;,&quot;cleanup_retries&quot;,&quot;control_reads&quot;,&quot;control_writes&quot;,&quot;events&quot;,&quot;canceled&quot;})</span>
+<span id="L669">        d.counters.push_back({name, std::string_view(name)==&quot;copied_bytes&quot; ? &quot;bytes&quot; : &quot;count&quot;, 0, max_integer});</span>
+<span id="L670">    return Status::ok;</span>
+<span id="L671">}</span>
+<span id="L672">Status Provider::prepare(std::string_view id) {</span>
+<span id="L673">    if (state_-&gt;selected) return Status::busy;</span>
+<span id="L674">    auto it = std::find_if(catalog.begin(), catalog.end(), [id](const Case&amp; c) { return id == c.id; });</span>
+<span id="L675">    if (it == catalog.end()) return Status::not_found;</span>
+<span id="L676">    state_-&gt;selected = &amp;*it; state_-&gt;ordinal = 0;</span>
+<span id="L677">    if(std::string_view(it-&gt;operation).starts_with(&quot;hal-&quot;)) {</span>
+<span id="L678">        try { state_-&gt;hal=std::make_unique&lt;HalFixture&gt;(*it); return Status::ok; }</span>
+<span id="L679">        catch(...) { state_-&gt;failed=true; return Status::provider_error; }</span>
+<span id="L680">    }</span>
+<span id="L681">    if(std::string_view(it-&gt;operation)==&quot;host-staging&quot;) {</span>
+<span id="L682">        try { state_-&gt;staging=std::make_unique&lt;StagingFixture&gt;(); return Status::ok; }</span>
+<span id="L683">        catch(...) { state_-&gt;failed=true; return Status::provider_error; }</span>
+<span id="L684">    }</span>
+<span id="L685">    if(std::string_view(it-&gt;operation).starts_with(&quot;pipeline-&quot;)) {</span>
+<span id="L686">        const auto* cs=it-&gt;real ? state_-&gt;session : nullptr;</span>
+<span id="L687">        const auto* xs=it-&gt;real ? state_-&gt;xdma_session : nullptr;</span>
+<span id="L688">        const bool graph=std::string_view(it-&gt;operation)==&quot;pipeline-graph&quot;;</span>
+<span id="L689">        if(it-&gt;real &amp;&amp; (!cs || !xs || !xs-&gt;confirmed_window_bytes || !cs-&gt;context || !cs-&gt;stream ||</span>
+<span id="L690">            (graph ? !cs-&gt;increment_graph || !cs-&gt;graph_buffer : !cs-&gt;increment_kernel))) {</span>
+<span id="L691">            state_-&gt;unavailable=true; return Status::not_run;</span>
+<span id="L692">        }</span>
+<span id="L693">        try {</span>
+<span id="L694">            if(!it-&gt;allocation_free) return Status::ok;</span>
+<span id="L695">            state_-&gt;pipeline=std::make_unique&lt;PipelineFixture&gt;(*it);</span>
+<span id="L696">            return state_-&gt;pipeline-&gt;setup(cs,xs);</span>
+<span id="L697">        } catch(...) { state_-&gt;failed=true; return Status::provider_error; }</span>
+<span id="L698">    }</span>
+<span id="L699">    if(std::string_view(it-&gt;operation).starts_with(&quot;xdma-&quot;)) {</span>
+<span id="L700">        const auto* session=it-&gt;real ? state_-&gt;xdma_session : nullptr;</span>
+<span id="L701">        if(it-&gt;real &amp;&amp; (!session || !session-&gt;confirmed_window_bytes)) { state_-&gt;unavailable=true;return Status::not_run; }</span>
+<span id="L702">        try {</span>
+<span id="L703">            if(!it-&gt;allocation_free) return Status::ok;</span>
+<span id="L704">            state_-&gt;xdma=std::make_unique&lt;XdmaFixture&gt;(*it);</span>
+<span id="L705">            return state_-&gt;xdma-&gt;setup(session);</span>
+<span id="L706">        } catch(...) { state_-&gt;failed=true; return Status::provider_error; }</span>
+<span id="L707">    }</span>
+<span id="L708">    const auto* session = it-&gt;real ? state_-&gt;session : nullptr;</span>
+<span id="L709">    if (it-&gt;real &amp;&amp; (!session || !session-&gt;context || !session-&gt;stream ||</span>
+<span id="L710">        (std::string_view(it-&gt;operation)==&quot;kernel&quot; &amp;&amp; !session-&gt;increment_kernel) ||</span>
+<span id="L711">        (std::string_view(it-&gt;operation)==&quot;graph&quot; &amp;&amp; (!session-&gt;increment_graph || !session-&gt;graph_buffer)))) {</span>
+<span id="L712">        state_-&gt;unavailable = true;</span>
+<span id="L713">        return Status::not_run;</span>
+<span id="L714">    }</span>
+<span id="L715">    try {</span>
+<span id="L716">        if (!it-&gt;allocation_free) return Status::ok;</span>
+<span id="L717">        if(std::string_view(it-&gt;operation)==&quot;graph&quot;) {</span>
+<span id="L718">            state_-&gt;graph=std::make_unique&lt;GraphFixture&gt;(*it);</span>
+<span id="L719">            return state_-&gt;graph-&gt;setup(session);</span>
+<span id="L720">        }</span>
+<span id="L721">        state_-&gt;fixture = std::make_unique&lt;CudaFixture&gt;(*it);</span>
+<span id="L722">        return state_-&gt;fixture-&gt;setup(session);</span>
+<span id="L723">    } catch (...) { state_-&gt;failed=true; return Status::provider_error; }</span>
+<span id="L724">}</span>
+<span id="L725">Status Provider::finish() noexcept {</span>
+<span id="L726">    state_-&gt;staging.reset(); state_-&gt;hal.reset();</span>
+<span id="L727">    if(state_-&gt;pipeline &amp;&amp; state_-&gt;pipeline-&gt;finish()!=Status::ok) return Status::provider_error;</span>
+<span id="L728">    state_-&gt;pipeline.reset();</span>
+<span id="L729">    if(state_-&gt;graph &amp;&amp; state_-&gt;graph-&gt;finish()!=Status::ok) return Status::provider_error;</span>
+<span id="L730">    state_-&gt;graph.reset();</span>
+<span id="L731">    if (state_-&gt;fixture &amp;&amp; state_-&gt;fixture-&gt;finish()!=Status::ok) return Status::provider_error;</span>
+<span id="L732">    if (state_-&gt;xdma &amp;&amp; state_-&gt;xdma-&gt;finish()!=Status::ok) return Status::provider_error;</span>
+<span id="L733">    state_-&gt;xdma.reset();</span>
+<span id="L734">    state_-&gt;fixture.reset(); state_-&gt;selected=nullptr; state_-&gt;unavailable=false; state_-&gt;failed=false; state_-&gt;ordinal=0;</span>
+<span id="L735">    return Status::ok;</span>
+<span id="L736">}</span>
+<span id="L737">Status Provider::invoke(void* user, std::string_view id, std::uint64_t ordinal, Observation&amp; out) {</span>
+<span id="L738">    auto&amp; self = *static_cast&lt;Provider*&gt;(user);</span>
+<span id="L739">    auto&amp; s = *self.state_;</span>
+<span id="L740">    if (s.failed || !s.selected || id!=s.selected-&gt;id || ordinal!=s.ordinal) return Status::provider_error;</span>
+<span id="L741">    if (s.unavailable) return Status::not_run;</span>
+<span id="L742">    try {</span>
+<span id="L743">        Measures measures;</span>
+<span id="L744">        if(s.hal) out.checksum=s.hal-&gt;invoke(measures);</span>
+<span id="L745">        else if(s.staging) out.checksum=s.staging-&gt;invoke(*s.selected,ordinal,measures);</span>
+<span id="L746">        else if(std::string_view(s.selected-&gt;operation).starts_with(&quot;pipeline-&quot;)) {</span>
+<span id="L747">            if(s.pipeline) out.checksum=s.pipeline-&gt;invoke(ordinal,measures);</span>
+<span id="L748">            else {</span>
+<span id="L749">                auto fixture=std::make_unique&lt;PipelineFixture&gt;(*s.selected);</span>
+<span id="L750">                require(fixture-&gt;setup(nullptr,nullptr)==Status::ok);</span>
+<span id="L751">                out.checksum=fixture-&gt;invoke(ordinal,measures);</span>
+<span id="L752">                require(fixture-&gt;finish()==Status::ok);</span>
+<span id="L753">            }</span>
+<span id="L754">        }</span>
+<span id="L755">        else if(std::string_view(s.selected-&gt;operation).starts_with(&quot;xdma-&quot;)) {</span>
+<span id="L756">            if(s.selected-&gt;allocation_free) out.checksum=s.xdma-&gt;invoke(ordinal,measures);</span>
+<span id="L757">            else {</span>
+<span id="L758">                auto fixture=std::make_unique&lt;XdmaFixture&gt;(*s.selected);</span>
+<span id="L759">                require(fixture-&gt;setup(nullptr)==Status::ok);</span>
+<span id="L760">                out.checksum=fixture-&gt;invoke(ordinal,measures);</span>
+<span id="L761">                require(fixture-&gt;finish()==Status::ok);</span>
+<span id="L762">            }</span>
+<span id="L763">        }</span>
+<span id="L764">        else if(s.graph) out.checksum=s.graph-&gt;invoke(ordinal,measures);</span>
+<span id="L765">        else if (s.selected-&gt;allocation_free) out.checksum = s.fixture-&gt;invoke(ordinal, measures);</span>
+<span id="L766">        else {</span>
+<span id="L767">            auto fixture = std::make_unique&lt;CudaFixture&gt;(*s.selected);</span>
+<span id="L768">            require(fixture-&gt;setup(nullptr) == Status::ok);</span>
+<span id="L769">            out.checksum = fixture-&gt;invoke(ordinal, measures);</span>
+<span id="L770">            require(fixture-&gt;finish() == Status::ok);</span>
+<span id="L771">        }</span>
+<span id="L772">        const auto values = measures.values(); out.counters.assign(values.begin(), values.end());</span>
+<span id="L773">        out.correct = true; ++s.ordinal;</span>
+<span id="L774">        return Status::ok;</span>
+<span id="L775">    } catch (...) { s.failed=true; out.correct=false; return Status::invariant_failed; }</span>
+<span id="L776">}</span>
+<span id="L777">} // namespace rtfw::benchmark::device</span></pre></html>

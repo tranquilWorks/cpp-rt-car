@@ -1,0 +1,86 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/golden_showcase/negative_artifacts.py</title><h1>tests/golden_showcase/negative_artifacts.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">&quot;&quot;&quot;Mutation tests over actual source-bound showcase execution, with restoration.&quot;&quot;&quot;</span>
+<span id="L2">import argparse</span>
+<span id="L3">import json</span>
+<span id="L4">from pathlib import Path</span>
+<span id="L5">import struct</span>
+<span id="L6">import sys</span>
+<span id="L7">ROOT=Path(__file__).resolve().parents[2]</span>
+<span id="L8">sys.path.insert(0,str(ROOT/&#x27;samples/golden_showcase&#x27;))</span>
+<span id="L9">import artifacts as a</span>
+<span id="L10">import report</span>
+<span id="L11">import run</span>
+<span id="L12"></span>
+<span id="L13"></span>
+<span id="L14">def main():</span>
+<span id="L15">    p=argparse.ArgumentParser();p.add_argument(&#x27;--evidence&#x27;,type=Path,required=True);p.add_argument(&#x27;--provenance&#x27;,type=Path,required=True);p.add_argument(&#x27;--build&#x27;,type=Path,required=True);p.add_argument(&#x27;--config&#x27;);args=p.parse_args()</span>
+<span id="L16">    root=args.evidence</span>
+<span id="L17">    names=(&#x27;golden_showcase&#x27;,&#x27;golden_experiment&#x27;,&#x27;golden_telemetry_loss&#x27;,&#x27;golden_system&#x27;,&#x27;golden_cuda&#x27;,&#x27;golden_xdma&#x27;,&#x27;golden_controller&#x27;)</span>
+<span id="L18">    binaries={name:run.executable(args.build,name,args.config) for name in names}</span>
+<span id="L19">    validate=lambda:report.validate(root,args.provenance,binaries=binaries)</span>
+<span id="L20">    validate();count=0</span>
+<span id="L21">    def reject(paths,change,check=validate):</span>
+<span id="L22">        nonlocal count</span>
+<span id="L23">        saved={path:path.read_bytes() for path in paths}</span>
+<span id="L24">        try:</span>
+<span id="L25">            change()</span>
+<span id="L26">            try:check()</span>
+<span id="L27">            except (OSError,ValueError,KeyError,TypeError):count+=1</span>
+<span id="L28">            else:raise AssertionError(&#x27;mutation accepted: &#x27;+str(paths))</span>
+<span id="L29">        finally:</span>
+<span id="L30">            for path,content in saved.items():path.write_bytes(content)</span>
+<span id="L31">    def edit(path,fn):</span>
+<span id="L32">        obj=a.load(path);fn(obj);path.write_text(json.dumps(obj,sort_keys=True,separators=(&#x27;,&#x27;,&#x27;:&#x27;))+&#x27;\n&#x27;)</span>
+<span id="L33">    bench=root/&#x27;benchmarks/golden-physics&#x27;;state=bench/&#x27;invocations/golden-physics/2/state.bin&#x27;;inv=state.with_name(&#x27;invocation.json&#x27;)</span>
+<span id="L34">    # Recompute internal checksum after corrupting an inactive state lane.</span>
+<span id="L35">    def inactive():</span>
+<span id="L36">        data=bytearray(state.read_bytes());struct.pack_into(&#x27;&lt;i&#x27;,data,512+255*4,1);data[480:488]=bytes(8);struct.pack_into(&#x27;&lt;Q&#x27;,data,480,a.fnv(data));state.write_bytes(data)</span>
+<span id="L37">        edit(inv,lambda d:d.update(checksum=a.fnv(data)))</span>
+<span id="L38">    reject([state,inv],inactive,lambda:a.benchmark(bench))</span>
+<span id="L39">    # Make the entire M23 bundle internally consistent with a false operation</span>
+<span id="L40">    # count. The independent invocation workload bound must still reject it.</span>
+<span id="L41">    raw=bench/&#x27;benchmark/raw.json&#x27;;result=bench/&#x27;benchmark/result.json&#x27;;tool,_=a.benchmark_tool()</span>
+<span id="L42">    def false_counter():</span>
+<span id="L43">        edit(inv,lambda d:d.update(operations=d[&#x27;operations&#x27;]+1))</span>
+<span id="L44">        r=a.load(raw);r[&#x27;samples&#x27;][0][&#x27;counters&#x27;][&#x27;operations&#x27;]+=1;raw.write_bytes(tool.canonical(r))</span>
+<span id="L45">        r=a.load(result);r[&#x27;raw_sha256&#x27;]=a.sha(raw.read_bytes());r[&#x27;statistics&#x27;][&#x27;counter_totals&#x27;][&#x27;operations&#x27;]+=1</span>
+<span id="L46">        r[&#x27;result_sha256&#x27;]=a.sha(tool.canonical({k:v for k,v in r.items() if k!=&#x27;result_sha256&#x27;}));result.write_bytes(tool.canonical(r))</span>
+<span id="L47">        tool.validate_bundle(bench/&#x27;benchmark&#x27;,a.benchmark_tool()[1])</span>
+<span id="L48">    reject([inv,raw,result],false_counter,lambda:a.benchmark(bench))</span>
+<span id="L49">    # A self-consistent M23 identity must still match the executed variant.</span>
+<span id="L50">    device=root/&#x27;benchmarks/sim_cuda-graph-native&#x27;;result=device/&#x27;benchmark/result.json&#x27;;device_raw=device/&#x27;benchmark/raw.json&#x27;</span>
+<span id="L51">    def false_backend():</span>
+<span id="L52">        r=a.load(result);r[&#x27;identity&#x27;][&#x27;backend&#x27;]=&#x27;cpu&#x27;;r[&#x27;identity&#x27;][&#x27;driver&#x27;]=&#x27;none&#x27;</span>
+<span id="L53">        context=dict(descriptor_sha256=r[&#x27;descriptor_sha256&#x27;],identity=r[&#x27;identity&#x27;],start_utc=r[&#x27;start_utc&#x27;])</span>
+<span id="L54">        r[&#x27;run_context_sha256&#x27;]=a.sha(tool.canonical(context)[:-1])</span>
+<span id="L55">        samples=a.load(device_raw);samples[&#x27;run_context_sha256&#x27;]=r[&#x27;run_context_sha256&#x27;];device_raw.write_bytes(tool.canonical(samples))</span>
+<span id="L56">        r[&#x27;raw_sha256&#x27;]=a.sha(device_raw.read_bytes())</span>
+<span id="L57">        r[&#x27;result_sha256&#x27;]=a.sha(tool.canonical({k:v for k,v in r.items() if k!=&#x27;result_sha256&#x27;}));result.write_bytes(tool.canonical(r))</span>
+<span id="L58">        tool.validate_bundle(device/&#x27;benchmark&#x27;,a.benchmark_tool()[1])</span>
+<span id="L59">    reject([result,device_raw],false_backend,lambda:a.benchmark(device))</span>
+<span id="L60">    path=root/&#x27;benchmarks/golden-replay/invocations/golden-replay/2/trusted.bin&#x27;</span>
+<span id="L61">    other=path.parent.parent/&#x27;3/trusted.bin&#x27;</span>
+<span id="L62">    reject([path],lambda:path.write_bytes(other.read_bytes()))</span>
+<span id="L63">    path=root/&#x27;faults/telemetry_loss/evidence.json&#x27;</span>
+<span id="L64">    reject([path],lambda:edit(path,lambda d:d.update(lost=0)))</span>
+<span id="L65">    path=root/&#x27;experiments/control_burst-17.json&#x27;</span>
+<span id="L66">    reject([path],lambda:edit(path,lambda d:d.update(accepted=17,rejected=0)))</span>
+<span id="L67">    path=root/&#x27;experiments/scratch_bytes-256.json&#x27;</span>
+<span id="L68">    reject([path],lambda:edit(path,lambda d:d.update(effective=64)))</span>
+<span id="L69">    path=root/&#x27;inputs.json&#x27;</span>
+<span id="L70">    reject([path],lambda:edit(path,lambda d:d[&#x27;executables&#x27;].update(golden_showcase=&#x27;0&#x27;*64)))</span>
+<span id="L71">    for name in (&#x27;report.json&#x27;,&#x27;faults.json&#x27;,&#x27;coverage.json&#x27;):</span>
+<span id="L72">        path=root/name;reject([path],lambda path=path:path.write_text(&#x27;{}&#x27;))</span>
+<span id="L73">    path=root/&#x27;benchmarks/golden-loop/invocations/golden-loop/0/state.bin&#x27;</span>
+<span id="L74">    reject([path],lambda:path.unlink())</span>
+<span id="L75">    path=root/&#x27;faults/stop_failure/execution.json&#x27;</span>
+<span id="L76">    reject([path],lambda:edit(path,lambda d:d.update(fault_safety=0)))</span>
+<span id="L77">    copied=root/&#x27;negative-provenance.json&#x27;;copied.write_bytes(args.provenance.read_bytes())</span>
+<span id="L78">    try:</span>
+<span id="L79">        edit(copied,lambda d:d[&#x27;files&#x27;].update({&#x27;golden_showcase/provider.cpp&#x27;:&#x27;0&#x27;*64}))</span>
+<span id="L80">        try:a.provenance(copied)</span>
+<span id="L81">        except ValueError:count+=1</span>
+<span id="L82">        else:raise AssertionError(&#x27;foreign source accepted&#x27;)</span>
+<span id="L83">    finally:copied.unlink()</span>
+<span id="L84">    validate()</span>
+<span id="L85">    print(f&#x27;PASS {count} source/state/replay/counter/gap/false-report mutation controls&#x27;)</span>
+<span id="L86">if __name__==&#x27;__main__&#x27;:main()</span></pre></html>

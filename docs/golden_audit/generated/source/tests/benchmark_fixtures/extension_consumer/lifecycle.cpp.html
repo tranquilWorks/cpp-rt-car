@@ -1,0 +1,136 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/benchmark_fixtures/extension_consumer/lifecycle.cpp</title><h1>tests/benchmark_fixtures/extension_consumer/lifecycle.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;provider.hpp&quot;</span>
+<span id="L2">#include &lt;atomic&gt;</span>
+<span id="L3">#include &lt;chrono&gt;</span>
+<span id="L4">#include &lt;iostream&gt;</span>
+<span id="L5">#include &lt;stdexcept&gt;</span>
+<span id="L6">#include &lt;thread&gt;</span>
+<span id="L7"></span>
+<span id="L8">namespace b = rtfw::benchmark;</span>
+<span id="L9">namespace {</span>
+<span id="L10">void check(bool value) { if (!value) throw std::runtime_error(&quot;extension contract failed&quot;); }</span>
+<span id="L11">bool tick(void* user, std::uint64_t&amp; out) {</span>
+<span id="L12">    auto&amp; value = *static_cast&lt;std::uint64_t*&gt;(user);</span>
+<span id="L13">    out = value; value += 10; return true;</span>
+<span id="L14">}</span>
+<span id="L15">b::Result run(example::Provider&amp; provider, const char* id = &quot;transform-64&quot;) {</span>
+<span id="L16">    b::Runner runner;</span>
+<span id="L17">    b::ProviderHandle handle;</span>
+<span id="L18">    check(runner.register_provider(provider.table(), handle) == b::Status::ok);</span>
+<span id="L19">    std::uint64_t time = 0;</span>
+<span id="L20">    b::ClockV1 clock; clock.kind = b::ClockKind::fake; clock.read_ns = tick; clock.user = &amp;time;</span>
+<span id="L21">    return runner.run(&quot;example.transform&quot;, id, clock, b::Identity{});</span>
+<span id="L22">}</span>
+<span id="L23">struct Callbacks {</span>
+<span id="L24">    unsigned calls{}, cleanup_calls{};</span>
+<span id="L25">    bool corrupt{}, fail{}, throws{}, retry{};</span>
+<span id="L26">    static bool transform(void* user, const std::uint64_t* input, std::uint64_t* output, std::size_t count) {</span>
+<span id="L27">        auto&amp; c = *static_cast&lt;Callbacks*&gt;(user); ++c.calls;</span>
+<span id="L28">        if (c.throws) throw std::runtime_error(&quot;test callback&quot;);</span>
+<span id="L29">        if (c.fail) return false;</span>
+<span id="L30">        for (std::size_t i = 0; i &lt; count; ++i) output[i] = 3 * input[i] + 7;</span>
+<span id="L31">        if (c.corrupt) ++output[count-1];</span>
+<span id="L32">        return true;</span>
+<span id="L33">    }</span>
+<span id="L34">    static bool cleanup(void* user) {</span>
+<span id="L35">        auto&amp; c = *static_cast&lt;Callbacks*&gt;(user); ++c.cleanup_calls;</span>
+<span id="L36">        return !c.retry || c.cleanup_calls &gt; 1;</span>
+<span id="L37">    }</span>
+<span id="L38">};</span>
+<span id="L39">void lifecycle() {</span>
+<span id="L40">    Callbacks callbacks;</span>
+<span id="L41">    example::Provider provider(&amp;callbacks, Callbacks::transform, Callbacks::cleanup);</span>
+<span id="L42">    auto table = provider.table();</span>
+<span id="L43">    b::Descriptor small, large;</span>
+<span id="L44">    check(table.describe(table.user, 0, small) == b::Status::ok);</span>
+<span id="L45">    check(table.describe(table.user, 1, large) == b::Status::ok);</span>
+<span id="L46">    check(table.describe(table.user, 2, large) == b::Status::not_found);</span>
+<span id="L47">    check(callbacks.calls == 0 &amp;&amp; callbacks.cleanup_calls == 0 &amp;&amp; !provider.owns_session());</span>
+<span id="L48">    check(small.parameters[0].value == 64 &amp;&amp; large.parameters[0].value == 1024);</span>
+<span id="L49">    check(provider.prepare(&quot;invalid&quot;) == b::Status::not_found);</span>
+<span id="L50">    for (const auto* id : {&quot;transform-64&quot;, &quot;transform-1024&quot;, &quot;transform-64&quot;}) {</span>
+<span id="L51">        check(provider.prepare(id) == b::Status::ok);</span>
+<span id="L52">        check(provider.prepare(id) == b::Status::busy);</span>
+<span id="L53">        const auto result = run(provider, id);</span>
+<span id="L54">        check(result.status == b::Status::ok &amp;&amp; result.samples.size() == 5 &amp;&amp; provider.completed() == 7);</span>
+<span id="L55">        const std::uint64_t n = std::string_view(id) == &quot;transform-64&quot; ? 64 : 1024;</span>
+<span id="L56">        for (std::size_t i = 0; i &lt; result.samples.size(); ++i) {</span>
+<span id="L57">            const auto&amp; sample = result.samples[i];</span>
+<span id="L58">            check(sample.observation.counters == std::vector&lt;std::uint64_t&gt;({n,n*8}));</span>
+<span id="L59">            check(sample.observation.checksum == n*(3*(i+2)+7)+3*n*(n-1)/2);</span>
+<span id="L60">        }</span>
+<span id="L61">        check(provider.finish() == b::Status::ok &amp;&amp; !provider.owns_session());</span>
+<span id="L62">        check(provider.finish() == b::Status::invalid);</span>
+<span id="L63">    }</span>
+<span id="L64">    const auto calls = callbacks.calls;</span>
+<span id="L65">    check(provider.prepare(&quot;transform-64&quot;, false) == b::Status::ok);</span>
+<span id="L66">    auto missing = run(provider);</span>
+<span id="L67">    check(missing.status == b::Status::not_run &amp;&amp; missing.samples.empty() &amp;&amp; missing.warmup_completed == 0);</span>
+<span id="L68">    check(callbacks.calls == calls &amp;&amp; provider.finish() == b::Status::ok);</span>
+<span id="L69">    for (unsigned fault = 0; fault &lt; 3; ++fault) {</span>
+<span id="L70">        callbacks.corrupt = fault == 0; callbacks.fail = fault == 1; callbacks.throws = fault == 2;</span>
+<span id="L71">        check(provider.prepare(&quot;transform-64&quot;) == b::Status::ok);</span>
+<span id="L72">        const auto failed = run(provider);</span>
+<span id="L73">        check(failed.status != b::Status::ok &amp;&amp; failed.samples.empty() &amp;&amp; provider.completed() == 0);</span>
+<span id="L74">        b::Observation observation;</span>
+<span id="L75">        check(table.invoke(table.user, &quot;transform-64&quot;, 0, observation) == b::Status::provider_error);</span>
+<span id="L76">        check(provider.finish() == b::Status::ok);</span>
+<span id="L77">    }</span>
+<span id="L78">    callbacks.corrupt = callbacks.fail = callbacks.throws = false;</span>
+<span id="L79">    callbacks.cleanup_calls = 0; callbacks.retry = true;</span>
+<span id="L80">    check(provider.prepare(&quot;transform-64&quot;) == b::Status::ok);</span>
+<span id="L81">    check(run(provider).status == b::Status::ok);</span>
+<span id="L82">    check(provider.finish() == b::Status::provider_error &amp;&amp; provider.owns_session());</span>
+<span id="L83">    check(provider.prepare(&quot;transform-64&quot;) == b::Status::busy);</span>
+<span id="L84">    check(provider.finish() == b::Status::ok &amp;&amp; !provider.owns_session());</span>
+<span id="L85">    check(provider.prepare(&quot;transform-64&quot;) == b::Status::ok);</span>
+<span id="L86">    b::Observation observation;</span>
+<span id="L87">    check(table.invoke(table.user, &quot;transform-64&quot;, 1, observation) == b::Status::provider_error);</span>
+<span id="L88">    check(provider.finish() == b::Status::ok);</span>
+<span id="L89">}</span>
+<span id="L90">void publication() {</span>
+<span id="L91">    const auto root = std::filesystem::temp_directory_path() /</span>
+<span id="L92">        (&quot;rtfw-extension-&quot; + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));</span>
+<span id="L93">    check(std::filesystem::create_directory(root));</span>
+<span id="L94">    Callbacks callbacks;</span>
+<span id="L95">    example::Provider provider(&amp;callbacks, Callbacks::transform, Callbacks::cleanup);</span>
+<span id="L96">    std::uint64_t time = 0;</span>
+<span id="L97">    b::ClockV1 clock; clock.kind = b::ClockKind::fake; clock.user = &amp;time; clock.read_ns = tick;</span>
+<span id="L98">    const auto output = root / &quot;result&quot;;</span>
+<span id="L99">    callbacks.corrupt = true;</span>
+<span id="L100">    check(example::run_to_directory(provider,&quot;transform-64&quot;,clock,b::Identity{},output) != b::Status::ok);</span>
+<span id="L101">    check(!std::filesystem::exists(output) &amp;&amp; !provider.owns_session());</span>
+<span id="L102">    callbacks.corrupt = false; callbacks.retry = true; callbacks.cleanup_calls = 0;</span>
+<span id="L103">    check(example::run_to_directory(provider,&quot;transform-64&quot;,clock,b::Identity{},output) == b::Status::provider_error);</span>
+<span id="L104">    check(!std::filesystem::exists(output) &amp;&amp; provider.owns_session());</span>
+<span id="L105">    b::Observation observation; auto table = provider.table();</span>
+<span id="L106">    check(table.invoke(table.user,&quot;transform-64&quot;,7,observation) == b::Status::provider_error);</span>
+<span id="L107">    check(provider.finish() == b::Status::ok);</span>
+<span id="L108">    check(example::run_to_directory(provider,&quot;transform-64&quot;,clock,b::Identity{},output) == b::Status::ok);</span>
+<span id="L109">    check(std::filesystem::exists(output/&quot;result.json&quot;));</span>
+<span id="L110">    const auto calls = callbacks.calls;</span>
+<span id="L111">    check(example::run_to_directory(provider,&quot;transform-64&quot;,clock,b::Identity{},output) == b::Status::exists);</span>
+<span id="L112">    check(callbacks.calls == calls);</span>
+<span id="L113">    check(example::run_to_directory(provider,&quot;transform-64&quot;,clock,b::Identity{},root/&quot;missing&quot;,false) == b::Status::not_run);</span>
+<span id="L114">    check(std::filesystem::exists(root/&quot;missing/result.json&quot;));</span>
+<span id="L115">    std::filesystem::remove_all(root);</span>
+<span id="L116">}</span>
+<span id="L117">}</span>
+<span id="L118">int main() {</span>
+<span id="L119">    try {</span>
+<span id="L120">        lifecycle();</span>
+<span id="L121">        publication();</span>
+<span id="L122">        std::atomic&lt;unsigned&gt; failures{0};</span>
+<span id="L123">        auto work = [&amp;] {</span>
+<span id="L124">            try { for (unsigned i = 0; i &lt; 16; ++i) lifecycle(); }</span>
+<span id="L125">            catch (...) { ++failures; }</span>
+<span id="L126">        };</span>
+<span id="L127">        std::thread first(work), second(work);</span>
+<span id="L128">        first.join(); second.join();</span>
+<span id="L129">        check(failures.load() == 0);</span>
+<span id="L130">        std::cout &lt;&lt; &quot;Extension metadata, oracles, repeated/fault/cleanup and independent-owner checks passed\n&quot;;</span>
+<span id="L131">        return 0;</span>
+<span id="L132">    } catch (const std::exception&amp; error) {</span>
+<span id="L133">        std::cerr &lt;&lt; error.what() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L134">        return 1;</span>
+<span id="L135">    }</span>
+<span id="L136">}</span></pre></html>

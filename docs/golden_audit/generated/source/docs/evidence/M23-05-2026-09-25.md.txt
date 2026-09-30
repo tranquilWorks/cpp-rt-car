@@ -1,0 +1,185 @@
+# M23-05 analysis and extension implementation evidence
+
+## Identity, scope and authorization
+
+Target baseline: `37c3b155894133789621d41b4233c8edde79d023` (PR #260), tree
+`20435c387117ae06a971d974e7f7da03105c2447`. Its final 32 checks passed on
+`bca5849b31acd4d67038351930c4bcbc35920e4e`, main CI `36064569567`.
+Branch: `agent/m23-05-analysis-extension`.
+
+Canonical control PR #494 merged at `b61ab1396168647ab8309eb7015b25edfae9ecf1`,
+batch blob `a043c31df4244e073a12229c9dcb907a22ba7d12`. The existing automation
+queue expressly authorizes this dependency-ready software batch and exact-head
+publication/integration. The local schema, canonical `validate_batch`/path rules,
+queue order and roadmap transition passed. Control hosted run `36089098815`,
+job `107927391508`, failed before execution (`steps=[]`, logs BlobNotFound).
+That validation is UNPERFORMED under the same standing unavailable-job exception
+retained in control #488. Full private-control checkout verification was also
+unperformed. This exception does not waive any target functional check.
+
+Workspace maintenance removed the prior scratch checkout. The merged target and
+pinned GoogleTest submodule were restored from Git before work. New implementation
+does not rely on the earlier unretained local build. Scoped control publication
+first used update-ref on a new branch, received HTTP 422 reference-not-found,
+then used the explicit create-branch operation. No existing ref was overwritten.
+
+## Acceptance map
+
+| Contract item | Implementation and verification |
+| --- | --- |
+| Preserve prior runtime/benchmark/package boundaries | Isolated `tools/compare_benchmarks.py`, `bench/analysis`, `bench/extension`; forbidden-path diff audit and retained 207-case CLI gates |
+| Strict baseline/candidate/policy/review/profiler contracts | Closed version-1 schema definitions; bounded capture, exact-byte file/policy hashes, unique trials; parser/digest/duplicate/budget tests |
+| Compatible identities/counters/workloads | Complete descriptor/identity checks, source-population consistency, selected counter/checksum oracles; identity/workload/counter/mixed-source tests |
+| Conservative noise/confidence/outliers | Independent run medians, exact binomial rank intervals and family adjustment; independently enumerated 11-sign coverage, rational/equality/overlap/noise tests |
+| Deterministic readable/machine reports | Schema-validated canonical JSON, Markdown, full per-run statistics and retained hashes; repeated byte equality and destination-preservation CLI tests |
+| Portable versus controlled review | Null portable thresholds; proposal-only generation, exact review binding and chronology; synthetic approval/fake-clock/threshold boundary tests |
+| Profiler fields and remediation | Exact case/result/context/sample binding, explicit clock relation; wrong-context/range tests; guide preserves external-reference limitations |
+| Complete third-party source kit | Two transform sizes, exact per-element/sum/counter oracle, checked prepare/run/finish/publish transaction; lifecycle/fault/cleanup/recovery/concurrent-owner tests |
+| Optional installed/relocated/embedded consumption | Source template CMake, installed tool/schema/docs, extension wrapper invokes unchanged device/Runtime/CPU/original chain; exact optional inventory |
+| Actual CLI and malformed/failure paths | Python analysis suite invokes template and comparison entry points; C++ transaction tests prove transform/cleanup failure nonpublication and retry |
+| Preserve/add hosted gates | Existing 32-check matrix and seven-way exchange unchanged; added template TSan/static analysis, full-matrix CTest and optional SDK wrapper |
+| Evidence and truthful closure | This ledger and current/handoff docs; no actual controlled timing, threshold approval, profiler capture, physical or human-review result claimed |
+
+## Local verification checkpoint
+
+- GCC 13 strict RelWithDebInfo template build passed; first complete optional
+  benchmark build passed. Logs: `/tmp/m2305-extension-build.log`,
+  `/tmp/m2305-full-build.log`.
+- Initial standalone Python suite: 20 tests passed, template integration
+  explicitly unperformed without the executable argument (one skip).
+- Initial CTest focused gate: 2/2 passed, including the actual template CLI.
+  Updated focused gate after additional identity/noise cases: 2/2 passed.
+  Logs: `/tmp/m2305-analysis-tests.log`, `/tmp/m2305-focused.log`,
+  `/tmp/m2305-focused-final.log`.
+- Agent implementation review added controlled fake-clock inconclusive behavior,
+  collection-host binding, failed-run priority, cleanup retry invocation gating,
+  and a shared host publication transaction exercised with failing callbacks.
+  These are new-scope corrections, not changes to prior behavior.
+- Full normal CTest, final focused transaction checks, sanitizer, complete
+  optional package chain, contract/full profiles and hosted gates are pending
+  at this checkpoint. Later dated sections and the target PR retain outcomes.
+
+## Preserved invariants and residual limits
+
+No Runtime/backend/provider implementation, v1 benchmark schema/validator,
+default SDK inventory, stable ABI, support matrix, version or license changes.
+New source examples are optional host tools; allocation and report I/O never
+enter runtime lanes. Existing raw evidence is read-only. No observations or
+outliers are discarded. A report can be incomplete/inconclusive and still be a
+valid report; only its explicit mode/status determines interpretation.
+
+Statistical coverage assumes independent identically distributed run medians.
+The external collection/review declarations are not authenticated or measured
+by this tool. Profiler digests reference externally retained data; capture and
+causal attribution are not implemented or claimed. Controlled thresholds and
+physical characterization are NOT RUN. Agent self-review is not independent
+human review. M24-M26, cybersecurity, Daybreak, Unreal, signing, release and
+deployment are outside this batch. M23/CAP-M23 software closure remains pending
+final verification and integration; whole-program completion remains M26.
+
+Rollback: revert the isolated analysis/extension and additive integration as one
+batch, preserving all M23-01 through M23-04 code and failed evidence.
+
+## Final source candidate checkpoint
+
+The implementation is complete in target PR #261. Initial published head
+`a03a1d81887a7256635ae0b6c21de3fb741c0fa0`, tree
+`c8c554742a975962b4ccfda3036f79d35617d751`, matches local
+`574702ac1a6e9f3b74530af56ab90ac298f7f7bc`. The final candidate also corrects
+the documented install command to build the full optional project first.
+Exact final source/CI/merge identities and completed gate results are retained
+in [PR #261](https://github.com/tranquilWorks/cpp-rt-car/pull/261), without
+reopening source merely to update CI timestamps.
+
+- Final new-scope focused gate passes 2/2: the full 25-test analysis/actual-CLI
+  suite (no skips) plus C++ metadata, independent output/counter oracles, repeated
+  lifecycle, missing prerequisite, exceptions, cleanup retry, actual failure
+  nonpublication and concurrent owners. `/tmp/m2305-focused-complete.log`.
+- ASan+UBSan passes the same 2/2 entries and all 25 Python/CLI tests, with the
+  existing CI policy `ASAN_OPTIONS=abort_on_error=1:detect_leaks=0` and
+  `UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1`. Leak scanning is not claimed.
+  `/tmp/m2305-asan-build.log`, `/tmp/m2305-asan-tests.log`.
+- Normal optional CTest passes all 47 entries across the first run and three
+  reruns. The first run could not start `benchmark_cpu_package_consumer` or the
+  two thread-policy entries because two generated ELF binaries had mode 0644.
+  Their ELF identity was inspected, only generated execute permissions restored,
+  and all three unchanged entries passed. No source assertion or timeout changed.
+  `/tmp/m2305-normal-ctest.log`, `/tmp/m2305-normal-ctest-retry.log`.
+- Compiled ABI verifies v8, 70 symbols, fingerprint `0xd0e7a5a14bf35f97`.
+  Independent Draft 2020-12 schema checking and shipped policy/plan validation
+  pass. Documentation and exact release ledgers pass. Scope review confirms all
+  27 changed paths are allowed and no protected source changed.
+- The first cumulative full-profile run completed contract, quick 33/33 and demo
+  behavior, then its execution session disappeared during the experimental
+  configure. The first package run passed 24 relocated tests, unrequested
+  isolation, original and CPU wrappers, then its session disappeared during
+  embedded Runtime compilation. Neither incomplete run is a full pass.
+  `/tmp/m2305-agent-full.log`, `/tmp/m2305-package.log` retain these checkpoints.
+- Fresh complete reruns use `/tmp/m2305-agent-full-complete.log` and
+  `/tmp/m2305-package-final.log`; their terminal results and hosted 32-check
+  disposition are recorded in PR #261 before integration.
+
+Review is agent self-review only. Physical measurements, real threshold approval,
+profiler capture and controlled-host validation remain NOT RUN. Software closure
+requires the final gates and merge recorded in the PR. M24-M26 remain separate.
+
+## Reactivation and combined-source candidate (2026-09-25)
+
+Repair #262 is integrated at `b39ac9f281862a5a0aff051880671218e117db47`,
+tree `dbfc45df441bcad0696b34b7e92fc34827f60b34`, after 32/32 hosted gates
+at `9166bd9390df36359041480671f569fa136236da`, workflow 36095242746.
+It passed focused 30/30, ASan/UBSan and TSan each 92/92, full quick 33/33 and
+experimental 37/37, relocated SDK 20/20 and unchanged ABI v8/70/fingerprint.
+Its source, tests and evidence are preserved exactly in this integration.
+
+Canonical reactivation #500 merged at `76fb4a2261c4bdc401051172641f4148a11ec76d`,
+blob `a6adf86ec1944c6d8126ded6d77aa8c402c231e2`, based on current control
+main `8306551de3f32f9cb15c38efb3f5ab1e886756f0`. Canonical validator/path
+rules, independent Draft202012 schema and roadmap checks passed. Control
+run 36097703224/job 107953357046 failed before execution (`steps=[]`, logs
+BlobNotFound); hosted and full private-control checkout validation remain
+UNPERFORMED under the standing unavailable-control-job exception retained
+in #494/#488/#498. This does not waive any target functional gate.
+
+Retained feature head `4f780cf23096155da50ff61a1c5fe4970c004a88` had two
+separate integration blockers: one unexpected completed-batch cancellation
+in an additional full local suite (84-ms test, unchanged 60-second timeout),
+and Windows release job 107934482222 hitting the analysis CTest 120-second
+bound. Windows Debug passed that entry in 118.39 seconds. The later 50-repeat
+lifecycle pass did not erase the cancellation; #262 repaired its ordering.
+All Windows setup/withdrawn-park and execution-permission failures remain
+retained in #262 and its unchanged repository evidence.
+
+The workspace disconnected after final repair verification, then maintenance
+removed the checkout/builds. Target feature/main and pinned GoogleTest were
+restored from Git; no old build result is treated as fresh combined evidence.
+
+The remaining fixture correction constructs synthetic manifest dictionaries
+from exact bundle/policy digests and original trial commands/controls. It avoids
+production capture during routine fixture setup, while every comparison still
+uses the unchanged v1 validator. A new test compares baseline and candidate
+fixture manifests with real capture, normalizing only its wall-clock timestamp.
+All 25 original tests, every sample/trial/assertion, actual CLI coverage and the
+120-second bound are retained; the suite now has 26 tests and verbose output.
+No production analysis/provider/validator or integrated Runtime change.
+
+Fresh focused, full/optional, sanitizer, package, ABI/release and hosted gates
+are pending for this source. Exact final identities and terminal results will
+be retained in this ledger and PR #261 before integration.
+
+Focused combined-source CTest passes 2/2, including all 26 Python tests with
+the actual template CLI and no skips, plus the C++ extension lifecycle suite.
+Contract profile passes after refreshing the exact roadmap digest following
+its status update; the first contract attempt correctly rejected that stale
+ledger entry. Logs retain both attempts; no check was suppressed.
+Exact AST comparison confirms the 25 original test bodies are unchanged.
+Scope/schema audit passes all 27 feature paths relative to integrated main.
+Runtime, repair tests and repair evidence match main byte for byte.
+The first local schema command used the canonical filename validator on
+active-batch.yaml and rejected the filename; independent schema validation
+passes for the active copy and the canonical filename validator passes its
+M23-05.yaml source. No functional test failed in that tooling invocation.
+Logs: `/tmp/m2305-resumed-focused.log`, `/tmp/m2305-resumed-contract.log`,
+`/tmp/m2305-resumed-contract-final.log`. Source will now remain frozen;
+final cumulative local/hosted results and exact source/tree/merge identities
+are recorded in PR #261.

@@ -17,7 +17,7 @@ installed header, target, or SONAME change. Existing C hosts and every
 device-ABI-v1 backend continue to use their frozen declarations; the runtime
 copies each accepted v1 table into an internal compatibility adapter before
 the canonical HAL v2 manager sees it. Native-v2 users must recompile and
-receive no C++ binary ABI promise. See [the HAL v2 contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/hal_v2.md).
+receive no C++ binary ABI promise. See [the HAL v2 contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/hal_v2.md).
 
 M17-02 likewise changes only C++ declarations in the existing installed
 headers. Its optional memory/topology extension, six-domain taxonomy,
@@ -25,7 +25,7 @@ heterogeneous buffer overload, inspectors, and correlation query add no C
 symbol, record, status, capability bit, export, target, header, fingerprint, or
 SONAME change. C hosts and device-ABI-v1 backends continue through the exact
 M17-01 adapter and implicit borrowed-host mapping. See the
-[heterogeneous-memory contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/heterogeneous_memory.md).
+[heterogeneous-memory contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/heterogeneous_memory.md).
 
 ## Compatibility handshake
 
@@ -181,7 +181,7 @@ but adds no `librtfw` export. Its documented entry symbol is resolved and owned
 by the embedding host and passed directly to the additive C++ Runtime API.
 Stable C ABI v8 remains exactly 70 exports, fingerprint
 `0xd0e7a5a14bf35f97`, and SONAME 8. See
-[extension registration](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/extension_registration.md).
+[extension registration](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/extension_registration.md).
 
 ## M17-06 ABI boundary
 

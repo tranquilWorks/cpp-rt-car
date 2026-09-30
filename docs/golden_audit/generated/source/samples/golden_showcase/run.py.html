@@ -1,0 +1,125 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_showcase/run.py</title><h1>samples/golden_showcase/run.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#!/usr/bin/env python3</span>
+<span id="L2">&quot;&quot;&quot;Build, run and validate the optional golden showcase source kit.&quot;&quot;&quot;</span>
+<span id="L3">import argparse</span>
+<span id="L4">import json</span>
+<span id="L5">from pathlib import Path</span>
+<span id="L6">import queue</span>
+<span id="L7">import re</span>
+<span id="L8">import subprocess</span>
+<span id="L9">import sys</span>
+<span id="L10">import threading</span>
+<span id="L11">import time</span>
+<span id="L12">import uuid</span>
+<span id="L13">import artifacts as a</span>
+<span id="L14">HERE=Path(__file__).resolve().parent</span>
+<span id="L15"></span>
+<span id="L16"></span>
+<span id="L17">def command(args,timeout=300,quiet=False):</span>
+<span id="L18">    r=subprocess.run(list(map(str,args)),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=timeout)</span>
+<span id="L19">    if not quiet:print(r.stdout,end=&#x27;&#x27;,flush=True)</span>
+<span id="L20">    if r.returncode:raise RuntimeError(f&#x27;exit {r.returncode}: {args}&#x27;)</span>
+<span id="L21">    return r.stdout</span>
+<span id="L22"></span>
+<span id="L23">def executable(build,name,configuration=None):</span>
+<span id="L24">    if configuration:a.require(re.fullmatch(r&#x27;[A-Za-z][A-Za-z0-9_-]*&#x27;,configuration) is not None,&#x27;invalid build configuration&#x27;)</span>
+<span id="L25">    configs=(configuration,) if configuration else (&#x27;Release&#x27;,&#x27;Debug&#x27;,&#x27;RelWithDebInfo&#x27;,&#x27;MinSizeRel&#x27;)</span>
+<span id="L26">    found=set()</span>
+<span id="L27">    for directory,base in ((build,name),(build/&#x27;bench&#x27;,&#x27;sample_&#x27;+name),(build/&#x27;samples&#x27;,&#x27;sample_&#x27;+name)):</span>
+<span id="L28">        for location in (directory,*(directory/c for c in configs)):</span>
+<span id="L29">            for suffix in (&#x27;&#x27;,&#x27;.exe&#x27;):</span>
+<span id="L30">                candidate=location/(base+suffix)</span>
+<span id="L31">                if candidate.is_file():found.add(candidate.resolve())</span>
+<span id="L32">    if not found:raise ValueError(&#x27;missing executable &#x27;+name+&#x27; for configuration &#x27;+str(configuration))</span>
+<span id="L33">    if len(found)!=1:raise ValueError(&#x27;ambiguous executable &#x27;+name+&#x27;; select --config or use a separate build directory&#x27;)</span>
+<span id="L34">    return found.pop()</span>
+<span id="L35"></span>
+<span id="L36">def peer_benchmark(args,controller):</span>
+<span id="L37">    # Read stdout in a thread so a broken child cannot make readline unbounded.</span>
+<span id="L38">    child=subprocess.Popen(list(map(str,args)),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)</span>
+<span id="L39">    lines=queue.Queue();peers=[]</span>
+<span id="L40">    def read():</span>
+<span id="L41">        try:</span>
+<span id="L42">            for line in child.stdout:lines.put(line)</span>
+<span id="L43">        finally:lines.put(None)</span>
+<span id="L44">    reader=threading.Thread(target=read,daemon=True);reader.start()</span>
+<span id="L45">    deadline=time.monotonic()+120</span>
+<span id="L46">    try:</span>
+<span id="L47">        while True:</span>
+<span id="L48">            line=lines.get(timeout=max(.01,deadline-time.monotonic()))</span>
+<span id="L49">            if line is None:break</span>
+<span id="L50">            print(line,end=&#x27;&#x27;,flush=True)</span>
+<span id="L51">            if line.startswith(&#x27;showcase_peer &#x27;):</span>
+<span id="L52">                key=line.split()[1]</span>
+<span id="L53">                a.require(key.startswith(&#x27;golden_&#x27;) and key.replace(&#x27;_&#x27;,&#x27;&#x27;).isalnum(),&#x27;peer key&#x27;)</span>
+<span id="L54">                peers.append(subprocess.Popen([str(controller),key,&#x27;26&#x27;,&#x27;5000&#x27;],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True))</span>
+<span id="L55">        a.require(child.wait(timeout=5)==0,&#x27;external benchmark child failure&#x27;)</span>
+<span id="L56">        a.require(len(peers)==7,&#x27;seven actual controller processes&#x27;)</span>
+<span id="L57">        for peer in peers:</span>
+<span id="L58">            output=peer.communicate(timeout=5)[0];print(output,end=&#x27;&#x27;,flush=True)</span>
+<span id="L59">            a.require(peer.returncode==0,&#x27;controller process failure&#x27;)</span>
+<span id="L60">    finally:</span>
+<span id="L61">        for process in [child,*peers]:</span>
+<span id="L62">            if process.poll() is None:process.kill();process.communicate(timeout=5)</span>
+<span id="L63">        reader.join(timeout=5)</span>
+<span id="L64"></span>
+<span id="L65">def execute(build,output,provenance,clock,configuration=None):</span>
+<span id="L66">    a.require(not output.exists(),&#x27;output already exists&#x27;)</span>
+<span id="L67">    source=a.provenance(provenance)</span>
+<span id="L68">    output.mkdir(parents=True)</span>
+<span id="L69">    names=(&#x27;golden_showcase&#x27;,&#x27;golden_experiment&#x27;,&#x27;golden_telemetry_loss&#x27;,&#x27;golden_system&#x27;,&#x27;golden_cuda&#x27;,&#x27;golden_xdma&#x27;,&#x27;golden_controller&#x27;)</span>
+<span id="L70">    binaries={name:executable(build,name,configuration) for name in names}</span>
+<span id="L71">    inputs={name:a.sha(path.read_bytes()) for name,path in binaries.items()}</span>
+<span id="L72">    descriptors=[json.loads(line) for line in command([binaries[&#x27;golden_showcase&#x27;],&#x27;--list&#x27;],quiet=True).splitlines() if line.strip()]</span>
+<span id="L73">    a.require([d[&#x27;case_id&#x27;] for d in descriptors]==list(a.IDS),&#x27;exact case inventory&#x27;)</span>
+<span id="L74">    for case in a.IDS:</span>
+<span id="L75">        dest=output/&#x27;benchmarks&#x27;/case</span>
+<span id="L76">        args=[binaries[&#x27;golden_showcase&#x27;],&#x27;--case&#x27;,case,&#x27;--clock&#x27;,clock,&#x27;--output&#x27;,dest]</span>
+<span id="L77">        if case==&#x27;golden-external&#x27;:peer_benchmark(args+[&#x27;--peer-prefix&#x27;,&#x27;golden_&#x27;+uuid.uuid4().hex],binaries[&#x27;golden_controller&#x27;])</span>
+<span id="L78">        else:command(args)</span>
+<span id="L79">        a.benchmark(dest)</span>
+<span id="L80">    for variant,dispatch in [(&#x27;sim_cuda&#x27;,&#x27;kernel&#x27;),(&#x27;sim_cuda&#x27;,&#x27;graph&#x27;),(&#x27;sim_xdma&#x27;,&#x27;cpu&#x27;),(&#x27;sim_combined&#x27;,&#x27;kernel&#x27;),(&#x27;sim_combined&#x27;,&#x27;graph&#x27;)]:</span>
+<span id="L81">        for mode in (&#x27;native&#x27;,&#x27;host&#x27;):</span>
+<span id="L82">            dest=output/&#x27;benchmarks&#x27;/f&#x27;{variant}-{dispatch}-{mode}&#x27;</span>
+<span id="L83">            command([binaries[&#x27;golden_showcase&#x27;],&#x27;--case&#x27;,&#x27;golden-loop&#x27;,&#x27;--clock&#x27;,clock,&#x27;--variant&#x27;,variant,&#x27;--dispatch&#x27;,dispatch,&#x27;--mode&#x27;,mode,&#x27;--output&#x27;,dest])</span>
+<span id="L84">            a.benchmark(dest)</span>
+<span id="L85">    for lever in a.cpu.contract()[&#x27;levers&#x27;]:</span>
+<span id="L86">        for value in lever[&#x27;values&#x27;]:</span>
+<span id="L87">            dest=output/&#x27;experiments&#x27;/f&#x27;{lever[&quot;id&quot;]}-{value}.json&#x27;;dest.parent.mkdir(exist_ok=True)</span>
+<span id="L88">            command([binaries[&#x27;golden_experiment&#x27;],lever[&#x27;id&#x27;],value,dest])</span>
+<span id="L89">    # Every fault is executed afresh through its existing actual owner path.</span>
+<span id="L90">    for fault in a.cpu.contract()[&#x27;faults&#x27;]:</span>
+<span id="L91">        name=fault[&#x27;id&#x27;];dest=output/&#x27;faults&#x27;/name;dest.mkdir(parents=True)</span>
+<span id="L92">        if name==&#x27;telemetry_loss&#x27;:command([binaries[&#x27;golden_telemetry_loss&#x27;],dest/&#x27;evidence.json&#x27;]);continue</span>
+<span id="L93">        if name in (&#x27;underflow&#x27;,&#x27;overrun&#x27;,&#x27;stop_failure&#x27;,&#x27;device_loss&#x27;,&#x27;reset_failure&#x27;):</span>
+<span id="L94">            command([binaries[&#x27;golden_xdma&#x27;],&#x27;--dispatch&#x27;,&#x27;graph&#x27;,&#x27;--fault&#x27;,name,&#x27;--output&#x27;,dest])</span>
+<span id="L95">            a.variant_inspect(dest,&#x27;sim_combined&#x27;)</span>
+<span id="L96">        else:</span>
+<span id="L97">            command([binaries[&#x27;golden_system&#x27;],&#x27;--campaign&#x27;,name,&#x27;--output&#x27;,dest]);a.cpu.inspect(dest)</span>
+<span id="L98">    # Explicit real external CIL on the CUDA and combined backends supplements</span>
+<span id="L99">    # the timed CPU external case; no child process is replaced by a callback.</span>
+<span id="L100">    pair=a.module(&#x27;showcase_pair&#x27;,HERE.parent/&#x27;golden_system/run.py&#x27;).pair</span>
+<span id="L101">    for name,dispatch in [(&#x27;golden_cuda&#x27;,&#x27;kernel&#x27;),(&#x27;golden_cuda&#x27;,&#x27;graph&#x27;),(&#x27;golden_xdma&#x27;,&#x27;cpu&#x27;),(&#x27;golden_xdma&#x27;,&#x27;kernel&#x27;),(&#x27;golden_xdma&#x27;,&#x27;graph&#x27;)]:</span>
+<span id="L102">        dest=output/&#x27;external&#x27;/f&#x27;{name}-{dispatch}&#x27;</span>
+<span id="L103">        h,c,ho,co=pair(binaries[name],binaries[&#x27;golden_controller&#x27;],dest,extra=[&#x27;--dispatch&#x27;,dispatch])</span>
+<span id="L104">        print(ho+co,end=&#x27;&#x27;,flush=True);a.require(h==c==0,&#x27;external variant failure&#x27;)</span>
+<span id="L105">        a.variant_inspect(dest,&#x27;sim_cuda&#x27; if name==&#x27;golden_cuda&#x27; else &#x27;sim_xdma&#x27; if dispatch==&#x27;cpu&#x27; else &#x27;sim_combined&#x27;)</span>
+<span id="L106">    # Source and executable bytes must still be the ones admitted at entry.</span>
+<span id="L107">    a.require(a.provenance(provenance)==source,&#x27;source changed during execution&#x27;)</span>
+<span id="L108">    a.require(inputs=={name:a.sha(path.read_bytes()) for name,path in binaries.items()},&#x27;executable changed during execution&#x27;)</span>
+<span id="L109">    (output/&#x27;inputs.json&#x27;).write_text(json.dumps(dict(schema=1,source=source,executables=inputs,clock=clock),sort_keys=True,indent=2)+&#x27;\n&#x27;)</span>
+<span id="L110">    import report</span>
+<span id="L111">    report.validate(output,provenance,publish=True,binaries=binaries)</span>
+<span id="L112">    print(&#x27;PASS golden showcase; physical, RT, controlled performance and final CAP-M26 audit remain separate&#x27;)</span>
+<span id="L113"></span>
+<span id="L114">def main():</span>
+<span id="L115">    p=argparse.ArgumentParser(description=__doc__);p.add_argument(&#x27;--build&#x27;,type=Path,default=HERE/&#x27;build&#x27;);p.add_argument(&#x27;--binaries-build&#x27;,type=Path);p.add_argument(&#x27;--prefix&#x27;,type=Path);p.add_argument(&#x27;--output&#x27;,type=Path,default=HERE/&#x27;output&#x27;);p.add_argument(&#x27;--provenance&#x27;,type=Path,default=HERE/&#x27;provenance.json&#x27;);p.add_argument(&#x27;--clock&#x27;,choices=(&#x27;fake&#x27;,&#x27;steady&#x27;),default=&#x27;fake&#x27;);p.add_argument(&#x27;--config&#x27;);args=p.parse_args()</span>
+<span id="L116">    try:</span>
+<span id="L117">        build=args.binaries_build</span>
+<span id="L118">        if build is None:</span>
+<span id="L119">            args.config=args.config or &#x27;Release&#x27;</span>
+<span id="L120">            config=[&#x27;cmake&#x27;,&#x27;-S&#x27;,HERE,&#x27;-B&#x27;,args.build,&#x27;-DCMAKE_BUILD_TYPE=&#x27;+args.config]</span>
+<span id="L121">            if args.prefix:config.append(&#x27;-DCMAKE_PREFIX_PATH=&#x27;+str(args.prefix.resolve()))</span>
+<span id="L122">            command(config);command([&#x27;cmake&#x27;,&#x27;--build&#x27;,args.build,&#x27;--config&#x27;,args.config,&#x27;--parallel&#x27;,&#x27;2&#x27;]);build=args.build</span>
+<span id="L123">        execute(build.resolve(),args.output.resolve(),args.provenance.resolve(),args.clock,args.config)</span>
+<span id="L124">    except (OSError,ValueError,RuntimeError,KeyError,subprocess.SubprocessError,queue.Empty) as e:p.exit(1,str(e)+&#x27;\n&#x27;)</span>
+<span id="L125">if __name__==&#x27;__main__&#x27;:main()</span></pre></html>

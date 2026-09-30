@@ -1,0 +1,1473 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_hal_v2.cpp</title><h1>tests/test_hal_v2.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;array&gt;</span>
+<span id="L5">#include &lt;atomic&gt;</span>
+<span id="L6">#include &lt;chrono&gt;</span>
+<span id="L7">#include &lt;cstddef&gt;</span>
+<span id="L8">#include &lt;cstdint&gt;</span>
+<span id="L9">#include &lt;cstring&gt;</span>
+<span id="L10">#include &lt;limits&gt;</span>
+<span id="L11">#include &lt;stdexcept&gt;</span>
+<span id="L12">#include &lt;string&gt;</span>
+<span id="L13">#include &lt;string_view&gt;</span>
+<span id="L14"></span>
+<span id="L15">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L16"></span>
+<span id="L17">#include &quot;rt/src/hal_v2.hpp&quot;</span>
+<span id="L18"></span>
+<span id="L19">namespace {</span>
+<span id="L20"></span>
+<span id="L21">using namespace std::chrono_literals;</span>
+<span id="L22"></span>
+<span id="L23">rt::RuntimeConfig hal_config(std::size_t backend_capacity = 1) {</span>
+<span id="L24">    rt::RuntimeConfig config;</span>
+<span id="L25">    config.callback_capacity = 1;</span>
+<span id="L26">    config.worker_count = 1;</span>
+<span id="L27">    config.executor_queue_capacity = 4;</span>
+<span id="L28">    config.task_scratch_slots = 4;</span>
+<span id="L29">    config.trace_capacity = 32;</span>
+<span id="L30">    config.device_backend_capacity = backend_capacity;</span>
+<span id="L31">    config.device_buffer_capacity = 1;</span>
+<span id="L32">    config.device_outstanding_capacity = 4;</span>
+<span id="L33">    config.device_completion_batch = 4;</span>
+<span id="L34">    return config;</span>
+<span id="L35">}</span>
+<span id="L36"></span>
+<span id="L37">template &lt;typename Range&gt;</span>
+<span id="L38">bool all_zero(const Range&amp; values) {</span>
+<span id="L39">    return std::all_of(</span>
+<span id="L40">        values.begin(), values.end(), [](const auto value) {</span>
+<span id="L41">            return value == 0;</span>
+<span id="L42">        });</span>
+<span id="L43">}</span>
+<span id="L44"></span>
+<span id="L45">template &lt;typename Range&gt;</span>
+<span id="L46">void set_identifier(Range&amp; destination, std::string_view value) {</span>
+<span id="L47">    destination.fill(0);</span>
+<span id="L48">    std::copy(value.begin(), value.end(), destination.begin());</span>
+<span id="L49">}</span>
+<span id="L50"></span>
+<span id="L51">struct NativeProbe {</span>
+<span id="L52">    explicit NativeProbe(std::string_view identifier = &quot;test.hal.native&quot;) {</span>
+<span id="L53">        set_identifier(capabilities.backend_id, identifier);</span>
+<span id="L54">    }</span>
+<span id="L55"></span>
+<span id="L56">    rt::HalV2BackendApi api() {</span>
+<span id="L57">        rt::HalV2BackendApi output;</span>
+<span id="L58">        output.instance = this;</span>
+<span id="L59">        output.get_capabilities = &amp;get_capabilities;</span>
+<span id="L60">        output.initialize = &amp;initialize;</span>
+<span id="L61">        output.register_buffer = &amp;register_buffer;</span>
+<span id="L62">        output.unregister_buffer = &amp;unregister_buffer;</span>
+<span id="L63">        output.submit = &amp;submit;</span>
+<span id="L64">        output.poll = &amp;poll;</span>
+<span id="L65">        output.cancel = &amp;cancel;</span>
+<span id="L66">        output.get_health = &amp;get_health;</span>
+<span id="L67">        output.reset = &amp;reset;</span>
+<span id="L68">        output.shutdown = &amp;shutdown;</span>
+<span id="L69">        return output;</span>
+<span id="L70">    }</span>
+<span id="L71"></span>
+<span id="L72">    rt::HalV2Capabilities capabilities = [] {</span>
+<span id="L73">        rt::HalV2Capabilities output;</span>
+<span id="L74">        output.max_in_flight = 8;</span>
+<span id="L75">        output.max_registered_buffers = 8;</span>
+<span id="L76">        output.max_buffer_bytes = 4096;</span>
+<span id="L77">        output.supports_cancel = 1;</span>
+<span id="L78">        output.supports_reset = 1;</span>
+<span id="L79">        output.deterministic_mock = 1;</span>
+<span id="L80">        output.control_storage_bytes = 37;</span>
+<span id="L81">        return output;</span>
+<span id="L82">    }();</span>
+<span id="L83">    rt::HalV2Status capability_status = rt::HalV2Status::ok;</span>
+<span id="L84">    bool throw_capabilities = false;</span>
+<span id="L85">    bool throw_submit = false;</span>
+<span id="L86">    std::atomic&lt;std::size_t&gt; capability_calls{0};</span>
+<span id="L87">    std::atomic&lt;std::size_t&gt; initialize_calls{0};</span>
+<span id="L88">    std::atomic&lt;std::size_t&gt; register_calls{0};</span>
+<span id="L89">    std::atomic&lt;std::size_t&gt; unregister_calls{0};</span>
+<span id="L90">    std::atomic&lt;std::size_t&gt; submit_calls{0};</span>
+<span id="L91">    std::atomic&lt;std::size_t&gt; poll_calls{0};</span>
+<span id="L92">    std::atomic&lt;std::size_t&gt; cancel_calls{0};</span>
+<span id="L93">    std::atomic&lt;std::size_t&gt; health_calls{0};</span>
+<span id="L94">    std::atomic&lt;std::size_t&gt; reset_calls{0};</span>
+<span id="L95">    std::atomic&lt;std::size_t&gt; shutdown_calls{0};</span>
+<span id="L96">    std::atomic&lt;std::uint64_t&gt; pending_submission{0};</span>
+<span id="L97">    std::atomic&lt;std::uint64_t&gt; submissions{0};</span>
+<span id="L98">    std::atomic&lt;std::uint64_t&gt; completions{0};</span>
+<span id="L99">    rt::HalV2InitializeConfig observed_initialize{};</span>
+<span id="L100">    rt::HalV2BufferRegistration observed_buffer{};</span>
+<span id="L101">    rt::HalV2Submission observed_submission{};</span>
+<span id="L102">    std::uint64_t observed_unregister_token = 0;</span>
+<span id="L103">    std::uint64_t observed_cancel_id = 0;</span>
+<span id="L104">    static constexpr std::uint64_t native_buffer_token = 0xabcdu;</span>
+<span id="L105"></span>
+<span id="L106">    static NativeProbe* self(void* instance) {</span>
+<span id="L107">        return static_cast&lt;NativeProbe*&gt;(instance);</span>
+<span id="L108">    }</span>
+<span id="L109"></span>
+<span id="L110">    static rt::HalV2Status get_capabilities(</span>
+<span id="L111">        void* instance, rt::HalV2Capabilities* output) {</span>
+<span id="L112">        auto* probe = self(instance);</span>
+<span id="L113">        if (!probe || !output) {</span>
+<span id="L114">            return rt::HalV2Status::invalid_argument;</span>
+<span id="L115">        }</span>
+<span id="L116">        probe-&gt;capability_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L117">        if (probe-&gt;throw_capabilities) {</span>
+<span id="L118">            throw std::runtime_error(&quot;capabilities&quot;);</span>
+<span id="L119">        }</span>
+<span id="L120">        if (probe-&gt;capability_status != rt::HalV2Status::ok) {</span>
+<span id="L121">            return probe-&gt;capability_status;</span>
+<span id="L122">        }</span>
+<span id="L123">        *output = probe-&gt;capabilities;</span>
+<span id="L124">        return rt::HalV2Status::ok;</span>
+<span id="L125">    }</span>
+<span id="L126"></span>
+<span id="L127">    static rt::HalV2Status initialize(</span>
+<span id="L128">        void* instance, const rt::HalV2InitializeConfig* config) {</span>
+<span id="L129">        auto* probe = self(instance);</span>
+<span id="L130">        if (!probe || !config) {</span>
+<span id="L131">            return rt::HalV2Status::invalid_argument;</span>
+<span id="L132">        }</span>
+<span id="L133">        probe-&gt;initialize_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L134">        probe-&gt;observed_initialize = *config;</span>
+<span id="L135">        return rt::HalV2Status::ok;</span>
+<span id="L136">    }</span>
+<span id="L137"></span>
+<span id="L138">    static rt::HalV2Status register_buffer(</span>
+<span id="L139">        void* instance,</span>
+<span id="L140">        const rt::HalV2BufferRegistration* registration,</span>
+<span id="L141">        std::uint64_t* token) {</span>
+<span id="L142">        auto* probe = self(instance);</span>
+<span id="L143">        if (!probe || !registration || !token) {</span>
+<span id="L144">            return rt::HalV2Status::invalid_argument;</span>
+<span id="L145">        }</span>
+<span id="L146">        probe-&gt;register_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L147">        probe-&gt;observed_buffer = *registration;</span>
+<span id="L148">        *token = native_buffer_token;</span>
+<span id="L149">        return rt::HalV2Status::ok;</span>
+<span id="L150">    }</span>
+<span id="L151"></span>
+<span id="L152">    static rt::HalV2Status unregister_buffer(</span>
+<span id="L153">        void* instance, std::uint64_t token) {</span>
+<span id="L154">        auto* probe = self(instance);</span>
+<span id="L155">        if (!probe) {</span>
+<span id="L156">            return rt::HalV2Status::invalid_argument;</span>
+<span id="L157">        }</span>
+<span id="L158">        probe-&gt;unregister_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L159">        probe-&gt;observed_unregister_token = token;</span>
+<span id="L160">        return rt::HalV2Status::ok;</span>
+<span id="L161">    }</span>
+<span id="L162"></span>
+<span id="L163">    static rt::HalV2Status submit(</span>
+<span id="L164">        void* instance, const rt::HalV2Submission* submission) {</span>
+<span id="L165">        auto* probe = self(instance);</span>
+<span id="L166">        if (!probe || !submission) {</span>
+<span id="L167">            return rt::HalV2Status::invalid_argument;</span>
+<span id="L168">        }</span>
+<span id="L169">        probe-&gt;submit_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L170">        if (probe-&gt;throw_submit) {</span>
+<span id="L171">            throw std::runtime_error(&quot;submit&quot;);</span>
+<span id="L172">        }</span>
+<span id="L173">        probe-&gt;observed_submission = *submission;</span>
+<span id="L174">        probe-&gt;submissions.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L175">        probe-&gt;pending_submission.store(</span>
+<span id="L176">            submission-&gt;submission_id, std::memory_order_release);</span>
+<span id="L177">        return rt::HalV2Status::ok;</span>
+<span id="L178">    }</span>
+<span id="L179"></span>
+<span id="L180">    static rt::HalV2Status poll(</span>
+<span id="L181">        void* instance,</span>
+<span id="L182">        rt::HalV2Completion* output,</span>
+<span id="L183">        std::uint64_t capacity,</span>
+<span id="L184">        std::uint64_t* count) {</span>
+<span id="L185">        auto* probe = self(instance);</span>
+<span id="L186">        if (!probe || !output || capacity == 0 || !count) {</span>
+<span id="L187">            return rt::HalV2Status::invalid_argument;</span>
+<span id="L188">        }</span>
+<span id="L189">        probe-&gt;poll_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L190">        *count = 0;</span>
+<span id="L191">        const auto submission = probe-&gt;pending_submission.exchange(</span>
+<span id="L192">            0, std::memory_order_acq_rel);</span>
+<span id="L193">        if (submission == 0) {</span>
+<span id="L194">            return rt::HalV2Status::ok;</span>
+<span id="L195">        }</span>
+<span id="L196">        output[0] = {};</span>
+<span id="L197">        output[0].submission_id = submission;</span>
+<span id="L198">        output[0].device_timestamp_ns = 1234;</span>
+<span id="L199">        output[0].value = 5678;</span>
+<span id="L200">        *count = 1;</span>
+<span id="L201">        probe-&gt;completions.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L202">        return rt::HalV2Status::ok;</span>
+<span id="L203">    }</span>
+<span id="L204"></span>
+<span id="L205">    static rt::HalV2Status cancel(void* instance, std::uint64_t id) {</span>
+<span id="L206">        auto* probe = self(instance);</span>
+<span id="L207">        if (!probe) {</span>
+<span id="L208">            return rt::HalV2Status::invalid_argument;</span>
+<span id="L209">        }</span>
+<span id="L210">        probe-&gt;cancel_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L211">        probe-&gt;observed_cancel_id = id;</span>
+<span id="L212">        return rt::HalV2Status::unsupported;</span>
+<span id="L213">    }</span>
+<span id="L214"></span>
+<span id="L215">    static rt::HalV2Status get_health(</span>
+<span id="L216">        void* instance, rt::HalV2Health* output) {</span>
+<span id="L217">        auto* probe = self(instance);</span>
+<span id="L218">        if (!probe || !output) {</span>
+<span id="L219">            return rt::HalV2Status::invalid_argument;</span>
+<span id="L220">        }</span>
+<span id="L221">        probe-&gt;health_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L222">        *output = {};</span>
+<span id="L223">        output-&gt;state = static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L224">            rt::HalV2HealthState::healthy);</span>
+<span id="L225">        output-&gt;generation = 9;</span>
+<span id="L226">        output-&gt;submissions = probe-&gt;submissions.load(</span>
+<span id="L227">            std::memory_order_acquire);</span>
+<span id="L228">        output-&gt;completions = probe-&gt;completions.load(</span>
+<span id="L229">            std::memory_order_acquire);</span>
+<span id="L230">        output-&gt;outstanding = probe-&gt;pending_submission.load(</span>
+<span id="L231">            std::memory_order_acquire) == 0 ? 0u : 1u;</span>
+<span id="L232">        return rt::HalV2Status::ok;</span>
+<span id="L233">    }</span>
+<span id="L234"></span>
+<span id="L235">    static rt::HalV2Status reset(void* instance) {</span>
+<span id="L236">        auto* probe = self(instance);</span>
+<span id="L237">        if (!probe) {</span>
+<span id="L238">            return rt::HalV2Status::invalid_argument;</span>
+<span id="L239">        }</span>
+<span id="L240">        probe-&gt;reset_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L241">        return rt::HalV2Status::ok;</span>
+<span id="L242">    }</span>
+<span id="L243"></span>
+<span id="L244">    static rt::HalV2Status shutdown(void* instance) {</span>
+<span id="L245">        auto* probe = self(instance);</span>
+<span id="L246">        if (!probe) {</span>
+<span id="L247">            return rt::HalV2Status::invalid_argument;</span>
+<span id="L248">        }</span>
+<span id="L249">        probe-&gt;shutdown_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L250">        return rt::HalV2Status::ok;</span>
+<span id="L251">    }</span>
+<span id="L252">};</span>
+<span id="L253"></span>
+<span id="L254">struct V1Probe {</span>
+<span id="L255">    explicit V1Probe(std::string_view identifier = &quot;test.hal.v1&quot;) {</span>
+<span id="L256">        std::fill(std::begin(backend_id), std::end(backend_id), 0);</span>
+<span id="L257">        std::copy(identifier.begin(), identifier.end(), std::begin(backend_id));</span>
+<span id="L258">        completion.struct_size = sizeof(completion);</span>
+<span id="L259">        completion.status = RTFW_DEVICE_STATUS_TIMEOUT;</span>
+<span id="L260">        completion.submission_id = 77;</span>
+<span id="L261">        completion.device_timestamp_ns = 88;</span>
+<span id="L262">        completion.value = 99;</span>
+<span id="L263">        health.struct_size = sizeof(health);</span>
+<span id="L264">        health.state = RTFW_DEVICE_HEALTH_DEGRADED;</span>
+<span id="L265">        health.last_status = RTFW_DEVICE_STATUS_RESET_REQUIRED;</span>
+<span id="L266">        health.generation = 1;</span>
+<span id="L267">        health.submissions = 2;</span>
+<span id="L268">        health.completions = 3;</span>
+<span id="L269">        health.queue_rejections = 4;</span>
+<span id="L270">        health.timeouts = 5;</span>
+<span id="L271">        health.errors = 6;</span>
+<span id="L272">        health.losses = 7;</span>
+<span id="L273">        health.cancellations = 8;</span>
+<span id="L274">        health.resets = 9;</span>
+<span id="L275">        health.outstanding = 10;</span>
+<span id="L276">    }</span>
+<span id="L277"></span>
+<span id="L278">    rtfw_device_backend_api api() {</span>
+<span id="L279">        rtfw_device_backend_api output{};</span>
+<span id="L280">        output.struct_size = sizeof(output);</span>
+<span id="L281">        output.abi_version = RTFW_DEVICE_ABI_VERSION;</span>
+<span id="L282">        output.instance = this;</span>
+<span id="L283">        output.get_capabilities = &amp;get_capabilities;</span>
+<span id="L284">        output.initialize = &amp;initialize;</span>
+<span id="L285">        output.register_buffer = &amp;register_buffer;</span>
+<span id="L286">        output.unregister_buffer = &amp;unregister_buffer;</span>
+<span id="L287">        output.submit = &amp;submit;</span>
+<span id="L288">        output.poll = &amp;poll;</span>
+<span id="L289">        output.cancel = &amp;cancel;</span>
+<span id="L290">        output.get_health = &amp;get_health;</span>
+<span id="L291">        output.reset = &amp;reset;</span>
+<span id="L292">        output.shutdown = &amp;shutdown;</span>
+<span id="L293">        return output;</span>
+<span id="L294">    }</span>
+<span id="L295"></span>
+<span id="L296">    char backend_id[RTFW_DEVICE_IDENTIFIER_CAPACITY]{};</span>
+<span id="L297">    rtfw_device_status capability_status = RTFW_DEVICE_STATUS_OK;</span>
+<span id="L298">    bool throw_capabilities = false;</span>
+<span id="L299">    bool throw_poll = false;</span>
+<span id="L300">    std::atomic&lt;std::size_t&gt; capability_calls{0};</span>
+<span id="L301">    std::atomic&lt;std::size_t&gt; initialize_calls{0};</span>
+<span id="L302">    std::atomic&lt;std::size_t&gt; register_calls{0};</span>
+<span id="L303">    std::atomic&lt;std::size_t&gt; unregister_calls{0};</span>
+<span id="L304">    std::atomic&lt;std::size_t&gt; submit_calls{0};</span>
+<span id="L305">    std::atomic&lt;std::size_t&gt; poll_calls{0};</span>
+<span id="L306">    std::atomic&lt;std::size_t&gt; cancel_calls{0};</span>
+<span id="L307">    std::atomic&lt;std::size_t&gt; health_calls{0};</span>
+<span id="L308">    std::atomic&lt;std::size_t&gt; reset_calls{0};</span>
+<span id="L309">    std::atomic&lt;std::size_t&gt; shutdown_calls{0};</span>
+<span id="L310">    rtfw_device_status cancel_status = RTFW_DEVICE_STATUS_UNSUPPORTED;</span>
+<span id="L311">    rtfw_device_status register_status = RTFW_DEVICE_STATUS_OK;</span>
+<span id="L312">    rtfw_device_status reset_status = RTFW_DEVICE_STATUS_OK;</span>
+<span id="L313">    rtfw_device_status shutdown_status = RTFW_DEVICE_STATUS_OK;</span>
+<span id="L314">    bool throw_register = false;</span>
+<span id="L315">    bool runtime_poll = false;</span>
+<span id="L316">    std::uint64_t buffer_token = 0x4455u;</span>
+<span id="L317">    std::atomic&lt;std::uint64_t&gt; pending_submission{0};</span>
+<span id="L318">    rtfw_device_init_config observed_initialize{};</span>
+<span id="L319">    rtfw_device_buffer_registration observed_buffer{};</span>
+<span id="L320">    rtfw_device_submission observed_submission{};</span>
+<span id="L321">    std::uint64_t observed_unregister_token = 0;</span>
+<span id="L322">    std::uint64_t observed_cancel_id = 0;</span>
+<span id="L323">    rtfw_device_completion completion{};</span>
+<span id="L324">    rtfw_device_health health{};</span>
+<span id="L325"></span>
+<span id="L326">    static V1Probe* self(void* instance) {</span>
+<span id="L327">        return static_cast&lt;V1Probe*&gt;(instance);</span>
+<span id="L328">    }</span>
+<span id="L329"></span>
+<span id="L330">    static rtfw_device_status get_capabilities(</span>
+<span id="L331">        void* instance, rtfw_device_capabilities* output) {</span>
+<span id="L332">        auto* probe = self(instance);</span>
+<span id="L333">        if (!probe || !output) {</span>
+<span id="L334">            return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L335">        }</span>
+<span id="L336">        probe-&gt;capability_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L337">        if (probe-&gt;throw_capabilities) {</span>
+<span id="L338">            throw std::runtime_error(&quot;v1 capabilities&quot;);</span>
+<span id="L339">        }</span>
+<span id="L340">        if (probe-&gt;capability_status != RTFW_DEVICE_STATUS_OK) {</span>
+<span id="L341">            return probe-&gt;capability_status;</span>
+<span id="L342">        }</span>
+<span id="L343">        *output = {};</span>
+<span id="L344">        output-&gt;struct_size = sizeof(*output);</span>
+<span id="L345">        output-&gt;abi_version = RTFW_DEVICE_ABI_VERSION;</span>
+<span id="L346">        output-&gt;max_in_flight = 8;</span>
+<span id="L347">        output-&gt;max_registered_buffers = 8;</span>
+<span id="L348">        output-&gt;max_buffer_bytes = 4096;</span>
+<span id="L349">        output-&gt;inline_payload_capacity =</span>
+<span id="L350">            RTFW_DEVICE_INLINE_PAYLOAD_CAPACITY;</span>
+<span id="L351">        output-&gt;buffer_ref_capacity = RTFW_DEVICE_BUFFER_REF_CAPACITY;</span>
+<span id="L352">        output-&gt;supports_cancel = 1;</span>
+<span id="L353">        output-&gt;supports_reset = 1;</span>
+<span id="L354">        output-&gt;deterministic_mock = 1;</span>
+<span id="L355">        output-&gt;control_storage_bytes = 37;</span>
+<span id="L356">        std::copy(</span>
+<span id="L357">            std::begin(probe-&gt;backend_id),</span>
+<span id="L358">            std::end(probe-&gt;backend_id),</span>
+<span id="L359">            std::begin(output-&gt;backend_id));</span>
+<span id="L360">        return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L361">    }</span>
+<span id="L362"></span>
+<span id="L363">    static rtfw_device_status initialize(</span>
+<span id="L364">        void* instance, const rtfw_device_init_config* config) {</span>
+<span id="L365">        auto* probe = self(instance);</span>
+<span id="L366">        if (!probe || !config) {</span>
+<span id="L367">            return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L368">        }</span>
+<span id="L369">        probe-&gt;initialize_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L370">        probe-&gt;observed_initialize = *config;</span>
+<span id="L371">        return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L372">    }</span>
+<span id="L373"></span>
+<span id="L374">    static rtfw_device_status register_buffer(</span>
+<span id="L375">        void* instance,</span>
+<span id="L376">        const rtfw_device_buffer_registration* registration,</span>
+<span id="L377">        std::uint64_t* token) {</span>
+<span id="L378">        auto* probe = self(instance);</span>
+<span id="L379">        if (!probe || !registration || !token) {</span>
+<span id="L380">            return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L381">        }</span>
+<span id="L382">        probe-&gt;register_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L383">        probe-&gt;observed_buffer = *registration;</span>
+<span id="L384">        *token = probe-&gt;buffer_token;</span>
+<span id="L385">        if (probe-&gt;throw_register) {</span>
+<span id="L386">            throw std::runtime_error(&quot;v1 register buffer&quot;);</span>
+<span id="L387">        }</span>
+<span id="L388">        return probe-&gt;register_status;</span>
+<span id="L389">    }</span>
+<span id="L390"></span>
+<span id="L391">    static rtfw_device_status unregister_buffer(</span>
+<span id="L392">        void* instance, std::uint64_t token) {</span>
+<span id="L393">        auto* probe = self(instance);</span>
+<span id="L394">        if (!probe) {</span>
+<span id="L395">            return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L396">        }</span>
+<span id="L397">        probe-&gt;unregister_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L398">        probe-&gt;observed_unregister_token = token;</span>
+<span id="L399">        return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L400">    }</span>
+<span id="L401"></span>
+<span id="L402">    static rtfw_device_status submit(</span>
+<span id="L403">        void* instance, const rtfw_device_submission* submission) {</span>
+<span id="L404">        auto* probe = self(instance);</span>
+<span id="L405">        if (!probe || !submission) {</span>
+<span id="L406">            return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L407">        }</span>
+<span id="L408">        probe-&gt;submit_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L409">        probe-&gt;observed_submission = *submission;</span>
+<span id="L410">        if (probe-&gt;runtime_poll) {</span>
+<span id="L411">            probe-&gt;pending_submission.store(</span>
+<span id="L412">                submission-&gt;submission_id, std::memory_order_release);</span>
+<span id="L413">        }</span>
+<span id="L414">        return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L415">    }</span>
+<span id="L416"></span>
+<span id="L417">    static rtfw_device_status poll(</span>
+<span id="L418">        void* instance,</span>
+<span id="L419">        rtfw_device_completion* output,</span>
+<span id="L420">        std::uint64_t capacity,</span>
+<span id="L421">        std::uint64_t* count) {</span>
+<span id="L422">        auto* probe = self(instance);</span>
+<span id="L423">        if (!probe || !output || capacity == 0 || !count) {</span>
+<span id="L424">            return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L425">        }</span>
+<span id="L426">        probe-&gt;poll_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L427">        if (probe-&gt;throw_poll) {</span>
+<span id="L428">            throw std::runtime_error(&quot;v1 poll&quot;);</span>
+<span id="L429">        }</span>
+<span id="L430">        output[0] = probe-&gt;completion;</span>
+<span id="L431">        if (probe-&gt;runtime_poll) {</span>
+<span id="L432">            const auto submission_id = probe-&gt;pending_submission.exchange(</span>
+<span id="L433">                0, std::memory_order_acq_rel);</span>
+<span id="L434">            if (submission_id == 0) {</span>
+<span id="L435">                *count = 0;</span>
+<span id="L436">                return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L437">            }</span>
+<span id="L438">            output[0].submission_id = submission_id;</span>
+<span id="L439">        }</span>
+<span id="L440">        *count = 1;</span>
+<span id="L441">        return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L442">    }</span>
+<span id="L443"></span>
+<span id="L444">    static rtfw_device_status cancel(void* instance, std::uint64_t id) {</span>
+<span id="L445">        auto* probe = self(instance);</span>
+<span id="L446">        if (!probe) {</span>
+<span id="L447">            return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L448">        }</span>
+<span id="L449">        probe-&gt;cancel_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L450">        probe-&gt;observed_cancel_id = id;</span>
+<span id="L451">        return probe-&gt;cancel_status;</span>
+<span id="L452">    }</span>
+<span id="L453"></span>
+<span id="L454">    static rtfw_device_status get_health(</span>
+<span id="L455">        void* instance, rtfw_device_health* output) {</span>
+<span id="L456">        auto* probe = self(instance);</span>
+<span id="L457">        if (!probe || !output) {</span>
+<span id="L458">            return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L459">        }</span>
+<span id="L460">        probe-&gt;health_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L461">        *output = probe-&gt;health;</span>
+<span id="L462">        return RTFW_DEVICE_STATUS_OK;</span>
+<span id="L463">    }</span>
+<span id="L464"></span>
+<span id="L465">    static rtfw_device_status reset(void* instance) {</span>
+<span id="L466">        auto* probe = self(instance);</span>
+<span id="L467">        if (!probe) {</span>
+<span id="L468">            return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L469">        }</span>
+<span id="L470">        probe-&gt;reset_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L471">        return probe-&gt;reset_status;</span>
+<span id="L472">    }</span>
+<span id="L473"></span>
+<span id="L474">    static rtfw_device_status shutdown(void* instance) {</span>
+<span id="L475">        auto* probe = self(instance);</span>
+<span id="L476">        if (!probe) {</span>
+<span id="L477">            return RTFW_DEVICE_STATUS_INVALID_ARGUMENT;</span>
+<span id="L478">        }</span>
+<span id="L479">        probe-&gt;shutdown_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L480">        return probe-&gt;shutdown_status;</span>
+<span id="L481">    }</span>
+<span id="L482">};</span>
+<span id="L483"></span>
+<span id="L484">struct SubmissionRequest {</span>
+<span id="L485">    rt::DeviceBufferHandle buffer{};</span>
+<span id="L486">};</span>
+<span id="L487"></span>
+<span id="L488">rt::CallbackResult prepare_submission(</span>
+<span id="L489">    void* user_data,</span>
+<span id="L490">    const rt::DeviceCallbackContext&amp;,</span>
+<span id="L491">    rt::DeviceSubmission&amp; submission) {</span>
+<span id="L492">    const auto&amp; request = *static_cast&lt;SubmissionRequest*&gt;(user_data);</span>
+<span id="L493">    submission.timeout_ns = 99&#x27;000;</span>
+<span id="L494">    submission.opcode = 0x1234u;</span>
+<span id="L495">    submission.payload_size = 3;</span>
+<span id="L496">    submission.payload[0] = 0x11u;</span>
+<span id="L497">    submission.payload[1] = 0x22u;</span>
+<span id="L498">    submission.payload[2] = 0x33u;</span>
+<span id="L499">    submission.buffer_count = 1;</span>
+<span id="L500">    submission.buffers[0].buffer_token = request.buffer.value;</span>
+<span id="L501">    submission.buffers[0].access = RTFW_DEVICE_ACCESS_READ_WRITE;</span>
+<span id="L502">    submission.buffers[0].offset = 2;</span>
+<span id="L503">    submission.buffers[0].bytes = 5;</span>
+<span id="L504">    return rt::CallbackResult::ok;</span>
+<span id="L505">}</span>
+<span id="L506"></span>
+<span id="L507">rt::CallbackResult prepare_no_buffer_submission(</span>
+<span id="L508">    void*,</span>
+<span id="L509">    const rt::DeviceCallbackContext&amp;,</span>
+<span id="L510">    rt::DeviceSubmission&amp; submission) {</span>
+<span id="L511">    submission.timeout_ns = 99&#x27;000;</span>
+<span id="L512">    submission.opcode = 0x1234u;</span>
+<span id="L513">    return rt::CallbackResult::ok;</span>
+<span id="L514">}</span>
+<span id="L515"></span>
+<span id="L516">rt::Status register_native(</span>
+<span id="L517">    rt::Runtime&amp; runtime,</span>
+<span id="L518">    NativeProbe&amp; probe,</span>
+<span id="L519">    std::string_view name,</span>
+<span id="L520">    rt::DeviceBackendHandle&amp; handle) {</span>
+<span id="L521">    return runtime.register_device_backend(</span>
+<span id="L522">        rt::HalV2BackendRegistration{name, probe.api()}, handle);</span>
+<span id="L523">}</span>
+<span id="L524"></span>
+<span id="L525">rt::CheckpointMetadata checkpoint_metadata(rt::Runtime&amp; runtime) {</span>
+<span id="L526">    std::array&lt;std::byte, 1024&gt; bytes{};</span>
+<span id="L527">    rt::ArtifactWriteResult result;</span>
+<span id="L528">    EXPECT_EQ(</span>
+<span id="L529">        runtime.write_checkpoint(0, bytes, result),</span>
+<span id="L530">        rt::Status::ok);</span>
+<span id="L531">    rt::CheckpointMetadata output;</span>
+<span id="L532">    EXPECT_EQ(</span>
+<span id="L533">        rt::inspect_checkpoint_artifact(</span>
+<span id="L534">            std::span&lt;const std::byte&gt;(bytes.data(), result.bytes_written),</span>
+<span id="L535">            output),</span>
+<span id="L536">        rt::Status::ok);</span>
+<span id="L537">    return output;</span>
+<span id="L538">}</span>
+<span id="L539"></span>
+<span id="L540">} // namespace</span>
+<span id="L541"></span>
+<span id="L542">TEST(HalV2, ApiVersionDefaultsAndLayoutsAreExact) {</span>
+<span id="L543">    EXPECT_EQ(rt::hal_v2_api_version, 2u);</span>
+<span id="L544">    EXPECT_EQ(rt::hal_v2_identifier_capacity, 64u);</span>
+<span id="L545">    EXPECT_EQ(rt::hal_v2_inline_payload_capacity, 128u);</span>
+<span id="L546">    EXPECT_EQ(rt::hal_v2_buffer_ref_capacity, 8u);</span>
+<span id="L547">    EXPECT_EQ(sizeof(rt::HalV2Capabilities), sizeof(rtfw_device_capabilities));</span>
+<span id="L548">    EXPECT_EQ(sizeof(rt::HalV2InitializeConfig), sizeof(rtfw_device_init_config));</span>
+<span id="L549">    EXPECT_EQ(</span>
+<span id="L550">        sizeof(rt::HalV2BufferRegistration),</span>
+<span id="L551">        sizeof(rtfw_device_buffer_registration));</span>
+<span id="L552">    EXPECT_EQ(sizeof(rt::HalV2BufferReference), sizeof(rtfw_device_buffer_ref));</span>
+<span id="L553">    EXPECT_EQ(sizeof(rt::HalV2Submission), sizeof(rtfw_device_submission));</span>
+<span id="L554">    EXPECT_EQ(sizeof(rt::HalV2Completion), sizeof(rtfw_device_completion));</span>
+<span id="L555">    EXPECT_EQ(sizeof(rt::HalV2Health), sizeof(rtfw_device_health));</span>
+<span id="L556">    EXPECT_EQ(sizeof(rt::HalV2BackendApi), sizeof(rtfw_device_backend_api));</span>
+<span id="L557"></span>
+<span id="L558">    const rt::HalV2Capabilities capabilities;</span>
+<span id="L559">    const rt::HalV2InitializeConfig initialize;</span>
+<span id="L560">    const rt::HalV2BufferRegistration buffer;</span>
+<span id="L561">    const rt::HalV2Submission submission;</span>
+<span id="L562">    const rt::HalV2Completion completion;</span>
+<span id="L563">    const rt::HalV2Health health;</span>
+<span id="L564">    const rt::HalV2BackendApi api;</span>
+<span id="L565">    EXPECT_EQ(capabilities.struct_size, sizeof(capabilities));</span>
+<span id="L566">    EXPECT_EQ(capabilities.api_version, 2u);</span>
+<span id="L567">    EXPECT_EQ(initialize.struct_size, sizeof(initialize));</span>
+<span id="L568">    EXPECT_EQ(initialize.api_version, 2u);</span>
+<span id="L569">    EXPECT_EQ(buffer.struct_size, sizeof(buffer));</span>
+<span id="L570">    EXPECT_EQ(submission.struct_size, sizeof(submission));</span>
+<span id="L571">    EXPECT_EQ(submission.api_version, 2u);</span>
+<span id="L572">    EXPECT_EQ(completion.struct_size, sizeof(completion));</span>
+<span id="L573">    EXPECT_EQ(health.struct_size, sizeof(health));</span>
+<span id="L574">    EXPECT_EQ(api.struct_size, sizeof(api));</span>
+<span id="L575">    EXPECT_EQ(api.api_version, 2u);</span>
+<span id="L576">    EXPECT_EQ(api.instance, nullptr);</span>
+<span id="L577">    EXPECT_TRUE(all_zero(capabilities.reserved));</span>
+<span id="L578">    EXPECT_TRUE(all_zero(initialize.reserved));</span>
+<span id="L579">    EXPECT_TRUE(all_zero(buffer.reserved));</span>
+<span id="L580">    EXPECT_TRUE(all_zero(submission.reserved));</span>
+<span id="L581">    EXPECT_TRUE(all_zero(completion.reserved));</span>
+<span id="L582">    EXPECT_TRUE(all_zero(health.reserved));</span>
+<span id="L583">    EXPECT_TRUE(all_zero(api.reserved));</span>
+<span id="L584">}</span>
+<span id="L585"></span>
+<span id="L586">TEST(HalV2, NativeRegistrationAndOperationTranslationAreExact) {</span>
+<span id="L587">    NativeProbe probe;</span>
+<span id="L588">    auto copied_api = probe.api();</span>
+<span id="L589">    rt::Runtime runtime;</span>
+<span id="L590">    ASSERT_EQ(runtime.configure(hal_config()), rt::Status::ok);</span>
+<span id="L591">    rt::DeviceBackendHandle backend;</span>
+<span id="L592">    ASSERT_EQ(</span>
+<span id="L593">        runtime.register_device_backend(</span>
+<span id="L594">            {&quot;native&quot;, copied_api}, backend),</span>
+<span id="L595">        rt::Status::ok);</span>
+<span id="L596">    copied_api.poll = nullptr;</span>
+<span id="L597"></span>
+<span id="L598">    std::array&lt;std::byte, 16&gt; storage{};</span>
+<span id="L599">    rt::DeviceBufferHandle buffer;</span>
+<span id="L600">    ASSERT_EQ(</span>
+<span id="L601">        runtime.register_device_buffer(</span>
+<span id="L602">            {&quot;native.buffer&quot;, backend, storage}, buffer),</span>
+<span id="L603">        rt::Status::ok);</span>
+<span id="L604">    SubmissionRequest request{buffer};</span>
+<span id="L605">    rt::PhaseHandle phase;</span>
+<span id="L606">    ASSERT_EQ(</span>
+<span id="L607">        runtime.register_device_phase(</span>
+<span id="L608">            {&quot;native.phase&quot;, backend, &amp;prepare_submission, &amp;request},</span>
+<span id="L609">            phase),</span>
+<span id="L610">        rt::Status::ok);</span>
+<span id="L611">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L612">    rt::DeviceBackendHandle frozen;</span>
+<span id="L613">    EXPECT_EQ(register_native(runtime, probe, &quot;late&quot;, frozen), rt::Status::invalid_state);</span>
+<span id="L614">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L615">    ASSERT_EQ(runtime.step({41, 1ms, std::nullopt}), rt::Status::ok);</span>
+<span id="L616"></span>
+<span id="L617">    auto health = rt::make_device_health();</span>
+<span id="L618">    ASSERT_EQ(runtime.device_health(backend, health), rt::Status::ok);</span>
+<span id="L619">    EXPECT_EQ(health.state, RTFW_DEVICE_HEALTH_HEALTHY);</span>
+<span id="L620">    EXPECT_EQ(health.generation, 9u);</span>
+<span id="L621">    EXPECT_EQ(health.submissions, 1u);</span>
+<span id="L622">    EXPECT_EQ(health.completions, 1u);</span>
+<span id="L623">    EXPECT_EQ(runtime.reset_device(backend), rt::Status::ok);</span>
+<span id="L624">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L625"></span>
+<span id="L626">    EXPECT_EQ(probe.capability_calls.load(), 1u);</span>
+<span id="L627">    EXPECT_EQ(probe.initialize_calls.load(), 1u);</span>
+<span id="L628">    EXPECT_EQ(probe.register_calls.load(), 1u);</span>
+<span id="L629">    EXPECT_EQ(probe.submit_calls.load(), 1u);</span>
+<span id="L630">    EXPECT_GE(probe.poll_calls.load(), 1u);</span>
+<span id="L631">    EXPECT_EQ(probe.health_calls.load(), 1u);</span>
+<span id="L632">    EXPECT_EQ(probe.reset_calls.load(), 1u);</span>
+<span id="L633">    EXPECT_EQ(probe.unregister_calls.load(), 1u);</span>
+<span id="L634">    EXPECT_EQ(probe.shutdown_calls.load(), 1u);</span>
+<span id="L635">    EXPECT_EQ(probe.observed_initialize.struct_size,</span>
+<span id="L636">              sizeof(rt::HalV2InitializeConfig));</span>
+<span id="L637">    EXPECT_EQ(probe.observed_initialize.api_version, 2u);</span>
+<span id="L638">    EXPECT_EQ(probe.observed_initialize.requested_in_flight, 4u);</span>
+<span id="L639">    EXPECT_EQ(probe.observed_initialize.requested_registered_buffers, 1u);</span>
+<span id="L640">    EXPECT_TRUE(all_zero(probe.observed_initialize.reserved));</span>
+<span id="L641">    EXPECT_EQ(probe.observed_buffer.data, storage.data());</span>
+<span id="L642">    EXPECT_EQ(probe.observed_buffer.bytes, storage.size());</span>
+<span id="L643">    EXPECT_EQ(</span>
+<span id="L644">        probe.observed_buffer.flags,</span>
+<span id="L645">        RTFW_DEVICE_BUFFER_HOST_READ |</span>
+<span id="L646">            RTFW_DEVICE_BUFFER_HOST_WRITE |</span>
+<span id="L647">            RTFW_DEVICE_BUFFER_DEVICE_READ |</span>
+<span id="L648">            RTFW_DEVICE_BUFFER_DEVICE_WRITE);</span>
+<span id="L649">    EXPECT_EQ(</span>
+<span id="L650">        std::string_view(probe.observed_buffer.name.data()),</span>
+<span id="L651">        &quot;native.buffer&quot;);</span>
+<span id="L652">    EXPECT_TRUE(all_zero(probe.observed_buffer.reserved));</span>
+<span id="L653">    EXPECT_NE(probe.observed_submission.submission_id, 0u);</span>
+<span id="L654">    EXPECT_EQ(probe.observed_submission.frame_index, 41u);</span>
+<span id="L655">    EXPECT_EQ(probe.observed_submission.timeout_ns, 99&#x27;000u);</span>
+<span id="L656">    EXPECT_EQ(probe.observed_submission.opcode, 0x1234u);</span>
+<span id="L657">    EXPECT_EQ(probe.observed_submission.payload_size, 3u);</span>
+<span id="L658">    EXPECT_EQ(probe.observed_submission.payload[0], 0x11u);</span>
+<span id="L659">    EXPECT_EQ(probe.observed_submission.payload[1], 0x22u);</span>
+<span id="L660">    EXPECT_EQ(probe.observed_submission.payload[2], 0x33u);</span>
+<span id="L661">    EXPECT_EQ(probe.observed_submission.buffer_count, 1u);</span>
+<span id="L662">    EXPECT_EQ(</span>
+<span id="L663">        probe.observed_submission.buffers[0].buffer_token,</span>
+<span id="L664">        NativeProbe::native_buffer_token);</span>
+<span id="L665">    EXPECT_EQ(</span>
+<span id="L666">        probe.observed_submission.buffers[0].access,</span>
+<span id="L667">        RTFW_DEVICE_ACCESS_READ_WRITE);</span>
+<span id="L668">    EXPECT_EQ(probe.observed_submission.buffers[0].offset, 2u);</span>
+<span id="L669">    EXPECT_EQ(probe.observed_submission.buffers[0].bytes, 5u);</span>
+<span id="L670">    EXPECT_TRUE(all_zero(probe.observed_submission.reserved));</span>
+<span id="L671">    EXPECT_EQ(</span>
+<span id="L672">        probe.observed_unregister_token,</span>
+<span id="L673">        NativeProbe::native_buffer_token);</span>
+<span id="L674">}</span>
+<span id="L675"></span>
+<span id="L676">TEST(HalV2, MalformedTablesAndCapabilitiesFailTransactionally) {</span>
+<span id="L677">    NativeProbe probe;</span>
+<span id="L678">    const auto good = probe.api();</span>
+<span id="L679">    const auto expect_invalid_api = [&amp;](rt::HalV2BackendApi api) {</span>
+<span id="L680">        rt::Runtime runtime;</span>
+<span id="L681">        EXPECT_EQ(runtime.configure(hal_config()), rt::Status::ok);</span>
+<span id="L682">        rt::DeviceBackendHandle handle;</span>
+<span id="L683">        EXPECT_EQ(</span>
+<span id="L684">            runtime.register_device_backend({&quot;bad&quot;, api}, handle),</span>
+<span id="L685">            rt::Status::invalid_argument);</span>
+<span id="L686">        EXPECT_FALSE(handle.valid());</span>
+<span id="L687">    };</span>
+<span id="L688"></span>
+<span id="L689">    auto malformed = good;</span>
+<span id="L690">    malformed.struct_size = sizeof(malformed) - 1;</span>
+<span id="L691">    expect_invalid_api(malformed);</span>
+<span id="L692">    malformed = good;</span>
+<span id="L693">    malformed.api_version = 1;</span>
+<span id="L694">    expect_invalid_api(malformed);</span>
+<span id="L695">    malformed = good;</span>
+<span id="L696">    malformed.instance = nullptr;</span>
+<span id="L697">    expect_invalid_api(malformed);</span>
+<span id="L698">    malformed = good;</span>
+<span id="L699">    malformed.get_capabilities = nullptr;</span>
+<span id="L700">    expect_invalid_api(malformed);</span>
+<span id="L701">    malformed = good;</span>
+<span id="L702">    malformed.initialize = nullptr;</span>
+<span id="L703">    expect_invalid_api(malformed);</span>
+<span id="L704">    malformed = good;</span>
+<span id="L705">    malformed.register_buffer = nullptr;</span>
+<span id="L706">    expect_invalid_api(malformed);</span>
+<span id="L707">    malformed = good;</span>
+<span id="L708">    malformed.unregister_buffer = nullptr;</span>
+<span id="L709">    expect_invalid_api(malformed);</span>
+<span id="L710">    malformed = good;</span>
+<span id="L711">    malformed.submit = nullptr;</span>
+<span id="L712">    expect_invalid_api(malformed);</span>
+<span id="L713">    malformed = good;</span>
+<span id="L714">    malformed.poll = nullptr;</span>
+<span id="L715">    expect_invalid_api(malformed);</span>
+<span id="L716">    malformed = good;</span>
+<span id="L717">    malformed.cancel = nullptr;</span>
+<span id="L718">    expect_invalid_api(malformed);</span>
+<span id="L719">    malformed = good;</span>
+<span id="L720">    malformed.get_health = nullptr;</span>
+<span id="L721">    expect_invalid_api(malformed);</span>
+<span id="L722">    malformed = good;</span>
+<span id="L723">    malformed.reset = nullptr;</span>
+<span id="L724">    expect_invalid_api(malformed);</span>
+<span id="L725">    malformed = good;</span>
+<span id="L726">    malformed.shutdown = nullptr;</span>
+<span id="L727">    expect_invalid_api(malformed);</span>
+<span id="L728">    malformed = good;</span>
+<span id="L729">    malformed.reserved[3] = 1;</span>
+<span id="L730">    expect_invalid_api(malformed);</span>
+<span id="L731"></span>
+<span id="L732">    const auto expect_invalid_capabilities = [&amp;](NativeProbe&amp; candidate) {</span>
+<span id="L733">        rt::Runtime runtime;</span>
+<span id="L734">        EXPECT_EQ(runtime.configure(hal_config()), rt::Status::ok);</span>
+<span id="L735">        rt::DeviceBackendHandle handle;</span>
+<span id="L736">        EXPECT_EQ(</span>
+<span id="L737">            register_native(runtime, candidate, &quot;bad.caps&quot;, handle),</span>
+<span id="L738">            rt::Status::invalid_argument);</span>
+<span id="L739">        EXPECT_FALSE(handle.valid());</span>
+<span id="L740">    };</span>
+<span id="L741">    NativeProbe short_caps;</span>
+<span id="L742">    short_caps.capabilities.struct_size = sizeof(rt::HalV2Capabilities) - 1;</span>
+<span id="L743">    expect_invalid_capabilities(short_caps);</span>
+<span id="L744">    NativeProbe wrong_version;</span>
+<span id="L745">    wrong_version.capabilities.api_version = 1;</span>
+<span id="L746">    expect_invalid_capabilities(wrong_version);</span>
+<span id="L747">    NativeProbe zero_capacity;</span>
+<span id="L748">    zero_capacity.capabilities.max_in_flight = 0;</span>
+<span id="L749">    expect_invalid_capabilities(zero_capacity);</span>
+<span id="L750">    NativeProbe invalid_boolean;</span>
+<span id="L751">    invalid_boolean.capabilities.supports_reset = 2;</span>
+<span id="L752">    expect_invalid_capabilities(invalid_boolean);</span>
+<span id="L753">    NativeProbe invalid_identifier;</span>
+<span id="L754">    set_identifier(invalid_identifier.capabilities.backend_id, &quot;bad id&quot;);</span>
+<span id="L755">    expect_invalid_capabilities(invalid_identifier);</span>
+<span id="L756">    NativeProbe reserved;</span>
+<span id="L757">    reserved.capabilities.reserved[0] = 1;</span>
+<span id="L758">    expect_invalid_capabilities(reserved);</span>
+<span id="L759"></span>
+<span id="L760">    NativeProbe first(&quot;test.hal.first&quot;);</span>
+<span id="L761">    NativeProbe second(&quot;test.hal.second&quot;);</span>
+<span id="L762">    rt::Runtime bounded;</span>
+<span id="L763">    ASSERT_EQ(bounded.configure(hal_config()), rt::Status::ok);</span>
+<span id="L764">    rt::DeviceBackendHandle first_handle;</span>
+<span id="L765">    rt::DeviceBackendHandle ignored;</span>
+<span id="L766">    ASSERT_EQ(register_native(bounded, first, &quot;only&quot;, first_handle), rt::Status::ok);</span>
+<span id="L767">    EXPECT_EQ(register_native(bounded, first, &quot;only&quot;, ignored), rt::Status::capacity_exceeded);</span>
+<span id="L768">    EXPECT_EQ(register_native(bounded, second, &quot;second&quot;, ignored), rt::Status::capacity_exceeded);</span>
+<span id="L769">    EXPECT_FALSE(ignored.valid());</span>
+<span id="L770"></span>
+<span id="L771">    rt::Runtime duplicate;</span>
+<span id="L772">    ASSERT_EQ(duplicate.configure(hal_config(2)), rt::Status::ok);</span>
+<span id="L773">    ASSERT_EQ(</span>
+<span id="L774">        register_native(duplicate, first, &quot;duplicate&quot;, first_handle),</span>
+<span id="L775">        rt::Status::ok);</span>
+<span id="L776">    EXPECT_EQ(</span>
+<span id="L777">        register_native(duplicate, second, &quot;duplicate&quot;, ignored),</span>
+<span id="L778">        rt::Status::invalid_argument);</span>
+<span id="L779">    EXPECT_FALSE(ignored.valid());</span>
+<span id="L780">}</span>
+<span id="L781"></span>
+<span id="L782">TEST(HalV2, NativeAndV1StatusesAndExceptionsAreEquivalent) {</span>
+<span id="L783">    struct Case {</span>
+<span id="L784">        std::int32_t value;</span>
+<span id="L785">        rt::Status expected;</span>
+<span id="L786">    };</span>
+<span id="L787">    constexpr std::array cases{</span>
+<span id="L788">        Case{0, rt::Status::ok},</span>
+<span id="L789">        Case{-1, rt::Status::invalid_argument},</span>
+<span id="L790">        Case{-2, rt::Status::invalid_state},</span>
+<span id="L791">        Case{-3, rt::Status::device_queue_full},</span>
+<span id="L792">        Case{-4, rt::Status::device_timeout},</span>
+<span id="L793">        Case{-5, rt::Status::device_error},</span>
+<span id="L794">        Case{-6, rt::Status::device_lost},</span>
+<span id="L795">        Case{-7, rt::Status::device_canceled},</span>
+<span id="L796">        Case{-8, rt::Status::device_error},</span>
+<span id="L797">        Case{-9, rt::Status::resource_exhausted},</span>
+<span id="L798">        Case{-10, rt::Status::device_error},</span>
+<span id="L799">        Case{-11, rt::Status::device_reset_required},</span>
+<span id="L800">        Case{17, rt::Status::device_error},</span>
+<span id="L801">    };</span>
+<span id="L802">    for (const auto&amp; test_case : cases) {</span>
+<span id="L803">        SCOPED_TRACE(test_case.value);</span>
+<span id="L804">        NativeProbe native;</span>
+<span id="L805">        native.capability_status =</span>
+<span id="L806">            static_cast&lt;rt::HalV2Status&gt;(test_case.value);</span>
+<span id="L807">        rt::Runtime native_runtime;</span>
+<span id="L808">        ASSERT_EQ(native_runtime.configure(hal_config()), rt::Status::ok);</span>
+<span id="L809">        rt::DeviceBackendHandle native_handle;</span>
+<span id="L810">        EXPECT_EQ(</span>
+<span id="L811">            register_native(native_runtime, native, &quot;status&quot;, native_handle),</span>
+<span id="L812">            test_case.expected);</span>
+<span id="L813">        EXPECT_EQ(native.capability_calls.load(), 1u);</span>
+<span id="L814">        EXPECT_EQ(native_handle.valid(), test_case.expected == rt::Status::ok);</span>
+<span id="L815"></span>
+<span id="L816">        V1Probe v1;</span>
+<span id="L817">        v1.capability_status = test_case.value;</span>
+<span id="L818">        rt::Runtime v1_runtime;</span>
+<span id="L819">        ASSERT_EQ(v1_runtime.configure(hal_config()), rt::Status::ok);</span>
+<span id="L820">        rt::DeviceBackendHandle v1_handle;</span>
+<span id="L821">        EXPECT_EQ(</span>
+<span id="L822">            v1_runtime.register_device_backend(</span>
+<span id="L823">                {&quot;status&quot;, v1.api()}, v1_handle),</span>
+<span id="L824">            test_case.expected);</span>
+<span id="L825">        EXPECT_EQ(v1.capability_calls.load(), 1u);</span>
+<span id="L826">        EXPECT_EQ(v1_handle.valid(), test_case.expected == rt::Status::ok);</span>
+<span id="L827">    }</span>
+<span id="L828"></span>
+<span id="L829">    NativeProbe native_throw;</span>
+<span id="L830">    native_throw.throw_capabilities = true;</span>
+<span id="L831">    rt::Runtime native_runtime;</span>
+<span id="L832">    ASSERT_EQ(native_runtime.configure(hal_config()), rt::Status::ok);</span>
+<span id="L833">    rt::DeviceBackendHandle handle;</span>
+<span id="L834">    EXPECT_EQ(</span>
+<span id="L835">        register_native(native_runtime, native_throw, &quot;throw&quot;, handle),</span>
+<span id="L836">        rt::Status::device_error);</span>
+<span id="L837">    EXPECT_FALSE(handle.valid());</span>
+<span id="L838"></span>
+<span id="L839">    V1Probe v1_throw;</span>
+<span id="L840">    v1_throw.throw_capabilities = true;</span>
+<span id="L841">    rt::Runtime v1_runtime;</span>
+<span id="L842">    ASSERT_EQ(v1_runtime.configure(hal_config()), rt::Status::ok);</span>
+<span id="L843">    EXPECT_EQ(</span>
+<span id="L844">        v1_runtime.register_device_backend(</span>
+<span id="L845">            {&quot;throw&quot;, v1_throw.api()}, handle),</span>
+<span id="L846">        rt::Status::device_error);</span>
+<span id="L847">    EXPECT_FALSE(handle.valid());</span>
+<span id="L848"></span>
+<span id="L849">    NativeProbe submit_throw;</span>
+<span id="L850">    submit_throw.throw_submit = true;</span>
+<span id="L851">    rt::Runtime step_runtime;</span>
+<span id="L852">    ASSERT_EQ(step_runtime.configure(hal_config()), rt::Status::ok);</span>
+<span id="L853">    rt::DeviceBackendHandle backend;</span>
+<span id="L854">    ASSERT_EQ(register_native(step_runtime, submit_throw, &quot;throw.submit&quot;, backend), rt::Status::ok);</span>
+<span id="L855">    rt::PhaseHandle phase;</span>
+<span id="L856">    ASSERT_EQ(</span>
+<span id="L857">        step_runtime.register_device_phase(</span>
+<span id="L858">            {&quot;throw.phase&quot;, backend, &amp;prepare_no_buffer_submission, nullptr},</span>
+<span id="L859">            phase),</span>
+<span id="L860">        rt::Status::ok);</span>
+<span id="L861">    ASSERT_EQ(step_runtime.finalize(), rt::Status::ok);</span>
+<span id="L862">    ASSERT_EQ(step_runtime.start(), rt::Status::ok);</span>
+<span id="L863">    EXPECT_EQ(</span>
+<span id="L864">        step_runtime.step({1, 1ms, std::nullopt}),</span>
+<span id="L865">        rt::Status::device_error);</span>
+<span id="L866">    EXPECT_EQ(submit_throw.submit_calls.load(), 1u);</span>
+<span id="L867">    EXPECT_EQ(step_runtime.stop(), rt::Status::ok);</span>
+<span id="L868">}</span>
+<span id="L869"></span>
+<span id="L870">TEST(HalV2, DeviceAbiV1AdapterPreservesEveryCoreFieldAndFailsClosed) {</span>
+<span id="L871">    V1Probe probe(&quot;test.hal.translation&quot;);</span>
+<span id="L872">    rt::detail::DeviceV1CompatibilityAdapter adapter(probe.api());</span>
+<span id="L873">    ASSERT_EQ(</span>
+<span id="L874">        adapter.prepare_completion_storage(2),</span>
+<span id="L875">        rt::Status::ok);</span>
+<span id="L876">    const auto&amp; api = adapter.api();</span>
+<span id="L877"></span>
+<span id="L878">    rt::HalV2Capabilities capabilities;</span>
+<span id="L879">    ASSERT_EQ(</span>
+<span id="L880">        api.get_capabilities(api.instance, &amp;capabilities),</span>
+<span id="L881">        rt::HalV2Status::ok);</span>
+<span id="L882">    EXPECT_EQ(capabilities.struct_size, sizeof(capabilities));</span>
+<span id="L883">    EXPECT_EQ(capabilities.api_version, 2u);</span>
+<span id="L884">    EXPECT_EQ(capabilities.max_in_flight, 8u);</span>
+<span id="L885">    EXPECT_EQ(capabilities.max_registered_buffers, 8u);</span>
+<span id="L886">    EXPECT_EQ(capabilities.max_buffer_bytes, 4096u);</span>
+<span id="L887">    EXPECT_EQ(capabilities.inline_payload_capacity, 128u);</span>
+<span id="L888">    EXPECT_EQ(capabilities.buffer_ref_capacity, 8u);</span>
+<span id="L889">    EXPECT_EQ(capabilities.supports_cancel, 1u);</span>
+<span id="L890">    EXPECT_EQ(capabilities.supports_reset, 1u);</span>
+<span id="L891">    EXPECT_EQ(capabilities.deterministic_mock, 1u);</span>
+<span id="L892">    EXPECT_EQ(</span>
+<span id="L893">        std::string_view(capabilities.backend_id.data()),</span>
+<span id="L894">        &quot;test.hal.translation&quot;);</span>
+<span id="L895">    EXPECT_EQ(capabilities.control_storage_bytes, 37u);</span>
+<span id="L896">    EXPECT_TRUE(all_zero(capabilities.reserved));</span>
+<span id="L897">    EXPECT_EQ(probe.capability_calls.load(), 1u);</span>
+<span id="L898"></span>
+<span id="L899">    rt::HalV2InitializeConfig initialize;</span>
+<span id="L900">    initialize.requested_in_flight = 6;</span>
+<span id="L901">    initialize.requested_registered_buffers = 2;</span>
+<span id="L902">    ASSERT_EQ(</span>
+<span id="L903">        api.initialize(api.instance, &amp;initialize),</span>
+<span id="L904">        rt::HalV2Status::ok);</span>
+<span id="L905">    EXPECT_EQ(probe.initialize_calls.load(), 1u);</span>
+<span id="L906">    EXPECT_EQ(</span>
+<span id="L907">        probe.observed_initialize.struct_size,</span>
+<span id="L908">        sizeof(rtfw_device_init_config));</span>
+<span id="L909">    EXPECT_EQ(</span>
+<span id="L910">        probe.observed_initialize.abi_version,</span>
+<span id="L911">        RTFW_DEVICE_ABI_VERSION);</span>
+<span id="L912">    EXPECT_EQ(probe.observed_initialize.requested_in_flight, 6u);</span>
+<span id="L913">    EXPECT_EQ(</span>
+<span id="L914">        probe.observed_initialize.requested_registered_buffers,</span>
+<span id="L915">        2u);</span>
+<span id="L916">    EXPECT_TRUE(std::all_of(</span>
+<span id="L917">        std::begin(probe.observed_initialize.reserved),</span>
+<span id="L918">        std::end(probe.observed_initialize.reserved),</span>
+<span id="L919">        [](std::uint64_t value) { return value == 0; }));</span>
+<span id="L920"></span>
+<span id="L921">    std::array&lt;std::byte, 32&gt; storage{};</span>
+<span id="L922">    rt::HalV2BufferRegistration registration;</span>
+<span id="L923">    registration.flags =</span>
+<span id="L924">        RTFW_DEVICE_BUFFER_HOST_READ |</span>
+<span id="L925">        RTFW_DEVICE_BUFFER_DEVICE_WRITE;</span>
+<span id="L926">    registration.data = storage.data();</span>
+<span id="L927">    registration.bytes = storage.size();</span>
+<span id="L928">    set_identifier(registration.name, &quot;translation.buffer&quot;);</span>
+<span id="L929">    std::uint64_t token = 0;</span>
+<span id="L930">    ASSERT_EQ(</span>
+<span id="L931">        api.register_buffer(</span>
+<span id="L932">            api.instance, &amp;registration, &amp;token),</span>
+<span id="L933">        rt::HalV2Status::ok);</span>
+<span id="L934">    EXPECT_EQ(probe.register_calls.load(), 1u);</span>
+<span id="L935">    EXPECT_EQ(token, probe.buffer_token);</span>
+<span id="L936">    EXPECT_EQ(</span>
+<span id="L937">        probe.observed_buffer.struct_size,</span>
+<span id="L938">        sizeof(rtfw_device_buffer_registration));</span>
+<span id="L939">    EXPECT_EQ(probe.observed_buffer.flags, registration.flags);</span>
+<span id="L940">    EXPECT_EQ(probe.observed_buffer.data, storage.data());</span>
+<span id="L941">    EXPECT_EQ(probe.observed_buffer.bytes, storage.size());</span>
+<span id="L942">    EXPECT_EQ(</span>
+<span id="L943">        std::string_view(probe.observed_buffer.name),</span>
+<span id="L944">        &quot;translation.buffer&quot;);</span>
+<span id="L945">    EXPECT_TRUE(std::all_of(</span>
+<span id="L946">        std::begin(probe.observed_buffer.reserved),</span>
+<span id="L947">        std::end(probe.observed_buffer.reserved),</span>
+<span id="L948">        [](std::uint64_t value) { return value == 0; }));</span>
+<span id="L949"></span>
+<span id="L950">    probe.register_status = RTFW_DEVICE_STATUS_ERROR;</span>
+<span id="L951">    token = 0;</span>
+<span id="L952">    EXPECT_EQ(</span>
+<span id="L953">        api.register_buffer(api.instance, &amp;registration, &amp;token),</span>
+<span id="L954">        rt::HalV2Status::error);</span>
+<span id="L955">    EXPECT_EQ(token, probe.buffer_token);</span>
+<span id="L956">    probe.register_status = RTFW_DEVICE_STATUS_OK;</span>
+<span id="L957">    probe.throw_register = true;</span>
+<span id="L958">    token = 0;</span>
+<span id="L959">    EXPECT_EQ(</span>
+<span id="L960">        api.register_buffer(api.instance, &amp;registration, &amp;token),</span>
+<span id="L961">        rt::HalV2Status::internal_error);</span>
+<span id="L962">    EXPECT_EQ(token, probe.buffer_token);</span>
+<span id="L963">    probe.throw_register = false;</span>
+<span id="L964"></span>
+<span id="L965">    rt::HalV2Submission submission;</span>
+<span id="L966">    submission.submission_id = 77;</span>
+<span id="L967">    submission.frame_index = 123;</span>
+<span id="L968">    submission.timeout_ns = 456;</span>
+<span id="L969">    submission.opcode = 0x789u;</span>
+<span id="L970">    submission.payload_size = 3;</span>
+<span id="L971">    submission.payload[0] = 0x12u;</span>
+<span id="L972">    submission.payload[1] = 0x34u;</span>
+<span id="L973">    submission.payload[2] = 0x56u;</span>
+<span id="L974">    submission.payload.back() = 0xa5u;</span>
+<span id="L975">    submission.buffer_count = 2;</span>
+<span id="L976">    submission.buffers[0].buffer_token = 0x100u;</span>
+<span id="L977">    submission.buffers[0].access = RTFW_DEVICE_ACCESS_READ;</span>
+<span id="L978">    submission.buffers[0].offset = 4;</span>
+<span id="L979">    submission.buffers[0].bytes = 5;</span>
+<span id="L980">    submission.buffers[1].buffer_token = 0x200u;</span>
+<span id="L981">    submission.buffers[1].access = RTFW_DEVICE_ACCESS_WRITE;</span>
+<span id="L982">    submission.buffers[1].offset = 6;</span>
+<span id="L983">    submission.buffers[1].bytes = 7;</span>
+<span id="L984">    ASSERT_EQ(</span>
+<span id="L985">        api.submit(api.instance, &amp;submission),</span>
+<span id="L986">        rt::HalV2Status::ok);</span>
+<span id="L987">    EXPECT_EQ(probe.submit_calls.load(), 1u);</span>
+<span id="L988">    EXPECT_EQ(</span>
+<span id="L989">        probe.observed_submission.struct_size,</span>
+<span id="L990">        sizeof(rtfw_device_submission));</span>
+<span id="L991">    EXPECT_EQ(</span>
+<span id="L992">        probe.observed_submission.abi_version,</span>
+<span id="L993">        RTFW_DEVICE_ABI_VERSION);</span>
+<span id="L994">    EXPECT_EQ(probe.observed_submission.submission_id, 77u);</span>
+<span id="L995">    EXPECT_EQ(probe.observed_submission.frame_index, 123u);</span>
+<span id="L996">    EXPECT_EQ(probe.observed_submission.timeout_ns, 456u);</span>
+<span id="L997">    EXPECT_EQ(probe.observed_submission.opcode, 0x789u);</span>
+<span id="L998">    EXPECT_EQ(probe.observed_submission.flags, 0u);</span>
+<span id="L999">    EXPECT_EQ(probe.observed_submission.payload_size, 3u);</span>
+<span id="L1000">    EXPECT_EQ(probe.observed_submission.payload[0], 0x12u);</span>
+<span id="L1001">    EXPECT_EQ(probe.observed_submission.payload[1], 0x34u);</span>
+<span id="L1002">    EXPECT_EQ(probe.observed_submission.payload[2], 0x56u);</span>
+<span id="L1003">    EXPECT_EQ(</span>
+<span id="L1004">        probe.observed_submission.payload[</span>
+<span id="L1005">            RTFW_DEVICE_INLINE_PAYLOAD_CAPACITY - 1],</span>
+<span id="L1006">        0xa5u);</span>
+<span id="L1007">    EXPECT_EQ(probe.observed_submission.buffer_count, 2u);</span>
+<span id="L1008">    EXPECT_EQ(probe.observed_submission.buffers[0].buffer_token, 0x100u);</span>
+<span id="L1009">    EXPECT_EQ(</span>
+<span id="L1010">        probe.observed_submission.buffers[0].access,</span>
+<span id="L1011">        RTFW_DEVICE_ACCESS_READ);</span>
+<span id="L1012">    EXPECT_EQ(probe.observed_submission.buffers[0].offset, 4u);</span>
+<span id="L1013">    EXPECT_EQ(probe.observed_submission.buffers[0].bytes, 5u);</span>
+<span id="L1014">    EXPECT_EQ(probe.observed_submission.buffers[0].reserved0, 0u);</span>
+<span id="L1015">    EXPECT_EQ(probe.observed_submission.buffers[1].buffer_token, 0x200u);</span>
+<span id="L1016">    EXPECT_EQ(</span>
+<span id="L1017">        probe.observed_submission.buffers[1].access,</span>
+<span id="L1018">        RTFW_DEVICE_ACCESS_WRITE);</span>
+<span id="L1019">    EXPECT_EQ(probe.observed_submission.buffers[1].offset, 6u);</span>
+<span id="L1020">    EXPECT_EQ(probe.observed_submission.buffers[1].bytes, 7u);</span>
+<span id="L1021">    EXPECT_EQ(probe.observed_submission.buffers[1].reserved0, 0u);</span>
+<span id="L1022">    EXPECT_TRUE(std::all_of(</span>
+<span id="L1023">        std::begin(probe.observed_submission.reserved),</span>
+<span id="L1024">        std::end(probe.observed_submission.reserved),</span>
+<span id="L1025">        [](std::uint64_t value) { return value == 0; }));</span>
+<span id="L1026"></span>
+<span id="L1027">    std::array&lt;rt::HalV2Completion, 2&gt; completions{};</span>
+<span id="L1028">    std::uint64_t completion_count = 0;</span>
+<span id="L1029">    ASSERT_EQ(</span>
+<span id="L1030">        api.poll(</span>
+<span id="L1031">            api.instance,</span>
+<span id="L1032">            completions.data(),</span>
+<span id="L1033">            completions.size(),</span>
+<span id="L1034">            &amp;completion_count),</span>
+<span id="L1035">        rt::HalV2Status::ok);</span>
+<span id="L1036">    EXPECT_EQ(probe.poll_calls.load(), 1u);</span>
+<span id="L1037">    ASSERT_EQ(completion_count, 1u);</span>
+<span id="L1038">    EXPECT_EQ(completions[0].status, RTFW_DEVICE_STATUS_TIMEOUT);</span>
+<span id="L1039">    EXPECT_EQ(completions[0].submission_id, 77u);</span>
+<span id="L1040">    EXPECT_EQ(completions[0].device_timestamp_ns, 88u);</span>
+<span id="L1041">    EXPECT_EQ(completions[0].value, 99u);</span>
+<span id="L1042">    EXPECT_TRUE(all_zero(completions[0].reserved));</span>
+<span id="L1043"></span>
+<span id="L1044">    rt::HalV2Health health;</span>
+<span id="L1045">    ASSERT_EQ(</span>
+<span id="L1046">        api.get_health(api.instance, &amp;health),</span>
+<span id="L1047">        rt::HalV2Status::ok);</span>
+<span id="L1048">    EXPECT_EQ(probe.health_calls.load(), 1u);</span>
+<span id="L1049">    EXPECT_EQ(</span>
+<span id="L1050">        health.state,</span>
+<span id="L1051">        static_cast&lt;std::uint32_t&gt;(rt::HalV2HealthState::degraded));</span>
+<span id="L1052">    EXPECT_EQ(</span>
+<span id="L1053">        health.last_status,</span>
+<span id="L1054">        static_cast&lt;std::int32_t&gt;(rt::HalV2Status::reset_required));</span>
+<span id="L1055">    EXPECT_EQ(health.generation, 1u);</span>
+<span id="L1056">    EXPECT_EQ(health.submissions, 2u);</span>
+<span id="L1057">    EXPECT_EQ(health.completions, 3u);</span>
+<span id="L1058">    EXPECT_EQ(health.queue_rejections, 4u);</span>
+<span id="L1059">    EXPECT_EQ(health.timeouts, 5u);</span>
+<span id="L1060">    EXPECT_EQ(health.errors, 6u);</span>
+<span id="L1061">    EXPECT_EQ(health.losses, 7u);</span>
+<span id="L1062">    EXPECT_EQ(health.cancellations, 8u);</span>
+<span id="L1063">    EXPECT_EQ(health.resets, 9u);</span>
+<span id="L1064">    EXPECT_EQ(health.outstanding, 10u);</span>
+<span id="L1065">    EXPECT_TRUE(all_zero(health.reserved));</span>
+<span id="L1066"></span>
+<span id="L1067">    EXPECT_EQ(</span>
+<span id="L1068">        api.unregister_buffer(api.instance, token),</span>
+<span id="L1069">        rt::HalV2Status::ok);</span>
+<span id="L1070">    EXPECT_EQ(probe.unregister_calls.load(), 1u);</span>
+<span id="L1071">    EXPECT_EQ(probe.observed_unregister_token, token);</span>
+<span id="L1072">    EXPECT_EQ(</span>
+<span id="L1073">        api.cancel(api.instance, 0x7788u),</span>
+<span id="L1074">        rt::HalV2Status::unsupported);</span>
+<span id="L1075">    EXPECT_EQ(probe.cancel_calls.load(), 1u);</span>
+<span id="L1076">    EXPECT_EQ(probe.observed_cancel_id, 0x7788u);</span>
+<span id="L1077">    probe.reset_status = 42;</span>
+<span id="L1078">    EXPECT_EQ(</span>
+<span id="L1079">        api.reset(api.instance),</span>
+<span id="L1080">        rt::HalV2Status::internal_error);</span>
+<span id="L1081">    EXPECT_EQ(probe.reset_calls.load(), 1u);</span>
+<span id="L1082">    probe.shutdown_status = RTFW_DEVICE_STATUS_RESET_REQUIRED;</span>
+<span id="L1083">    EXPECT_EQ(</span>
+<span id="L1084">        api.shutdown(api.instance),</span>
+<span id="L1085">        rt::HalV2Status::reset_required);</span>
+<span id="L1086">    EXPECT_EQ(probe.shutdown_calls.load(), 1u);</span>
+<span id="L1087"></span>
+<span id="L1088">    const auto poll_calls = probe.poll_calls.load();</span>
+<span id="L1089">    probe.completion.reserved[0] = 1;</span>
+<span id="L1090">    completions[0].value = 0xfeedu;</span>
+<span id="L1091">    completion_count = 9;</span>
+<span id="L1092">    EXPECT_EQ(</span>
+<span id="L1093">        api.poll(</span>
+<span id="L1094">            api.instance,</span>
+<span id="L1095">            completions.data(),</span>
+<span id="L1096">            completions.size(),</span>
+<span id="L1097">            &amp;completion_count),</span>
+<span id="L1098">        rt::HalV2Status::internal_error);</span>
+<span id="L1099">    EXPECT_EQ(probe.poll_calls.load(), poll_calls + 1);</span>
+<span id="L1100">    EXPECT_EQ(completion_count, 0u);</span>
+<span id="L1101">    EXPECT_EQ(completions[0].value, 0xfeedu);</span>
+<span id="L1102">    probe.completion.reserved[0] = 0;</span>
+<span id="L1103">    probe.completion.status = 42;</span>
+<span id="L1104">    EXPECT_EQ(</span>
+<span id="L1105">        api.poll(</span>
+<span id="L1106">            api.instance,</span>
+<span id="L1107">            completions.data(),</span>
+<span id="L1108">            completions.size(),</span>
+<span id="L1109">            &amp;completion_count),</span>
+<span id="L1110">        rt::HalV2Status::internal_error);</span>
+<span id="L1111">    EXPECT_EQ(probe.poll_calls.load(), poll_calls + 2);</span>
+<span id="L1112">    EXPECT_EQ(completion_count, 0u);</span>
+<span id="L1113">    probe.throw_poll = true;</span>
+<span id="L1114">    EXPECT_EQ(</span>
+<span id="L1115">        api.poll(</span>
+<span id="L1116">            api.instance,</span>
+<span id="L1117">            completions.data(),</span>
+<span id="L1118">            completions.size(),</span>
+<span id="L1119">            &amp;completion_count),</span>
+<span id="L1120">        rt::HalV2Status::internal_error);</span>
+<span id="L1121">    EXPECT_EQ(probe.poll_calls.load(), poll_calls + 3);</span>
+<span id="L1122">    EXPECT_EQ(completion_count, 0u);</span>
+<span id="L1123"></span>
+<span id="L1124">    const auto health_calls = probe.health_calls.load();</span>
+<span id="L1125">    probe.health.state = 42;</span>
+<span id="L1126">    health.generation = 0xfeedu;</span>
+<span id="L1127">    EXPECT_EQ(</span>
+<span id="L1128">        api.get_health(api.instance, &amp;health),</span>
+<span id="L1129">        rt::HalV2Status::internal_error);</span>
+<span id="L1130">    EXPECT_EQ(probe.health_calls.load(), health_calls + 1);</span>
+<span id="L1131">    EXPECT_EQ(health.generation, 0xfeedu);</span>
+<span id="L1132">    probe.health.state = RTFW_DEVICE_HEALTH_HEALTHY;</span>
+<span id="L1133">    probe.health.last_status = 42;</span>
+<span id="L1134">    EXPECT_EQ(</span>
+<span id="L1135">        api.get_health(api.instance, &amp;health),</span>
+<span id="L1136">        rt::HalV2Status::internal_error);</span>
+<span id="L1137">    EXPECT_EQ(probe.health_calls.load(), health_calls + 2);</span>
+<span id="L1138">    EXPECT_EQ(health.generation, 0xfeedu);</span>
+<span id="L1139">}</span>
+<span id="L1140"></span>
+<span id="L1141">TEST(HalV2, NativeIdentityIsSeparateAndV1IdentityRemainsStable) {</span>
+<span id="L1142">    NativeProbe native(&quot;test.hal.identity&quot;);</span>
+<span id="L1143">    V1Probe first_v1(&quot;test.hal.identity&quot;);</span>
+<span id="L1144">    V1Probe second_v1(&quot;test.hal.identity&quot;);</span>
+<span id="L1145"></span>
+<span id="L1146">    rt::Runtime first;</span>
+<span id="L1147">    rt::Runtime second;</span>
+<span id="L1148">    rt::Runtime native_runtime;</span>
+<span id="L1149">    ASSERT_EQ(first.configure(hal_config()), rt::Status::ok);</span>
+<span id="L1150">    ASSERT_EQ(second.configure(hal_config()), rt::Status::ok);</span>
+<span id="L1151">    ASSERT_EQ(native_runtime.configure(hal_config()), rt::Status::ok);</span>
+<span id="L1152">    rt::DeviceBackendHandle handle;</span>
+<span id="L1153">    ASSERT_EQ(</span>
+<span id="L1154">        first.register_device_backend(</span>
+<span id="L1155">            {&quot;identity&quot;, first_v1.api()}, handle),</span>
+<span id="L1156">        rt::Status::ok);</span>
+<span id="L1157">    ASSERT_EQ(</span>
+<span id="L1158">        second.register_device_backend(</span>
+<span id="L1159">            {&quot;identity&quot;, second_v1.api()}, handle),</span>
+<span id="L1160">        rt::Status::ok);</span>
+<span id="L1161">    ASSERT_EQ(</span>
+<span id="L1162">        register_native(native_runtime, native, &quot;identity&quot;, handle),</span>
+<span id="L1163">        rt::Status::ok);</span>
+<span id="L1164">    std::array&lt;std::byte, 1&gt; first_state{};</span>
+<span id="L1165">    std::array&lt;std::byte, 1&gt; second_state{};</span>
+<span id="L1166">    std::array&lt;std::byte, 1&gt; native_state{};</span>
+<span id="L1167">    ASSERT_EQ(</span>
+<span id="L1168">        first.register_state({&quot;identity.state&quot;, 1, first_state}),</span>
+<span id="L1169">        rt::Status::ok);</span>
+<span id="L1170">    ASSERT_EQ(</span>
+<span id="L1171">        second.register_state({&quot;identity.state&quot;, 1, second_state}),</span>
+<span id="L1172">        rt::Status::ok);</span>
+<span id="L1173">    ASSERT_EQ(</span>
+<span id="L1174">        native_runtime.register_state(</span>
+<span id="L1175">            {&quot;identity.state&quot;, 1, native_state}),</span>
+<span id="L1176">        rt::Status::ok);</span>
+<span id="L1177">    ASSERT_EQ(first.finalize(), rt::Status::ok);</span>
+<span id="L1178">    ASSERT_EQ(second.finalize(), rt::Status::ok);</span>
+<span id="L1179">    ASSERT_EQ(native_runtime.finalize(), rt::Status::ok);</span>
+<span id="L1180">    const auto first_metadata = checkpoint_metadata(first);</span>
+<span id="L1181">    const auto second_metadata = checkpoint_metadata(second);</span>
+<span id="L1182">    const auto native_metadata = checkpoint_metadata(native_runtime);</span>
+<span id="L1183">    EXPECT_EQ(first_metadata.graph_id, second_metadata.graph_id);</span>
+<span id="L1184">    EXPECT_NE(first_metadata.graph_id, native_metadata.graph_id);</span>
+<span id="L1185">    EXPECT_EQ(first_metadata.replay_id, second_metadata.replay_id);</span>
+<span id="L1186">    EXPECT_NE(first_metadata.replay_id, native_metadata.replay_id);</span>
+<span id="L1187">}</span>
+<span id="L1188"></span>
+<span id="L1189">TEST(HalV2, NativeAndAdaptedV1RuntimeObservationsAreEquivalent) {</span>
+<span id="L1190">    NativeProbe native(&quot;test.hal.equivalent&quot;);</span>
+<span id="L1191">    V1Probe v1(&quot;test.hal.equivalent&quot;);</span>
+<span id="L1192">    v1.runtime_poll = true;</span>
+<span id="L1193">    v1.completion.status = RTFW_DEVICE_STATUS_OK;</span>
+<span id="L1194">    v1.completion.device_timestamp_ns = 1234;</span>
+<span id="L1195">    v1.completion.value = 5678;</span>
+<span id="L1196">    v1.health.state = RTFW_DEVICE_HEALTH_HEALTHY;</span>
+<span id="L1197">    v1.health.last_status = RTFW_DEVICE_STATUS_OK;</span>
+<span id="L1198">    v1.health.generation = 9;</span>
+<span id="L1199">    v1.health.submissions = 1;</span>
+<span id="L1200">    v1.health.completions = 1;</span>
+<span id="L1201">    v1.health.queue_rejections = 0;</span>
+<span id="L1202">    v1.health.timeouts = 0;</span>
+<span id="L1203">    v1.health.errors = 0;</span>
+<span id="L1204">    v1.health.losses = 0;</span>
+<span id="L1205">    v1.health.cancellations = 0;</span>
+<span id="L1206">    v1.health.resets = 0;</span>
+<span id="L1207">    v1.health.outstanding = 0;</span>
+<span id="L1208"></span>
+<span id="L1209">    rt::Runtime native_runtime;</span>
+<span id="L1210">    rt::Runtime adapted_runtime;</span>
+<span id="L1211">    const auto config = hal_config();</span>
+<span id="L1212">    ASSERT_EQ(native_runtime.configure(config), rt::Status::ok);</span>
+<span id="L1213">    ASSERT_EQ(adapted_runtime.configure(config), rt::Status::ok);</span>
+<span id="L1214"></span>
+<span id="L1215">    rt::DeviceBackendHandle native_backend;</span>
+<span id="L1216">    rt::DeviceBackendHandle adapted_backend;</span>
+<span id="L1217">    ASSERT_EQ(</span>
+<span id="L1218">        register_native(</span>
+<span id="L1219">            native_runtime, native, &quot;equivalent&quot;, native_backend),</span>
+<span id="L1220">        rt::Status::ok);</span>
+<span id="L1221">    ASSERT_EQ(</span>
+<span id="L1222">        adapted_runtime.register_device_backend(</span>
+<span id="L1223">            {&quot;equivalent&quot;, v1.api()}, adapted_backend),</span>
+<span id="L1224">        rt::Status::ok);</span>
+<span id="L1225"></span>
+<span id="L1226">    std::array&lt;std::byte, 16&gt; native_storage{};</span>
+<span id="L1227">    std::array&lt;std::byte, 16&gt; adapted_storage{};</span>
+<span id="L1228">    rt::DeviceBufferHandle native_buffer;</span>
+<span id="L1229">    rt::DeviceBufferHandle adapted_buffer;</span>
+<span id="L1230">    ASSERT_EQ(</span>
+<span id="L1231">        native_runtime.register_device_buffer(</span>
+<span id="L1232">            {&quot;equivalent.buffer&quot;, native_backend, native_storage},</span>
+<span id="L1233">            native_buffer),</span>
+<span id="L1234">        rt::Status::ok);</span>
+<span id="L1235">    ASSERT_EQ(</span>
+<span id="L1236">        adapted_runtime.register_device_buffer(</span>
+<span id="L1237">            {&quot;equivalent.buffer&quot;, adapted_backend, adapted_storage},</span>
+<span id="L1238">            adapted_buffer),</span>
+<span id="L1239">        rt::Status::ok);</span>
+<span id="L1240"></span>
+<span id="L1241">    SubmissionRequest native_request{native_buffer};</span>
+<span id="L1242">    SubmissionRequest adapted_request{adapted_buffer};</span>
+<span id="L1243">    rt::PhaseHandle native_phase;</span>
+<span id="L1244">    rt::PhaseHandle adapted_phase;</span>
+<span id="L1245">    ASSERT_EQ(</span>
+<span id="L1246">        native_runtime.register_device_phase(</span>
+<span id="L1247">            {&quot;equivalent.phase&quot;,</span>
+<span id="L1248">             native_backend,</span>
+<span id="L1249">             &amp;prepare_submission,</span>
+<span id="L1250">             &amp;native_request},</span>
+<span id="L1251">            native_phase),</span>
+<span id="L1252">        rt::Status::ok);</span>
+<span id="L1253">    ASSERT_EQ(</span>
+<span id="L1254">        adapted_runtime.register_device_phase(</span>
+<span id="L1255">            {&quot;equivalent.phase&quot;,</span>
+<span id="L1256">             adapted_backend,</span>
+<span id="L1257">             &amp;prepare_submission,</span>
+<span id="L1258">             &amp;adapted_request},</span>
+<span id="L1259">            adapted_phase),</span>
+<span id="L1260">        rt::Status::ok);</span>
+<span id="L1261"></span>
+<span id="L1262">    ASSERT_EQ(native_runtime.finalize(), rt::Status::ok);</span>
+<span id="L1263">    ASSERT_EQ(adapted_runtime.finalize(), rt::Status::ok);</span>
+<span id="L1264">    ASSERT_EQ(native_runtime.start(), rt::Status::ok);</span>
+<span id="L1265">    ASSERT_EQ(adapted_runtime.start(), rt::Status::ok);</span>
+<span id="L1266"></span>
+<span id="L1267">    EXPECT_EQ(</span>
+<span id="L1268">        native_runtime.step({17, 1ms, std::nullopt}),</span>
+<span id="L1269">        rt::Status::ok);</span>
+<span id="L1270">    EXPECT_EQ(</span>
+<span id="L1271">        adapted_runtime.step({17, 1ms, std::nullopt}),</span>
+<span id="L1272">        rt::Status::ok);</span>
+<span id="L1273">    EXPECT_EQ(native_storage, adapted_storage);</span>
+<span id="L1274"></span>
+<span id="L1275">    auto native_health = rt::make_device_health();</span>
+<span id="L1276">    auto adapted_health = rt::make_device_health();</span>
+<span id="L1277">    ASSERT_EQ(</span>
+<span id="L1278">        native_runtime.device_health(native_backend, native_health),</span>
+<span id="L1279">        rt::Status::ok);</span>
+<span id="L1280">    ASSERT_EQ(</span>
+<span id="L1281">        adapted_runtime.device_health(adapted_backend, adapted_health),</span>
+<span id="L1282">        rt::Status::ok);</span>
+<span id="L1283">    EXPECT_EQ(native_health.state, adapted_health.state);</span>
+<span id="L1284">    EXPECT_EQ(native_health.last_status, adapted_health.last_status);</span>
+<span id="L1285">    EXPECT_EQ(native_health.generation, adapted_health.generation);</span>
+<span id="L1286">    EXPECT_EQ(native_health.submissions, adapted_health.submissions);</span>
+<span id="L1287">    EXPECT_EQ(native_health.completions, adapted_health.completions);</span>
+<span id="L1288">    EXPECT_EQ(native_health.queue_rejections, adapted_health.queue_rejections);</span>
+<span id="L1289">    EXPECT_EQ(native_health.timeouts, adapted_health.timeouts);</span>
+<span id="L1290">    EXPECT_EQ(native_health.errors, adapted_health.errors);</span>
+<span id="L1291">    EXPECT_EQ(native_health.losses, adapted_health.losses);</span>
+<span id="L1292">    EXPECT_EQ(native_health.cancellations, adapted_health.cancellations);</span>
+<span id="L1293">    EXPECT_EQ(native_health.resets, adapted_health.resets);</span>
+<span id="L1294">    EXPECT_EQ(native_health.outstanding, adapted_health.outstanding);</span>
+<span id="L1295"></span>
+<span id="L1296">    ASSERT_EQ(native_runtime.reset_device(native_backend), rt::Status::ok);</span>
+<span id="L1297">    ASSERT_EQ(adapted_runtime.reset_device(adapted_backend), rt::Status::ok);</span>
+<span id="L1298"></span>
+<span id="L1299">    rt::RuntimeMetricSnapshot native_metrics;</span>
+<span id="L1300">    rt::RuntimeMetricSnapshot adapted_metrics;</span>
+<span id="L1301">    ASSERT_EQ(</span>
+<span id="L1302">        native_runtime.metrics_snapshot(</span>
+<span id="L1303">            rt::RuntimeMetricWindow::cumulative,</span>
+<span id="L1304">            nullptr,</span>
+<span id="L1305">            native_metrics),</span>
+<span id="L1306">        rt::Status::ok);</span>
+<span id="L1307">    ASSERT_EQ(</span>
+<span id="L1308">        adapted_runtime.metrics_snapshot(</span>
+<span id="L1309">            rt::RuntimeMetricWindow::cumulative,</span>
+<span id="L1310">            nullptr,</span>
+<span id="L1311">            adapted_metrics),</span>
+<span id="L1312">        rt::Status::ok);</span>
+<span id="L1313">    ASSERT_EQ(native_metrics.sample_count, adapted_metrics.sample_count);</span>
+<span id="L1314">    for (std::size_t index = 0; index &lt; native_metrics.sample_count; ++index) {</span>
+<span id="L1315">        SCOPED_TRACE(index);</span>
+<span id="L1316">        EXPECT_EQ(native_metrics.samples[index].id, adapted_metrics.samples[index].id);</span>
+<span id="L1317">        EXPECT_EQ(</span>
+<span id="L1318">            native_metrics.samples[index].kind,</span>
+<span id="L1319">            adapted_metrics.samples[index].kind);</span>
+<span id="L1320">        EXPECT_EQ(</span>
+<span id="L1321">            native_metrics.samples[index].value,</span>
+<span id="L1322">            adapted_metrics.samples[index].value);</span>
+<span id="L1323">    }</span>
+<span id="L1324"></span>
+<span id="L1325">    std::array&lt;rt::RuntimeTraceEvent, 64&gt; native_trace{};</span>
+<span id="L1326">    std::array&lt;rt::RuntimeTraceEvent, 64&gt; adapted_trace{};</span>
+<span id="L1327">    rt::RuntimeTraceCursor native_cursor;</span>
+<span id="L1328">    rt::RuntimeTraceCursor adapted_cursor;</span>
+<span id="L1329">    rt::RuntimeTraceReadResult native_trace_result;</span>
+<span id="L1330">    rt::RuntimeTraceReadResult adapted_trace_result;</span>
+<span id="L1331">    ASSERT_EQ(</span>
+<span id="L1332">        native_runtime.read_trace(</span>
+<span id="L1333">            native_cursor, native_trace, native_trace_result),</span>
+<span id="L1334">        rt::Status::ok);</span>
+<span id="L1335">    ASSERT_EQ(</span>
+<span id="L1336">        adapted_runtime.read_trace(</span>
+<span id="L1337">            adapted_cursor, adapted_trace, adapted_trace_result),</span>
+<span id="L1338">        rt::Status::ok);</span>
+<span id="L1339">    std::array&lt;rt::RuntimeTraceEvent, 3&gt; native_device_events{};</span>
+<span id="L1340">    std::array&lt;rt::RuntimeTraceEvent, 3&gt; adapted_device_events{};</span>
+<span id="L1341">    std::size_t native_device_count = 0;</span>
+<span id="L1342">    std::size_t adapted_device_count = 0;</span>
+<span id="L1343">    for (std::size_t index = 0;</span>
+<span id="L1344">         index &lt; native_trace_result.events_read;</span>
+<span id="L1345">         ++index) {</span>
+<span id="L1346">        if (native_trace[index].type &gt;=</span>
+<span id="L1347">                rt::RuntimeTraceEventType::device_submitted &amp;&amp;</span>
+<span id="L1348">            native_device_count &lt; native_device_events.size()) {</span>
+<span id="L1349">            native_device_events[native_device_count++] = native_trace[index];</span>
+<span id="L1350">        }</span>
+<span id="L1351">    }</span>
+<span id="L1352">    for (std::size_t index = 0;</span>
+<span id="L1353">         index &lt; adapted_trace_result.events_read;</span>
+<span id="L1354">         ++index) {</span>
+<span id="L1355">        if (adapted_trace[index].type &gt;=</span>
+<span id="L1356">                rt::RuntimeTraceEventType::device_submitted &amp;&amp;</span>
+<span id="L1357">            adapted_device_count &lt; adapted_device_events.size()) {</span>
+<span id="L1358">            adapted_device_events[adapted_device_count++] = adapted_trace[index];</span>
+<span id="L1359">        }</span>
+<span id="L1360">    }</span>
+<span id="L1361">    ASSERT_EQ(native_device_count, native_device_events.size());</span>
+<span id="L1362">    ASSERT_EQ(adapted_device_count, adapted_device_events.size());</span>
+<span id="L1363">    for (std::size_t index = 0; index &lt; native_device_events.size(); ++index) {</span>
+<span id="L1364">        SCOPED_TRACE(index);</span>
+<span id="L1365">        EXPECT_EQ(native_device_events[index].type, adapted_device_events[index].type);</span>
+<span id="L1366">        EXPECT_EQ(</span>
+<span id="L1367">            native_device_events[index].status,</span>
+<span id="L1368">            adapted_device_events[index].status);</span>
+<span id="L1369">        EXPECT_EQ(</span>
+<span id="L1370">            native_device_events[index].producer,</span>
+<span id="L1371">            adapted_device_events[index].producer);</span>
+<span id="L1372">        EXPECT_EQ(</span>
+<span id="L1373">            native_device_events[index].frame_index,</span>
+<span id="L1374">            adapted_device_events[index].frame_index);</span>
+<span id="L1375">        EXPECT_EQ(</span>
+<span id="L1376">            native_device_events[index].callback_index,</span>
+<span id="L1377">            adapted_device_events[index].callback_index);</span>
+<span id="L1378">        EXPECT_EQ(</span>
+<span id="L1379">            native_device_events[index].value,</span>
+<span id="L1380">            adapted_device_events[index].value);</span>
+<span id="L1381">    }</span>
+<span id="L1382"></span>
+<span id="L1383">    ASSERT_EQ(native_runtime.stop(), rt::Status::ok);</span>
+<span id="L1384">    ASSERT_EQ(adapted_runtime.stop(), rt::Status::ok);</span>
+<span id="L1385">    EXPECT_EQ(native.initialize_calls.load(), v1.initialize_calls.load());</span>
+<span id="L1386">    EXPECT_EQ(native.register_calls.load(), v1.register_calls.load());</span>
+<span id="L1387">    EXPECT_EQ(native.submit_calls.load(), v1.submit_calls.load());</span>
+<span id="L1388">    EXPECT_EQ(native.health_calls.load(), v1.health_calls.load());</span>
+<span id="L1389">    EXPECT_EQ(native.reset_calls.load(), v1.reset_calls.load());</span>
+<span id="L1390">    EXPECT_EQ(native.unregister_calls.load(), v1.unregister_calls.load());</span>
+<span id="L1391">    EXPECT_EQ(native.shutdown_calls.load(), v1.shutdown_calls.load());</span>
+<span id="L1392">}</span>
+<span id="L1393"></span>
+<span id="L1394">TEST(HalV2, AdaptedV1StorageIsExactInsideSixRowMemoryPlan) {</span>
+<span id="L1395">    NativeProbe native(&quot;test.hal.accounting&quot;);</span>
+<span id="L1396">    V1Probe v1(&quot;test.hal.accounting&quot;);</span>
+<span id="L1397">    const auto config = hal_config();</span>
+<span id="L1398">    rt::Runtime native_runtime;</span>
+<span id="L1399">    rt::Runtime adapted_runtime;</span>
+<span id="L1400">    ASSERT_EQ(native_runtime.configure(config), rt::Status::ok);</span>
+<span id="L1401">    ASSERT_EQ(adapted_runtime.configure(config), rt::Status::ok);</span>
+<span id="L1402">    rt::DeviceBackendHandle handle;</span>
+<span id="L1403">    ASSERT_EQ(</span>
+<span id="L1404">        register_native(native_runtime, native, &quot;accounting&quot;, handle),</span>
+<span id="L1405">        rt::Status::ok);</span>
+<span id="L1406">    ASSERT_EQ(</span>
+<span id="L1407">        adapted_runtime.register_device_backend(</span>
+<span id="L1408">            {&quot;accounting&quot;, v1.api()}, handle),</span>
+<span id="L1409">        rt::Status::ok);</span>
+<span id="L1410">    ASSERT_EQ(native_runtime.finalize(), rt::Status::ok);</span>
+<span id="L1411">    ASSERT_EQ(adapted_runtime.finalize(), rt::Status::ok);</span>
+<span id="L1412">    rt::MemoryPlan native_plan;</span>
+<span id="L1413">    rt::MemoryPlan adapted_plan;</span>
+<span id="L1414">    ASSERT_TRUE(native_runtime.memory_plan(native_plan));</span>
+<span id="L1415">    ASSERT_TRUE(adapted_runtime.memory_plan(adapted_plan));</span>
+<span id="L1416">    const auto adapter_bytes =</span>
+<span id="L1417">        sizeof(rt::detail::DeviceV1CompatibilityAdapter) +</span>
+<span id="L1418">        config.device_completion_batch * sizeof(rtfw_device_completion);</span>
+<span id="L1419">    EXPECT_EQ(</span>
+<span id="L1420">        adapted_plan.device_control_bytes,</span>
+<span id="L1421">        native_plan.device_control_bytes + adapter_bytes);</span>
+<span id="L1422">    EXPECT_EQ(native_plan.device_backend_reported_bytes, 37u);</span>
+<span id="L1423">    EXPECT_EQ(adapted_plan.device_backend_reported_bytes, 37u);</span>
+<span id="L1424">    EXPECT_EQ(</span>
+<span id="L1425">        native_plan.planned_bytes,</span>
+<span id="L1426">        native_plan.runtime_control_bytes +</span>
+<span id="L1427">            native_plan.executor_control_bytes +</span>
+<span id="L1428">            native_plan.device_control_bytes +</span>
+<span id="L1429">            native_plan.phase_scratch_total_bytes +</span>
+<span id="L1430">            native_plan.task_scratch_total_bytes +</span>
+<span id="L1431">            native_plan.trace_storage_bytes);</span>
+<span id="L1432">    EXPECT_EQ(</span>
+<span id="L1433">        adapted_plan.planned_bytes,</span>
+<span id="L1434">        adapted_plan.runtime_control_bytes +</span>
+<span id="L1435">            adapted_plan.executor_control_bytes +</span>
+<span id="L1436">            adapted_plan.device_control_bytes +</span>
+<span id="L1437">            adapted_plan.phase_scratch_total_bytes +</span>
+<span id="L1438">            adapted_plan.task_scratch_total_bytes +</span>
+<span id="L1439">            adapted_plan.trace_storage_bytes);</span>
+<span id="L1440">}</span>
+<span id="L1441"></span>
+<span id="L1442">TEST(HalV2, AdaptedV1StorageSurvivesConfiguringGrowthAndIsIsolated) {</span>
+<span id="L1443">    constexpr std::size_t backend_count = 8;</span>
+<span id="L1444">    std::array&lt;V1Probe, backend_count&gt; probes{</span>
+<span id="L1445">        V1Probe{&quot;test.growth.0&quot;},</span>
+<span id="L1446">        V1Probe{&quot;test.growth.1&quot;},</span>
+<span id="L1447">        V1Probe{&quot;test.growth.2&quot;},</span>
+<span id="L1448">        V1Probe{&quot;test.growth.3&quot;},</span>
+<span id="L1449">        V1Probe{&quot;test.growth.4&quot;},</span>
+<span id="L1450">        V1Probe{&quot;test.growth.5&quot;},</span>
+<span id="L1451">        V1Probe{&quot;test.growth.6&quot;},</span>
+<span id="L1452">        V1Probe{&quot;test.growth.7&quot;},</span>
+<span id="L1453">    };</span>
+<span id="L1454">    rt::Runtime runtime;</span>
+<span id="L1455">    ASSERT_EQ(runtime.configure(hal_config(backend_count)), rt::Status::ok);</span>
+<span id="L1456">    for (std::size_t index = 0; index &lt; probes.size(); ++index) {</span>
+<span id="L1457">        const auto name = std::string(&quot;growth.&quot;) + std::to_string(index);</span>
+<span id="L1458">        rt::DeviceBackendHandle handle;</span>
+<span id="L1459">        ASSERT_EQ(</span>
+<span id="L1460">            runtime.register_device_backend(</span>
+<span id="L1461">                {name, probes[index].api()}, handle),</span>
+<span id="L1462">            rt::Status::ok);</span>
+<span id="L1463">        EXPECT_EQ(handle.index(), index);</span>
+<span id="L1464">    }</span>
+<span id="L1465">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L1466">    ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1467">    ASSERT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1468">    for (const auto&amp; probe : probes) {</span>
+<span id="L1469">        EXPECT_EQ(probe.capability_calls.load(), 1u);</span>
+<span id="L1470">        EXPECT_EQ(probe.initialize_calls.load(), 1u);</span>
+<span id="L1471">        EXPECT_EQ(probe.shutdown_calls.load(), 1u);</span>
+<span id="L1472">    }</span>
+<span id="L1473">}</span></pre></html>

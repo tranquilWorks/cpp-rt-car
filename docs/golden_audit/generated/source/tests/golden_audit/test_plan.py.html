@@ -1,0 +1,36 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/golden_audit/test_plan.py</title><h1>tests/golden_audit/test_plan.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">&quot;&quot;&quot;The bounded soak covers each required backend/executor and fault every cycle.&quot;&quot;&quot;</span>
+<span id="L2">import importlib.util</span>
+<span id="L3">from pathlib import Path</span>
+<span id="L4">import sys</span>
+<span id="L5">import unittest</span>
+<span id="L6"></span>
+<span id="L7">ROOT = Path(__file__).resolve().parents[2]</span>
+<span id="L8">sys.path.insert(0, str(ROOT / &#x27;samples/golden_audit&#x27;))</span>
+<span id="L9">spec = importlib.util.spec_from_file_location(&#x27;audit_plan_runner&#x27;, ROOT / &#x27;samples/golden_audit/run.py&#x27;)</span>
+<span id="L10">runner = importlib.util.module_from_spec(spec); spec.loader.exec_module(runner)</span>
+<span id="L11"></span>
+<span id="L12"></span>
+<span id="L13">class SoakPlanTests(unittest.TestCase):</span>
+<span id="L14">    def test_every_variant_and_fault_each_cycle(self):</span>
+<span id="L15">        rows = runner.matrix(16)</span>
+<span id="L16">        self.assertEqual(len(rows), 384)</span>
+<span id="L17">        self.assertEqual(len({r[&#x27;id&#x27;] for r in rows}), 384)</span>
+<span id="L18">        expected = {(variant, mode) for variant in (&#x27;cpu&#x27;, &#x27;cuda-kernel&#x27;, &#x27;cuda-graph&#x27;,</span>
+<span id="L19">                    &#x27;xdma&#x27;, &#x27;combined-kernel&#x27;, &#x27;combined-graph&#x27;) for mode in (&#x27;native&#x27;, &#x27;host&#x27;, &#x27;external&#x27;)}</span>
+<span id="L20">        for cycle in range(16):</span>
+<span id="L21">            selected = [r for r in rows if r[&#x27;cycle&#x27;] == cycle]</span>
+<span id="L22">            nominal = [r for r in selected if r[&#x27;fault&#x27;] == &#x27;none&#x27; and r[&#x27;campaign&#x27;] == &#x27;nominal&#x27;]</span>
+<span id="L23">            self.assertEqual({(r[&#x27;variant&#x27;], r[&#x27;mode&#x27;]) for r in nominal}, expected)</span>
+<span id="L24">            faults = {r[&#x27;fault&#x27;] if r[&#x27;fault&#x27;] != &#x27;none&#x27; else r[&#x27;campaign&#x27;] for r in selected if r not in nominal}</span>
+<span id="L25">            self.assertEqual(faults, {&#x27;underflow&#x27;, &#x27;overrun&#x27;, &#x27;device_loss&#x27;, &#x27;reset_failure&#x27;, &#x27;stop_failure&#x27;, &#x27;overload&#x27;})</span>
+<span id="L26">        self.assertEqual({r[&#x27;workers&#x27;] for r in rows}, {1, 2, 3})</span>
+<span id="L27">        self.assertEqual({r[&#x27;grain&#x27;] for r in rows}, {1, 4, 16, 64})</span>
+<span id="L28"></span>
+<span id="L29">    def test_invalid_soak_bounds(self):</span>
+<span id="L30">        for cycles in (0, 1, 33, True, 2.0, &#x27;16&#x27;):</span>
+<span id="L31">            with self.subTest(cycles=cycles), self.assertRaisesRegex(ValueError, &#x27;cycles must&#x27;):</span>
+<span id="L32">                runner.matrix(cycles)</span>
+<span id="L33"></span>
+<span id="L34"></span>
+<span id="L35">if __name__ == &#x27;__main__&#x27;:</span>
+<span id="L36">    unittest.main()</span></pre></html>

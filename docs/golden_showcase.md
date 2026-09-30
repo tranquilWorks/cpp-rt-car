@@ -2,8 +2,8 @@
 
 M26-05 supplies an optional source kit around the immutable M26-01 scenario and
 the existing CPU, CUDA and XDMA owners. Its scope is portable simulation and
-injected-driver protocol evidence. The final CAP-M26 coverage audit belongs to
-M26-06. Physical CUDA/XDMA/HIL, RT1/RT2, human acceptance, Unreal, controlled
+injected-driver protocol evidence. The [M26-06 coverage audit](golden_audit.md)
+records source-linked requirement dispositions separately. Physical CUDA/XDMA/HIL, RT1/RT2, human acceptance, Unreal, controlled
 performance and release/deployment are NOT_RUN.
 
 Build an SDK with `-DRTFW_BUILD_BENCHMARKS=ON`, then run the installed kit:

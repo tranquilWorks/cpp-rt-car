@@ -1,0 +1,240 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_system/memory.hpp</title><h1>samples/golden_system/memory.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &lt;algorithm&gt;</span>
+<span id="L3">#include &lt;array&gt;</span>
+<span id="L4">#include &lt;exception&gt;</span>
+<span id="L5">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L6">#if defined(_WIN32)</span>
+<span id="L7">#ifndef NOMINMAX</span>
+<span id="L8">#define NOMINMAX</span>
+<span id="L9">#endif</span>
+<span id="L10">// psapi.h requires the Windows types; preserve this include order.</span>
+<span id="L11">// clang-format off</span>
+<span id="L12">#include &lt;windows.h&gt;</span>
+<span id="L13">#include &lt;psapi.h&gt;</span>
+<span id="L14">// clang-format on</span>
+<span id="L15">#elif defined(__linux__)</span>
+<span id="L16">#include &lt;sys/mman.h&gt;</span>
+<span id="L17">#include &lt;unistd.h&gt;</span>
+<span id="L18">#else</span>
+<span id="L19">#error &quot;The host memory reference supports Linux and Windows only&quot;</span>
+<span id="L20">#endif</span>
+<span id="L21"></span>
+<span id="L22">namespace golden {</span>
+<span id="L23">// Derived from unchanged M25-05 memory.hpp with 1MiB region bounds.</span>
+<span id="L24">// Fixed host arena; acquire/release and OS observation are control-plane only.</span>
+<span id="L25">// It replaces three supported resident regions, not every Runtime allocation.</span>
+<span id="L26">class Memory {</span>
+<span id="L27">  struct alignas(4096) Slot {</span>
+<span id="L28">    std::array&lt;std::byte, 1048576&gt; bytes{};</span>
+<span id="L29">    std::size_t used = 0;</span>
+<span id="L30">    bool live = false, applied = false;</span>
+<span id="L31">    // Keep the page-aligned stride explicit: MSVC /W4 diagnoses implicit</span>
+<span id="L32">    // alignment padding. No warning suppression or storage-layout change.</span>
+<span id="L33">    std::array&lt;std::byte, 4096 - sizeof(std::size_t) - 2 * sizeof(bool)&gt;</span>
+<span id="L34">        padding{};</span>
+<span id="L35">  };</span>
+<span id="L36">  static_assert(sizeof(Slot) == 1048576 + 4096 &amp;&amp; alignof(Slot) == 4096);</span>
+<span id="L37">  std::array&lt;Slot, 3&gt; slots_{};</span>
+<span id="L38">  Slot *find(void *token) noexcept {</span>
+<span id="L39">    for (auto &amp;slot : slots_)</span>
+<span id="L40">      if (&amp;slot == token &amp;&amp; slot.live)</span>
+<span id="L41">        return &amp;slot;</span>
+<span id="L42">    return nullptr;</span>
+<span id="L43">  }</span>
+<span id="L44">  static bool basic_policy(const rt::MemoryPolicy &amp;p) noexcept {</span>
+<span id="L45">    return p.page_rounding == rt::PageRounding::none &amp;&amp;</span>
+<span id="L46">           p.guard_bytes_before == 0 &amp;&amp; p.guard_bytes_after == 0 &amp;&amp;</span>
+<span id="L47">           p.prefault == rt::PolicyToggle::disabled &amp;&amp;</span>
+<span id="L48">           p.first_touch == rt::FirstTouchPolicy::none &amp;&amp;</span>
+<span id="L49">           p.locking == rt::PolicyToggle::disabled &amp;&amp;</span>
+<span id="L50">           p.pinning == rt::PolicyToggle::disabled &amp;&amp;</span>
+<span id="L51">           p.huge_pages == rt::HugePagePreference::disabled &amp;&amp;</span>
+<span id="L52">           p.huge_page_fallback == rt::PolicyToggle::disabled &amp;&amp;</span>
+<span id="L53">           p.rollback == rt::RollbackIntent::release &amp;&amp; p.numa_node == -1 &amp;&amp;</span>
+<span id="L54">           p.residency_verification == rt::PolicyToggle::disabled;</span>
+<span id="L55">  }</span>
+<span id="L56"></span>
+<span id="L57">public:</span>
+<span id="L58">  static constexpr std::size_t region_capacity = 1048576;</span>
+<span id="L59">  std::size_t acquisitions = 0, releases = 0, observations = 0, violations = 0;</span>
+<span id="L60">  unsigned fail_acquire = 0, fail_apply = 0, fail_observe = 0,</span>
+<span id="L61">           fail_rollback = 0;</span>
+<span id="L62">  Memory() = default;</span>
+<span id="L63">  Memory(const Memory &amp;) = delete;</span>
+<span id="L64">  Memory &amp;operator=(const Memory &amp;) = delete;</span>
+<span id="L65">  ~Memory() {</span>
+<span id="L66">    if (live_count())</span>
+<span id="L67">      std::terminate();</span>
+<span id="L68">  }</span>
+<span id="L69">  std::size_t live_count() const noexcept {</span>
+<span id="L70">    std::size_t n = 0;</span>
+<span id="L71">    for (const auto &amp;slot : slots_)</span>
+<span id="L72">      n += slot.live ? 1u : 0u;</span>
+<span id="L73">    return n;</span>
+<span id="L74">  }</span>
+<span id="L75">  rt::MemoryProvider table() noexcept {</span>
+<span id="L76">    rt::MemoryProvider p;</span>
+<span id="L77">    p.user_data = this;</span>
+<span id="L78">    p.capabilities = rt::memory_provider_capability_bit(</span>
+<span id="L79">                         rt::MemoryProviderCapability::policy_operations) |</span>
+<span id="L80">                     rt::memory_provider_capability_bit(</span>
+<span id="L81">                         rt::MemoryProviderCapability::independent_observation);</span>
+<span id="L82">    p.acquire = &amp;acquire;</span>
+<span id="L83">    p.apply = &amp;apply;</span>
+<span id="L84">    p.observe = &amp;observe;</span>
+<span id="L85">    p.rollback = &amp;rollback;</span>
+<span id="L86">    p.release = &amp;release;</span>
+<span id="L87">    return p;</span>
+<span id="L88">  }</span>
+<span id="L89">  static rt::Status acquire(void *opaque,</span>
+<span id="L90">                            const rt::MemoryProviderAcquireRequest &amp;r,</span>
+<span id="L91">                            rt::MemoryProviderAllocation &amp;out) noexcept {</span>
+<span id="L92">    out = {};</span>
+<span id="L93">    if (!opaque)</span>
+<span id="L94">      return rt::Status::invalid_argument;</span>
+<span id="L95">    auto &amp;self = *static_cast&lt;Memory *&gt;(opaque);</span>
+<span id="L96">    const std::array ids{rt::memory_region_phase_scratch,</span>
+<span id="L97">                         rt::memory_region_task_scratch,</span>
+<span id="L98">                         rt::memory_region_trace_storage};</span>
+<span id="L99">    std::size_t index = ids.size();</span>
+<span id="L100">    for (std::size_t i = 0; i &lt; ids.size(); ++i)</span>
+<span id="L101">      if (r.region == ids[i])</span>
+<span id="L102">        index = i;</span>
+<span id="L103">    if (index == ids.size() || !r.logical_bytes || !r.required_alignment ||</span>
+<span id="L104">        (r.required_alignment &amp; (r.required_alignment - 1)) ||</span>
+<span id="L105">        r.required_alignment &gt; 4096 ||</span>
+<span id="L106">        r.page_rounding != rt::PageRounding::none || r.guard_bytes_before ||</span>
+<span id="L107">        r.guard_bytes_after ||</span>
+<span id="L108">        r.huge_pages != rt::HugePagePreference::disabled ||</span>
+<span id="L109">        r.huge_page_fallback == rt::PolicyToggle::enabled ||</span>
+<span id="L110">        r.numa_node != -1 || r.rollback != rt::RollbackIntent::release)</span>
+<span id="L111">      return rt::Status::invalid_config;</span>
+<span id="L112">    if (r.logical_bytes &gt; region_capacity)</span>
+<span id="L113">      return rt::Status::resource_exhausted;</span>
+<span id="L114">    auto &amp;slot = self.slots_[index];</span>
+<span id="L115">    if (slot.live)</span>
+<span id="L116">      return rt::Status::invalid_state;</span>
+<span id="L117">    if (self.fail_acquire &amp;&amp; --self.fail_acquire == 0)</span>
+<span id="L118">      return rt::Status::resource_exhausted;</span>
+<span id="L119">    slot.used = r.logical_bytes;</span>
+<span id="L120">    slot.live = true;</span>
+<span id="L121">    slot.applied = false;</span>
+<span id="L122">    ++self.acquisitions;</span>
+<span id="L123">    out.token = &amp;slot;</span>
+<span id="L124">    out.allocation_base = slot.bytes.data();</span>
+<span id="L125">    out.allocation_bytes = slot.bytes.size();</span>
+<span id="L126">    out.usable_data = slot.bytes.data();</span>
+<span id="L127">    out.usable_bytes = slot.used;</span>
+<span id="L128">    out.committed_bytes = slot.used;</span>
+<span id="L129">    out.alignment = 4096;</span>
+<span id="L130">    return rt::Status::ok;</span>
+<span id="L131">  }</span>
+<span id="L132">  static rt::Status apply(void *opaque, void *token, const rt::MemoryPolicy &amp;p,</span>
+<span id="L133">                          rt::MemoryProviderObservation &amp;out) noexcept {</span>
+<span id="L134">    out = {};</span>
+<span id="L135">    if (!opaque)</span>
+<span id="L136">      return rt::Status::invalid_argument;</span>
+<span id="L137">    auto &amp;self = *static_cast&lt;Memory *&gt;(opaque);</span>
+<span id="L138">    auto *slot = self.find(token);</span>
+<span id="L139">    if (!slot || !basic_policy(p))</span>
+<span id="L140">      return rt::Status::invalid_config;</span>
+<span id="L141">    slot-&gt;applied = true; // Retain even a failed apply until rollback.</span>
+<span id="L142">    if (self.fail_apply &amp;&amp; --self.fail_apply == 0)</span>
+<span id="L143">      return rt::Status::internal_error;</span>
+<span id="L144">    return rt::Status::ok;</span>
+<span id="L145">  }</span>
+<span id="L146">  static rt::Status observe(void *opaque, void *token,</span>
+<span id="L147">                            const rt::MemoryPolicy &amp;p,</span>
+<span id="L148">                            rt::MemoryProviderObservation &amp;out) noexcept {</span>
+<span id="L149">    out = {};</span>
+<span id="L150">    if (!opaque)</span>
+<span id="L151">      return rt::Status::invalid_argument;</span>
+<span id="L152">    auto &amp;self = *static_cast&lt;Memory *&gt;(opaque);</span>
+<span id="L153">    auto *slot = self.find(token);</span>
+<span id="L154">    if (!slot || !slot-&gt;applied || !basic_policy(p))</span>
+<span id="L155">      return rt::Status::invalid_state;</span>
+<span id="L156">    if (self.fail_observe &amp;&amp; --self.fail_observe == 0)</span>
+<span id="L157">      return rt::Status::internal_error;</span>
+<span id="L158">    constexpr std::size_t page = 4096;</span>
+<span id="L159">    const auto count = (slot-&gt;used + page - 1) / page;</span>
+<span id="L160">    std::array&lt;bool, region_capacity / page&gt; resident{};</span>
+<span id="L161">#if defined(_WIN32)</span>
+<span id="L162">    SYSTEM_INFO info{};</span>
+<span id="L163">    GetSystemInfo(&amp;info);</span>
+<span id="L164">    if (info.dwPageSize != page)</span>
+<span id="L165">      return rt::Status::invalid_config;</span>
+<span id="L166">    std::array&lt;PSAPI_WORKING_SET_EX_INFORMATION, region_capacity / page&gt;</span>
+<span id="L167">        pages{};</span>
+<span id="L168">    for (std::size_t i = 0; i &lt; count; ++i)</span>
+<span id="L169">      pages[i].VirtualAddress = slot-&gt;bytes.data() + i * page;</span>
+<span id="L170">    if (!QueryWorkingSetEx(GetCurrentProcess(), pages.data(),</span>
+<span id="L171">                           static_cast&lt;DWORD&gt;(count * sizeof(pages[0]))))</span>
+<span id="L172">      return rt::Status::internal_error;</span>
+<span id="L173">    for (std::size_t i = 0; i &lt; count; ++i)</span>
+<span id="L174">      resident[i] = pages[i].VirtualAttributes.Valid != 0;</span>
+<span id="L175">#else</span>
+<span id="L176">    if (sysconf(_SC_PAGESIZE) != static_cast&lt;long&gt;(page))</span>
+<span id="L177">      return rt::Status::invalid_config;</span>
+<span id="L178">    std::array&lt;unsigned char, region_capacity / page&gt; pages{};</span>
+<span id="L179">    if (mincore(slot-&gt;bytes.data(), slot-&gt;used, pages.data()) != 0)</span>
+<span id="L180">      return rt::Status::internal_error;</span>
+<span id="L181">    for (std::size_t i = 0; i &lt; count; ++i)</span>
+<span id="L182">      resident[i] = (pages[i] &amp; 1u) != 0;</span>
+<span id="L183">#endif</span>
+<span id="L184">    for (std::size_t i = 0; i &lt; count; ++i)</span>
+<span id="L185">      if (resident[i])</span>
+<span id="L186">        out.resident_bytes += std::min(page, slot-&gt;used - i * page);</span>
+<span id="L187">    out.independently_observed = true;</span>
+<span id="L188">    ++self.observations;</span>
+<span id="L189">    return rt::Status::ok;</span>
+<span id="L190">  }</span>
+<span id="L191">  static rt::Status rollback(void *opaque, void *token,</span>
+<span id="L192">                             const rt::MemoryPolicy &amp;,</span>
+<span id="L193">                             const rt::MemoryProviderObservation &amp;) noexcept {</span>
+<span id="L194">    if (!opaque)</span>
+<span id="L195">      return rt::Status::invalid_argument;</span>
+<span id="L196">    auto &amp;self = *static_cast&lt;Memory *&gt;(opaque);</span>
+<span id="L197">    auto *slot = self.find(token);</span>
+<span id="L198">    if (!slot)</span>
+<span id="L199">      return rt::Status::invalid_state;</span>
+<span id="L200">    if (self.fail_rollback &amp;&amp; --self.fail_rollback == 0)</span>
+<span id="L201">      return rt::Status::internal_error;</span>
+<span id="L202">    slot-&gt;applied = false;</span>
+<span id="L203">    return rt::Status::ok;</span>
+<span id="L204">  }</span>
+<span id="L205">  static void release(void *opaque, void *token,</span>
+<span id="L206">                      rt::RollbackIntent intent) noexcept {</span>
+<span id="L207">    if (!opaque)</span>
+<span id="L208">      return;</span>
+<span id="L209">    auto &amp;self = *static_cast&lt;Memory *&gt;(opaque);</span>
+<span id="L210">    auto *slot = self.find(token);</span>
+<span id="L211">    if (!slot || slot-&gt;applied || intent != rt::RollbackIntent::release) {</span>
+<span id="L212">      ++self.violations;</span>
+<span id="L213">      return;</span>
+<span id="L214">    }</span>
+<span id="L215">    slot-&gt;live = false;</span>
+<span id="L216">    slot-&gt;used = 0;</span>
+<span id="L217">    ++self.releases;</span>
+<span id="L218">  }</span>
+<span id="L219">  static rt::CpuMemoryPolicy policy() noexcept {</span>
+<span id="L220">    rt::CpuMemoryPolicy p;</span>
+<span id="L221">    for (auto id :</span>
+<span id="L222">         {rt::memory_region_phase_scratch, rt::memory_region_task_scratch,</span>
+<span id="L223">          rt::memory_region_trace_storage}) {</span>
+<span id="L224">      auto &amp;r = p.memory_policies[p.memory_policy_count++];</span>
+<span id="L225">      r.region = id;</span>
+<span id="L226">      r.policy.requirement = rt::PolicyRequirement::strict;</span>
+<span id="L227">      r.policy.provider = rt::MemoryProviderOwnership::host;</span>
+<span id="L228">      r.policy.alignment = 64;</span>
+<span id="L229">      r.policy.page_rounding = rt::PageRounding::none;</span>
+<span id="L230">      r.policy.prefault = r.policy.locking = r.policy.pinning =</span>
+<span id="L231">          r.policy.huge_page_fallback = r.policy.residency_verification =</span>
+<span id="L232">              rt::PolicyToggle::disabled;</span>
+<span id="L233">      r.policy.first_touch = rt::FirstTouchPolicy::none;</span>
+<span id="L234">      r.policy.huge_pages = rt::HugePagePreference::disabled;</span>
+<span id="L235">      r.policy.rollback = rt::RollbackIntent::release;</span>
+<span id="L236">    }</span>
+<span id="L237">    return p;</span>
+<span id="L238">  }</span>
+<span id="L239">};</span>
+<span id="L240">} // namespace golden</span></pre></html>

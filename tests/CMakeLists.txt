@@ -606,3 +606,4 @@ if(TARGET rtfw_host_adapter_tests)
 endif()
 
 add_subdirectory(golden_showcase)
+add_subdirectory(golden_audit)

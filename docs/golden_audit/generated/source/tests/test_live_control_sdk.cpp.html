@@ -1,0 +1,483 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_live_control_sdk.cpp</title><h1>tests/test_live_control_sdk.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;array&gt;</span>
+<span id="L4">#include &lt;bit&gt;</span>
+<span id="L5">#include &lt;cmath&gt;</span>
+<span id="L6">#include &lt;cstddef&gt;</span>
+<span id="L7">#include &lt;cstdint&gt;</span>
+<span id="L8">#include &lt;limits&gt;</span>
+<span id="L9">#include &lt;span&gt;</span>
+<span id="L10">#include &lt;string&gt;</span>
+<span id="L11">#include &lt;vector&gt;</span>
+<span id="L12"></span>
+<span id="L13">#include &lt;rt/live_control.hpp&gt;</span>
+<span id="L14"></span>
+<span id="L15">namespace sdk_test {</span>
+<span id="L16"></span>
+<span id="L17">struct ControllerGains {</span>
+<span id="L18">    float proportional = 0.0F;</span>
+<span id="L19">    float integral = 0.0F;</span>
+<span id="L20">    float derivative = 0.0F;</span>
+<span id="L21">    std::uint32_t revision = 0;</span>
+<span id="L22"></span>
+<span id="L23">    friend bool operator==(ControllerGains, ControllerGains) noexcept = default;</span>
+<span id="L24">};</span>
+<span id="L25"></span>
+<span id="L26">struct ClearFault {</span>
+<span id="L27">    std::uint32_t fault_identity = 0;</span>
+<span id="L28">    std::uint32_t authorization = 0;</span>
+<span id="L29"></span>
+<span id="L30">    friend bool operator==(ClearFault, ClearFault) noexcept = default;</span>
+<span id="L31">};</span>
+<span id="L32"></span>
+<span id="L33">struct ZeroIdentity {</span>
+<span id="L34">    std::uint32_t value = 0;</span>
+<span id="L35">};</span>
+<span id="L36"></span>
+<span id="L37">struct ThrowingCodec {</span>
+<span id="L38">    std::uint32_t value = 0;</span>
+<span id="L39">};</span>
+<span id="L40"></span>
+<span id="L41">struct MissingCodec {</span>
+<span id="L42">    std::uint32_t value = 0;</span>
+<span id="L43">};</span>
+<span id="L44"></span>
+<span id="L45">} // namespace sdk_test</span>
+<span id="L46"></span>
+<span id="L47">namespace rt {</span>
+<span id="L48"></span>
+<span id="L49">template &lt;&gt;</span>
+<span id="L50">struct LiveControlTypeTraits&lt;sdk_test::ControllerGains&gt; {</span>
+<span id="L51">    static constexpr std::uint32_t application_type_identity = 0x4347&#x27;4149u;</span>
+<span id="L52">    static constexpr std::uint32_t application_schema_version = 3;</span>
+<span id="L53">    static constexpr LiveControlUpdateKind update_kind =</span>
+<span id="L54">        LiveControlUpdateKind::controller_parameters;</span>
+<span id="L55">    static constexpr std::size_t encoded_extent = 16;</span>
+<span id="L56"></span>
+<span id="L57">    static bool validate(const sdk_test::ControllerGains&amp; value) noexcept {</span>
+<span id="L58">        return std::isfinite(value.proportional) &amp;&amp;</span>
+<span id="L59">            std::isfinite(value.integral) &amp;&amp;</span>
+<span id="L60">            std::isfinite(value.derivative) &amp;&amp;</span>
+<span id="L61">            value.proportional &gt;= 0.0F &amp;&amp; value.proportional &lt;= 100.0F &amp;&amp;</span>
+<span id="L62">            value.integral &gt;= 0.0F &amp;&amp; value.integral &lt;= 100.0F &amp;&amp;</span>
+<span id="L63">            value.derivative &gt;= 0.0F &amp;&amp; value.derivative &lt;= 100.0F &amp;&amp;</span>
+<span id="L64">            value.revision != 0;</span>
+<span id="L65">    }</span>
+<span id="L66"></span>
+<span id="L67">    static bool encode(</span>
+<span id="L68">        const sdk_test::ControllerGains&amp; value,</span>
+<span id="L69">        std::span&lt;std::byte, encoded_extent&gt; output) noexcept {</span>
+<span id="L70">        return store_u32_le(</span>
+<span id="L71">                   output, 0, std::bit_cast&lt;std::uint32_t&gt;(value.proportional)) &amp;&amp;</span>
+<span id="L72">            store_u32_le(</span>
+<span id="L73">                output, 4, std::bit_cast&lt;std::uint32_t&gt;(value.integral)) &amp;&amp;</span>
+<span id="L74">            store_u32_le(</span>
+<span id="L75">                output, 8, std::bit_cast&lt;std::uint32_t&gt;(value.derivative)) &amp;&amp;</span>
+<span id="L76">            store_u32_le(output, 12, value.revision);</span>
+<span id="L77">    }</span>
+<span id="L78"></span>
+<span id="L79">    static bool decode(</span>
+<span id="L80">        std::span&lt;const std::byte, encoded_extent&gt; input,</span>
+<span id="L81">        sdk_test::ControllerGains&amp; output) noexcept {</span>
+<span id="L82">        std::uint32_t proportional = 0;</span>
+<span id="L83">        std::uint32_t integral = 0;</span>
+<span id="L84">        std::uint32_t derivative = 0;</span>
+<span id="L85">        std::uint32_t revision = 0;</span>
+<span id="L86">        if (!load_u32_le(input, 0, proportional) ||</span>
+<span id="L87">            !load_u32_le(input, 4, integral) ||</span>
+<span id="L88">            !load_u32_le(input, 8, derivative) ||</span>
+<span id="L89">            !load_u32_le(input, 12, revision)) {</span>
+<span id="L90">            return false;</span>
+<span id="L91">        }</span>
+<span id="L92">        output = {</span>
+<span id="L93">            std::bit_cast&lt;float&gt;(proportional),</span>
+<span id="L94">            std::bit_cast&lt;float&gt;(integral),</span>
+<span id="L95">            std::bit_cast&lt;float&gt;(derivative),</span>
+<span id="L96">            revision};</span>
+<span id="L97">        return true;</span>
+<span id="L98">    }</span>
+<span id="L99">};</span>
+<span id="L100"></span>
+<span id="L101">template &lt;&gt;</span>
+<span id="L102">struct LiveControlTypeTraits&lt;sdk_test::ClearFault&gt; {</span>
+<span id="L103">    static constexpr std::uint32_t application_type_identity = 0x434c&#x27;5246u;</span>
+<span id="L104">    static constexpr std::uint32_t application_schema_version = 1;</span>
+<span id="L105">    static constexpr LiveControlUpdateKind update_kind =</span>
+<span id="L106">        LiveControlUpdateKind::clear_fault;</span>
+<span id="L107">    static constexpr std::size_t encoded_extent = 8;</span>
+<span id="L108"></span>
+<span id="L109">    static bool validate(const sdk_test::ClearFault&amp; value) noexcept {</span>
+<span id="L110">        return value.fault_identity != 0 &amp;&amp; value.authorization != 0;</span>
+<span id="L111">    }</span>
+<span id="L112"></span>
+<span id="L113">    static bool encode(</span>
+<span id="L114">        const sdk_test::ClearFault&amp; value,</span>
+<span id="L115">        std::span&lt;std::byte, encoded_extent&gt; output) noexcept {</span>
+<span id="L116">        return store_u32_le(output, 0, value.fault_identity) &amp;&amp;</span>
+<span id="L117">            store_u32_le(output, 4, value.authorization);</span>
+<span id="L118">    }</span>
+<span id="L119"></span>
+<span id="L120">    static bool decode(</span>
+<span id="L121">        std::span&lt;const std::byte, encoded_extent&gt; input,</span>
+<span id="L122">        sdk_test::ClearFault&amp; output) noexcept {</span>
+<span id="L123">        sdk_test::ClearFault candidate;</span>
+<span id="L124">        if (!load_u32_le(input, 0, candidate.fault_identity) ||</span>
+<span id="L125">            !load_u32_le(input, 4, candidate.authorization)) {</span>
+<span id="L126">            return false;</span>
+<span id="L127">        }</span>
+<span id="L128">        output = candidate;</span>
+<span id="L129">        return true;</span>
+<span id="L130">    }</span>
+<span id="L131">};</span>
+<span id="L132"></span>
+<span id="L133">template &lt;&gt;</span>
+<span id="L134">struct LiveControlTypeTraits&lt;sdk_test::ZeroIdentity&gt; {</span>
+<span id="L135">    static constexpr std::uint32_t application_type_identity = 0;</span>
+<span id="L136">    static constexpr std::uint32_t application_schema_version = 1;</span>
+<span id="L137">    static constexpr LiveControlUpdateKind update_kind =</span>
+<span id="L138">        LiveControlUpdateKind::scenario_parameters;</span>
+<span id="L139">    static constexpr std::size_t encoded_extent = 4;</span>
+<span id="L140">    static bool validate(const sdk_test::ZeroIdentity&amp;) noexcept { return true; }</span>
+<span id="L141">    static bool encode(</span>
+<span id="L142">        const sdk_test::ZeroIdentity&amp;,</span>
+<span id="L143">        std::span&lt;std::byte, encoded_extent&gt;) noexcept { return true; }</span>
+<span id="L144">    static bool decode(</span>
+<span id="L145">        std::span&lt;const std::byte, encoded_extent&gt;,</span>
+<span id="L146">        sdk_test::ZeroIdentity&amp;) noexcept { return true; }</span>
+<span id="L147">};</span>
+<span id="L148"></span>
+<span id="L149">template &lt;&gt;</span>
+<span id="L150">struct LiveControlTypeTraits&lt;sdk_test::ThrowingCodec&gt; {</span>
+<span id="L151">    static constexpr std::uint32_t application_type_identity = 1;</span>
+<span id="L152">    static constexpr std::uint32_t application_schema_version = 1;</span>
+<span id="L153">    static constexpr LiveControlUpdateKind update_kind =</span>
+<span id="L154">        LiveControlUpdateKind::scenario_parameters;</span>
+<span id="L155">    static constexpr std::size_t encoded_extent = 4;</span>
+<span id="L156">    static bool validate(const sdk_test::ThrowingCodec&amp;) { return true; }</span>
+<span id="L157">    static bool encode(</span>
+<span id="L158">        const sdk_test::ThrowingCodec&amp;,</span>
+<span id="L159">        std::span&lt;std::byte, encoded_extent&gt;) { return true; }</span>
+<span id="L160">    static bool decode(</span>
+<span id="L161">        std::span&lt;const std::byte, encoded_extent&gt;,</span>
+<span id="L162">        sdk_test::ThrowingCodec&amp;) { return true; }</span>
+<span id="L163">};</span>
+<span id="L164"></span>
+<span id="L165">} // namespace rt</span>
+<span id="L166"></span>
+<span id="L167">static_assert(rt::LiveControlFixedType&lt;sdk_test::ControllerGains&gt;);</span>
+<span id="L168">static_assert(rt::LiveControlFixedType&lt;sdk_test::ClearFault&gt;);</span>
+<span id="L169">static_assert(!rt::LiveControlFixedType&lt;sdk_test::ZeroIdentity&gt;);</span>
+<span id="L170">static_assert(!rt::LiveControlFixedType&lt;sdk_test::ThrowingCodec&gt;);</span>
+<span id="L171">static_assert(!rt::LiveControlFixedType&lt;sdk_test::MissingCodec&gt;);</span>
+<span id="L172">static_assert(!rt::LiveControlFixedType&lt;std::string&gt;);</span>
+<span id="L173">static_assert(!rt::LiveControlFixedType&lt;std::uint32_t*&gt;);</span>
+<span id="L174"></span>
+<span id="L175">namespace {</span>
+<span id="L176"></span>
+<span id="L177">constexpr std::uint64_t kMailbox = 0x4d323204u;</span>
+<span id="L178">constexpr std::uint64_t kProducer = 0x53444b31u;</span>
+<span id="L179"></span>
+<span id="L180">rt::LiveControlProducerHandle handle() {</span>
+<span id="L181">    rt::LiveControlProducerHandle value;</span>
+<span id="L182">    value.runtime_id = 11;</span>
+<span id="L183">    value.configuration_generation = 22;</span>
+<span id="L184">    value.mailbox_identity = kMailbox;</span>
+<span id="L185">    value.producer_identity = kProducer;</span>
+<span id="L186">    value.producer_index = 0;</span>
+<span id="L187">    return value;</span>
+<span id="L188">}</span>
+<span id="L189"></span>
+<span id="L190">rt::LiveControlUpdateRecord record_for(</span>
+<span id="L191">    const rt::LiveControlProducerHandle&amp; producer,</span>
+<span id="L192">    std::span&lt;const std::byte&gt; payload) {</span>
+<span id="L193">    rt::LiveControlUpdateRecord record;</span>
+<span id="L194">    record.runtime_id = producer.runtime_id;</span>
+<span id="L195">    record.configuration_generation = producer.configuration_generation;</span>
+<span id="L196">    record.mailbox_identity = producer.mailbox_identity;</span>
+<span id="L197">    record.producer_identity = producer.producer_identity;</span>
+<span id="L198">    record.producer_sequence = 1;</span>
+<span id="L199">    record.target_frame_index = 9;</span>
+<span id="L200">    record.update_kind = rt::LiveControlUpdateKind::controller_parameters;</span>
+<span id="L201">    record.payload_bytes = static_cast&lt;std::uint32_t&gt;(payload.size());</span>
+<span id="L202">    record.payload_digest = rt::live_control_payload_digest(payload);</span>
+<span id="L203">    return record;</span>
+<span id="L204">}</span>
+<span id="L205"></span>
+<span id="L206">void refresh_digest(</span>
+<span id="L207">    rt::LiveControlUpdateRecord&amp; record,</span>
+<span id="L208">    std::span&lt;const std::byte&gt; payload) {</span>
+<span id="L209">    record.payload_digest = rt::live_control_payload_digest(payload);</span>
+<span id="L210">}</span>
+<span id="L211"></span>
+<span id="L212">} // namespace</span>
+<span id="L213"></span>
+<span id="L214">TEST(LiveControlSdk, CanonicalEnvelopeHasExactLittleEndianLayout) {</span>
+<span id="L215">    const sdk_test::ControllerGains gains{1.0F, 0.5F, 0.25F, 7};</span>
+<span id="L216">    rt::LiveControlTypedPayload&lt;sdk_test::ControllerGains&gt; payload{};</span>
+<span id="L217">    ASSERT_EQ(</span>
+<span id="L218">        rt::encode_live_control_typed_payload(gains, payload),</span>
+<span id="L219">        rt::LiveControlTypedStatus::ok);</span>
+<span id="L220">    ASSERT_EQ(payload.size(), 48u);</span>
+<span id="L221"></span>
+<span id="L222">    const std::array&lt;std::byte, 32&gt; expected_header{</span>
+<span id="L223">        std::byte{0x52}, std::byte{0x54}, std::byte{0x4c}, std::byte{0x43},</span>
+<span id="L224">        std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00},</span>
+<span id="L225">        std::byte{0x30}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00},</span>
+<span id="L226">        std::byte{0x49}, std::byte{0x41}, std::byte{0x47}, std::byte{0x43},</span>
+<span id="L227">        std::byte{0x03}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00},</span>
+<span id="L228">        std::byte{0x02}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00},</span>
+<span id="L229">        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00},</span>
+<span id="L230">        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}};</span>
+<span id="L231">    EXPECT_TRUE(std::equal(</span>
+<span id="L232">        expected_header.begin(), expected_header.end(), payload.begin()));</span>
+<span id="L233">    EXPECT_EQ(payload[32], std::byte{0x00});</span>
+<span id="L234">    EXPECT_EQ(payload[34], std::byte{0x80});</span>
+<span id="L235">    EXPECT_EQ(payload[35], std::byte{0x3f});</span>
+<span id="L236"></span>
+<span id="L237">    rt::LiveControlTypedEnvelopeMetadata metadata;</span>
+<span id="L238">    ASSERT_EQ(</span>
+<span id="L239">        rt::inspect_live_control_typed_envelope(payload, metadata),</span>
+<span id="L240">        rt::LiveControlTypedStatus::ok);</span>
+<span id="L241">    EXPECT_EQ(metadata.magic, rt::live_control_typed_envelope_magic);</span>
+<span id="L242">    EXPECT_EQ(metadata.envelope_version, 1u);</span>
+<span id="L243">    EXPECT_EQ(metadata.total_encoded_bytes, payload.size());</span>
+<span id="L244">    EXPECT_EQ(metadata.application_type_identity, 0x4347&#x27;4149u);</span>
+<span id="L245">    EXPECT_EQ(metadata.application_schema_version, 3u);</span>
+<span id="L246">    EXPECT_EQ(</span>
+<span id="L247">        metadata.update_kind,</span>
+<span id="L248">        rt::LiveControlUpdateKind::controller_parameters);</span>
+<span id="L249"></span>
+<span id="L250">    auto record = record_for(handle(), payload);</span>
+<span id="L251">    sdk_test::ControllerGains decoded;</span>
+<span id="L252">    EXPECT_EQ(</span>
+<span id="L253">        rt::decode_live_control_typed_payload(record, payload, decoded),</span>
+<span id="L254">        rt::LiveControlTypedStatus::ok);</span>
+<span id="L255">    EXPECT_EQ(decoded, gains);</span>
+<span id="L256">}</span>
+<span id="L257"></span>
+<span id="L258">TEST(LiveControlSdk, DecodeRejectsMutationsWithoutPartiallyChangingOutput) {</span>
+<span id="L259">    const sdk_test::ControllerGains gains{2.0F, 1.0F, 0.5F, 9};</span>
+<span id="L260">    rt::LiveControlTypedPayload&lt;sdk_test::ControllerGains&gt; canonical{};</span>
+<span id="L261">    ASSERT_EQ(</span>
+<span id="L262">        rt::encode_live_control_typed_payload(gains, canonical),</span>
+<span id="L263">        rt::LiveControlTypedStatus::ok);</span>
+<span id="L264">    auto record = record_for(handle(), canonical);</span>
+<span id="L265">    const sdk_test::ControllerGains sentinel{7.0F, 8.0F, 9.0F, 99};</span>
+<span id="L266">    sdk_test::ControllerGains output = sentinel;</span>
+<span id="L267"></span>
+<span id="L268">    EXPECT_EQ(</span>
+<span id="L269">        rt::decode_live_control_typed_payload(</span>
+<span id="L270">            record,</span>
+<span id="L271">            std::span&lt;const std::byte&gt;{canonical}.first(canonical.size() - 1),</span>
+<span id="L272">            output),</span>
+<span id="L273">        rt::LiveControlTypedStatus::malformed_envelope);</span>
+<span id="L274">    EXPECT_EQ(output, sentinel);</span>
+<span id="L275"></span>
+<span id="L276">    auto mutated = canonical;</span>
+<span id="L277">    mutated[0] ^= std::byte{0x01};</span>
+<span id="L278">    refresh_digest(record, mutated);</span>
+<span id="L279">    EXPECT_EQ(</span>
+<span id="L280">        rt::decode_live_control_typed_payload(record, mutated, output),</span>
+<span id="L281">        rt::LiveControlTypedStatus::malformed_envelope);</span>
+<span id="L282">    EXPECT_EQ(output, sentinel);</span>
+<span id="L283"></span>
+<span id="L284">    mutated = canonical;</span>
+<span id="L285">    mutated[24] = std::byte{1};</span>
+<span id="L286">    refresh_digest(record, mutated);</span>
+<span id="L287">    EXPECT_EQ(</span>
+<span id="L288">        rt::decode_live_control_typed_payload(record, mutated, output),</span>
+<span id="L289">        rt::LiveControlTypedStatus::malformed_envelope);</span>
+<span id="L290">    EXPECT_EQ(output, sentinel);</span>
+<span id="L291"></span>
+<span id="L292">    mutated = canonical;</span>
+<span id="L293">    ASSERT_TRUE(rt::store_u32_le(mutated, 12, 0x1111u));</span>
+<span id="L294">    refresh_digest(record, mutated);</span>
+<span id="L295">    EXPECT_EQ(</span>
+<span id="L296">        rt::decode_live_control_typed_payload(record, mutated, output),</span>
+<span id="L297">        rt::LiveControlTypedStatus::type_mismatch);</span>
+<span id="L298">    EXPECT_EQ(output, sentinel);</span>
+<span id="L299"></span>
+<span id="L300">    mutated = canonical;</span>
+<span id="L301">    ASSERT_TRUE(rt::store_u32_le(mutated, 16, 4u));</span>
+<span id="L302">    refresh_digest(record, mutated);</span>
+<span id="L303">    EXPECT_EQ(</span>
+<span id="L304">        rt::decode_live_control_typed_payload(record, mutated, output),</span>
+<span id="L305">        rt::LiveControlTypedStatus::schema_mismatch);</span>
+<span id="L306">    EXPECT_EQ(output, sentinel);</span>
+<span id="L307"></span>
+<span id="L308">    mutated = canonical;</span>
+<span id="L309">    mutated[32] ^= std::byte{0x01};</span>
+<span id="L310">    record = record_for(handle(), canonical);</span>
+<span id="L311">    EXPECT_EQ(</span>
+<span id="L312">        rt::decode_live_control_typed_payload(record, mutated, output),</span>
+<span id="L313">        rt::LiveControlTypedStatus::digest_mismatch);</span>
+<span id="L314">    EXPECT_EQ(output, sentinel);</span>
+<span id="L315"></span>
+<span id="L316">    mutated = canonical;</span>
+<span id="L317">    ASSERT_TRUE(rt::store_u32_le(</span>
+<span id="L318">        mutated,</span>
+<span id="L319">        32,</span>
+<span id="L320">        std::bit_cast&lt;std::uint32_t&gt;(</span>
+<span id="L321">            std::numeric_limits&lt;float&gt;::quiet_NaN())));</span>
+<span id="L322">    refresh_digest(record, mutated);</span>
+<span id="L323">    EXPECT_EQ(</span>
+<span id="L324">        rt::decode_live_control_typed_payload(record, mutated, output),</span>
+<span id="L325">        rt::LiveControlTypedStatus::codec_rejected);</span>
+<span id="L326">    EXPECT_EQ(output, sentinel);</span>
+<span id="L327"></span>
+<span id="L328">    std::vector&lt;std::byte&gt; trailing(canonical.begin(), canonical.end());</span>
+<span id="L329">    trailing.push_back(std::byte{0});</span>
+<span id="L330">    rt::LiveControlTypedEnvelopeMetadata metadata;</span>
+<span id="L331">    EXPECT_EQ(</span>
+<span id="L332">        rt::inspect_live_control_typed_envelope(trailing, metadata),</span>
+<span id="L333">        rt::LiveControlTypedStatus::malformed_envelope);</span>
+<span id="L334">}</span>
+<span id="L335"></span>
+<span id="L336">TEST(LiveControlSdk, BuildersPreserveExactHandleSequenceTargetAndRawStatus) {</span>
+<span id="L337">    const auto producer = handle();</span>
+<span id="L338">    const sdk_test::ControllerGains gains{3.0F, 2.0F, 1.0F, 5};</span>
+<span id="L339">    rt::LiveControlTypedPayload&lt;sdk_test::ControllerGains&gt; payload{};</span>
+<span id="L340">    rt::LiveControlUpdateRecord host;</span>
+<span id="L341">    ASSERT_EQ(</span>
+<span id="L342">        rt::make_live_control_host_update(</span>
+<span id="L343">            producer, 41, 72, gains, payload, host),</span>
+<span id="L344">        rt::LiveControlTypedStatus::ok);</span>
+<span id="L345">    EXPECT_EQ(host.runtime_id, producer.runtime_id);</span>
+<span id="L346">    EXPECT_EQ(</span>
+<span id="L347">        host.configuration_generation,</span>
+<span id="L348">        producer.configuration_generation);</span>
+<span id="L349">    EXPECT_EQ(host.mailbox_identity, producer.mailbox_identity);</span>
+<span id="L350">    EXPECT_EQ(host.producer_identity, producer.producer_identity);</span>
+<span id="L351">    EXPECT_EQ(host.producer_sequence, 41u);</span>
+<span id="L352">    EXPECT_EQ(host.target_frame_index, 72u);</span>
+<span id="L353">    EXPECT_EQ(</span>
+<span id="L354">        host.rate_release_sequence,</span>
+<span id="L355">        std::numeric_limits&lt;std::uint64_t&gt;::max());</span>
+<span id="L356">    EXPECT_EQ(host.target_kind, rt::LiveControlTargetKind::host_frame);</span>
+<span id="L357">    EXPECT_EQ(</span>
+<span id="L358">        host.update_kind,</span>
+<span id="L359">        rt::LiveControlUpdateKind::controller_parameters);</span>
+<span id="L360">    EXPECT_EQ(host.payload_bytes, payload.size());</span>
+<span id="L361">    EXPECT_EQ(host.payload_alignment, 1u);</span>
+<span id="L362">    EXPECT_EQ(</span>
+<span id="L363">        host.policy_flags,</span>
+<span id="L364">        rt::live_control_payload_canonical_little_endian);</span>
+<span id="L365">    EXPECT_EQ(host.payload_digest, rt::live_control_payload_digest(payload));</span>
+<span id="L366"></span>
+<span id="L367">    rt::LiveControlBoundaryTarget rate;</span>
+<span id="L368">    rate.kind = rt::LiveControlTargetKind::rate_release;</span>
+<span id="L369">    rate.rate_release_sequence = 18;</span>
+<span id="L370">    rate.reference_release_index = 2;</span>
+<span id="L371">    rate.rate_domain_registration_index = 3;</span>
+<span id="L372">    rate.phase_index = 4;</span>
+<span id="L373">    rate.rate_substep_ordinal = 5;</span>
+<span id="L374">    rt::LiveControlUpdateRecord rate_record;</span>
+<span id="L375">    ASSERT_EQ(</span>
+<span id="L376">        rt::make_live_control_rate_update(</span>
+<span id="L377">            producer, 42, rate, gains, payload, rate_record),</span>
+<span id="L378">        rt::LiveControlTypedStatus::ok);</span>
+<span id="L379">    EXPECT_EQ(rate_record.producer_sequence, 42u);</span>
+<span id="L380">    EXPECT_EQ(rate_record.target_frame_index,</span>
+<span id="L381">              std::numeric_limits&lt;std::uint64_t&gt;::max());</span>
+<span id="L382">    EXPECT_EQ(rate_record.rate_release_sequence, 18u);</span>
+<span id="L383">    EXPECT_EQ(rate_record.reference_release_index, 2u);</span>
+<span id="L384">    EXPECT_EQ(rate_record.rate_domain_registration_index, 3u);</span>
+<span id="L385">    EXPECT_EQ(rate_record.phase_index, 4u);</span>
+<span id="L386">    EXPECT_EQ(rate_record.rate_substep_ordinal, 5u);</span>
+<span id="L387">    EXPECT_EQ(rate_record.target_kind, rt::LiveControlTargetKind::rate_release);</span>
+<span id="L388"></span>
+<span id="L389">    const auto preserved = host;</span>
+<span id="L390">    auto invalid = producer;</span>
+<span id="L391">    invalid.runtime_id = 0;</span>
+<span id="L392">    EXPECT_EQ(</span>
+<span id="L393">        rt::make_live_control_host_update(</span>
+<span id="L394">            invalid, 43, 73, gains, payload, host),</span>
+<span id="L395">        rt::LiveControlTypedStatus::invalid_handle);</span>
+<span id="L396">    EXPECT_EQ(host.producer_sequence, preserved.producer_sequence);</span>
+<span id="L397">    EXPECT_EQ(</span>
+<span id="L398">        rt::make_live_control_host_update(</span>
+<span id="L399">            producer, 0, 73, gains, payload, host),</span>
+<span id="L400">        rt::LiveControlTypedStatus::invalid_argument);</span>
+<span id="L401">    EXPECT_EQ(host.producer_sequence, preserved.producer_sequence);</span>
+<span id="L402">    EXPECT_EQ(</span>
+<span id="L403">        rt::make_live_control_host_update(</span>
+<span id="L404">            producer,</span>
+<span id="L405">            43,</span>
+<span id="L406">            std::numeric_limits&lt;std::uint64_t&gt;::max(),</span>
+<span id="L407">            gains,</span>
+<span id="L408">            payload,</span>
+<span id="L409">            host),</span>
+<span id="L410">        rt::LiveControlTypedStatus::invalid_target);</span>
+<span id="L411">    EXPECT_EQ(host.producer_sequence, preserved.producer_sequence);</span>
+<span id="L412">    auto bad_options = rt::LiveControlTypedRecordOptions{};</span>
+<span id="L413">    bad_options.policy_flags = 0;</span>
+<span id="L414">    EXPECT_EQ(</span>
+<span id="L415">        rt::make_live_control_host_update(</span>
+<span id="L416">            producer, 43, 73, gains, payload, host, bad_options),</span>
+<span id="L417">        rt::LiveControlTypedStatus::invalid_options);</span>
+<span id="L418">    EXPECT_EQ(host.producer_sequence, preserved.producer_sequence);</span>
+<span id="L419"></span>
+<span id="L420">    auto rejected = gains;</span>
+<span id="L421">    rejected.proportional = -1.0F;</span>
+<span id="L422">    EXPECT_EQ(</span>
+<span id="L423">        rt::make_live_control_host_update(</span>
+<span id="L424">            producer, 43, 73, rejected, payload, host),</span>
+<span id="L425">        rt::LiveControlTypedStatus::codec_rejected);</span>
+<span id="L426">    EXPECT_EQ(host.producer_sequence, preserved.producer_sequence);</span>
+<span id="L427">}</span>
+<span id="L428"></span>
+<span id="L429">TEST(LiveControlSdk, TypedClearFaultKeepsRawAdmissionResultVisible) {</span>
+<span id="L430">    rt::Runtime runtime;</span>
+<span id="L431">    rt::LiveControlPolicy policy;</span>
+<span id="L432">    policy.policy_identity = 0x4d323204;</span>
+<span id="L433">    policy.mailbox_capacity = 1;</span>
+<span id="L434">    policy.producer_capacity = 1;</span>
+<span id="L435">    policy.record_capacity = 1;</span>
+<span id="L436">    policy.payload_bytes_per_record = static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L437">        rt::live_control_typed_payload_extent&lt;sdk_test::ClearFault&gt;);</span>
+<span id="L438">    policy.total_payload_storage_bytes = policy.payload_bytes_per_record;</span>
+<span id="L439">    ASSERT_EQ(runtime.set_live_control_policy(policy), rt::Status::ok);</span>
+<span id="L440">    rt::LiveControlMailboxRegistration mailbox;</span>
+<span id="L441">    mailbox.mailbox_identity = kMailbox;</span>
+<span id="L442">    mailbox.record_capacity = 1;</span>
+<span id="L443">    mailbox.payload_bytes_per_record = policy.payload_bytes_per_record;</span>
+<span id="L444">    ASSERT_EQ(</span>
+<span id="L445">        runtime.register_live_control_mailbox(mailbox),</span>
+<span id="L446">        rt::Status::ok);</span>
+<span id="L447">    rt::LiveControlProducerRegistration registration;</span>
+<span id="L448">    registration.mailbox_identity = kMailbox;</span>
+<span id="L449">    registration.producer_identity = kProducer;</span>
+<span id="L450">    ASSERT_EQ(</span>
+<span id="L451">        runtime.register_live_control_producer(registration),</span>
+<span id="L452">        rt::Status::ok);</span>
+<span id="L453">    ASSERT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L454"></span>
+<span id="L455">    rt::LiveControlProducerHandle producer;</span>
+<span id="L456">    ASSERT_EQ(</span>
+<span id="L457">        runtime.live_control_producer_handle(kMailbox, kProducer, producer),</span>
+<span id="L458">        rt::Status::ok);</span>
+<span id="L459">    const sdk_test::ClearFault clear{77, 0x434c&#x27;4541u};</span>
+<span id="L460">    rt::LiveControlTypedPayload&lt;sdk_test::ClearFault&gt; payload{};</span>
+<span id="L461">    rt::LiveControlUpdateRecord update;</span>
+<span id="L462">    ASSERT_EQ(</span>
+<span id="L463">        rt::make_live_control_host_update(</span>
+<span id="L464">            producer, 1, 4, clear, payload, update),</span>
+<span id="L465">        rt::LiveControlTypedStatus::ok);</span>
+<span id="L466"></span>
+<span id="L467">    auto admission = rt::LiveControlAdmissionResult::busy;</span>
+<span id="L468">    EXPECT_EQ(</span>
+<span id="L469">        runtime.stage_live_control_update(</span>
+<span id="L470">            producer, update, payload, admission),</span>
+<span id="L471">        rt::Status::ok);</span>
+<span id="L472">    EXPECT_EQ(admission, rt::LiveControlAdmissionResult::accepted);</span>
+<span id="L473"></span>
+<span id="L474">    update.producer_sequence = 2;</span>
+<span id="L475">    update.payload_digest = rt::live_control_payload_digest(payload);</span>
+<span id="L476">    admission = rt::LiveControlAdmissionResult::invalid;</span>
+<span id="L477">    EXPECT_EQ(</span>
+<span id="L478">        runtime.stage_live_control_update(</span>
+<span id="L479">            producer, update, payload, admission),</span>
+<span id="L480">        rt::Status::ok);</span>
+<span id="L481">    EXPECT_EQ(admission, rt::LiveControlAdmissionResult::full);</span>
+<span id="L482">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L483">}</span></pre></html>

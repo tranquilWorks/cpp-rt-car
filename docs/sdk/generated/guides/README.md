@@ -15,13 +15,13 @@ versioned observability/replay, and asynchronous device integration.
 > support the target `rt::Runtime` path and stable C ABI v8. Portable support
 > makes no hard-real-time, worst-case-latency, cross-platform bitwise-
 > determinism, CUDA-hardware, XDMA, or C++ binary ABI claim. See the
-> [product contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/product_contract.md)
+> [product contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/product_contract.md)
 > and [release policy](docs__release_policy.md) before integrating it.
 
 ## Start with the installed SDK
 
-You need CMake 3.20+, a C++20 compiler and its platform build tools. The SDK
-build below needs no GoogleTest checkout, Python, CUDA toolkit or experimental
+You need CMake 3.20+, Python 3 (for source-kit provenance), a C++20 compiler and
+its platform build tools. The SDK build below needs no GoogleTest checkout, CUDA toolkit or experimental
 SimCore dependencies. Run these Bash commands from the RTFW source root:
 
 <!-- ci-verified: .github/workflows/docs-contract.yml -->
@@ -56,8 +56,8 @@ Both paths run two dependent phases over three host-driven frames and check
 shutdown. The [first-use guide](docs__getting_started.md) explains the graph,
 ownership, capacities, Windows commands, package relocation and troubleshooting.
 It also ships as `<prefix>/<datadir>/rtfw/getting_started.md`.
-See [supported samples](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/samples/README.md) for next steps; the
-[legacy experiments](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/examples/README.md) are a separate research directory.
+See [supported samples](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/samples/README.md) for next steps; the
+[legacy experiments](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/examples/README.md) are a separate research directory.
 
 ## Current implementation
 
@@ -123,7 +123,7 @@ RT0 evidence, not physical HIL.
 ## Support and compatibility
 
 RTFW 1.x supports only the exact RT0 build/test tuples in the
-[portable support matrix](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/portable_support_matrix.json). Other C++20
+[portable support matrix](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/portable_support_matrix.json). Other C++20
 platforms are best effort unless added through a reviewed matrix change. C ABI
 v8 is the stable binary boundary. The target C++ declarations reachable from
 `<rt/runtime.hpp>` are source-compatible within 1.x, require recompilation, and
@@ -134,10 +134,10 @@ Release archives include an immutable source commit and SHA-256 for every
 artifact in a generated manifest. The complete versioning, deprecation,
 support, and release checklist is in the
 [release policy](docs__release_policy.md); changes are recorded in the
-[changelog](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/CHANGELOG.md).
+[changelog](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/CHANGELOG.md).
 
 The M20-PRE-01 candidate assurance lane and its exact limits are documented in
-[portable assurance](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/portable_assurance.md). Its SBOM and provenance
+[portable assurance](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/portable_assurance.md). Its SBOM and provenance
 outputs are verification candidates, not authenticated release provenance.
 
 ## Contributor build and test
@@ -212,7 +212,7 @@ rejected.
 Phase percentiles are **not cumulative for the whole process**. They cover the
 latest samples retained by a rolling histogram, whose default capacity is 120.
 Several worker telemetry names are also provisional; see
-[observability](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/observability.md).
+[observability](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/observability.md).
 
 The legacy `rtfw_demo` intentionally does not implement `--config`, `--rt`,
 `--run`, `--duration`, or `RTFW_PROFILE`. The separate
@@ -311,12 +311,12 @@ submission, buffer, completion, health, status, and cleanup fields; malformed
 outputs and exceptions fail closed. Adapted v1 retains legacy graph/replay
 identity, while native v2 includes a kind/API marker. Adapter storage is
 counted once in device control without changing the six-row MemoryPlan. See the
-[HAL v2 contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/hal_v2.md). M17-02 appends a separately versioned,
+[HAL v2 contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/hal_v2.md). M17-02 appends a separately versioned,
 fixed-capacity extension for exactly six memory-domain kinds, topology and
 timestamp domains, explicit host-span/opaque registrations, inspection, and
 declared running-state timestamp correlation. Core-only v2 and adapted-v1
 backends keep one implicit borrowed-host domain and the exact M17-01 path. See
-the [heterogeneous-memory contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/heterogeneous_memory.md). M17-03 adds
+the [heterogeneous-memory contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/heterogeneous_memory.md). M17-03 adds
 fixed command batches, same-backend timelines, explicit synchronization, and
 isolated per-backend submission lanes. M17-04 adds native registrations for
 caller-owned CUDA Graphs and bounded XDMA control/event commands. M17 remains
@@ -333,14 +333,14 @@ queue/team. All three use the same task representation for nested
 [executor contract](docs__executor.md), the
 [memory-plan contract](docs__memory_plan.md), the
 [time/platform contract](docs__time_platform.md), the
-[observability contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/observability.md), the
+[observability contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/observability.md), the
 [determinism/replay contract](docs__determinism_replay.md), the
 [device backend contract](docs__device_backend.md), and the
 [stable C ABI contract](docs__c_abi.md), plus the working
-[C](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/samples/embed_c/mini_app.c) and
-[C++](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/samples/embed_cpp/mini_app.cpp) examples plus the
-[mock-device sample](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/samples/device_mock.cpp). The optional M9 CUDA and M10 XDMA candidates have separate
-[CUDA](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/cuda_backend.md) and [XDMA](docs__xdma_backend.md) backend and
+[C](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/samples/embed_c/mini_app.c) and
+[C++](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/samples/embed_cpp/mini_app.cpp) examples plus the
+[mock-device sample](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/samples/device_mock.cpp). The optional M9 CUDA and M10 XDMA candidates have separate
+[CUDA](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/cuda_backend.md) and [XDMA](docs__xdma_backend.md) backend and
 qualification contracts.
 
 ## Architecture direction
@@ -359,9 +359,9 @@ The target is a domain-neutral runtime rather than a car or physics engine:
 
 Accepted architecture decisions:
 
-- [ADR-0001: one CPU executor boundary](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/adr/0001-one-executor-boundary.md)
-- [ADR-0002: host-driven time by default](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/adr/0002-host-driven-time.md)
-- [ADR-0003: bounded device backend ABI](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/adr/0003-device-backend-boundary.md)
+- [ADR-0001: one CPU executor boundary](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/adr/0001-one-executor-boundary.md)
+- [ADR-0002: host-driven time by default](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/adr/0002-host-driven-time.md)
+- [ADR-0003: bounded device backend ABI](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/adr/0003-device-backend-boundary.md)
 
 The M1–M14 portable runtime plus the 1.2.1 lifecycle-safety closure implements
 lifecycle, both explicit time modes,
@@ -376,7 +376,7 @@ claiming a qualified deployment. The existing
 `SimCore` demo and legacy scheduler components remain outside that target
 path. M12 adds the named support matrix, cross-instance device-isolation gate,
 1.x compatibility policy, and checked package-manifest workflow. The
-[M15 CPU/memory policy model](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/cpu_memory_policy.md) adds strict
+[M15 CPU/memory policy model](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/cpu_memory_policy.md) adds strict
 finalization validation, Linux runtime-owned thread apply/readback, stable
 role/category identities, external verify-only ownership, and the bounded
 three-region provider/resident transaction without changing steady-state
@@ -391,7 +391,7 @@ HAL v2 core and complete device-ABI-v1 compatibility path without promoting
 later M17 or M18 capabilities. M17-04 adds bounded native vendor commands to
 the M17-03 isolated-lane C++ contract without promoting physical memory, DMA,
 coherency, clock, hardware, or qualification claims. The
-[architecture guide](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/architecture.md) distinguishes supported and
+[architecture guide](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/architecture.md) distinguishes supported and
 experimental paths.
 
 ## Real-time and determinism language
@@ -405,7 +405,7 @@ RTFW separates portable functionality from deployment qualification:
 
 No RT2 record exists yet.
 
-The offline [qualification contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/qualification.md) defines exact
+The offline [qualification contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/qualification.md) defines exact
 schema versions, bounds, digest rules, review limits, and proposal commands.
 Passing those synthetic/tooling gates is not hardware or RT qualification and
 does not edit a support matrix.
@@ -415,7 +415,7 @@ fixed-point/specified math). Release 1.2 supports D0 and an explicit D1
 contract for registered canonical state. Its worker-count and compiler-artifact
 fixtures do not prove D2, arbitrary floating-point identity, or cross-machine
 D3 behavior. Definitions and evidence requirements are in the
-[product contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/product_contract.md) and
+[product contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/product_contract.md) and
 [determinism/replay contract](docs__determinism_replay.md).
 
 ## Repository map
@@ -504,7 +504,7 @@ CI currently provides:
 - documentation/version/claim checks.
 
 These jobs provide regression evidence, not real-time qualification. Missing
-high-risk gates are tracked in [the roadmap](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/roadmap.md).
+high-risk gates are tracked in [the roadmap](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/roadmap.md).
 
 ## Autotune tooling
 
@@ -513,22 +513,22 @@ now drives `rtfw_runtime_demo` through the strict profile contract. Its
 measurements describe only the built binary, declared workload, and observed
 host; they are not portable latency bounds, hardware qualification, or an
 automatic deployment recommendation. See
-[DOE/autotune status](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/DOE_AUTOTUNE.md).
+[DOE/autotune status](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/DOE_AUTOTUNE.md).
 
 The platform hardening scripts make privileged, best-effort host changes. They
 are deployment experiments, not library behavior and not evidence of RT2.
-Review [real-time hardening](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/real_time_hardening.md) before running them.
+Review [real-time hardening](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/real_time_hardening.md) before running them.
 
 ## Contributing
 
-Read the [contributor guide](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/contributor_guide.md), the
-[product contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/product_contract.md), and relevant ADRs before changing
+Read the [contributor guide](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/contributor_guide.md), the
+[product contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/product_contract.md), and relevant ADRs before changing
 public semantics. New present-tense feature claims need an implementation test;
 latency or qualification claims need a named evidence procedure.
 
 ## License
 
-Licensed under the [Apache License 2.0](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/LICENSE).
+Licensed under the [Apache License 2.0](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/LICENSE).
 
 ## Optional host-side benchmarks (M23-01)
 
@@ -545,8 +545,19 @@ M23-02 adds the optional `rtfw.cpu` source provider with 51 graph, executor, mem
 
 The [offline SDK manual](../README.md) ships in ordinary CPack
 archives with a generated source-linked API reference, relevant guides and
-[executable recipes](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/sdk/generated/recipes.md). The reference covers all
+[executable recipes](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/sdk/generated/recipes.md). The reference covers all
 default public headers and labels optional components explicitly. Docs generation
 is a developer check; installing or building the default SDK needs no generator.
-M25 software delivery does not establish independent novice review, M26, physical/RT,
+M25 software delivery does not establish independent novice review, physical/RT,
 Unreal or release qualification.
+
+## Golden system and capability audit
+
+The [offline golden manual](../../golden_audit/index.html) maps the
+complete CPU, simulated CUDA/XDMA/combined and external-controller scenario to
+source, ownership, clocks, controls, failure/recovery, benchmarks and tuning.
+The [audit guide](docs__golden_audit.md) includes the installed one-command workflow
+and bounded regression soak. All 112 canonical capability requirements retain
+explicit implementation, engineering, manual-gate and claim-limit dispositions.
+M18 physical/RT, M19 Unreal, M20 release engineering and independent M25 human
+review remain separate; portable simulation does not close those requirements.

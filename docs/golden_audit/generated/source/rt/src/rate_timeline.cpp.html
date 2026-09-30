@@ -1,0 +1,332 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>rt/src/rate_timeline.cpp</title><h1>rt/src/rate_timeline.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;rate_timeline.hpp&quot;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;array&gt;</span>
+<span id="L5">#include &lt;limits&gt;</span>
+<span id="L6">#include &lt;new&gt;</span>
+<span id="L7">#include &lt;numeric&gt;</span>
+<span id="L8">#include &lt;string_view&gt;</span>
+<span id="L9"></span>
+<span id="L10">namespace {</span>
+<span id="L11"></span>
+<span id="L12">bool checked_add(</span>
+<span id="L13">    std::uint64_t left,</span>
+<span id="L14">    std::uint64_t right,</span>
+<span id="L15">    std::uint64_t&amp; output) noexcept {</span>
+<span id="L16">    if (left &gt; std::numeric_limits&lt;std::uint64_t&gt;::max() - right) {</span>
+<span id="L17">        return false;</span>
+<span id="L18">    }</span>
+<span id="L19">    output = left + right;</span>
+<span id="L20">    return true;</span>
+<span id="L21">}</span>
+<span id="L22"></span>
+<span id="L23">bool checked_multiply(</span>
+<span id="L24">    std::uint64_t left,</span>
+<span id="L25">    std::uint64_t right,</span>
+<span id="L26">    std::uint64_t&amp; output) noexcept {</span>
+<span id="L27">    if (left != 0 &amp;&amp;</span>
+<span id="L28">        right &gt; std::numeric_limits&lt;std::uint64_t&gt;::max() / left) {</span>
+<span id="L29">        return false;</span>
+<span id="L30">    }</span>
+<span id="L31">    output = left * right;</span>
+<span id="L32">    return true;</span>
+<span id="L33">}</span>
+<span id="L34"></span>
+<span id="L35">bool checked_lcm(</span>
+<span id="L36">    std::uint64_t left,</span>
+<span id="L37">    std::uint64_t right,</span>
+<span id="L38">    std::uint64_t&amp; output) noexcept {</span>
+<span id="L39">    const auto divisor = std::gcd(left, right);</span>
+<span id="L40">    return divisor != 0 &amp;&amp; checked_multiply(left / divisor, right, output);</span>
+<span id="L41">}</span>
+<span id="L42"></span>
+<span id="L43">bool valid_name(std::string_view name) noexcept {</span>
+<span id="L44">    if (name.empty() || name.size() &gt;= rt::rate_domain_name_capacity) {</span>
+<span id="L45">        return false;</span>
+<span id="L46">    }</span>
+<span id="L47">    return std::all_of(name.begin(), name.end(), [](char character) {</span>
+<span id="L48">        return (character &gt;= &#x27;a&#x27; &amp;&amp; character &lt;= &#x27;z&#x27;) ||</span>
+<span id="L49">            (character &gt;= &#x27;A&#x27; &amp;&amp; character &lt;= &#x27;Z&#x27;) ||</span>
+<span id="L50">            (character &gt;= &#x27;0&#x27; &amp;&amp; character &lt;= &#x27;9&#x27;) ||</span>
+<span id="L51">            character == &#x27;.&#x27; || character == &#x27;_&#x27; || character == &#x27;:&#x27; ||</span>
+<span id="L52">            character == &#x27;/&#x27; || character == &#x27;@&#x27; || character == &#x27;-&#x27;;</span>
+<span id="L53">    });</span>
+<span id="L54">}</span>
+<span id="L55"></span>
+<span id="L56">} // namespace</span>
+<span id="L57"></span>
+<span id="L58">namespace rt::detail {</span>
+<span id="L59"></span>
+<span id="L60">Status compile_rate_timeline(</span>
+<span id="L61">    std::uint32_t graph_owner,</span>
+<span id="L62">    std::size_t phase_count,</span>
+<span id="L63">    std::span&lt;const PhaseHandle&gt; compiled_order,</span>
+<span id="L64">    std::span&lt;const RateDomainSpec&gt; domains,</span>
+<span id="L65">    std::span&lt;const RateBindingSpec&gt; bindings,</span>
+<span id="L66">    CompiledRatePlan&amp; output,</span>
+<span id="L67">    RateCompileDiagnostic&amp; diagnostic) noexcept {</span>
+<span id="L68">    diagnostic = {};</span>
+<span id="L69">    if (domains.empty()) {</span>
+<span id="L70">        if (!bindings.empty()) {</span>
+<span id="L71">            diagnostic = {</span>
+<span id="L72">                Status::invalid_config,</span>
+<span id="L73">                &quot;rate bindings require at least one rate domain&quot;};</span>
+<span id="L74">            return diagnostic.status;</span>
+<span id="L75">        }</span>
+<span id="L76">        output = {};</span>
+<span id="L77">        return Status::ok;</span>
+<span id="L78">    }</span>
+<span id="L79">    if (domains.size() &gt; rate_domain_capacity) {</span>
+<span id="L80">        diagnostic = {</span>
+<span id="L81">            Status::capacity_exceeded,</span>
+<span id="L82">            &quot;rate-domain capacity exceeded&quot;};</span>
+<span id="L83">        return diagnostic.status;</span>
+<span id="L84">    }</span>
+<span id="L85">    if (phase_count == 0 || compiled_order.size() != phase_count ||</span>
+<span id="L86">        bindings.size() != phase_count) {</span>
+<span id="L87">        diagnostic = {</span>
+<span id="L88">            Status::invalid_config,</span>
+<span id="L89">            &quot;enabled rate model requires exactly one binding per phase&quot;};</span>
+<span id="L90">        return diagnostic.status;</span>
+<span id="L91">    }</span>
+<span id="L92"></span>
+<span id="L93">    try {</span>
+<span id="L94">        std::vector&lt;std::size_t&gt; binding_by_phase(</span>
+<span id="L95">            phase_count,</span>
+<span id="L96">            std::numeric_limits&lt;std::size_t&gt;::max());</span>
+<span id="L97">        std::vector&lt;std::size_t&gt; phases_per_domain(domains.size(), 0);</span>
+<span id="L98">        for (std::size_t index = 0; index &lt; bindings.size(); ++index) {</span>
+<span id="L99">            const auto&amp; binding = bindings[index];</span>
+<span id="L100">            if (!binding.phase.valid() ||</span>
+<span id="L101">                binding.phase.owner() != graph_owner ||</span>
+<span id="L102">                binding.phase.index() &gt;= phase_count ||</span>
+<span id="L103">                !binding.domain.valid() ||</span>
+<span id="L104">                binding.domain.owner() != graph_owner ||</span>
+<span id="L105">                binding.domain.index() &gt;= domains.size() ||</span>
+<span id="L106">                (binding.phase_kind != RatePhaseKind::cpu &amp;&amp;</span>
+<span id="L107">                 binding.phase_kind != RatePhaseKind::device)) {</span>
+<span id="L108">                diagnostic = {</span>
+<span id="L109">                    Status::invalid_handle,</span>
+<span id="L110">                    &quot;rate binding contains an invalid or foreign reference&quot;};</span>
+<span id="L111">                return diagnostic.status;</span>
+<span id="L112">            }</span>
+<span id="L113">            auto&amp; phase_binding = binding_by_phase[binding.phase.index()];</span>
+<span id="L114">            if (phase_binding != std::numeric_limits&lt;std::size_t&gt;::max()) {</span>
+<span id="L115">                diagnostic = {</span>
+<span id="L116">                    Status::invalid_config,</span>
+<span id="L117">                    &quot;a phase is bound to more than one rate domain&quot;};</span>
+<span id="L118">                return diagnostic.status;</span>
+<span id="L119">            }</span>
+<span id="L120">            phase_binding = index;</span>
+<span id="L121">            ++phases_per_domain[binding.domain.index()];</span>
+<span id="L122">        }</span>
+<span id="L123">        if (std::find(</span>
+<span id="L124">                binding_by_phase.begin(),</span>
+<span id="L125">                binding_by_phase.end(),</span>
+<span id="L126">                std::numeric_limits&lt;std::size_t&gt;::max()) !=</span>
+<span id="L127">                binding_by_phase.end() ||</span>
+<span id="L128">            std::find(</span>
+<span id="L129">                phases_per_domain.begin(),</span>
+<span id="L130">                phases_per_domain.end(),</span>
+<span id="L131">                std::size_t{0}) != phases_per_domain.end()) {</span>
+<span id="L132">            diagnostic = {</span>
+<span id="L133">                Status::invalid_config,</span>
+<span id="L134">                &quot;rate model has a missing phase or empty domain ownership&quot;};</span>
+<span id="L135">            return diagnostic.status;</span>
+<span id="L136">        }</span>
+<span id="L137"></span>
+<span id="L138">        std::uint64_t supercycle = 1;</span>
+<span id="L139">        for (std::size_t index = 0; index &lt; domains.size(); ++index) {</span>
+<span id="L140">            const auto&amp; domain = domains[index];</span>
+<span id="L141">            if (domain.period_ns == 0 || domain.substep_count == 0 ||</span>
+<span id="L142">                domain.substep_count &gt; rate_domain_substep_capacity ||</span>
+<span id="L143">                !valid_name(domain.name) ||</span>
+<span id="L144">                (domain.criticality != RateCriticality::background &amp;&amp;</span>
+<span id="L145">                 domain.criticality != RateCriticality::normal &amp;&amp;</span>
+<span id="L146">                 domain.criticality != RateCriticality::critical)) {</span>
+<span id="L147">                diagnostic = {</span>
+<span id="L148">                    Status::invalid_config,</span>
+<span id="L149">                    &quot;rate domain contains invalid period, substeps, deadline, or criticality&quot;};</span>
+<span id="L150">                return diagnostic.status;</span>
+<span id="L151">            }</span>
+<span id="L152">            for (std::size_t earlier = 0; earlier &lt; index; ++earlier) {</span>
+<span id="L153">                if (domains[earlier].name == domain.name) {</span>
+<span id="L154">                    diagnostic = {</span>
+<span id="L155">                        Status::invalid_config,</span>
+<span id="L156">                        &quot;rate-domain names must be unique&quot;};</span>
+<span id="L157">                    return diagnostic.status;</span>
+<span id="L158">                }</span>
+<span id="L159">            }</span>
+<span id="L160">            if (!checked_lcm(supercycle, domain.period_ns, supercycle)) {</span>
+<span id="L161">                diagnostic = {</span>
+<span id="L162">                    Status::capacity_exceeded,</span>
+<span id="L163">                    &quot;rate supercycle is not representable&quot;};</span>
+<span id="L164">                return diagnostic.status;</span>
+<span id="L165">            }</span>
+<span id="L166">        }</span>
+<span id="L167"></span>
+<span id="L168">        std::uint64_t release_count = 0;</span>
+<span id="L169">        for (std::size_t index = 0; index &lt; domains.size(); ++index) {</span>
+<span id="L170">            std::uint64_t domain_entries = supercycle / domains[index].period_ns;</span>
+<span id="L171">            if (!checked_multiply(</span>
+<span id="L172">                    domain_entries,</span>
+<span id="L173">                    static_cast&lt;std::uint64_t&gt;(phases_per_domain[index]),</span>
+<span id="L174">                    domain_entries) ||</span>
+<span id="L175">                !checked_multiply(</span>
+<span id="L176">                    domain_entries,</span>
+<span id="L177">                    domains[index].substep_count,</span>
+<span id="L178">                    domain_entries) ||</span>
+<span id="L179">                !checked_add(release_count, domain_entries, release_count) ||</span>
+<span id="L180">                release_count &gt; reference_release_capacity) {</span>
+<span id="L181">                diagnostic = {</span>
+<span id="L182">                    Status::capacity_exceeded,</span>
+<span id="L183">                    &quot;reference-release capacity exceeded&quot;};</span>
+<span id="L184">                return diagnostic.status;</span>
+<span id="L185">            }</span>
+<span id="L186">        }</span>
+<span id="L187"></span>
+<span id="L188">        CompiledRatePlan candidate;</span>
+<span id="L189">        candidate.supercycle_ns = supercycle;</span>
+<span id="L190">        candidate.domains.reserve(domains.size());</span>
+<span id="L191">        candidate.bindings.reserve(phase_count);</span>
+<span id="L192">        candidate.releases.reserve(static_cast&lt;std::size_t&gt;(release_count));</span>
+<span id="L193"></span>
+<span id="L194">        const auto reference_period = domains.front().period_ns;</span>
+<span id="L195">        for (std::size_t index = 0; index &lt; domains.size(); ++index) {</span>
+<span id="L196">            const auto&amp; source = domains[index];</span>
+<span id="L197">            CompiledRateDomain compiled;</span>
+<span id="L198">            compiled.domain = RateDomainHandle{</span>
+<span id="L199">                graph_owner,</span>
+<span id="L200">                static_cast&lt;std::uint32_t&gt;(index)};</span>
+<span id="L201">            std::copy(source.name.begin(), source.name.end(), compiled.name.begin());</span>
+<span id="L202">            compiled.registration_index = index;</span>
+<span id="L203">            compiled.period_ns = source.period_ns;</span>
+<span id="L204">            compiled.substep_count = source.substep_count;</span>
+<span id="L205">            compiled.relative_deadline_ns = source.relative_deadline_ns;</span>
+<span id="L206">            compiled.budget_wcet_ns = source.budget_wcet_ns;</span>
+<span id="L207">            compiled.criticality = source.criticality;</span>
+<span id="L208">            compiled.optional = source.optional;</span>
+<span id="L209">            compiled.late_action = source.late_action;</span>
+<span id="L210">            compiled.bounded_catch_up_limit =</span>
+<span id="L211">                source.bounded_catch_up_limit;</span>
+<span id="L212">            compiled.releases_per_supercycle = supercycle / source.period_ns;</span>
+<span id="L213">            const auto ratio_gcd = std::gcd(source.period_ns, reference_period);</span>
+<span id="L214">            compiled.period_ratio_numerator = source.period_ns / ratio_gcd;</span>
+<span id="L215">            compiled.period_ratio_denominator = reference_period / ratio_gcd;</span>
+<span id="L216">            candidate.domains.push_back(compiled);</span>
+<span id="L217">        }</span>
+<span id="L218"></span>
+<span id="L219">        std::vector&lt;std::size_t&gt; compiled_index_by_phase(</span>
+<span id="L220">            phase_count,</span>
+<span id="L221">            std::numeric_limits&lt;std::size_t&gt;::max());</span>
+<span id="L222">        for (std::size_t index = 0; index &lt; compiled_order.size(); ++index) {</span>
+<span id="L223">            const auto phase = compiled_order[index];</span>
+<span id="L224">            if (!phase.valid() || phase.owner() != graph_owner ||</span>
+<span id="L225">                phase.index() &gt;= phase_count) {</span>
+<span id="L226">                diagnostic = {</span>
+<span id="L227">                    Status::invalid_handle,</span>
+<span id="L228">                    &quot;compiled phase order contains an invalid reference&quot;};</span>
+<span id="L229">                return diagnostic.status;</span>
+<span id="L230">            }</span>
+<span id="L231">            if (compiled_index_by_phase[phase.index()] !=</span>
+<span id="L232">                std::numeric_limits&lt;std::size_t&gt;::max()) {</span>
+<span id="L233">                diagnostic = {</span>
+<span id="L234">                    Status::invalid_config,</span>
+<span id="L235">                    &quot;compiled phase order is not a permutation&quot;};</span>
+<span id="L236">                return diagnostic.status;</span>
+<span id="L237">            }</span>
+<span id="L238">            compiled_index_by_phase[phase.index()] = index;</span>
+<span id="L239">            const auto&amp; binding = bindings[binding_by_phase[phase.index()]];</span>
+<span id="L240">            candidate.bindings.push_back({</span>
+<span id="L241">                phase,</span>
+<span id="L242">                binding.domain,</span>
+<span id="L243">                binding.phase_kind,</span>
+<span id="L244">                index,</span>
+<span id="L245">            });</span>
+<span id="L246">        }</span>
+<span id="L247"></span>
+<span id="L248">        for (std::size_t domain_index = 0;</span>
+<span id="L249">             domain_index &lt; domains.size();</span>
+<span id="L250">             ++domain_index) {</span>
+<span id="L251">            const auto&amp; domain = domains[domain_index];</span>
+<span id="L252">            const auto sequence_count = supercycle / domain.period_ns;</span>
+<span id="L253">            for (std::uint64_t sequence = 0;</span>
+<span id="L254">                 sequence &lt; sequence_count;</span>
+<span id="L255">                 ++sequence) {</span>
+<span id="L256">                std::uint64_t release_time = 0;</span>
+<span id="L257">                if (!checked_multiply(sequence, domain.period_ns, release_time)) {</span>
+<span id="L258">                    diagnostic = {</span>
+<span id="L259">                        Status::capacity_exceeded,</span>
+<span id="L260">                        &quot;rate release time is not representable&quot;};</span>
+<span id="L261">                    return diagnostic.status;</span>
+<span id="L262">                }</span>
+<span id="L263">                std::uint64_t deadline_time = 0;</span>
+<span id="L264">                if (!checked_add(</span>
+<span id="L265">                        release_time,</span>
+<span id="L266">                        domain.relative_deadline_ns,</span>
+<span id="L267">                        deadline_time)) {</span>
+<span id="L268">                    diagnostic = {</span>
+<span id="L269">                        Status::capacity_exceeded,</span>
+<span id="L270">                        &quot;rate release deadline is not representable&quot;};</span>
+<span id="L271">                    return diagnostic.status;</span>
+<span id="L272">                }</span>
+<span id="L273">                for (const auto&amp; binding : candidate.bindings) {</span>
+<span id="L274">                    if (binding.domain.index() != domain_index) {</span>
+<span id="L275">                        continue;</span>
+<span id="L276">                    }</span>
+<span id="L277">                    for (std::uint32_t substep = 0;</span>
+<span id="L278">                         substep &lt; domain.substep_count;</span>
+<span id="L279">                         ++substep) {</span>
+<span id="L280">                        candidate.releases.push_back({</span>
+<span id="L281">                            release_time,</span>
+<span id="L282">                            binding.domain,</span>
+<span id="L283">                            domain_index,</span>
+<span id="L284">                            sequence,</span>
+<span id="L285">                            binding.phase,</span>
+<span id="L286">                            binding.phase_kind,</span>
+<span id="L287">                            binding.compiled_phase_index,</span>
+<span id="L288">                            substep,</span>
+<span id="L289">                            domain.substep_count,</span>
+<span id="L290">                            domain.relative_deadline_ns,</span>
+<span id="L291">                            deadline_time,</span>
+<span id="L292">                            domain.budget_wcet_ns,</span>
+<span id="L293">                            domain.criticality,</span>
+<span id="L294">                            domain.optional,</span>
+<span id="L295">                            domain.late_action,</span>
+<span id="L296">                            domain.bounded_catch_up_limit,</span>
+<span id="L297">                        });</span>
+<span id="L298">                    }</span>
+<span id="L299">                }</span>
+<span id="L300">            }</span>
+<span id="L301">        }</span>
+<span id="L302">        std::sort(</span>
+<span id="L303">            candidate.releases.begin(),</span>
+<span id="L304">            candidate.releases.end(),</span>
+<span id="L305">            [](const ReferenceRelease&amp; left, const ReferenceRelease&amp; right) {</span>
+<span id="L306">                if (left.release_time_ns != right.release_time_ns) {</span>
+<span id="L307">                    return left.release_time_ns &lt; right.release_time_ns;</span>
+<span id="L308">                }</span>
+<span id="L309">                if (left.domain_registration_index !=</span>
+<span id="L310">                    right.domain_registration_index) {</span>
+<span id="L311">                    return left.domain_registration_index &lt;</span>
+<span id="L312">                        right.domain_registration_index;</span>
+<span id="L313">                }</span>
+<span id="L314">                if (left.compiled_phase_index != right.compiled_phase_index) {</span>
+<span id="L315">                    return left.compiled_phase_index &lt;</span>
+<span id="L316">                        right.compiled_phase_index;</span>
+<span id="L317">                }</span>
+<span id="L318">                return left.substep_ordinal &lt; right.substep_ordinal;</span>
+<span id="L319">            });</span>
+<span id="L320"></span>
+<span id="L321">        output = std::move(candidate);</span>
+<span id="L322">        return Status::ok;</span>
+<span id="L323">    } catch (const std::bad_alloc&amp;) {</span>
+<span id="L324">        diagnostic = {Status::resource_exhausted, nullptr};</span>
+<span id="L325">        return diagnostic.status;</span>
+<span id="L326">    } catch (...) {</span>
+<span id="L327">        diagnostic = {Status::internal_error, nullptr};</span>
+<span id="L328">        return diagnostic.status;</span>
+<span id="L329">    }</span>
+<span id="L330">}</span>
+<span id="L331"></span>
+<span id="L332">} // namespace rt::detail</span></pre></html>

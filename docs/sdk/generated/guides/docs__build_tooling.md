@@ -58,7 +58,7 @@ Installed CUDA-enabled packages export `rtfw::cuda_driver`, propagate the
 `RTFW_CUDA_DRIVER_AVAILABLE` definition, and resolve `CUDA::cuda_driver`.
 Packages built with the default `RTFW_ENABLE_CUDA=OFF` still export
 `rtfw::cuda_backend` for injection/testing but do not expose the production
-adapter symbol. See [the CUDA contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/cuda_backend.md).
+adapter symbol. See [the CUDA contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/cuda_backend.md).
 
 ## Optional Xilinx XDMA Linux adapter
 
@@ -121,7 +121,7 @@ cmake --build --preset pgo-use
 - a `bloaty` target is created only when Bloaty is found.
 - `SIM_ENABLE_AVX2=ON` applies global x86 AVX2/FMA compile flags and is
   experimental; it is not runtime ISA dispatch.
-- sanitizer combinations are described in [sanitizers](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/sanitizers.md).
+- sanitizer combinations are described in [sanitizers](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/sanitizers.md).
 
 ## Installation/versioning
 
@@ -200,7 +200,7 @@ SBOM/provenance/manifest verification, safe extraction, relocated consumption,
 C ABI v8 verification, and SONAME 8 verification. It performs no network
 lookup during candidate/fixture verification, signing, tag, publication,
 release, system-wide install, device access, privileged operation, or Unreal
-build. See [portable assurance](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/portable_assurance.md).
+build. See [portable assurance](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/portable_assurance.md).
 
 ## Portable release archive
 

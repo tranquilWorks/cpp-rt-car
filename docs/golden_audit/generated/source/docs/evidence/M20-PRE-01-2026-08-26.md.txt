@@ -1,0 +1,163 @@
+# M20-PRE-01 retained implementation evidence
+
+Date: 2026-08-26  
+Batch: M20-PRE-01, Expand portable fuzz static security and provenance
+verification  
+Target repository: `kpbianco/cpp-rt-car`  
+Exact baseline: `c846cc427c93018175a69c7372c130f00c0b713b`  
+Baseline tree: `b4621821fd624dab7819fe5b4d1222f7967e0e08`  
+Control repository: `kpbianco/portfolio-control`  
+Control revision: `acdbdc50f66fd66f9a8e48eee75923edfd759787`  
+Branch: `agent/m20-pre-01-portable-assurance`
+
+## Baseline and scope
+
+The branch began from the exact merged M17-06 result named by the control
+contract. `contracts/active-batch.yaml` is the exact M20-PRE-01 target
+contract. The GoogleTest submodule was initialized at its already recorded
+commit `7e17b15f1547bb8dd9c2fed91043b7af3437387f` and remained clean.
+
+The pre-evidence audit found 50 changed or new paths, all inside the active
+allowlist and none matching a forbidden path. This evidence file is the 51st
+allowed path. No path below `abi/`, `rt/include/`, `rt/src/`, `src/`, `core/`,
+`include/`, `hal/`, `gpu/`, `samples/`, `qualification/`, `configs/`, or a
+support matrix changed. M15 through M19 retained evidence is byte-unchanged.
+The release, CUDA qualification, XDMA qualification, autotune, scaling, and
+documentation workflows are unchanged. C ABI v8, 70-export fingerprint,
+SONAME 8, device ABI v1, extension ABI v1, public/installed inventory, schema,
+version 1.2.1, license, support, and qualification state are preserved.
+
+Unreal/Windows-host integration and physical CUDA/XDMA/combined qualification
+were deliberately excluded. Existing portable Windows Server CI remains a
+required compatibility gate; no Unreal source or Windows-host integration was
+attempted.
+
+## Implemented assurance lane
+
+`scripts/verify-portable-assurance.sh` exposes fail-closed `dependencies`,
+`static`, `fuzz`, `artifacts`, and cumulative `all` modes. It requires an
+explicit build/output root and complete expected source commit. Generated
+reports and candidate bytes remain below that root.
+
+- Dependency reconciliation covers the clean exact GoogleTest submodule,
+  GoogleTest fallback digest, RapidCheck full commit, vcpkg baseline and empty
+  lock, exact FetchContent inventory, and every workflow action. Pull-request
+  dependency review is blocking at high severity.
+- The static gate reconciles 29 exact `target|source` translation units against
+  a clean default non-experimental, tests-off, examples-off, demo-off Clang 14
+  compilation database and runs analyzer core, C++, dead-code, security, Unix,
+  and variadic-list checks as errors. Only the named padding-optimization check
+  is excluded because frozen/public records cannot be reordered here.
+- The fuzz gate replays immutable seeds, generates the exact maximum boundary,
+  and runs fixed seed 424242 under Clang 14 libFuzzer plus ASan/UBSan. Snapshot
+  and runtime-profile inputs are capped at 65,536 bytes and 20,000 mutations;
+  the explicitly experimental job queue is capped at 4,096 bytes and 10,000
+  mutations. Compile/link flags, tool identity, sanitizer settings, corpus and
+  dictionary hashes, counts, limits, status, and failure inventory are recorded.
+- Artifact mode builds and stages the default Release package, creates two
+  byte-identical canonical SPDX 2.3 candidate SBOMs, creates an unsigned
+  in-toto Statement v1 candidate, creates and verifies a strict canonical final
+  manifest against the caller's exact source commit, verifies all candidate
+  bytes offline, extracts safely, runs the relocated consumer, and checks C ABI
+  v8 plus SONAME 8.
+- A fictional CC0 public fixture exercises actual offline DSSE/RSA PKCS#1 v1.5
+  SHA-256 verification plus artifact, signature, trust, repository, source,
+  ref, workflow, issuer, and predicate mutation rejection. No private key or
+  signing path is retained.
+
+## Reviewed input identities
+
+| Input | SHA-256 / identity |
+| --- | --- |
+| `.clang-tidy` | `d113e7f81fe2c7db2c721caf21706636c5df342d0a430e76ec1b37815b5eec10` |
+| static source manifest | `c417ce49c1bb374a51960040aad02e7e6134a4e8bfd3f0cbddf68918d225835f` |
+| portable toolchain policy | `7a0e7ce2abaac1a88451cc038aa84d8fe8d91e265cc80ab63225120462500f50` |
+| dependency/action policy | `ecb2a8ddd39ac9679e7483d11c6b93b8170874d82d1b8c87b0c8d87e00ddd796` |
+| candidate artifact policy | `25a81595dbb15bb070a20853ea44acff8901808ed15a967146174ef3af11868c` |
+| official SPDX 2.3 schema | `44f0abdeb5d5dc296a713103ba40416dd3d68925ba4bcbad9d1f2862ed11f287` |
+| snapshot seeds / dictionary | `572515deb9510093fab5b094437e305f471a5ae55a1c3a8aefb4fd2d68a70abb` / `5f6c48087813b3b9b04572509720ed46ed7c241ebe5bee5b7bb744e7ff0b7294` |
+| runtime-profile seeds / dictionary | `74b597517e7dde88cfda7bb96ab2adfa9b344fba9797c6e2208d73f8014fd2e7` / `56d687395d198af9a32cf2d9330acc7d879bdcccff0eae9e5b126bab89fb76f2` |
+| experimental job-queue seeds / dictionary | `391d4f49fab6fe35bc5328dcaaa181c0567b347c34c6aff9f73ed7d96e57ffd8` / `40400acc68d6860cff2a21ad3126e8d9586245b41f7b786eba3924ae0d1ca46e` |
+| signed-fixture artifact | `ab4ec6135d94bcf60275fcb9cabc5a780e3b6f08dc4f69ed75abb2c79cbebf88` |
+| signed-fixture DSSE envelope | `7b18080b44cec2831fdb293f61a49f894426d156ec2dbca968ab1ec328243ea0` |
+| signed-fixture public trust | `8890da6854ea425f84c0622d133731dab17c1c8c8435b5807b2bfc418b474341` |
+
+The SPDX schema is the official SPDX 2.3 JSON schema at `spdx/spdx-spec`
+commit `d99772ca9816b1615c0e53a94525550054e6a83c`, path
+`schemas/spdx-schema-2-3.json`, retained under CC-BY-3.0. The repository's
+specialized offline verifier enforces the exact candidate document shape and
+bytes; this is not a general SPDX certification service.
+
+## Local validation results
+
+| Command / gate | Result |
+| --- | --- |
+| `./scripts/agent-verify.sh contract` | pass; documentation, release contract, 35 release-tool tests, C ABI header/manifest, dependency reconciliation, and public fixture verification passed |
+| `python3 tests/test_release_tools.py` | pass; 35 tests, including deterministic SBOM/statement, canonical expected-source manifest, fixture crypto/identity mutations, static-manifest containment/duplicates, dependency mutation, and seed-manifest rejection |
+| `python3 tools/check_docs_contract.py` | pass |
+| `python3 tools/check_release_contract.py` | pass after reviewed digest refresh |
+| `python3 tools/check_c_abi.py` | pass; C ABI v8, 70 symbols, fingerprint `0xd0e7a5a14bf35f97` |
+| `python3 tools/sbom.py verify-dependencies --policy tools/sbom_expected.json` | pass; three exact declared dependencies and six exact workflow actions; output labels identity-only and vulnerability-clearance false |
+| `python3 tools/provenance.py verify-fixture --repo-root . --policy release/portable-assurance-policy.json` | pass; cryptographic fixture true, target authenticated false, current revocation checked false |
+| Python byte compilation and `bash -n scripts/verify-portable-assurance.sh` | pass |
+| GCC C++20 `-Wall -Wextra -Werror -fsyntax-only` for all three fuzz harnesses | pass; compiler-only syntax evidence, not a libFuzzer run |
+| PyYAML parse of CI, active batch, and verification contracts | pass |
+| changed-path allowlist/forbidden-path audit | pass; no outside or forbidden path |
+| prior M15-M19 evidence diff | pass; unchanged |
+| portable `dependencies` mode | pass; report created below an explicit temporary root |
+| portable `static`, `fuzz`, and `artifacts` modes | unperformed on this host; each returned 1 because required Clang 14/CMake tools are absent |
+| portable cumulative `all` mode | dependency subgate passed, then returned 1 at the missing static toolchain; no skipped pass was recorded |
+| `./scripts/agent-verify.sh quick` | returned 127 at `cmake: command not found` after the complete contract profile passed |
+| `./scripts/agent-verify.sh full` | returned 127 at the inherited quick CMake configure after the complete contract profile passed |
+
+The local environment has GCC but no `cmake`, `clang-14`, `clang++-14`, or
+`clang-tidy-14`. Therefore no local Clang analyzer, libFuzzer mutation,
+ASan/UBSan execution, package/archive/SBOM candidate, relocation, shared-object
+ABI, or SONAME result is claimed. Those are required hosted CI gates, not
+waived checks.
+
+## External and human gates
+
+The initial branch publication at remote commit
+`28b9c096c5971c961ad16f9941ecafc73460a276` produced these exact hosted
+results:
+
+- Autotune Smoke run `32985845123`, check/job `98231600402`, completed
+  successfully.
+- AT-MAP5 run `32985785493`, check/job `98231475679`, was cancelled by GitHub
+  before any step executed. The run-level conclusion is `failure`, the check
+  conclusion is `cancelled`, the run jobs API returned no executed jobs, and
+  no job log exists. It is not implementation evidence and remains required.
+- CI, Documentation contract, and Scaling smoke did not instantiate for that
+  commit. Consequently the new `Portable assurance (Clang 14)` job, blocking
+  dependency review, existing Linux GCC/Clang and Windows MSVC matrices,
+  sanitizers, determinism exchange, package/archive/relocation, documentation,
+  ABI/SONAME, vendor compile-only, and scaling gates remain unverified and
+  mandatory.
+
+A follow-up evidence-only commit requests fresh hosted workflow admission. No
+cancelled, missing, queued, or absent check is treated as a pass or waived.
+
+Separate human fuzz/analyzer, security/supply-chain, SBOM/provenance,
+package/compatibility, and evidence-claim review is also pending. No absent
+check count, reviewer identity, signing ceremony, hardware record, support
+promotion, release, deployment, or production result is inferred.
+
+## Claim boundary, risk, and rollback
+
+This evidence may support only the exact local static/tool-test/dependency and
+public-fixture results above plus later named hosted results. A bounded seed
+smoke is not continuous fuzzing or vulnerability absence. Pins and an SBOM are
+not vulnerability, legal, license, or upstream trust clearance. The RTFW
+statement is unsigned and unauthenticated; the separate signed fixture does not
+authenticate RTFW, establish current trust/revocation state, or create a SLSA
+level. No reproducible-build, controlled-performance, soak, physical
+CUDA/XDMA/combined, HIL, field, latency, RT1/RT2, Unreal, signed-release,
+publication, deployment, or production claim follows.
+
+Rollback is one coherent revert of the M20-PRE-01 verification, policies,
+corpora, public-only fixture, CI wiring, docs/contracts/digests, and this
+evidence. Generated temporary/CI candidates may be discarded after confirming
+they were never tagged, published, installed system-wide, or used for support
+or qualification. Any security issue exposed by the lane remains a release
+blocker even if the tooling is reverted.

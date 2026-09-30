@@ -1,0 +1,479 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_xdma/session.hpp</title><h1>samples/golden_xdma/session.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;../golden_system/session.hpp&quot;</span>
+<span id="L3">#include &quot;io.hpp&quot;</span>
+<span id="L4"></span>
+<span id="L5">#include &lt;optional&gt;</span>
+<span id="L6">#include &lt;vector&gt;</span>
+<span id="L7"></span>
+<span id="L8">#if defined(_MSC_VER)</span>
+<span id="L9">#pragma warning(push)</span>
+<span id="L10">#pragma warning(disable : 4324)</span>
+<span id="L11">#endif</span>
+<span id="L12">namespace golden::xdma {</span>
+<span id="L13">class Session {</span>
+<span id="L14">  Physics *physics_;</span>
+<span id="L15">  Io &amp;io_;</span>
+<span id="L16">  Jobs *jobs_;</span>
+<span id="L17">  Memory &amp;memory_;</span>
+<span id="L18">  bool attached_ = false, closed_ = false;</span>
+<span id="L19"></span>
+<span id="L20">public:</span>
+<span id="L21">  Clock clock;</span>
+<span id="L22">  World world;</span>
+<span id="L23">  std::optional&lt;rt::Runtime&gt; runtime;</span>
+<span id="L24">  std::array&lt;Binding, 8&gt; bindings{};</span>
+<span id="L25">  std::array&lt;rt::PhaseHandle, 10&gt; phases{};</span>
+<span id="L26">  std::array&lt;rt::RateDomainHandle, 5&gt; rates{};</span>
+<span id="L27">  rt::MemoryPlan plan{};</span>
+<span id="L28">  rt::LiveControlProducerHandle producer{};</span>
+<span id="L29">  std::uint64_t sequence = 1;</span>
+<span id="L30">  Session(Options options, Jobs *jobs, Memory &amp;memory, Io &amp;io,</span>
+<span id="L31">          Physics *physics = nullptr)</span>
+<span id="L32">      : physics_(physics), io_(io), jobs_(jobs), memory_(memory),</span>
+<span id="L33">        world(options), runtime(std::in_place, clock) {}</span>
+<span id="L34">  ~Session() {</span>
+<span id="L35">    if (close() != rt::Status::ok)</span>
+<span id="L36">      std::terminate();</span>
+<span id="L37">  }</span>
+<span id="L38">  Session(const Session &amp;) = delete;</span>
+<span id="L39">  Session &amp;operator=(const Session &amp;) = delete;</span>
+<span id="L40">  rt::Status prepare(std::size_t retention_capacity = fixed::action_capacity,</span>
+<span id="L41">                     const rt::CpuMemoryPolicy *cpu_policy = nullptr) noexcept {</span>
+<span id="L42">    if (!world.options.valid())</span>
+<span id="L43">      return rt::Status::invalid_argument;</span>
+<span id="L44">    rt::RuntimeConfig c;</span>
+<span id="L45">    c.callback_capacity = 10;</span>
+<span id="L46">    c.worker_count = world.options.workers;</span>
+<span id="L47">    c.executor_queue_capacity = fixed::queue_slots;</span>
+<span id="L48">    c.scratch_bytes = fixed::scratch_bytes;</span>
+<span id="L49">    c.task_scratch_bytes = fixed::scratch_bytes;</span>
+<span id="L50">    c.task_scratch_slots = fixed::task_slots;</span>
+<span id="L51">    c.trace_capacity = fixed::action_capacity;</span>
+<span id="L52">    c.memory_budget_bytes = fixed::runtime_budget;</span>
+<span id="L53">    c.snapshot_max_bytes = fixed::checkpoint_bytes;</span>
+<span id="L54">    c.input_log_max_bytes = fixed::artifact_bytes;</span>
+<span id="L55">    c.replay_input_capacity = fixed::maximum_ticks;</span>
+<span id="L56">    c.determinism_tier = rt::DeterminismTier::unspecified;</span>
+<span id="L57">    std::copy(fixed::scenario_id.begin(), fixed::scenario_id.end(),</span>
+<span id="L58">              c.workload_id.begin());</span>
+<span id="L59">    if (jobs_)</span>
+<span id="L60">      c.executor_policy = rt::ExecutorPolicy::host_adapter;</span>
+<span id="L61">    if (physics_)</span>
+<span id="L62">      physics_-&gt;limits(c);</span>
+<span id="L63">    Io::limits(c, physics_ != nullptr);</span>
+<span id="L64">    const bool replay_enabled = !physics_ || physics_-&gt;replay_enabled();</span>
+<span id="L65">    auto &amp;r = *runtime;</span>
+<span id="L66">    rt::Status s;</span>
+<span id="L67">#define GOLDEN_TRY(expression)                                                 \</span>
+<span id="L68">  do {                                                                         \</span>
+<span id="L69">    s = (expression);                                                          \</span>
+<span id="L70">    if (s != rt::Status::ok)                                                   \</span>
+<span id="L71">      return s;                                                                \</span>
+<span id="L72">  } while (false)</span>
+<span id="L73">    GOLDEN_TRY(r.configure(c));</span>
+<span id="L74">    if (physics_)</span>
+<span id="L75">      GOLDEN_TRY(r.set_device_capacity_policy(</span>
+<span id="L76">          rt::DeviceCapacityPolicy::native_per_backend));</span>
+<span id="L77">    if (jobs_) {</span>
+<span id="L78">      GOLDEN_TRY(jobs_-&gt;attach());</span>
+<span id="L79">      attached_ = true;</span>
+<span id="L80">      GOLDEN_TRY(r.set_host_executor(jobs_-&gt;adapter()));</span>
+<span id="L81">    }</span>
+<span id="L82">    GOLDEN_TRY(r.set_memory_provider(memory_.table()));</span>
+<span id="L83">    auto parked = Memory::policy();</span>
+<span id="L84">    parked.thread_policy_count = 1;</span>
+<span id="L85">    parked.thread_policies[0].role = rt::thread_role_executor_worker;</span>
+<span id="L86">    parked.thread_policies[0].policy.wait_strategy = rt::WaitStrategy::park;</span>
+<span id="L87">    GOLDEN_TRY(r.set_cpu_memory_policy(cpu_policy ? *cpu_policy : parked));</span>
+<span id="L88">    GOLDEN_TRY(</span>
+<span id="L89">        r.set_rate_execution_policy({128, 26, 1, 1, fixed::action_capacity}));</span>
+<span id="L90">    GOLDEN_TRY(r.set_mixed_rate_closure_policy(</span>
+<span id="L91">        {26,</span>
+<span id="L92">         retention_capacity,</span>
+<span id="L93">         retention_capacity,</span>
+<span id="L94">         fixed::artifact_bytes,</span>
+<span id="L95">         128,</span>
+<span id="L96">         rt::MixedRateOverflowPolicy::overwrite_committed,</span>
+<span id="L97">         replay_enabled,</span>
+<span id="L98">         true,</span>
+<span id="L99">         {}}));</span>
+<span id="L100">    rt::LiveControlPolicy p;</span>
+<span id="L101">    p.policy_identity = 2601;</span>
+<span id="L102">    p.mailbox_capacity = 1;</span>
+<span id="L103">    p.producer_capacity = 1;</span>
+<span id="L104">    p.record_capacity = 16;</span>
+<span id="L105">    p.payload_bytes_per_record = 64;</span>
+<span id="L106">    p.total_payload_storage_bytes = 1024;</span>
+<span id="L107">    GOLDEN_TRY(r.set_live_control_policy(p));</span>
+<span id="L108">    rt::LiveControlMailboxRegistration m;</span>
+<span id="L109">    m.mailbox_identity = 2601;</span>
+<span id="L110">    m.record_capacity = 16;</span>
+<span id="L111">    m.payload_bytes_per_record = 64;</span>
+<span id="L112">    GOLDEN_TRY(r.register_live_control_mailbox(m));</span>
+<span id="L113">    rt::LiveControlProducerRegistration producer_registration;</span>
+<span id="L114">    producer_registration.mailbox_identity = 2601;</span>
+<span id="L115">    producer_registration.producer_identity = 2601;</span>
+<span id="L116">    GOLDEN_TRY(r.register_live_control_producer(producer_registration));</span>
+<span id="L117">    rt::LiveControlClosurePolicy closure;</span>
+<span id="L118">    closure.policy_identity = 2601;</span>
+<span id="L119">    closure.action_capacity = retention_capacity;</span>
+<span id="L120">    closure.retained_generation_capacity = 128;</span>
+<span id="L121">    closure.retained_record_capacity = 256;</span>
+<span id="L122">    closure.retained_payload_bytes = 16384;</span>
+<span id="L123">    closure.replay_record_capacity = retention_capacity;</span>
+<span id="L124">    closure.replay_max_bytes = fixed::artifact_bytes;</span>
+<span id="L125">    closure.replay_enabled = replay_enabled;</span>
+<span id="L126">    GOLDEN_TRY(r.set_live_control_closure_policy(closure));</span>
+<span id="L127">    rt::LiveControlReplayRetentionPolicy retention;</span>
+<span id="L128">    retention.policy_identity = 2601;</span>
+<span id="L129">    retention.admission_capacity = 128;</span>
+<span id="L130">    retention.payload_capacity_bytes = 8192;</span>
+<span id="L131">    if (replay_enabled)</span>
+<span id="L132">      GOLDEN_TRY(r.set_live_control_replay_retention_policy(retention));</span>
+<span id="L133">    if (physics_)</span>
+<span id="L134">      GOLDEN_TRY(physics_-&gt;configure(r, world));</span>
+<span id="L135">    GOLDEN_TRY(io_.configure(r, world));</span>
+<span id="L136">    constexpr std::array&lt;std::size_t, 5&gt; phases_per_domain{3, 2, 1, 2, 2};</span>
+<span id="L137">    // Contract budgets are domain-release envelopes; Runtime charges each</span>
+<span id="L138">    // phase.</span>
+<span id="L139">    for (std::size_t i = 0; i &lt; 5; ++i)</span>
+<span id="L140">      GOLDEN_TRY(r.register_rate_domain(</span>
+<span id="L141">          {fixed::rate_names[i], fixed::periods[i] * fixed::tick_ns, 1,</span>
+<span id="L142">           fixed::periods[i] * fixed::tick_ns,</span>
+<span id="L143">           fixed::budgets[i] / phases_per_domain[i]},</span>
+<span id="L144">          rates[i]));</span>
+<span id="L145">    for (std::size_t i = 0; i &lt; 8; ++i) {</span>
+<span id="L146">      bindings[i] = {&amp;world, i};</span>
+<span id="L147">      if (physics_ &amp;&amp; i == 1) {</span>
+<span id="L148">        GOLDEN_TRY(physics_-&gt;register_phase(r, rates[0], phases[i]));</span>
+<span id="L149">      } else if (i == 3 || i == 5) {</span>
+<span id="L150">        GOLDEN_TRY(</span>
+<span id="L151">            io_.register_phase(r, i, rates[fixed::phase_rates[i]], phases[i]));</span>
+<span id="L152">      } else {</span>
+<span id="L153">        GOLDEN_TRY(r.register_callback(</span>
+<span id="L154">            {fixed::phase_names[i], invoke_variant, this}, phases[i]));</span>
+<span id="L155">        GOLDEN_TRY(r.bind_phase_to_rate_domain(phases[i],</span>
+<span id="L156">                                               rates[fixed::phase_rates[i]]));</span>
+<span id="L157">      }</span>
+<span id="L158">    }</span>
+<span id="L159">    for (std::size_t lane = 0; lane &lt; 2; ++lane) {</span>
+<span id="L160">      GOLDEN_TRY(</span>
+<span id="L161">          r.register_callback({lane ? &quot;actuator.complete&quot; : &quot;sensor.complete&quot;,</span>
+<span id="L162">                               invoke_variant, this},</span>
+<span id="L163">                              phases[8 + lane]));</span>
+<span id="L164">      GOLDEN_TRY(</span>
+<span id="L165">          r.bind_phase_to_rate_domain(phases[8 + lane], rates[lane ? 3 : 1]));</span>
+<span id="L166">      GOLDEN_TRY(r.add_dependency(phases[lane ? 5 : 3], phases[8 + lane]));</span>
+<span id="L167">    }</span>
+<span id="L168">    for (auto edge :</span>
+<span id="L169">         std::array&lt;std::array&lt;std::size_t, 2&gt;, 3&gt;{{{0, 1}, {1, 2}, {6, 7}}})</span>
+<span id="L170">      GOLDEN_TRY(r.add_dependency(phases[edge[0]], phases[edge[1]]));</span>
+<span id="L171">    constexpr std::array&lt;std::string_view, 7&gt; names{</span>
+<span id="L172">        &quot;command&quot;,    &quot;plant&quot;,    &quot;stage&quot;,    &quot;sensor&quot;,</span>
+<span id="L173">        &quot;controller&quot;, &quot;actuator&quot;, &quot;aggregate&quot;};</span>
+<span id="L174">    std::array&lt;rt::ResourceHandle, 7&gt; resources{};</span>
+<span id="L175">    for (std::size_t i = 0; i &lt; 7; ++i) {</span>
+<span id="L176">      GOLDEN_TRY(r.register_resource(names[i], resources[i]));</span>
+<span id="L177">      GOLDEN_TRY(r.declare_resource_access(phases[i], resources[i],</span>
+<span id="L178">                                           rt::ResourceAccess::write));</span>
+<span id="L179">    }</span>
+<span id="L180">    GOLDEN_TRY(r.declare_resource_access(phases[1], resources[0],</span>
+<span id="L181">                                         rt::ResourceAccess::read));</span>
+<span id="L182">    GOLDEN_TRY(r.declare_resource_access(phases[2], resources[1],</span>
+<span id="L183">                                         rt::ResourceAccess::read));</span>
+<span id="L184">    GOLDEN_TRY(r.declare_resource_access(phases[7], resources[6],</span>
+<span id="L185">                                         rt::ResourceAccess::read));</span>
+<span id="L186">    for (std::size_t i = 0; i &lt; 5; ++i) {</span>
+<span id="L187">      Frame f{};</span>
+<span id="L188">      if (i == 3)</span>
+<span id="L189">        pack_vector(f, world.plant.acceleration);</span>
+<span id="L190">      seal(f, i, 0, 1);</span>
+<span id="L191">      if (i == 4) {</span>
+<span id="L192">        GOLDEN_TRY(r.register_cross_rate_channel(</span>
+<span id="L193">            {fixed::channel_names[i], phases[2], phases[6], frame_size(i),</span>
+<span id="L194">             frame_span(f, i), rt::CrossRateMode::sample_and_hold,</span>
+<span id="L195">             fixed::channel_age[i] * fixed::tick_ns},</span>
+<span id="L196">            world.channels[i]));</span>
+<span id="L197">        continue;</span>
+<span id="L198">      }</span>
+<span id="L199">      sampled_header(f, i, 1, 0, 0, rt::SampledIoFrameStatus::initial);</span>
+<span id="L200">      rt::CrossRateChannelRegistration cross{</span>
+<span id="L201">          fixed::channel_names[i],</span>
+<span id="L202">          phases[fixed::channel_producers[i]],</span>
+<span id="L203">          phases[fixed::channel_consumers[i]],</span>
+<span id="L204">          frame_size(i),</span>
+<span id="L205">          frame_span(f, i),</span>
+<span id="L206">          rt::CrossRateMode::sample_and_hold,</span>
+<span id="L207">          fixed::channel_age[i] * fixed::tick_ns};</span>
+<span id="L208">      if (i % 2)</span>
+<span id="L209">        cross.producer_device = {3, frame_size(i)};</span>
+<span id="L210">      else</span>
+<span id="L211">        cross.consumer_device = {0, frame_size(i)};</span>
+<span id="L212">      GOLDEN_TRY(r.register_cross_rate_channel(cross, world.channels[i]));</span>
+<span id="L213">      rt::SampledIoChannelRegistration sampled;</span>
+<span id="L214">      sampled.channel = world.channels[i];</span>
+<span id="L215">      sampled.direction = i % 2 ? rt::SampledIoDirection::input</span>
+<span id="L216">                                : rt::SampledIoDirection::output;</span>
+<span id="L217">      sampled.channel_identity = 26001 + i;</span>
+<span id="L218">      sampled.encoding = rt::SampledIoEncoding::signed_int32_le;</span>
+<span id="L219">      sampled.element_count = static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L220">          fixed::channel_elements[i] * fixed::capacity);</span>
+<span id="L221">      sampled.samples_per_frame = 1;</span>
+<span id="L222">      sampled.units_identity = 26001 + i;</span>
+<span id="L223">      sampled.calibration_identity = 1;</span>
+<span id="L224">      sampled.sample_period_ns = fixed::tick_ns;</span>
+<span id="L225">      sampled.timestamp_domain_identity = sampled.clock_domain_identity =</span>
+<span id="L226">          sampled.trigger_identity = 1;</span>
+<span id="L227">      sampled.ring_capacity = 4;</span>
+<span id="L228">      sampled.initial_sequence = 1;</span>
+<span id="L229">      sampled.maximum_age_ns = fixed::channel_age[i] * fixed::tick_ns;</span>
+<span id="L230">      sampled.stale_policy = rt::SampledIoStalePolicy::substitute_initial;</span>
+<span id="L231">      sampled.initial_frame = frame_span(f, i);</span>
+<span id="L232">      Frame safe{};</span>
+<span id="L233">      if (!(i % 2)) {</span>
+<span id="L234">        sampled_header(safe, i, 1, 0, 0, rt::SampledIoFrameStatus::safe);</span>
+<span id="L235">        sampled.underrun_policy = rt::SampledIoUnderrunPolicy::substitute_safe;</span>
+<span id="L236">        sampled.safe_transition_timeout_ns = safe_timeout_ns;</span>
+<span id="L237">        sampled.startup_safe_frame = sampled.failure_safe_frame =</span>
+<span id="L238">            sampled.shutdown_safe_frame = frame_span(safe, i);</span>
+<span id="L239">      }</span>
+<span id="L240">      GOLDEN_TRY(r.register_sampled_io_channel(sampled));</span>
+<span id="L241">    }</span>
+<span id="L242">    GOLDEN_TRY(r.register_state({&quot;golden.state&quot;, 1, world.canonical}));</span>
+<span id="L243">    GOLDEN_TRY(r.finalize());</span>
+<span id="L244">    if (!r.memory_plan(plan) || plan.planned_bytes &gt; fixed::runtime_budget ||</span>
+<span id="L245">        plan.phase_count != 10 || plan.rate_domain_count != 5 ||</span>
+<span id="L246">        plan.rate_binding_count != 10 || plan.reference_release_count != 32 ||</span>
+<span id="L247">        plan.cross_rate_channel_count != 5 ||</span>
+<span id="L248">        plan.sampled_io_channel_count != 4 ||</span>
+<span id="L249">        (plan.device_backend_count != (physics_ ? 2u : 1u) ||</span>
+<span id="L250">         plan.device_buffer_count != (physics_ ? 8u : 6u) ||</span>
+<span id="L251">         plan.device_timeline_count != (physics_ ? 3u : 2u)) ||</span>
+<span id="L252">        memory_.live_count() != 3)</span>
+<span id="L253">      return rt::Status::internal_error;</span>
+<span id="L254">    const auto accounted =</span>
+<span id="L255">        plan.runtime_control_bytes + plan.executor_control_bytes +</span>
+<span id="L256">        plan.phase_scratch_total_bytes + plan.task_scratch_total_bytes +</span>
+<span id="L257">        plan.trace_storage_bytes;</span>
+<span id="L258">    // The six-row equation includes device metadata as its own control row.</span>
+<span id="L259">    if (accounted + plan.device_control_bytes != plan.planned_bytes ||</span>
+<span id="L260">        plan.phase_scratch_total_bytes &gt; Memory::region_capacity ||</span>
+<span id="L261">        plan.task_scratch_total_bytes &gt; Memory::region_capacity ||</span>
+<span id="L262">        plan.trace_storage_bytes &gt; Memory::region_capacity)</span>
+<span id="L263">      return rt::Status::internal_error;</span>
+<span id="L264">    GOLDEN_TRY(r.live_control_producer_handle(2601, 2601, producer));</span>
+<span id="L265">    GOLDEN_TRY(r.start());</span>
+<span id="L266">#undef GOLDEN_TRY</span>
+<span id="L267">    return rt::Status::ok;</span>
+<span id="L268">  }</span>
+<span id="L269">  static rt::CallbackResult</span>
+<span id="L270">  invoke_variant(void *opaque, const rt::CallbackContext &amp;ctx) noexcept {</span>
+<span id="L271">    return static_cast&lt;Session *&gt;(opaque)-&gt;phase(ctx)</span>
+<span id="L272">               ? rt::CallbackResult::ok</span>
+<span id="L273">               : rt::CallbackResult::error;</span>
+<span id="L274">  }</span>
+<span id="L275">  bool phase(const rt::CallbackContext &amp;ctx) noexcept {</span>
+<span id="L276">    if (!ctx.rate_release)</span>
+<span id="L277">      return false;</span>
+<span id="L278">    const auto p = ctx.rate_release-&gt;phase.index();</span>
+<span id="L279">    auto &amp;w = world;</span>
+<span id="L280">    const auto &amp;release = *ctx.rate_release;</span>
+<span id="L281">    const auto tick = release.logical_release_ns / fixed::tick_ns;</span>
+<span id="L282">    if (p &gt;= 8) {</span>
+<span id="L283">      if (p &gt; 9 || !io_.complete(p - 8))</span>
+<span id="L284">        return false;</span>
+<span id="L285">      w.encode();</span>
+<span id="L286">      return true;</span>
+<span id="L287">    }</span>
+<span id="L288">    if (p == 1 || p == 6 || p == 7)</span>
+<span id="L289">      return w.phase(p, ctx);</span>
+<span id="L290">    if (!w.configuration.consume(ctx.live_control) || tick &gt;= w.options.ticks ||</span>
+<span id="L291">        tick % fixed::periods[fixed::phase_rates[p]])</span>
+<span id="L292">      return false;</span>
+<span id="L293">    ++w.calls[p];</span>
+<span id="L294">    if (p == 0) {</span>
+<span id="L295">      if (!io_.read(release, 3))</span>
+<span id="L296">        return false;</span>
+<span id="L297">      unpack_vector(w.buffers[3], w.command);</span>
+<span id="L298">      w.next_tick = tick + 1;</span>
+<span id="L299">      if (physics_ &amp;&amp; !physics_-&gt;input(ctx))</span>
+<span id="L300">        return false;</span>
+<span id="L301">    } else if (p == 2) {</span>
+<span id="L302">      if (physics_ &amp;&amp; !physics_-&gt;complete(ctx))</span>
+<span id="L303">        return false;</span>
+<span id="L304">      for (auto c : {std::size_t{0}, std::size_t{4}}) {</span>
+<span id="L305">        w.buffers[c].fill(std::byte{});</span>
+<span id="L306">        pack_vector(w.buffers[c], w.plant.position);</span>
+<span id="L307">        pack_vector(w.buffers[c], w.plant.velocity, 3);</span>
+<span id="L308">        if (!(c == 4 ? w.publish(release, c, tick) : io_.publish(release, c)))</span>
+<span id="L309">          return false;</span>
+<span id="L310">      }</span>
+<span id="L311">    } else if (p == 4) {</span>
+<span id="L312">      if (!io_.read(release, 1))</span>
+<span id="L313">        return false;</span>
+<span id="L314">      if (w.configuration.fault == 2 &amp;&amp; tick == 6) {</span>
+<span id="L315">        // Preserve the prior application-level stale-input campaign. The</span>
+<span id="L316">        // actual sampled transport frame remains separately validated.</span>
+<span id="L317">        seal(w.buffers[1], 1, 2, w.publications[1]);</span>
+<span id="L318">        w.timestamps[1] = 2 * fixed::tick_ns;</span>
+<span id="L319">        ++w.stale;</span>
+<span id="L320">      }</span>
+<span id="L321">      const bool absent = (w.options.external &amp;&amp; !w.external_ready) ||</span>
+<span id="L322">                          w.configuration.fault == 10;</span>
+<span id="L323">      if (absent)</span>
+<span id="L324">        ++w.missing;</span>
+<span id="L325">      w.buffers[2].fill(std::byte{});</span>
+<span id="L326">      for (std::size_t a = 0; a &lt; 3; ++a)</span>
+<span id="L327">        for (std::size_t i = 0; i &lt; w.options.count; ++i) {</span>
+<span id="L328">          const auto v =</span>
+<span id="L329">              (w.configuration.fault == 2 &amp;&amp; tick == 6)</span>
+<span id="L330">                  ? 0</span>
+<span id="L331">                  : get32(w.buffers[1],</span>
+<span id="L332">                          header_bytes + 4 * ((3 + a) * fixed::capacity + i));</span>
+<span id="L333">          const auto value =</span>
+<span id="L334">              absent ? 0</span>
+<span id="L335">                     : (w.options.external ? w.external_command[a][i]</span>
+<span id="L336">                                           : effort(v, w.configuration.target,</span>
+<span id="L337">                                                    w.configuration.gain));</span>
+<span id="L338">          if (value &lt; -4 || value &gt; 4)</span>
+<span id="L339">            return false;</span>
+<span id="L340">          put32(w.buffers[2], header_bytes + 4 * (a * fixed::capacity + i),</span>
+<span id="L341">                value);</span>
+<span id="L342">        }</span>
+<span id="L343">      // Frozen underflow is a genuinely absent CPU command publication.</span>
+<span id="L344">      // Runtime selects the registered zero safe frame; the native device</span>
+<span id="L345">      // must still return its terminal acknowledgement. Clear at tick 12.</span>
+<span id="L346">      if (w.configuration.fault != 3 &amp;&amp; !io_.publish(release, 2))</span>
+<span id="L347">        return false;</span>
+<span id="L348">    } else</span>
+<span id="L349">      return false;</span>
+<span id="L350">    w.encode();</span>
+<span id="L351">    return true;</span>
+<span id="L352">  }</span>
+<span id="L353">  rt::HostFrameContext frame(std::size_t tick) const noexcept {</span>
+<span id="L354">    return {tick, std::chrono::nanoseconds(fixed::tick_ns), std::nullopt,</span>
+<span id="L355">            1000 + tick * fixed::tick_ns};</span>
+<span id="L356">  }</span>
+<span id="L357">  void time(std::uint64_t value) noexcept {</span>
+<span id="L358">    clock.now.store(value, std::memory_order_relaxed);</span>
+<span id="L359">    io_.time(value);</span>
+<span id="L360">  }</span>
+<span id="L361">  rt::Status step(std::size_t tick, bool late = false) noexcept {</span>
+<span id="L362">    if (tick == 6 &amp;&amp; world.options.campaign == Campaign::control_rejected &amp;&amp;</span>
+<span id="L363">        !stage&lt;1&gt;(6, 16, false, 0, true))</span>
+<span id="L364">      return rt::Status::internal_error;</span>
+<span id="L365">    auto f = frame(tick);</span>
+<span id="L366">    clock.now.store(*f.nominal_release_ns + (late ? 2 * fixed::tick_ns : 0),</span>
+<span id="L367">                    std::memory_order_relaxed);</span>
+<span id="L368">    io_.time(*f.nominal_release_ns);</span>
+<span id="L369">    return runtime-&gt;step(f);</span>
+<span id="L370">  }</span>
+<span id="L371">  template &lt;unsigned Kind&gt;</span>
+<span id="L372">  bool stage(std::size_t tick, std::int32_t value, bool rate = false,</span>
+<span id="L373">             std::size_t phase = 0, bool corrupt = false) noexcept {</span>
+<span id="L374">    rt::LiveControlTypedPayload&lt;Control&lt;Kind&gt;&gt; payload{};</span>
+<span id="L375">    rt::LiveControlUpdateRecord record;</span>
+<span id="L376">    rt::LiveControlTypedStatus typed;</span>
+<span id="L377">    if (rate) {</span>
+<span id="L378">      rt::LiveControlBoundaryTarget target;</span>
+<span id="L379">      target.kind = rt::LiveControlTargetKind::rate_release;</span>
+<span id="L380">      bool found = false;</span>
+<span id="L381">      for (std::size_t i = 0; i &lt; 32; ++i) {</span>
+<span id="L382">        rt::ReferenceRelease ref;</span>
+<span id="L383">        if (!runtime-&gt;reference_release_at(i, ref))</span>
+<span id="L384">          return false;</span>
+<span id="L385">        if (ref.release_time_ns == tick * fixed::tick_ns &amp;&amp;</span>
+<span id="L386">            ref.phase.index() == phase) {</span>
+<span id="L387">          target.reference_release_index = static_cast&lt;std::uint32_t&gt;(i);</span>
+<span id="L388">          target.rate_release_sequence = ref.domain_release_sequence;</span>
+<span id="L389">          target.rate_domain_registration_index =</span>
+<span id="L390">              static_cast&lt;std::uint32_t&gt;(ref.domain_registration_index);</span>
+<span id="L391">          target.phase_index = ref.phase.index();</span>
+<span id="L392">          target.rate_substep_ordinal = ref.substep_ordinal;</span>
+<span id="L393">          found = true;</span>
+<span id="L394">          break;</span>
+<span id="L395">        }</span>
+<span id="L396">      }</span>
+<span id="L397">      if (!found)</span>
+<span id="L398">        return false;</span>
+<span id="L399">      typed = rt::make_live_control_rate_update(</span>
+<span id="L400">          producer, sequence, target, Control&lt;Kind&gt;{value}, payload, record);</span>
+<span id="L401">    } else</span>
+<span id="L402">      typed = rt::make_live_control_host_update(</span>
+<span id="L403">          producer, sequence, tick, Control&lt;Kind&gt;{value}, payload, record);</span>
+<span id="L404">    if (typed != rt::LiveControlTypedStatus::ok)</span>
+<span id="L405">      return false;</span>
+<span id="L406">    if (corrupt)</span>
+<span id="L407">      record.payload_digest ^= 1;</span>
+<span id="L408">    rt::LiveControlAdmissionResult admission;</span>
+<span id="L409">    if (runtime-&gt;stage_live_control_update(producer, record, payload,</span>
+<span id="L410">                                           admission) != rt::Status::ok)</span>
+<span id="L411">      return false;</span>
+<span id="L412">    if (corrupt)</span>
+<span id="L413">      return admission == rt::LiveControlAdmissionResult::invalid;</span>
+<span id="L414">    if (admission != rt::LiveControlAdmissionResult::accepted)</span>
+<span id="L415">      return false;</span>
+<span id="L416">    ++sequence;</span>
+<span id="L417">    return true;</span>
+<span id="L418">  }</span>
+<span id="L419">  bool controls() noexcept {</span>
+<span id="L420">    const auto n = world.options.ticks;</span>
+<span id="L421">    const auto campaign = world.options.campaign;</span>
+<span id="L422">    if (n &gt; 1 &amp;&amp; !stage&lt;1&gt;(1, 16, true, 0))</span>
+<span id="L423">      return false;</span>
+<span id="L424">    if (n &gt; 2 &amp;&amp; !stage&lt;3&gt;(2, 2, true, 3))</span>
+<span id="L425">      return false;</span>
+<span id="L426">    if (n &gt; 3 &amp;&amp; !stage&lt;2&gt;(3, 2, true, 4))</span>
+<span id="L427">      return false;</span>
+<span id="L428">    if (campaign == Campaign::control_replaced &amp;&amp;</span>
+<span id="L429">        (!stage&lt;2&gt;(6, 1) || !stage&lt;2&gt;(6, 3)))</span>
+<span id="L430">      return false;</span>
+<span id="L431">    if (campaign == Campaign::stale_input &amp;&amp; !stage&lt;4&gt;(6, 2))</span>
+<span id="L432">      return false;</span>
+<span id="L433">    if (campaign == Campaign::peer_missing &amp;&amp; !stage&lt;4&gt;(6, 10))</span>
+<span id="L434">      return false;</span>
+<span id="L435">    return (n &lt;= 12 || stage&lt;4&gt;(12, 0)) &amp;&amp; (n &lt;= 18 || stage&lt;5&gt;(18, 0));</span>
+<span id="L436">  }</span>
+<span id="L437">  std::vector&lt;std::byte&gt; checkpoint(std::uint64_t tick) {</span>
+<span id="L438">    std::size_t size = 0;</span>
+<span id="L439">    rt::ArtifactWriteResult result;</span>
+<span id="L440">    if (runtime-&gt;checkpoint_size(size) != rt::Status::ok ||</span>
+<span id="L441">        size &gt; fixed::checkpoint_bytes)</span>
+<span id="L442">      return {};</span>
+<span id="L443">    std::vector&lt;std::byte&gt; bytes(size);</span>
+<span id="L444">    if (runtime-&gt;write_checkpoint(tick, bytes, result) != rt::Status::ok)</span>
+<span id="L445">      return {};</span>
+<span id="L446">    bytes.resize(result.bytes_written);</span>
+<span id="L447">    return bytes;</span>
+<span id="L448">  }</span>
+<span id="L449">  rt::Status close() noexcept {</span>
+<span id="L450">    if (closed_)</span>
+<span id="L451">      return rt::Status::ok;</span>
+<span id="L452">    if (attached_) {</span>
+<span id="L453">      auto s = jobs_-&gt;quiesce();</span>
+<span id="L454">      if (s != rt::Status::ok)</span>
+<span id="L455">        return s;</span>
+<span id="L456">    }</span>
+<span id="L457">    if (runtime &amp;&amp; runtime-&gt;state() != rt::RuntimeState::configuring) {</span>
+<span id="L458">      auto s = runtime-&gt;stop();</span>
+<span id="L459">      if (s != rt::Status::ok)</span>
+<span id="L460">        return s;</span>
+<span id="L461">    }</span>
+<span id="L462">    if (memory_.live_count() || memory_.violations)</span>
+<span id="L463">      return rt::Status::internal_error;</span>
+<span id="L464">    runtime.reset();</span>
+<span id="L465">    if (attached_) {</span>
+<span id="L466">      auto s = jobs_-&gt;detach();</span>
+<span id="L467">      if (s != rt::Status::ok)</span>
+<span id="L468">        return s;</span>
+<span id="L469">      attached_ = false;</span>
+<span id="L470">    }</span>
+<span id="L471">    closed_ = true;</span>
+<span id="L472">    return rt::Status::ok;</span>
+<span id="L473">  }</span>
+<span id="L474">};</span>
+<span id="L475">} // namespace golden::xdma</span>
+<span id="L476"></span>
+<span id="L477">#if defined(_MSC_VER)</span>
+<span id="L478">#pragma warning(pop)</span>
+<span id="L479">#endif</span></pre></html>

@@ -15,15 +15,15 @@ the compiled graph, one runtime-owned completion-service lane, and a
 deterministic fault-injectable CPU mock. M17-01 adds an additive C++ HAL v2
 core and routes both native HAL v2 registrations and every unchanged
 device-ABI-v1 registration through one canonical HAL v2 device manager. The
-complete v1 translation contract is in [the HAL v2 contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/hal_v2.md).
+complete v1 translation contract is in [the HAL v2 contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/hal_v2.md).
 M17-02 adds the optional memory/topology extension and Runtime registration,
 inspection, and correlation surface described in the
-[heterogeneous-memory contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/heterogeneous_memory.md).
+[heterogeneous-memory contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/heterogeneous_memory.md).
 
 This base is portable RT0 functional behavior. It is not itself
 CUDA, Vulkan, XDMA, driver, latency, or RT2 qualification. The optional M9
 CUDA implementation and its separate hardware-evidence boundary are in
-[the CUDA backend contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/cuda_backend.md). The M10 Xilinx Linux XDMA AXI-MM
+[the CUDA backend contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/cuda_backend.md). The M10 Xilinx Linux XDMA AXI-MM
 candidate uses the same device ABI while isolating blocking character-device
 calls on fixed backend workers; its separate boundary is in
 [the XDMA backend contract](docs__xdma_backend.md).
@@ -103,7 +103,7 @@ identifier, 128-byte inline payload, and eight-reference limit. The required
 table covers capability discovery, initialization, host-buffer registration
 and unregistration, one core submission, bounded completion polling,
 cancellation, health, reset, and shutdown. It has a non-null borrowed instance
-and a zero reserved tail. See [the HAL v2 contract](https://github.com/tranquilWorks/cpp-rt-car/blob/98ecca5a6572dd83d59e26063716f6d76b7a5d4f/docs/hal_v2.md) for the complete
+and a zero reserved tail. See [the HAL v2 contract](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/hal_v2.md) for the complete
 records, v1 field/status map, malformed-output rules, and deferred features.
 
 `rt/include/rt/device_abi.h` is a C-compatible backend boundary with device ABI

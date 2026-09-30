@@ -1,0 +1,2300 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/test_command_batch.cpp</title><h1>tests/test_command_batch.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &lt;gtest/gtest.h&gt;</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;algorithm&gt;</span>
+<span id="L4">#include &lt;array&gt;</span>
+<span id="L5">#include &lt;atomic&gt;</span>
+<span id="L6">#include &lt;chrono&gt;</span>
+<span id="L7">#include &lt;cstddef&gt;</span>
+<span id="L8">#include &lt;cstdint&gt;</span>
+<span id="L9">#include &lt;future&gt;</span>
+<span id="L10">#include &lt;limits&gt;</span>
+<span id="L11">#include &lt;stdexcept&gt;</span>
+<span id="L12">#include &lt;string&gt;</span>
+<span id="L13">#include &lt;string_view&gt;</span>
+<span id="L14">#include &lt;thread&gt;</span>
+<span id="L15">#include &lt;type_traits&gt;</span>
+<span id="L16"></span>
+<span id="L17">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L18">#include &quot;rt/src/device_manager.hpp&quot;</span>
+<span id="L19"></span>
+<span id="L20">namespace {</span>
+<span id="L21">struct RetirementSlot {</span>
+<span id="L22">  std::atomic&lt;std::uint32_t&gt; state{6};</span>
+<span id="L23">  std::atomic&lt;bool&gt; graph_released{false};</span>
+<span id="L24">  std::uint32_t phase_index = 7;</span>
+<span id="L25">  std::uint32_t backend_index = 3;</span>
+<span id="L26">};</span>
+<span id="L27">} // namespace</span>
+<span id="L28"></span>
+<span id="L29">TEST(CommandBatch, GraphPublicationObservesRetiredBatch) {</span>
+<span id="L30">  RetirementSlot slot;</span>
+<span id="L31">  std::atomic&lt;std::uint64_t&gt; outstanding{1};</span>
+<span id="L32">  unsigned completions = 0, cancellations = 0, wakes = 0;</span>
+<span id="L33">  rt::detail::retire_device_batch_slot(</span>
+<span id="L34">      slot, outstanding, 0,</span>
+<span id="L35">      [&amp;](std::uint32_t backend) noexcept {</span>
+<span id="L36">        EXPECT_EQ(backend, 3u);</span>
+<span id="L37">        ++wakes;</span>
+<span id="L38">      },</span>
+<span id="L39">      [&amp;](std::uint32_t phase) noexcept {</span>
+<span id="L40">        // Force the host&#x27;s stop observation at the exact graph-publication</span>
+<span id="L41">        // boundary. No scheduler timing is needed to expose the old window.</span>
+<span id="L42">        EXPECT_EQ(phase, 7u);</span>
+<span id="L43">        if (slot.state.load(std::memory_order_acquire) != 0) ++cancellations;</span>
+<span id="L44">        EXPECT_EQ(outstanding.load(std::memory_order_acquire), 0u);</span>
+<span id="L45">        EXPECT_TRUE(slot.graph_released.load(std::memory_order_acquire));</span>
+<span id="L46">        ++completions;</span>
+<span id="L47">      });</span>
+<span id="L48">  EXPECT_EQ(completions, 1u);</span>
+<span id="L49">  EXPECT_EQ(cancellations, 0u);</span>
+<span id="L50">  EXPECT_EQ(wakes, 1u);</span>
+<span id="L51">  EXPECT_EQ(slot.state.load(), 0u);</span>
+<span id="L52">  EXPECT_EQ(outstanding.load(), 0u);</span>
+<span id="L53">}</span>
+<span id="L54"></span>
+<span id="L55">TEST(CommandBatch, GraphPublicationCannotRetireTheNextOccupant) {</span>
+<span id="L56">  RetirementSlot slot;</span>
+<span id="L57">  std::atomic&lt;std::uint64_t&gt; outstanding{1};</span>
+<span id="L58">  rt::detail::retire_device_batch_slot(</span>
+<span id="L59">      slot, outstanding, 0,</span>
+<span id="L60">      [](std::uint32_t backend) noexcept { EXPECT_EQ(backend, 3u); },</span>
+<span id="L61">      [&amp;](std::uint32_t phase) noexcept {</span>
+<span id="L62">        EXPECT_EQ(phase, 7u);</span>
+<span id="L63">        EXPECT_EQ(slot.state.load(std::memory_order_acquire), 0u);</span>
+<span id="L64">        // The graph can immediately admit its successor or the next frame.</span>
+<span id="L65">        slot.phase_index = 19;</span>
+<span id="L66">        slot.backend_index = 11;</span>
+<span id="L67">        slot.graph_released.store(false, std::memory_order_relaxed);</span>
+<span id="L68">        outstanding.fetch_add(1, std::memory_order_release);</span>
+<span id="L69">        slot.state.store(6, std::memory_order_release);</span>
+<span id="L70">      });</span>
+<span id="L71">  EXPECT_EQ(slot.state.load(), 6u);</span>
+<span id="L72">  EXPECT_EQ(outstanding.load(), 1u);</span>
+<span id="L73">  EXPECT_FALSE(slot.graph_released.load());</span>
+<span id="L74">  EXPECT_EQ(slot.phase_index, 19u);</span>
+<span id="L75">  EXPECT_EQ(slot.backend_index, 11u);</span>
+<span id="L76">}</span>
+<span id="L77"></span>
+<span id="L78">TEST(CommandBatch, RetirementCapturesMetadataBeforeSlotReuse) {</span>
+<span id="L79">  RetirementSlot slot;</span>
+<span id="L80">  std::atomic&lt;std::uint64_t&gt; outstanding{1};</span>
+<span id="L81">  rt::detail::retire_device_batch_slot(</span>
+<span id="L82">      slot, outstanding, 0,</span>
+<span id="L83">      [&amp;](std::uint32_t backend) noexcept {</span>
+<span id="L84">        EXPECT_EQ(backend, 3u);</span>
+<span id="L85">        EXPECT_EQ(slot.state.load(std::memory_order_acquire), 0u);</span>
+<span id="L86">        // Another admitted phase may reuse Free even before graph publication.</span>
+<span id="L87">        slot.phase_index = 19;</span>
+<span id="L88">        slot.backend_index = 11;</span>
+<span id="L89">        slot.graph_released.store(false, std::memory_order_relaxed);</span>
+<span id="L90">        outstanding.fetch_add(1, std::memory_order_release);</span>
+<span id="L91">        slot.state.store(6, std::memory_order_release);</span>
+<span id="L92">      },</span>
+<span id="L93">      [](std::uint32_t phase) noexcept { EXPECT_EQ(phase, 7u); });</span>
+<span id="L94">  EXPECT_EQ(slot.state.load(), 6u);</span>
+<span id="L95">  EXPECT_EQ(outstanding.load(), 1u);</span>
+<span id="L96">  EXPECT_FALSE(slot.graph_released.load());</span>
+<span id="L97">}</span>
+<span id="L98"></span>
+<span id="L99">TEST(CommandBatch, PreviouslyReleasedGraphStillRetiresOnce) {</span>
+<span id="L100">  RetirementSlot slot;</span>
+<span id="L101">  slot.graph_released.store(true);</span>
+<span id="L102">  std::atomic&lt;std::uint64_t&gt; outstanding{1};</span>
+<span id="L103">  unsigned completions = 0, wakes = 0;</span>
+<span id="L104">  rt::detail::retire_device_batch_slot(</span>
+<span id="L105">      slot, outstanding, 0,</span>
+<span id="L106">      [&amp;](std::uint32_t backend) noexcept {</span>
+<span id="L107">        EXPECT_EQ(backend, 3u);</span>
+<span id="L108">        EXPECT_EQ(outstanding.load(), 0u);</span>
+<span id="L109">        EXPECT_EQ(slot.state.load(), 0u);</span>
+<span id="L110">        ++wakes;</span>
+<span id="L111">      },</span>
+<span id="L112">      [&amp;](std::uint32_t) noexcept { ++completions; });</span>
+<span id="L113">  EXPECT_EQ(completions, 0u);</span>
+<span id="L114">  EXPECT_EQ(wakes, 1u);</span>
+<span id="L115">  EXPECT_EQ(outstanding.load(), 0u);</span>
+<span id="L116">  EXPECT_EQ(slot.state.load(), 0u);</span>
+<span id="L117">}</span>
+<span id="L118"></span>
+<span id="L119">TEST(CommandBatch, NotificationAfterEmptySelectionDoesNotParkWithQueuedWork) {</span>
+<span id="L120">  std::atomic&lt;std::uint64_t&gt; wake{0};</span>
+<span id="L121">  std::atomic&lt;bool&gt; stopping{false};</span>
+<span id="L122">  std::promise&lt;void&gt; finished;</span>
+<span id="L123">  auto completion = finished.get_future();</span>
+<span id="L124">  bool queued = false;</span>
+<span id="L125">  int* selected = nullptr;</span>
+<span id="L126">  std::thread worker([&amp;] {</span>
+<span id="L127">    selected = rt::detail::select_device_submission_or_wait(</span>
+<span id="L128">        wake, stopping, [&amp;]() noexcept -&gt; int* {</span>
+<span id="L129">          // The scan saw empty. Force publication and notification into the</span>
+<span id="L130">          // exact interval before the helper can decide to park.</span>
+<span id="L131">          queued = true;</span>
+<span id="L132">          wake.fetch_add(1, std::memory_order_release);</span>
+<span id="L133">          wake.notify_one();</span>
+<span id="L134">          return nullptr;</span>
+<span id="L135">        });</span>
+<span id="L136">    finished.set_value();</span>
+<span id="L137">  });</span>
+<span id="L138">  // This bounds liveness of the negative control, not Runtime performance.</span>
+<span id="L139">  const bool completed = completion.wait_for(std::chrono::seconds(5)) ==</span>
+<span id="L140">                         std::future_status::ready;</span>
+<span id="L141">  if (!completed) {</span>
+<span id="L142">    // Rescue the old ordering before joining: never leave a blocked owner.</span>
+<span id="L143">    wake.fetch_add(1, std::memory_order_release);</span>
+<span id="L144">    wake.notify_one();</span>
+<span id="L145">  }</span>
+<span id="L146">  worker.join();</span>
+<span id="L147">  EXPECT_TRUE(completed) &lt;&lt; &quot;submission notification was lost before parking&quot;;</span>
+<span id="L148">  EXPECT_TRUE(queued);</span>
+<span id="L149">  EXPECT_EQ(selected, nullptr);</span>
+<span id="L150">}</span>
+<span id="L151"></span>
+<span id="L152">TEST(CommandBatch, SubmissionSelectionAndStopDoNotPark) {</span>
+<span id="L153">  std::atomic&lt;std::uint64_t&gt; wake{7};</span>
+<span id="L154">  std::atomic&lt;bool&gt; stopping{false};</span>
+<span id="L155">  int slot = 1;</span>
+<span id="L156">  EXPECT_EQ(rt::detail::select_device_submission_or_wait(</span>
+<span id="L157">                wake, stopping, [&amp;]() noexcept { return &amp;slot; }), &amp;slot);</span>
+<span id="L158">  stopping.store(true, std::memory_order_release);</span>
+<span id="L159">  EXPECT_EQ(rt::detail::select_device_submission_or_wait(</span>
+<span id="L160">                wake, stopping, []() noexcept -&gt; int* { return nullptr; }), nullptr);</span>
+<span id="L161">}</span>
+<span id="L162"></span>
+<span id="L163">namespace {</span>
+<span id="L164"></span>
+<span id="L165">template &lt;typename Range&gt; bool all_zero(const Range &amp;values) {</span>
+<span id="L166">  return std::all_of(values.begin(), values.end(),</span>
+<span id="L167">                     [](const auto value) { return value == 0; });</span>
+<span id="L168">}</span>
+<span id="L169"></span>
+<span id="L170">template &lt;typename Range&gt;</span>
+<span id="L171">void set_identifier(Range &amp;output, std::string_view value) {</span>
+<span id="L172">  output.fill(0);</span>
+<span id="L173">  std::copy(value.begin(), value.end(), output.begin());</span>
+<span id="L174">}</span>
+<span id="L175"></span>
+<span id="L176">rt::RuntimeConfig batch_config(std::size_t backend_capacity = 1) {</span>
+<span id="L177">  rt::RuntimeConfig config;</span>
+<span id="L178">  config.callback_capacity = 8;</span>
+<span id="L179">  config.worker_count = 2;</span>
+<span id="L180">  config.executor_queue_capacity = 8;</span>
+<span id="L181">  config.task_scratch_slots = 8;</span>
+<span id="L182">  config.trace_capacity = 32;</span>
+<span id="L183">  config.device_backend_capacity = backend_capacity;</span>
+<span id="L184">  config.device_buffer_capacity = 8;</span>
+<span id="L185">  config.device_outstanding_capacity = 2;</span>
+<span id="L186">  config.device_completion_batch = 2;</span>
+<span id="L187">  return config;</span>
+<span id="L188">}</span>
+<span id="L189"></span>
+<span id="L190">rt::HalV2MemoryTopologySnapshot batch_snapshot() {</span>
+<span id="L191">  rt::HalV2MemoryTopologySnapshot snapshot;</span>
+<span id="L192">  snapshot.memory_domain_count = 2;</span>
+<span id="L193">  snapshot.topology_node_count = 1;</span>
+<span id="L194">  snapshot.timestamp_domain_count = 1;</span>
+<span id="L195">  snapshot.completion_timestamp_domain_identity = 201;</span>
+<span id="L196"></span>
+<span id="L197">  auto &amp;node = snapshot.topology_nodes[0];</span>
+<span id="L198">  node.identity = 101;</span>
+<span id="L199">  node.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2TopologyNodeKind::host);</span>
+<span id="L200"></span>
+<span id="L201">  auto &amp;timestamp = snapshot.timestamp_domains[0];</span>
+<span id="L202">  timestamp.identity = 201;</span>
+<span id="L203">  timestamp.kind = static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L204">      rt::HalV2TimestampDomainKind::runtime_monotonic);</span>
+<span id="L205">  timestamp.tick_numerator_ns = 1;</span>
+<span id="L206">  timestamp.tick_denominator = 1;</span>
+<span id="L207">  timestamp.monotonic = 1;</span>
+<span id="L208"></span>
+<span id="L209">  auto &amp;coherent = snapshot.memory_domains[0];</span>
+<span id="L210">  coherent.identity = 1;</span>
+<span id="L211">  coherent.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryDomainKind::host);</span>
+<span id="L212">  coherent.ownership_modes = rt::hal_v2_memory_ownership_borrowed_host;</span>
+<span id="L213">  coherent.maximum_bytes = 4096;</span>
+<span id="L214">  coherent.byte_granularity = 1;</span>
+<span id="L215">  coherent.alignment = 1;</span>
+<span id="L216">  coherent.offset_granularity = 1;</span>
+<span id="L217">  coherent.access =</span>
+<span id="L218">      RTFW_DEVICE_BUFFER_HOST_READ | RTFW_DEVICE_BUFFER_HOST_WRITE |</span>
+<span id="L219">      RTFW_DEVICE_BUFFER_DEVICE_READ | RTFW_DEVICE_BUFFER_DEVICE_WRITE;</span>
+<span id="L220">  coherent.coherency =</span>
+<span id="L221">      static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryCoherency::host_coherent);</span>
+<span id="L222">  coherent.topology_node_identity = 101;</span>
+<span id="L223">  coherent.timestamp_domain_identity = 201;</span>
+<span id="L224"></span>
+<span id="L225">  auto &amp;explicit_domain = snapshot.memory_domains[1];</span>
+<span id="L226">  explicit_domain = coherent;</span>
+<span id="L227">  explicit_domain.identity = 2;</span>
+<span id="L228">  explicit_domain.kind =</span>
+<span id="L229">      static_cast&lt;std::uint32_t&gt;(rt::HalV2MemoryDomainKind::pinned_host);</span>
+<span id="L230">  explicit_domain.coherency = static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L231">      rt::HalV2MemoryCoherency::explicit_flush_invalidate);</span>
+<span id="L232">  explicit_domain.required_synchronization =</span>
+<span id="L233">      rt::hal_v2_memory_sync_flush | rt::hal_v2_memory_sync_invalidate;</span>
+<span id="L234">  return snapshot;</span>
+<span id="L235">}</span>
+<span id="L236"></span>
+<span id="L237">struct BatchBackend {</span>
+<span id="L238">  enum class SubmitMode : std::uint32_t {</span>
+<span id="L239">    complete,</span>
+<span id="L240">    no_completion,</span>
+<span id="L241">    error,</span>
+<span id="L242">    throwing,</span>
+<span id="L243">    blocked,</span>
+<span id="L244">    malformed_completion,</span>
+<span id="L245">    manual_completion,</span>
+<span id="L246">  };</span>
+<span id="L247"></span>
+<span id="L248">  BatchBackend() {</span>
+<span id="L249">    set_identifier(core_capabilities.backend_id, &quot;test.command.v2&quot;);</span>
+<span id="L250">  }</span>
+<span id="L251"></span>
+<span id="L252">  rt::HalV2BackendApi core_api() {</span>
+<span id="L253">    rt::HalV2BackendApi api;</span>
+<span id="L254">    api.instance = this;</span>
+<span id="L255">    api.get_capabilities = &amp;get_core_capabilities;</span>
+<span id="L256">    api.initialize = &amp;initialize;</span>
+<span id="L257">    api.register_buffer = &amp;register_buffer;</span>
+<span id="L258">    api.unregister_buffer = &amp;unregister_buffer;</span>
+<span id="L259">    api.submit = &amp;submit_single;</span>
+<span id="L260">    api.poll = &amp;poll_single;</span>
+<span id="L261">    api.cancel = &amp;cancel_single;</span>
+<span id="L262">    api.get_health = &amp;get_health;</span>
+<span id="L263">    api.reset = &amp;reset;</span>
+<span id="L264">    api.shutdown = &amp;shutdown;</span>
+<span id="L265">    return api;</span>
+<span id="L266">  }</span>
+<span id="L267"></span>
+<span id="L268">  rt::HalV2MemoryTopologyExtension memory_extension() {</span>
+<span id="L269">    rt::HalV2MemoryTopologyExtension extension;</span>
+<span id="L270">    extension.instance = this;</span>
+<span id="L271">    extension.discover = &amp;discover_memory;</span>
+<span id="L272">    extension.register_memory = &amp;register_memory;</span>
+<span id="L273">    extension.unregister_memory = &amp;unregister_memory;</span>
+<span id="L274">    extension.query_timestamp_correlation = &amp;query_correlation;</span>
+<span id="L275">    return extension;</span>
+<span id="L276">  }</span>
+<span id="L277"></span>
+<span id="L278">  rt::HalV2CommandTimelineExtension command_extension() {</span>
+<span id="L279">    rt::HalV2CommandTimelineExtension extension;</span>
+<span id="L280">    extension.instance = this;</span>
+<span id="L281">    extension.get_capabilities = &amp;get_command_capabilities;</span>
+<span id="L282">    extension.submit = &amp;submit_batch;</span>
+<span id="L283">    extension.poll = &amp;poll_batches;</span>
+<span id="L284">    extension.cancel = &amp;cancel_batch;</span>
+<span id="L285">    extension.request_stop = &amp;request_stop;</span>
+<span id="L286">    return extension;</span>
+<span id="L287">  }</span>
+<span id="L288"></span>
+<span id="L289">  rt::HalV2Capabilities core_capabilities = [] {</span>
+<span id="L290">    rt::HalV2Capabilities value;</span>
+<span id="L291">    value.max_in_flight = 8;</span>
+<span id="L292">    value.max_registered_buffers = 8;</span>
+<span id="L293">    value.max_buffer_bytes = 4096;</span>
+<span id="L294">    value.supports_cancel = 1;</span>
+<span id="L295">    value.supports_reset = 1;</span>
+<span id="L296">    value.deterministic_mock = 1;</span>
+<span id="L297">    return value;</span>
+<span id="L298">  }();</span>
+<span id="L299">  rt::HalV2CommandTimelineCapabilities command_capabilities = [] {</span>
+<span id="L300">    rt::HalV2CommandTimelineCapabilities value;</span>
+<span id="L301">    value.max_in_flight_batches = 2;</span>
+<span id="L302">    value.max_commands_per_batch = rt::hal_v2_command_capacity;</span>
+<span id="L303">    value.max_wait_points = rt::hal_v2_timeline_wait_capacity;</span>
+<span id="L304">    value.max_signal_points = rt::hal_v2_timeline_signal_capacity;</span>
+<span id="L305">    value.max_timelines = rt::hal_v2_timeline_capacity;</span>
+<span id="L306">    value.completion_batch_capacity = 2;</span>
+<span id="L307">    value.backend_control_storage_bytes = 256;</span>
+<span id="L308">    return value;</span>
+<span id="L309">  }();</span>
+<span id="L310">  rt::HalV2MemoryTopologySnapshot snapshot = batch_snapshot();</span>
+<span id="L311">  std::atomic&lt;SubmitMode&gt; mode{SubmitMode::complete};</span>
+<span id="L312">  std::atomic&lt;rt::HalV2Status&gt; capabilities_status{rt::HalV2Status::ok};</span>
+<span id="L313">  std::atomic&lt;bool&gt; leave_capabilities_untouched{false};</span>
+<span id="L314">  std::atomic&lt;bool&gt; partially_write_capabilities{false};</span>
+<span id="L315">  std::atomic&lt;bool&gt; throw_capabilities{false};</span>
+<span id="L316">  std::atomic&lt;std::size_t&gt; capabilities_calls{0};</span>
+<span id="L317">  std::atomic&lt;bool&gt; incoming_capabilities_header_exact{false};</span>
+<span id="L318">  std::atomic&lt;bool&gt; incoming_capabilities_semantics_zero{false};</span>
+<span id="L319">  std::atomic&lt;bool&gt; submit_entered{false};</span>
+<span id="L320">  std::atomic&lt;bool&gt; release_submit{false};</span>
+<span id="L321">  std::atomic&lt;std::uint32_t&gt; completion_ready{0};</span>
+<span id="L322">  std::atomic&lt;std::size_t&gt; batch_submit_calls{0};</span>
+<span id="L323">  std::atomic&lt;std::size_t&gt; batch_poll_calls{0};</span>
+<span id="L324">  std::atomic&lt;std::size_t&gt; batch_cancel_calls{0};</span>
+<span id="L325">  std::atomic&lt;std::size_t&gt; stop_request_calls{0};</span>
+<span id="L326">  std::atomic&lt;std::size_t&gt; single_submit_calls{0};</span>
+<span id="L327">  std::atomic&lt;std::size_t&gt; memory_registration_calls{0};</span>
+<span id="L328">  rt::DeviceCommandBatch last_batch{};</span>
+<span id="L329">  rt::HalV2BatchCompletion pending_completion{};</span>
+<span id="L330">  std::array&lt;rt::HalV2BatchCompletion, 2&gt; manual_completions{};</span>
+<span id="L331">  std::array&lt;std::uint64_t, 2&gt; submitted_payload_offsets{};</span>
+<span id="L332">  std::atomic&lt;std::size_t&gt; manual_submitted{0};</span>
+<span id="L333">  std::atomic&lt;std::size_t&gt; manual_release_count{0};</span>
+<span id="L334">  bool auto_release_manual_completions = false;</span>
+<span id="L335">  std::size_t manual_polled = 0;</span>
+<span id="L336">  std::span&lt;std::byte&gt; payload_storage{};</span>
+<span id="L337">  std::array&lt;std::byte, 4&gt; completion_payload{};</span>
+<span id="L338">  bool write_payload_on_submit = false;</span>
+<span id="L339"></span>
+<span id="L340">  static BatchBackend *self(void *instance) {</span>
+<span id="L341">    return static_cast&lt;BatchBackend *&gt;(instance);</span>
+<span id="L342">  }</span>
+<span id="L343"></span>
+<span id="L344">  static rt::HalV2Status get_core_capabilities(void *instance,</span>
+<span id="L345">                                               rt::HalV2Capabilities *output) {</span>
+<span id="L346">    if (!instance || !output) {</span>
+<span id="L347">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L348">    }</span>
+<span id="L349">    *output = self(instance)-&gt;core_capabilities;</span>
+<span id="L350">    return rt::HalV2Status::ok;</span>
+<span id="L351">  }</span>
+<span id="L352"></span>
+<span id="L353">  static rt::HalV2Status initialize(void *instance,</span>
+<span id="L354">                                    const rt::HalV2InitializeConfig *) {</span>
+<span id="L355">    return instance ? rt::HalV2Status::ok : rt::HalV2Status::invalid_argument;</span>
+<span id="L356">  }</span>
+<span id="L357"></span>
+<span id="L358">  static rt::HalV2Status register_buffer(void *instance,</span>
+<span id="L359">                                         const rt::HalV2BufferRegistration *,</span>
+<span id="L360">                                         std::uint64_t *token) {</span>
+<span id="L361">    if (!instance || !token) {</span>
+<span id="L362">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L363">    }</span>
+<span id="L364">    *token = 0x1001;</span>
+<span id="L365">    return rt::HalV2Status::ok;</span>
+<span id="L366">  }</span>
+<span id="L367"></span>
+<span id="L368">  static rt::HalV2Status unregister_buffer(void *instance, std::uint64_t) {</span>
+<span id="L369">    return instance ? rt::HalV2Status::ok : rt::HalV2Status::invalid_argument;</span>
+<span id="L370">  }</span>
+<span id="L371"></span>
+<span id="L372">  static rt::HalV2Status submit_single(void *instance,</span>
+<span id="L373">                                       const rt::HalV2Submission *) {</span>
+<span id="L374">    if (!instance) {</span>
+<span id="L375">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L376">    }</span>
+<span id="L377">    self(instance)-&gt;single_submit_calls.fetch_add(1);</span>
+<span id="L378">    return rt::HalV2Status::ok;</span>
+<span id="L379">  }</span>
+<span id="L380"></span>
+<span id="L381">  static rt::HalV2Status poll_single(void *instance, rt::HalV2Completion *,</span>
+<span id="L382">                                     std::uint64_t, std::uint64_t *count) {</span>
+<span id="L383">    if (!instance || !count) {</span>
+<span id="L384">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L385">    }</span>
+<span id="L386">    *count = 0;</span>
+<span id="L387">    return rt::HalV2Status::ok;</span>
+<span id="L388">  }</span>
+<span id="L389"></span>
+<span id="L390">  static rt::HalV2Status cancel_single(void *, std::uint64_t) {</span>
+<span id="L391">    return rt::HalV2Status::unsupported;</span>
+<span id="L392">  }</span>
+<span id="L393"></span>
+<span id="L394">  static rt::HalV2Status get_health(void *instance, rt::HalV2Health *health) {</span>
+<span id="L395">    if (!instance || !health) {</span>
+<span id="L396">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L397">    }</span>
+<span id="L398">    *health = {};</span>
+<span id="L399">    health-&gt;state = static_cast&lt;std::uint32_t&gt;(rt::HalV2HealthState::healthy);</span>
+<span id="L400">    return rt::HalV2Status::ok;</span>
+<span id="L401">  }</span>
+<span id="L402"></span>
+<span id="L403">  static rt::HalV2Status reset(void *instance) {</span>
+<span id="L404">    return instance ? rt::HalV2Status::ok : rt::HalV2Status::invalid_argument;</span>
+<span id="L405">  }</span>
+<span id="L406"></span>
+<span id="L407">  static rt::HalV2Status shutdown(void *instance) {</span>
+<span id="L408">    return instance ? rt::HalV2Status::ok : rt::HalV2Status::invalid_argument;</span>
+<span id="L409">  }</span>
+<span id="L410"></span>
+<span id="L411">  static rt::HalV2Status</span>
+<span id="L412">  discover_memory(void *instance, rt::HalV2MemoryTopologySnapshot *output) {</span>
+<span id="L413">    if (!instance || !output) {</span>
+<span id="L414">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L415">    }</span>
+<span id="L416">    *output = self(instance)-&gt;snapshot;</span>
+<span id="L417">    return rt::HalV2Status::ok;</span>
+<span id="L418">  }</span>
+<span id="L419"></span>
+<span id="L420">  static rt::HalV2Status register_memory(void *instance,</span>
+<span id="L421">                                         const rt::HalV2MemoryRegistration *,</span>
+<span id="L422">                                         rt::HalV2MemoryToken *token) {</span>
+<span id="L423">    if (!instance || !token) {</span>
+<span id="L424">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L425">    }</span>
+<span id="L426">    auto &amp;backend = *self(instance);</span>
+<span id="L427">    const auto ordinal = backend.memory_registration_calls.fetch_add(1) + 1;</span>
+<span id="L428">    token-&gt;submission_token = 0x2000 + ordinal;</span>
+<span id="L429">    token-&gt;native_token.size = 1;</span>
+<span id="L430">    token-&gt;native_token.bytes[0] = std::byte{0x42};</span>
+<span id="L431">    return rt::HalV2Status::ok;</span>
+<span id="L432">  }</span>
+<span id="L433"></span>
+<span id="L434">  static rt::HalV2Status unregister_memory(void *instance,</span>
+<span id="L435">                                           const rt::HalV2MemoryRegistration *,</span>
+<span id="L436">                                           const rt::HalV2MemoryToken *) {</span>
+<span id="L437">    return instance ? rt::HalV2Status::ok : rt::HalV2Status::invalid_argument;</span>
+<span id="L438">  }</span>
+<span id="L439"></span>
+<span id="L440">  static rt::HalV2Status</span>
+<span id="L441">  query_correlation(void *, const rt::HalV2TimestampCorrelationQuery *,</span>
+<span id="L442">                    rt::HalV2TimestampCorrelation *) {</span>
+<span id="L443">    return rt::HalV2Status::unsupported;</span>
+<span id="L444">  }</span>
+<span id="L445"></span>
+<span id="L446">  static rt::HalV2Status</span>
+<span id="L447">  get_command_capabilities(void *instance,</span>
+<span id="L448">                           rt::HalV2CommandTimelineCapabilities *output) {</span>
+<span id="L449">    if (!instance || !output) {</span>
+<span id="L450">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L451">    }</span>
+<span id="L452">    auto &amp;backend = *self(instance);</span>
+<span id="L453">    backend.capabilities_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L454">    backend.incoming_capabilities_header_exact.store(</span>
+<span id="L455">        output-&gt;struct_size == sizeof(*output) &amp;&amp;</span>
+<span id="L456">            output-&gt;extension_version ==</span>
+<span id="L457">                rt::hal_v2_command_timeline_extension_version,</span>
+<span id="L458">        std::memory_order_relaxed);</span>
+<span id="L459">    backend.incoming_capabilities_semantics_zero.store(</span>
+<span id="L460">        output-&gt;max_in_flight_batches == 0 &amp;&amp;</span>
+<span id="L461">            output-&gt;max_commands_per_batch == 0 &amp;&amp;</span>
+<span id="L462">            output-&gt;max_wait_points == 0 &amp;&amp;</span>
+<span id="L463">            output-&gt;max_signal_points == 0 &amp;&amp; output-&gt;max_timelines == 0 &amp;&amp;</span>
+<span id="L464">            output-&gt;completion_batch_capacity == 0 &amp;&amp;</span>
+<span id="L465">            output-&gt;backend_control_storage_bytes == 0 &amp;&amp;</span>
+<span id="L466">            all_zero(output-&gt;reserved),</span>
+<span id="L467">        std::memory_order_relaxed);</span>
+<span id="L468">    if (backend.throw_capabilities.load()) {</span>
+<span id="L469">      throw std::runtime_error(&quot;command capabilities&quot;);</span>
+<span id="L470">    }</span>
+<span id="L471">    const auto status = backend.capabilities_status.load();</span>
+<span id="L472">    if (status != rt::HalV2Status::ok) {</span>
+<span id="L473">      return status;</span>
+<span id="L474">    }</span>
+<span id="L475">    if (backend.partially_write_capabilities.load()) {</span>
+<span id="L476">      output-&gt;max_in_flight_batches =</span>
+<span id="L477">          backend.command_capabilities.max_in_flight_batches;</span>
+<span id="L478">      return rt::HalV2Status::ok;</span>
+<span id="L479">    }</span>
+<span id="L480">    if (!backend.leave_capabilities_untouched.load()) {</span>
+<span id="L481">      *output = backend.command_capabilities;</span>
+<span id="L482">    }</span>
+<span id="L483">    return rt::HalV2Status::ok;</span>
+<span id="L484">  }</span>
+<span id="L485"></span>
+<span id="L486">  static rt::HalV2Status submit_batch(void *instance,</span>
+<span id="L487">                                      const rt::DeviceCommandBatch *batch) {</span>
+<span id="L488">    if (!instance || !batch) {</span>
+<span id="L489">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L490">    }</span>
+<span id="L491">    auto &amp;backend = *self(instance);</span>
+<span id="L492">    backend.last_batch = *batch;</span>
+<span id="L493">    const auto submission_index =</span>
+<span id="L494">        backend.batch_submit_calls.fetch_add(1, std::memory_order_relaxed);</span>
+<span id="L495">    if (submission_index &lt; backend.submitted_payload_offsets.size() &amp;&amp;</span>
+<span id="L496">        batch-&gt;command_count != 0 &amp;&amp;</span>
+<span id="L497">        batch-&gt;commands[0].buffer_count != 0) {</span>
+<span id="L498">      backend.submitted_payload_offsets[submission_index] =</span>
+<span id="L499">          batch-&gt;commands[0].buffers[0].offset;</span>
+<span id="L500">    }</span>
+<span id="L501">    if (backend.write_payload_on_submit &amp;&amp; batch-&gt;command_count != 0 &amp;&amp;</span>
+<span id="L502">        batch-&gt;commands[0].buffer_count != 0) {</span>
+<span id="L503">      const auto &amp;payload = batch-&gt;commands[0].buffers[0];</span>
+<span id="L504">      if (payload.offset &lt;= backend.payload_storage.size() &amp;&amp;</span>
+<span id="L505">          backend.completion_payload.size() &lt;=</span>
+<span id="L506">              backend.payload_storage.size() - payload.offset &amp;&amp;</span>
+<span id="L507">          payload.bytes == backend.completion_payload.size()) {</span>
+<span id="L508">        std::copy(backend.completion_payload.begin(),</span>
+<span id="L509">                  backend.completion_payload.end(),</span>
+<span id="L510">                  backend.payload_storage.begin() +</span>
+<span id="L511">                      static_cast&lt;std::ptrdiff_t&gt;(payload.offset));</span>
+<span id="L512">      }</span>
+<span id="L513">    }</span>
+<span id="L514">    const auto behavior = backend.mode.load();</span>
+<span id="L515">    if (behavior == SubmitMode::throwing) {</span>
+<span id="L516">      throw std::runtime_error(&quot;batch submit&quot;);</span>
+<span id="L517">    }</span>
+<span id="L518">    if (behavior == SubmitMode::error) {</span>
+<span id="L519">      return rt::HalV2Status::error;</span>
+<span id="L520">    }</span>
+<span id="L521">    if (behavior == SubmitMode::blocked) {</span>
+<span id="L522">      backend.submit_entered.store(true, std::memory_order_release);</span>
+<span id="L523">      backend.submit_entered.notify_all();</span>
+<span id="L524">      while (!backend.release_submit.load(std::memory_order_acquire)) {</span>
+<span id="L525">        backend.release_submit.wait(false, std::memory_order_relaxed);</span>
+<span id="L526">      }</span>
+<span id="L527">      return rt::HalV2Status::canceled;</span>
+<span id="L528">    }</span>
+<span id="L529">    if (behavior == SubmitMode::no_completion) {</span>
+<span id="L530">      return rt::HalV2Status::ok;</span>
+<span id="L531">    }</span>
+<span id="L532">    if (behavior == SubmitMode::manual_completion) {</span>
+<span id="L533">      const auto index = backend.manual_submitted.load(</span>
+<span id="L534">          std::memory_order_relaxed);</span>
+<span id="L535">      if (index &gt;= backend.manual_completions.size()) {</span>
+<span id="L536">        return rt::HalV2Status::queue_full;</span>
+<span id="L537">      }</span>
+<span id="L538">      auto &amp;completion = backend.manual_completions[index];</span>
+<span id="L539">      completion = {};</span>
+<span id="L540">      completion.batch_id = batch-&gt;batch_id;</span>
+<span id="L541">      completion.signal_count = batch-&gt;signal_count;</span>
+<span id="L542">      completion.device_timestamp = 77 + index;</span>
+<span id="L543">      completion.timestamp_domain_identity = 201;</span>
+<span id="L544">      for (std::size_t signal = 0; signal &lt; batch-&gt;signal_count; ++signal) {</span>
+<span id="L545">        completion.signals[signal] = batch-&gt;signals[signal];</span>
+<span id="L546">      }</span>
+<span id="L547">      backend.manual_submitted.fetch_add(1, std::memory_order_release);</span>
+<span id="L548">      backend.manual_submitted.notify_all();</span>
+<span id="L549">      return rt::HalV2Status::ok;</span>
+<span id="L550">    }</span>
+<span id="L551">    backend.pending_completion = {};</span>
+<span id="L552">    backend.pending_completion.batch_id = batch-&gt;batch_id;</span>
+<span id="L553">    backend.pending_completion.signal_count = batch-&gt;signal_count;</span>
+<span id="L554">    backend.pending_completion.device_timestamp = 77;</span>
+<span id="L555">    backend.pending_completion.timestamp_domain_identity = 201;</span>
+<span id="L556">    for (std::size_t index = 0; index &lt; batch-&gt;signal_count; ++index) {</span>
+<span id="L557">      backend.pending_completion.signals[index] = batch-&gt;signals[index];</span>
+<span id="L558">    }</span>
+<span id="L559">    if (behavior == SubmitMode::malformed_completion) {</span>
+<span id="L560">      backend.pending_completion.timestamp_domain_identity = 999;</span>
+<span id="L561">    }</span>
+<span id="L562">    backend.completion_ready.store(1, std::memory_order_release);</span>
+<span id="L563">    return rt::HalV2Status::ok;</span>
+<span id="L564">  }</span>
+<span id="L565"></span>
+<span id="L566">  static rt::HalV2Status poll_batches(void *instance,</span>
+<span id="L567">                                      rt::HalV2BatchCompletion *completions,</span>
+<span id="L568">                                      std::uint64_t capacity,</span>
+<span id="L569">                                      std::uint64_t *count) {</span>
+<span id="L570">    if (!instance || !count || (capacity != 0 &amp;&amp; !completions)) {</span>
+<span id="L571">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L572">    }</span>
+<span id="L573">    auto &amp;backend = *self(instance);</span>
+<span id="L574">    backend.batch_poll_calls.fetch_add(1);</span>
+<span id="L575">    if (backend.mode.load() == SubmitMode::manual_completion) {</span>
+<span id="L576">      const auto submitted = backend.manual_submitted.load(</span>
+<span id="L577">          std::memory_order_acquire);</span>
+<span id="L578">      const auto released = backend.auto_release_manual_completions &amp;&amp;</span>
+<span id="L579">              submitted == backend.manual_completions.size()</span>
+<span id="L580">          ? submitted</span>
+<span id="L581">          : backend.manual_release_count.load(std::memory_order_acquire);</span>
+<span id="L582">      if (capacity != 0 &amp;&amp; backend.manual_polled &lt; released) {</span>
+<span id="L583">        completions[0] = backend.manual_completions[backend.manual_polled++];</span>
+<span id="L584">        *count = 1;</span>
+<span id="L585">      } else {</span>
+<span id="L586">        *count = 0;</span>
+<span id="L587">      }</span>
+<span id="L588">      return rt::HalV2Status::ok;</span>
+<span id="L589">    }</span>
+<span id="L590">    if (capacity != 0 &amp;&amp;</span>
+<span id="L591">        backend.completion_ready.exchange(0, std::memory_order_acq_rel) != 0) {</span>
+<span id="L592">      completions[0] = backend.pending_completion;</span>
+<span id="L593">      *count = 1;</span>
+<span id="L594">    } else {</span>
+<span id="L595">      *count = 0;</span>
+<span id="L596">    }</span>
+<span id="L597">    return rt::HalV2Status::ok;</span>
+<span id="L598">  }</span>
+<span id="L599"></span>
+<span id="L600">  static rt::HalV2Status cancel_batch(void *instance, std::uint64_t) {</span>
+<span id="L601">    if (!instance) {</span>
+<span id="L602">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L603">    }</span>
+<span id="L604">    self(instance)-&gt;batch_cancel_calls.fetch_add(1);</span>
+<span id="L605">    return rt::HalV2Status::ok;</span>
+<span id="L606">  }</span>
+<span id="L607"></span>
+<span id="L608">  static rt::HalV2Status request_stop(void *instance) {</span>
+<span id="L609">    if (!instance) {</span>
+<span id="L610">      return rt::HalV2Status::invalid_argument;</span>
+<span id="L611">    }</span>
+<span id="L612">    auto &amp;backend = *self(instance);</span>
+<span id="L613">    backend.stop_request_calls.fetch_add(1);</span>
+<span id="L614">    backend.release_submit.store(true, std::memory_order_release);</span>
+<span id="L615">    backend.release_submit.notify_all();</span>
+<span id="L616">    return rt::HalV2Status::ok;</span>
+<span id="L617">  }</span>
+<span id="L618">};</span>
+<span id="L619"></span>
+<span id="L620">rt::Status register_backend(rt::Runtime &amp;runtime, BatchBackend &amp;backend,</span>
+<span id="L621">                            std::string_view name,</span>
+<span id="L622">                            rt::DeviceBackendHandle &amp;handle,</span>
+<span id="L623">                            bool with_commands = true) {</span>
+<span id="L624">  auto memory = backend.memory_extension();</span>
+<span id="L625">  auto command = backend.command_extension();</span>
+<span id="L626">  return runtime.register_device_backend(</span>
+<span id="L627">      {name, backend.core_api(), &amp;memory, with_commands ? &amp;command : nullptr},</span>
+<span id="L628">      handle);</span>
+<span id="L629">}</span>
+<span id="L630"></span>
+<span id="L631">rt::HalV2BufferReference reference(rt::DeviceBufferHandle buffer,</span>
+<span id="L632">                                   std::uint32_t access,</span>
+<span id="L633">                                   std::uint64_t bytes = 16) {</span>
+<span id="L634">  rt::HalV2BufferReference result;</span>
+<span id="L635">  result.buffer_token = buffer.value;</span>
+<span id="L636">  result.access = access;</span>
+<span id="L637">  result.bytes = bytes;</span>
+<span id="L638">  return result;</span>
+<span id="L639">}</span>
+<span id="L640"></span>
+<span id="L641">rt::DeviceCommandBatch dispatch_declaration(</span>
+<span id="L642">    rt::DeviceBufferHandle buffer, rt::DeviceTimelineHandle timeline,</span>
+<span id="L643">    std::uint32_t access = RTFW_DEVICE_ACCESS_READ,</span>
+<span id="L644">    std::uint64_t bytes = 16) {</span>
+<span id="L645">  rt::DeviceCommandBatch declaration;</span>
+<span id="L646">  declaration.command_count = 1;</span>
+<span id="L647">  declaration.signal_count = 1;</span>
+<span id="L648">  auto &amp;command = declaration.commands[0];</span>
+<span id="L649">  command.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::dispatch);</span>
+<span id="L650">  command.opcode = 7;</span>
+<span id="L651">  command.buffer_count = 1;</span>
+<span id="L652">  command.buffers[0] = reference(buffer, access, bytes);</span>
+<span id="L653">  declaration.signals[0].timeline_handle = timeline.value;</span>
+<span id="L654">  return declaration;</span>
+<span id="L655">}</span>
+<span id="L656"></span>
+<span id="L657">struct DeviceRateContextSnapshot {</span>
+<span id="L658">  rt::RateDomainHandle domain{};</span>
+<span id="L659">  rt::PhaseHandle phase{};</span>
+<span id="L660">  std::uint64_t supercycle_cycle = 0;</span>
+<span id="L661">  std::uint64_t domain_release_sequence = 0;</span>
+<span id="L662">  std::uint32_t substep_ordinal = 0;</span>
+<span id="L663">  std::uint64_t logical_release_ns = 0;</span>
+<span id="L664">  std::uint64_t nominal_release_ns = 0;</span>
+<span id="L665">  std::uint64_t absolute_deadline_ns = 0;</span>
+<span id="L666">  std::uint64_t declared_budget_ns = 0;</span>
+<span id="L667">  rt::RateLateAction late_action = rt::RateLateAction::fail;</span>
+<span id="L668">  std::uint32_t degradation_level = 0;</span>
+<span id="L669">  bool seen = false;</span>
+<span id="L670">};</span>
+<span id="L671"></span>
+<span id="L672">struct BatchProvider {</span>
+<span id="L673">  rt::DeviceCommandBatch declaration{};</span>
+<span id="L674">  std::uint64_t wait_value = 0;</span>
+<span id="L675">  std::uint64_t signal_value = 1;</span>
+<span id="L676">  bool signal_from_rate_substep = false;</span>
+<span id="L677">  std::uint64_t timeout_ns = 100&#x27;000&#x27;000;</span>
+<span id="L678">  bool malformed_timeout = false;</span>
+<span id="L679">  std::atomic&lt;std::size_t&gt; *callback_count = nullptr;</span>
+<span id="L680">  std::atomic&lt;bool&gt; *rate_context_seen = nullptr;</span>
+<span id="L681">  DeviceRateContextSnapshot *rate_context = nullptr;</span>
+<span id="L682">  std::span&lt;const std::byte&gt; payload_storage{};</span>
+<span id="L683">  std::array&lt;std::byte, 4&gt; *payload_seen = nullptr;</span>
+<span id="L684">};</span>
+<span id="L685"></span>
+<span id="L686">rt::CallbackResult provide_batch(void *user_data,</span>
+<span id="L687">                                 const rt::DeviceCallbackContext &amp;context,</span>
+<span id="L688">                                 rt::DeviceCommandBatch &amp;batch) {</span>
+<span id="L689">  auto &amp;provider = *static_cast&lt;BatchProvider *&gt;(user_data);</span>
+<span id="L690">  if (provider.callback_count) {</span>
+<span id="L691">    provider.callback_count-&gt;fetch_add(1, std::memory_order_release);</span>
+<span id="L692">    provider.callback_count-&gt;notify_all();</span>
+<span id="L693">  }</span>
+<span id="L694">  if (provider.rate_context_seen) {</span>
+<span id="L695">    provider.rate_context_seen-&gt;store(</span>
+<span id="L696">        context.rate_release != nullptr, std::memory_order_release);</span>
+<span id="L697">  }</span>
+<span id="L698">  if (provider.rate_context &amp;&amp; context.rate_release) {</span>
+<span id="L699">    const auto &amp;release = *context.rate_release;</span>
+<span id="L700">    *provider.rate_context = {</span>
+<span id="L701">        release.domain,</span>
+<span id="L702">        release.phase,</span>
+<span id="L703">        release.supercycle_cycle,</span>
+<span id="L704">        release.domain_release_sequence,</span>
+<span id="L705">        release.substep_ordinal,</span>
+<span id="L706">        release.logical_release_ns,</span>
+<span id="L707">        release.nominal_release_ns,</span>
+<span id="L708">        release.absolute_deadline_ns,</span>
+<span id="L709">        release.declared_budget_ns,</span>
+<span id="L710">        release.late_action,</span>
+<span id="L711">        release.degradation_level,</span>
+<span id="L712">        true,</span>
+<span id="L713">    };</span>
+<span id="L714">  }</span>
+<span id="L715">  if (provider.payload_seen &amp;&amp;</span>
+<span id="L716">      provider.payload_storage.size() &gt;= provider.payload_seen-&gt;size()) {</span>
+<span id="L717">    std::copy_n(provider.payload_storage.begin(),</span>
+<span id="L718">                provider.payload_seen-&gt;size(),</span>
+<span id="L719">                provider.payload_seen-&gt;begin());</span>
+<span id="L720">  }</span>
+<span id="L721">  batch = provider.declaration;</span>
+<span id="L722">  batch.timeout_ns = provider.malformed_timeout ? 0 : provider.timeout_ns;</span>
+<span id="L723">  for (std::size_t index = 0; index &lt; batch.wait_count; ++index) {</span>
+<span id="L724">    batch.waits[index].value = provider.wait_value;</span>
+<span id="L725">  }</span>
+<span id="L726">  for (std::size_t index = 0; index &lt; batch.signal_count; ++index) {</span>
+<span id="L727">    batch.signals[index].value = provider.signal_value + index +</span>
+<span id="L728">        (provider.signal_from_rate_substep &amp;&amp; context.rate_release</span>
+<span id="L729">             ? context.rate_release-&gt;substep_ordinal</span>
+<span id="L730">             : 0);</span>
+<span id="L731">  }</span>
+<span id="L732">  return rt::CallbackResult::ok;</span>
+<span id="L733">}</span>
+<span id="L734"></span>
+<span id="L735">struct ConfiguredBatchRuntime {</span>
+<span id="L736">  BatchBackend backend;</span>
+<span id="L737">  rt::Runtime runtime;</span>
+<span id="L738">  rt::DeviceBackendHandle backend_handle{};</span>
+<span id="L739">  rt::DeviceBufferHandle buffer{};</span>
+<span id="L740">  rt::DeviceTimelineHandle timeline{};</span>
+<span id="L741">  std::array&lt;std::byte, 64&gt; storage{};</span>
+<span id="L742"></span>
+<span id="L743">    void configure(std::size_t worker_count = 2) {</span>
+<span id="L744">        auto config = batch_config();</span>
+<span id="L745">        config.worker_count = worker_count;</span>
+<span id="L746">        ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L747">    ASSERT_EQ(register_backend(runtime, backend, &quot;command&quot;, backend_handle),</span>
+<span id="L748">              rt::Status::ok);</span>
+<span id="L749">    ASSERT_EQ(runtime.register_device_buffer(</span>
+<span id="L750">                  {&quot;command.buffer&quot;, backend_handle, storage}, buffer),</span>
+<span id="L751">              rt::Status::ok);</span>
+<span id="L752">    ASSERT_EQ(runtime.register_device_timeline(</span>
+<span id="L753">                  {&quot;command.timeline&quot;, backend_handle, 0}, timeline),</span>
+<span id="L754">              rt::Status::ok);</span>
+<span id="L755">  }</span>
+<span id="L756">};</span>
+<span id="L757"></span>
+<span id="L758">std::uint64_t device_rate_graph_id(</span>
+<span id="L759">    bool reverse_binding_order,</span>
+<span id="L760">    std::uint64_t second_completion_budget = 4) {</span>
+<span id="L761">  ConfiguredBatchRuntime fixture;</span>
+<span id="L762">  fixture.configure();</span>
+<span id="L763">  if (fixture.runtime.set_rate_execution_policy({4}) != rt::Status::ok) {</span>
+<span id="L764">    ADD_FAILURE() &lt;&lt; fixture.runtime.last_error();</span>
+<span id="L765">    return 0;</span>
+<span id="L766">  }</span>
+<span id="L767">  BatchProvider first;</span>
+<span id="L768">  BatchProvider second;</span>
+<span id="L769">  rt::DeviceTimelineHandle second_timeline;</span>
+<span id="L770">  if (fixture.runtime.register_device_timeline(</span>
+<span id="L771">          {&quot;command.timeline.second&quot;, fixture.backend_handle, 0},</span>
+<span id="L772">          second_timeline) != rt::Status::ok) {</span>
+<span id="L773">    ADD_FAILURE() &lt;&lt; fixture.runtime.last_error();</span>
+<span id="L774">    return 0;</span>
+<span id="L775">  }</span>
+<span id="L776">  first.declaration = dispatch_declaration(fixture.buffer, fixture.timeline);</span>
+<span id="L777">  second.declaration = dispatch_declaration(fixture.buffer, second_timeline);</span>
+<span id="L778">  rt::PhaseHandle first_phase;</span>
+<span id="L779">  rt::PhaseHandle second_phase;</span>
+<span id="L780">  if (fixture.runtime.register_device_batch_phase(</span>
+<span id="L781">          {&quot;rate.first&quot;, fixture.backend_handle, &amp;provide_batch,</span>
+<span id="L782">           &amp;first, first.declaration}, first_phase) != rt::Status::ok ||</span>
+<span id="L783">      fixture.runtime.register_device_batch_phase(</span>
+<span id="L784">          {&quot;rate.second&quot;, fixture.backend_handle, &amp;provide_batch,</span>
+<span id="L785">           &amp;second, second.declaration}, second_phase) != rt::Status::ok) {</span>
+<span id="L786">    ADD_FAILURE() &lt;&lt; fixture.runtime.last_error();</span>
+<span id="L787">    return 0;</span>
+<span id="L788">  }</span>
+<span id="L789">  rt::RateDomainHandle domain;</span>
+<span id="L790">  if (fixture.runtime.register_rate_domain(</span>
+<span id="L791">          {&quot;device.rate.identity&quot;, 10, 1, 6, 0,</span>
+<span id="L792">           rt::RateCriticality::critical, false,</span>
+<span id="L793">           rt::RateLateAction::fail, 0}, domain) != rt::Status::ok) {</span>
+<span id="L794">    ADD_FAILURE() &lt;&lt; fixture.runtime.last_error();</span>
+<span id="L795">    return 0;</span>
+<span id="L796">  }</span>
+<span id="L797">  const std::array roles{rt::DeviceRatePayloadRole::input};</span>
+<span id="L798">  const rt::DeviceRatePhaseBinding first_binding{</span>
+<span id="L799">      first_phase, domain, 4, 1, roles};</span>
+<span id="L800">  const rt::DeviceRatePhaseBinding second_binding{</span>
+<span id="L801">      second_phase, domain, second_completion_budget, 1, roles};</span>
+<span id="L802">  const auto first_status = reverse_binding_order</span>
+<span id="L803">      ? fixture.runtime.bind_device_phase_to_rate_domain(second_binding)</span>
+<span id="L804">      : fixture.runtime.bind_device_phase_to_rate_domain(first_binding);</span>
+<span id="L805">  const auto second_status = reverse_binding_order</span>
+<span id="L806">      ? fixture.runtime.bind_device_phase_to_rate_domain(first_binding)</span>
+<span id="L807">      : fixture.runtime.bind_device_phase_to_rate_domain(second_binding);</span>
+<span id="L808">  if (first_status != rt::Status::ok || second_status != rt::Status::ok ||</span>
+<span id="L809">      fixture.runtime.finalize() != rt::Status::ok) {</span>
+<span id="L810">    ADD_FAILURE() &lt;&lt; fixture.runtime.last_error();</span>
+<span id="L811">    return 0;</span>
+<span id="L812">  }</span>
+<span id="L813">  std::size_t required = 0;</span>
+<span id="L814">  if (fixture.runtime.checkpoint_size(required) != rt::Status::ok) {</span>
+<span id="L815">    ADD_FAILURE() &lt;&lt; fixture.runtime.last_error();</span>
+<span id="L816">    return 0;</span>
+<span id="L817">  }</span>
+<span id="L818">  std::vector&lt;std::byte&gt; checkpoint(required);</span>
+<span id="L819">  rt::ArtifactWriteResult result;</span>
+<span id="L820">  rt::CheckpointMetadata metadata;</span>
+<span id="L821">  if (fixture.runtime.write_checkpoint(0, checkpoint, result) !=</span>
+<span id="L822">          rt::Status::ok ||</span>
+<span id="L823">      rt::inspect_checkpoint_artifact(checkpoint, metadata) != rt::Status::ok) {</span>
+<span id="L824">    ADD_FAILURE() &lt;&lt; fixture.runtime.last_error();</span>
+<span id="L825">    return 0;</span>
+<span id="L826">  }</span>
+<span id="L827">  return metadata.graph_id;</span>
+<span id="L828">}</span>
+<span id="L829"></span>
+<span id="L830">const rt::ThreadPolicyReport *</span>
+<span id="L831">find_thread(const rt::CpuMemoryPolicyReport &amp;report, rt::ThreadRoleId role) {</span>
+<span id="L832">  const auto end =</span>
+<span id="L833">      report.threads.begin() + static_cast&lt;std::ptrdiff_t&gt;(report.thread_count);</span>
+<span id="L834">  const auto found =</span>
+<span id="L835">      std::find_if(report.threads.begin(), end,</span>
+<span id="L836">                   [role](const auto &amp;row) { return row.role == role; });</span>
+<span id="L837">  return found == end ? nullptr : &amp;*found;</span>
+<span id="L838">}</span>
+<span id="L839"></span>
+<span id="L840">} // namespace</span>
+<span id="L841"></span>
+<span id="L842">TEST(CommandBatch, PublicConstantsLayoutsDefaultsAndAggregatePrefixAreExact) {</span>
+<span id="L843">  EXPECT_EQ(rt::hal_v2_command_timeline_extension_version, 1u);</span>
+<span id="L844">  EXPECT_EQ(rt::hal_v2_command_capacity, 16u);</span>
+<span id="L845">  EXPECT_EQ(rt::hal_v2_timeline_wait_capacity, 8u);</span>
+<span id="L846">  EXPECT_EQ(rt::hal_v2_timeline_signal_capacity, 8u);</span>
+<span id="L847">  EXPECT_EQ(rt::hal_v2_timeline_capacity, 16u);</span>
+<span id="L848">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::dispatch), 1u);</span>
+<span id="L849">  EXPECT_EQ(static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::copy), 2u);</span>
+<span id="L850">  EXPECT_EQ(</span>
+<span id="L851">      static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::memory_synchronization),</span>
+<span id="L852">      3u);</span>
+<span id="L853">  EXPECT_EQ(sizeof(rt::DeviceTimelineHandle), 8u);</span>
+<span id="L854">  EXPECT_EQ(sizeof(rt::HalV2TimelinePoint), 48u);</span>
+<span id="L855">  EXPECT_EQ(sizeof(rt::DeviceCommand), 544u);</span>
+<span id="L856">  EXPECT_EQ(sizeof(rt::DeviceCommandBatch), 9584u);</span>
+<span id="L857">  EXPECT_EQ(sizeof(rt::HalV2BatchCompletion), 488u);</span>
+<span id="L858">  EXPECT_EQ(sizeof(rt::HalV2CommandTimelineCapabilities), 104u);</span>
+<span id="L859">  EXPECT_EQ(sizeof(rt::HalV2CommandTimelineExtension), 120u);</span>
+<span id="L860">  EXPECT_EQ(sizeof(rt::DeviceTimelineInfo), 144u);</span>
+<span id="L861">  EXPECT_EQ(sizeof(rt::HalV2BackendRegistration), 192u);</span>
+<span id="L862">  static_assert(std::is_standard_layout_v&lt;rt::DeviceCommand&gt;);</span>
+<span id="L863">  static_assert(std::is_standard_layout_v&lt;rt::DeviceCommandBatch&gt;);</span>
+<span id="L864">  static_assert(std::is_standard_layout_v&lt;rt::HalV2BatchCompletion&gt;);</span>
+<span id="L865">  static_assert(std::is_aggregate_v&lt;rt::DeviceCallbackContext&gt;);</span>
+<span id="L866"></span>
+<span id="L867">  const rt::DeviceCommand command;</span>
+<span id="L868">  const rt::DeviceCommandBatch batch;</span>
+<span id="L869">  const rt::HalV2BatchCompletion completion;</span>
+<span id="L870">  const rt::HalV2CommandTimelineCapabilities capabilities;</span>
+<span id="L871">  const rt::HalV2CommandTimelineExtension extension;</span>
+<span id="L872">  EXPECT_EQ(command.kind, 0u);</span>
+<span id="L873">  EXPECT_EQ(batch.command_count, 0u);</span>
+<span id="L874">  EXPECT_EQ(completion.batch_id, 0u);</span>
+<span id="L875">  EXPECT_EQ(capabilities.max_in_flight_batches, 0u);</span>
+<span id="L876">  EXPECT_EQ(extension.submit, nullptr);</span>
+<span id="L877">  EXPECT_TRUE(all_zero(command.reserved));</span>
+<span id="L878">  EXPECT_TRUE(all_zero(batch.reserved));</span>
+<span id="L879">  EXPECT_TRUE(all_zero(completion.reserved));</span>
+<span id="L880">  EXPECT_TRUE(all_zero(capabilities.reserved));</span>
+<span id="L881">  EXPECT_TRUE(all_zero(extension.reserved));</span>
+<span id="L882"></span>
+<span id="L883">  const rt::DeviceRatePhaseBinding device_rate{};</span>
+<span id="L884">  const rt::CompiledDeviceRatePhase compiled_device_rate{};</span>
+<span id="L885">  const rt::DeviceRateAdmissionReport admission{};</span>
+<span id="L886">  const rt::DeviceRateAdmissionDiagnostic admission_diagnostic{};</span>
+<span id="L887">  const rt::CrossRateChannelRegistration cross_rate{};</span>
+<span id="L888">  const rt::CrossRateReadResult cross_rate_read{};</span>
+<span id="L889">  EXPECT_FALSE(device_rate.phase.valid());</span>
+<span id="L890">  EXPECT_EQ(device_rate.completion_budget_ns, 0u);</span>
+<span id="L891">  EXPECT_EQ(device_rate.maximum_in_flight, 0u);</span>
+<span id="L892">  EXPECT_TRUE(device_rate.payload_roles.empty());</span>
+<span id="L893">  EXPECT_FALSE(compiled_device_rate.phase.valid());</span>
+<span id="L894">  EXPECT_EQ(admission.interval_count, 0u);</span>
+<span id="L895">  EXPECT_EQ(admission_diagnostic.status, rt::Status::ok);</span>
+<span id="L896">  EXPECT_FALSE(cross_rate.producer_device.valid());</span>
+<span id="L897">  EXPECT_FALSE(cross_rate.consumer_device.valid());</span>
+<span id="L898">  EXPECT_EQ(cross_rate_read.producer_timestamp_domain_identity, 0u);</span>
+<span id="L899">  EXPECT_EQ(cross_rate_read.producer_timestamp, 0u);</span>
+<span id="L900"></span>
+<span id="L901">  const rt::HalV2BackendRegistration old_prefix{&quot;old&quot;, {}};</span>
+<span id="L902">  EXPECT_EQ(old_prefix.memory_topology, nullptr);</span>
+<span id="L903">  EXPECT_EQ(old_prefix.command_timeline, nullptr);</span>
+<span id="L904">}</span>
+<span id="L905"></span>
+<span id="L906">TEST(CommandBatch, DeviceRateModelCompilesInspectsAccountsAndStarts) {</span>
+<span id="L907">  ConfiguredBatchRuntime fixture;</span>
+<span id="L908">  fixture.configure();</span>
+<span id="L909">  ASSERT_EQ(fixture.runtime.set_rate_execution_policy({4}), rt::Status::ok);</span>
+<span id="L910">  BatchProvider provider;</span>
+<span id="L911">  provider.declaration = dispatch_declaration(fixture.buffer, fixture.timeline);</span>
+<span id="L912">  rt::PhaseHandle phase;</span>
+<span id="L913">  ASSERT_EQ(fixture.runtime.register_device_batch_phase(</span>
+<span id="L914">                {&quot;rate.batch&quot;, fixture.backend_handle, &amp;provide_batch,</span>
+<span id="L915">                 &amp;provider, provider.declaration},</span>
+<span id="L916">                phase),</span>
+<span id="L917">            rt::Status::ok);</span>
+<span id="L918">  rt::RateDomainHandle domain;</span>
+<span id="L919">  ASSERT_EQ(fixture.runtime.register_rate_domain(</span>
+<span id="L920">                {&quot;device.rate&quot;, 10, 1, 6, 0,</span>
+<span id="L921">                 rt::RateCriticality::critical, false,</span>
+<span id="L922">                 rt::RateLateAction::fail, 0},</span>
+<span id="L923">                domain),</span>
+<span id="L924">            rt::Status::ok);</span>
+<span id="L925">  const std::array roles{rt::DeviceRatePayloadRole::input};</span>
+<span id="L926">  ASSERT_EQ(fixture.runtime.bind_device_phase_to_rate_domain(</span>
+<span id="L927">                {phase, domain, 4, 1, roles}),</span>
+<span id="L928">            rt::Status::ok);</span>
+<span id="L929">  ASSERT_EQ(fixture.runtime.finalize(), rt::Status::ok)</span>
+<span id="L930">      &lt;&lt; fixture.runtime.last_error();</span>
+<span id="L931"></span>
+<span id="L932">  EXPECT_TRUE(fixture.runtime.device_rate_model_enabled());</span>
+<span id="L933">  EXPECT_EQ(fixture.runtime.device_rate_phase_count(), 1u);</span>
+<span id="L934">  EXPECT_EQ(fixture.runtime.device_rate_command_count(), 1u);</span>
+<span id="L935">  EXPECT_EQ(fixture.runtime.device_rate_payload_reference_count(), 1u);</span>
+<span id="L936">  EXPECT_EQ(fixture.runtime.device_rate_timeline_reference_count(), 1u);</span>
+<span id="L937">  rt::CompiledDeviceRatePhase compiled;</span>
+<span id="L938">  ASSERT_TRUE(fixture.runtime.compiled_device_rate_phase_at(0, compiled));</span>
+<span id="L939">  EXPECT_EQ(compiled.phase, phase);</span>
+<span id="L940">  EXPECT_EQ(compiled.domain, domain);</span>
+<span id="L941">  EXPECT_EQ(compiled.backend, fixture.backend_handle);</span>
+<span id="L942">  EXPECT_EQ(compiled.completion_budget_ns, 4u);</span>
+<span id="L943">  EXPECT_EQ(compiled.maximum_in_flight, 1u);</span>
+<span id="L944">  EXPECT_EQ(compiled.completion_timestamp_domain_identity, 201u);</span>
+<span id="L945">  rt::CompiledDeviceRateCommand command;</span>
+<span id="L946">  ASSERT_TRUE(fixture.runtime.compiled_device_rate_command_at(0, command));</span>
+<span id="L947">  EXPECT_EQ(command.kind, rt::HalV2CommandKind::dispatch);</span>
+<span id="L948">  EXPECT_EQ(command.opcode, 7u);</span>
+<span id="L949">  rt::CompiledDeviceRatePayloadReference payload;</span>
+<span id="L950">  ASSERT_TRUE(fixture.runtime.compiled_device_rate_payload_reference_at(</span>
+<span id="L951">      0, payload));</span>
+<span id="L952">  EXPECT_EQ(payload.buffer, fixture.buffer);</span>
+<span id="L953">  EXPECT_EQ(payload.role, rt::DeviceRatePayloadRole::input);</span>
+<span id="L954">  EXPECT_EQ(payload.bytes, 16u);</span>
+<span id="L955">  rt::CompiledDeviceRateTimelineReference timeline;</span>
+<span id="L956">  ASSERT_TRUE(fixture.runtime.compiled_device_rate_timeline_reference_at(</span>
+<span id="L957">      0, timeline));</span>
+<span id="L958">  EXPECT_EQ(timeline.timeline, fixture.timeline);</span>
+<span id="L959">  EXPECT_EQ(timeline.role, rt::DeviceRateTimelineRole::signal);</span>
+<span id="L960">  rt::DeviceRateAdmissionReport admission;</span>
+<span id="L961">  ASSERT_TRUE(fixture.runtime.device_rate_admission_report(admission));</span>
+<span id="L962">  EXPECT_EQ(admission.supercycle_ns, 10u);</span>
+<span id="L963">  EXPECT_EQ(admission.peak_global_in_flight, 1u);</span>
+<span id="L964">  EXPECT_EQ(admission.interval_count, 1u);</span>
+<span id="L965">  rt::DeviceRateAdmissionInterval interval;</span>
+<span id="L966">  ASSERT_TRUE(fixture.runtime.device_rate_admission_interval_at(0, interval));</span>
+<span id="L967">  EXPECT_EQ(interval.release_time_ns, 0u);</span>
+<span id="L968">  EXPECT_EQ(interval.completion_deadline_ns, 4u);</span>
+<span id="L969"></span>
+<span id="L970">  rt::MemoryPlan memory;</span>
+<span id="L971">  ASSERT_TRUE(fixture.runtime.memory_plan(memory));</span>
+<span id="L972">  EXPECT_EQ(memory.device_rate_phase_count, 1u);</span>
+<span id="L973">  EXPECT_EQ(memory.device_rate_command_count, 1u);</span>
+<span id="L974">  EXPECT_EQ(memory.device_rate_payload_reference_count, 1u);</span>
+<span id="L975">  EXPECT_EQ(memory.device_rate_timeline_reference_count, 1u);</span>
+<span id="L976">  EXPECT_EQ(memory.device_rate_admission_interval_count, 1u);</span>
+<span id="L977">  EXPECT_GT(memory.device_rate_plan_bytes, 0u);</span>
+<span id="L978">  EXPECT_EQ(memory.device_rate_dispatch_record_count, 1u);</span>
+<span id="L979">  EXPECT_EQ(memory.device_rate_dependency_count, 0u);</span>
+<span id="L980">  EXPECT_EQ(memory.device_rate_execution_slot_count, 1u);</span>
+<span id="L981">  EXPECT_GT(memory.device_rate_execution_bytes, 0u);</span>
+<span id="L982"></span>
+<span id="L983">  EXPECT_EQ(fixture.runtime.start(), rt::Status::ok);</span>
+<span id="L984">  EXPECT_EQ(fixture.backend.batch_submit_calls.load(), 0u);</span>
+<span id="L985">  EXPECT_EQ(fixture.backend.batch_poll_calls.load(), 0u);</span>
+<span id="L986">  EXPECT_EQ(fixture.backend.single_submit_calls.load(), 0u);</span>
+<span id="L987">  EXPECT_EQ(fixture.runtime.stop(), rt::Status::ok);</span>
+<span id="L988">}</span>
+<span id="L989"></span>
+<span id="L990">TEST(CommandBatch, CpuToDeviceCrossRatePayloadIsCopiedBeforeProvider) {</span>
+<span id="L991">  struct ManualClock final : rt::RuntimeClock {</span>
+<span id="L992">    std::uint64_t now_ns() noexcept override { return 1&#x27;000; }</span>
+<span id="L993">    rt::Status sleep_until_ns(std::uint64_t) noexcept override {</span>
+<span id="L994">      return rt::Status::ok;</span>
+<span id="L995">    }</span>
+<span id="L996">  } clock;</span>
+<span id="L997">  struct Producer {</span>
+<span id="L998">    rt::CrossRateChannelHandle channel{};</span>
+<span id="L999">    std::array&lt;std::byte, 4&gt; payload{};</span>
+<span id="L1000">  } producer;</span>
+<span id="L1001"></span>
+<span id="L1002">  BatchBackend backend;</span>
+<span id="L1003">  backend.mode.store(BatchBackend::SubmitMode::manual_completion);</span>
+<span id="L1004">  backend.auto_release_manual_completions = true;</span>
+<span id="L1005">  rt::Runtime runtime(clock);</span>
+<span id="L1006">  auto config = batch_config();</span>
+<span id="L1007">  config.callback_capacity = 2;</span>
+<span id="L1008">  ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L1009">  ASSERT_EQ(runtime.set_rate_execution_policy({3}), rt::Status::ok);</span>
+<span id="L1010">  rt::DeviceBackendHandle backend_handle;</span>
+<span id="L1011">  ASSERT_EQ(register_backend(runtime, backend, &quot;payload.input&quot;, backend_handle),</span>
+<span id="L1012">            rt::Status::ok);</span>
+<span id="L1013">  std::array&lt;std::byte, 64&gt; storage{};</span>
+<span id="L1014">  rt::DeviceBufferHandle buffer;</span>
+<span id="L1015">  ASSERT_EQ(runtime.register_device_buffer(</span>
+<span id="L1016">                {&quot;payload.input.buffer&quot;, backend_handle, storage}, buffer),</span>
+<span id="L1017">            rt::Status::ok);</span>
+<span id="L1018">  rt::DeviceTimelineHandle timeline;</span>
+<span id="L1019">  ASSERT_EQ(runtime.register_device_timeline(</span>
+<span id="L1020">                {&quot;payload.input.timeline&quot;, backend_handle, 0}, timeline),</span>
+<span id="L1021">            rt::Status::ok);</span>
+<span id="L1022">  producer.payload = {std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}};</span>
+<span id="L1023">  rt::PhaseHandle cpu_phase;</span>
+<span id="L1024">  ASSERT_EQ(runtime.register_callback(</span>
+<span id="L1025">                {&quot;payload.input.cpu&quot;,</span>
+<span id="L1026">                 [](void *data, const rt::CallbackContext &amp;context) {</span>
+<span id="L1027">                   auto &amp;state = *static_cast&lt;Producer *&gt;(data);</span>
+<span id="L1028">                   if (!context.rate_release ||</span>
+<span id="L1029">                       context.rate_release-&gt;publish(</span>
+<span id="L1030">                           state.channel, state.payload) != rt::Status::ok) {</span>
+<span id="L1031">                     return rt::CallbackResult::error;</span>
+<span id="L1032">                   }</span>
+<span id="L1033">                   return rt::CallbackResult::ok;</span>
+<span id="L1034">                 },</span>
+<span id="L1035">                 &amp;producer},</span>
+<span id="L1036">                cpu_phase),</span>
+<span id="L1037">            rt::Status::ok);</span>
+<span id="L1038">  std::array&lt;std::byte, 4&gt; provider_seen{};</span>
+<span id="L1039">  BatchProvider provider;</span>
+<span id="L1040">  provider.declaration = dispatch_declaration(buffer, timeline);</span>
+<span id="L1041">  provider.signal_from_rate_substep = true;</span>
+<span id="L1042">  provider.payload_storage = std::span&lt;const std::byte&gt;(storage).first(4);</span>
+<span id="L1043">  provider.payload_seen = &amp;provider_seen;</span>
+<span id="L1044">  std::atomic&lt;std::size_t&gt; provider_calls{0};</span>
+<span id="L1045">  provider.callback_count = &amp;provider_calls;</span>
+<span id="L1046">  rt::PhaseHandle device_phase;</span>
+<span id="L1047">  ASSERT_EQ(runtime.register_device_batch_phase(</span>
+<span id="L1048">                {&quot;payload.input.device&quot;, backend_handle, &amp;provide_batch,</span>
+<span id="L1049">                 &amp;provider, provider.declaration},</span>
+<span id="L1050">                device_phase),</span>
+<span id="L1051">            rt::Status::ok);</span>
+<span id="L1052">  rt::RateDomainHandle cpu_domain;</span>
+<span id="L1053">  rt::RateDomainHandle device_domain;</span>
+<span id="L1054">  ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L1055">                {&quot;payload.input.cpu.rate&quot;, 1&#x27;000&#x27;000&#x27;000, 1,</span>
+<span id="L1056">                 900&#x27;000&#x27;000, 10, rt::RateCriticality::critical, false,</span>
+<span id="L1057">                 rt::RateLateAction::fail, 0},</span>
+<span id="L1058">                cpu_domain),</span>
+<span id="L1059">            rt::Status::ok);</span>
+<span id="L1060">  ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L1061">                {&quot;payload.input.device.rate&quot;, 2&#x27;000&#x27;000&#x27;000, 2,</span>
+<span id="L1062">                 900&#x27;000&#x27;000, 0, rt::RateCriticality::critical, false,</span>
+<span id="L1063">                 rt::RateLateAction::fail, 0},</span>
+<span id="L1064">                device_domain),</span>
+<span id="L1065">            rt::Status::ok);</span>
+<span id="L1066">  ASSERT_EQ(runtime.bind_phase_to_rate_domain(cpu_phase, cpu_domain),</span>
+<span id="L1067">            rt::Status::ok);</span>
+<span id="L1068">  const std::array roles{rt::DeviceRatePayloadRole::input};</span>
+<span id="L1069">  ASSERT_EQ(runtime.bind_device_phase_to_rate_domain(</span>
+<span id="L1070">                {device_phase, device_domain, 800&#x27;000&#x27;000, 2, roles}),</span>
+<span id="L1071">            rt::Status::ok);</span>
+<span id="L1072">  const std::array&lt;std::byte, 4&gt; initial{};</span>
+<span id="L1073">  ASSERT_EQ(runtime.register_cross_rate_channel(</span>
+<span id="L1074">                {&quot;payload.input.channel&quot;, cpu_phase, device_phase,</span>
+<span id="L1075">                 producer.payload.size(), initial,</span>
+<span id="L1076">                 rt::CrossRateMode::sample_and_hold,</span>
+<span id="L1077">                 std::numeric_limits&lt;std::uint64_t&gt;::max(), {}, {0, 2}},</span>
+<span id="L1078">                producer.channel),</span>
+<span id="L1079">            rt::Status::ok);</span>
+<span id="L1080">  EXPECT_EQ(runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L1081">  EXPECT_EQ(provider_calls.load(), 0u);</span>
+<span id="L1082">  ASSERT_EQ(runtime.replace_cross_rate_channel(</span>
+<span id="L1083">                producer.channel,</span>
+<span id="L1084">                {&quot;payload.input.channel&quot;, cpu_phase, device_phase,</span>
+<span id="L1085">                 producer.payload.size(), initial,</span>
+<span id="L1086">                 rt::CrossRateMode::sample_and_hold,</span>
+<span id="L1087">                 std::numeric_limits&lt;std::uint64_t&gt;::max(), {}, {0, 4}}),</span>
+<span id="L1088">            rt::Status::ok);</span>
+<span id="L1089">  ASSERT_EQ(runtime.finalize(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L1090">  rt::CompiledCrossRateChannel compiled;</span>
+<span id="L1091">  ASSERT_TRUE(runtime.compiled_cross_rate_channel_at(0, compiled));</span>
+<span id="L1092">  EXPECT_TRUE(compiled.consumer_device.valid());</span>
+<span id="L1093">  EXPECT_EQ(compiled.consumer_device_buffer, buffer);</span>
+<span id="L1094">  EXPECT_EQ(compiled.consumer_device_base_offset, 0u);</span>
+<span id="L1095">  EXPECT_EQ(compiled.consumer_device_slot_count, 2u);</span>
+<span id="L1096">  rt::MemoryPlan memory;</span>
+<span id="L1097">  ASSERT_TRUE(runtime.memory_plan(memory));</span>
+<span id="L1098">  EXPECT_EQ(memory.cross_rate_device_endpoint_count, 1u);</span>
+<span id="L1099">  EXPECT_EQ(memory.cross_rate_device_staging_bytes, 4u);</span>
+<span id="L1100">  ASSERT_EQ(runtime.start(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L1101">  rt::StepResult result;</span>
+<span id="L1102">  EXPECT_EQ(runtime.step(</span>
+<span id="L1103">                {0, std::chrono::nanoseconds(1), std::nullopt, 1&#x27;000},</span>
+<span id="L1104">                &amp;result),</span>
+<span id="L1105">            rt::Status::ok)</span>
+<span id="L1106">      &lt;&lt; runtime.last_error();</span>
+<span id="L1107">  EXPECT_EQ(provider_seen, producer.payload);</span>
+<span id="L1108">  EXPECT_EQ(provider_calls.load(), 2u);</span>
+<span id="L1109">  EXPECT_EQ(backend.batch_submit_calls.load(), 2u);</span>
+<span id="L1110">  EXPECT_EQ(backend.submitted_payload_offsets[0], 0u);</span>
+<span id="L1111">  EXPECT_EQ(backend.submitted_payload_offsets[1], 4u);</span>
+<span id="L1112">  EXPECT_EQ(backend.last_batch.commands[0].buffers[0].offset, 4u);</span>
+<span id="L1113">  EXPECT_EQ(backend.last_batch.commands[0].buffers[0].bytes, 4u);</span>
+<span id="L1114">  EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1115">}</span>
+<span id="L1116"></span>
+<span id="L1117">TEST(CommandBatch, DeviceToCpuCrossRatePayloadPublishesOnlyOnCompletion) {</span>
+<span id="L1118">  struct ManualClock final : rt::RuntimeClock {</span>
+<span id="L1119">    std::uint64_t now_ns() noexcept override { return 1&#x27;000; }</span>
+<span id="L1120">    rt::Status sleep_until_ns(std::uint64_t) noexcept override {</span>
+<span id="L1121">      return rt::Status::ok;</span>
+<span id="L1122">    }</span>
+<span id="L1123">  } clock;</span>
+<span id="L1124">  struct Consumer {</span>
+<span id="L1125">    rt::CrossRateChannelHandle channel{};</span>
+<span id="L1126">    std::array&lt;std::byte, 4&gt; payload{};</span>
+<span id="L1127">    rt::CrossRateReadResult read{};</span>
+<span id="L1128">    bool copied = false;</span>
+<span id="L1129">  } consumer;</span>
+<span id="L1130"></span>
+<span id="L1131">  BatchBackend backend;</span>
+<span id="L1132">  backend.mode.store(BatchBackend::SubmitMode::manual_completion);</span>
+<span id="L1133">  rt::Runtime runtime(clock);</span>
+<span id="L1134">  auto config = batch_config();</span>
+<span id="L1135">  config.callback_capacity = 2;</span>
+<span id="L1136">  ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L1137">  ASSERT_EQ(runtime.set_rate_execution_policy({2}), rt::Status::ok);</span>
+<span id="L1138">  rt::DeviceBackendHandle backend_handle;</span>
+<span id="L1139">  ASSERT_EQ(register_backend(runtime, backend, &quot;payload.output&quot;, backend_handle),</span>
+<span id="L1140">            rt::Status::ok);</span>
+<span id="L1141">  std::array&lt;std::byte, 64&gt; storage{};</span>
+<span id="L1142">  backend.payload_storage = storage;</span>
+<span id="L1143">  backend.completion_payload =</span>
+<span id="L1144">      {std::byte{9}, std::byte{8}, std::byte{7}, std::byte{6}};</span>
+<span id="L1145">  backend.write_payload_on_submit = true;</span>
+<span id="L1146">  rt::DeviceBufferHandle buffer;</span>
+<span id="L1147">  ASSERT_EQ(runtime.register_device_buffer(</span>
+<span id="L1148">                {&quot;payload.output.buffer&quot;, backend_handle, storage}, buffer),</span>
+<span id="L1149">            rt::Status::ok);</span>
+<span id="L1150">  rt::DeviceTimelineHandle timeline;</span>
+<span id="L1151">  ASSERT_EQ(runtime.register_device_timeline(</span>
+<span id="L1152">                {&quot;payload.output.timeline&quot;, backend_handle, 0}, timeline),</span>
+<span id="L1153">            rt::Status::ok);</span>
+<span id="L1154">  BatchProvider provider;</span>
+<span id="L1155">  provider.declaration = dispatch_declaration(</span>
+<span id="L1156">      buffer, timeline, RTFW_DEVICE_ACCESS_WRITE);</span>
+<span id="L1157">  rt::PhaseHandle device_phase;</span>
+<span id="L1158">  ASSERT_EQ(runtime.register_device_batch_phase(</span>
+<span id="L1159">                {&quot;payload.output.device&quot;, backend_handle, &amp;provide_batch,</span>
+<span id="L1160">                 &amp;provider, provider.declaration},</span>
+<span id="L1161">                device_phase),</span>
+<span id="L1162">            rt::Status::ok);</span>
+<span id="L1163">  rt::PhaseHandle cpu_phase;</span>
+<span id="L1164">  ASSERT_EQ(runtime.register_callback(</span>
+<span id="L1165">                {&quot;payload.output.cpu&quot;,</span>
+<span id="L1166">                 [](void *data, const rt::CallbackContext &amp;context) {</span>
+<span id="L1167">                   auto &amp;state = *static_cast&lt;Consumer *&gt;(data);</span>
+<span id="L1168">                   if (!context.rate_release) {</span>
+<span id="L1169">                     return rt::CallbackResult::error;</span>
+<span id="L1170">                   }</span>
+<span id="L1171">                   state.copied = context.rate_release-&gt;copy(</span>
+<span id="L1172">                                      state.channel, state.payload,</span>
+<span id="L1173">                                      state.read) ==</span>
+<span id="L1174">                                  rt::CrossRateReadStatus::ok;</span>
+<span id="L1175">                   return state.copied ? rt::CallbackResult::ok</span>
+<span id="L1176">                                       : rt::CallbackResult::error;</span>
+<span id="L1177">                 },</span>
+<span id="L1178">                 &amp;consumer},</span>
+<span id="L1179">                cpu_phase),</span>
+<span id="L1180">            rt::Status::ok);</span>
+<span id="L1181">  rt::RateDomainHandle device_domain;</span>
+<span id="L1182">  rt::RateDomainHandle cpu_domain;</span>
+<span id="L1183">  ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L1184">                {&quot;payload.output.device.rate&quot;, 1&#x27;000&#x27;000&#x27;000, 1,</span>
+<span id="L1185">                 900&#x27;000&#x27;000, 0, rt::RateCriticality::critical, false,</span>
+<span id="L1186">                 rt::RateLateAction::fail, 0},</span>
+<span id="L1187">                device_domain),</span>
+<span id="L1188">            rt::Status::ok);</span>
+<span id="L1189">  ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L1190">                {&quot;payload.output.cpu.rate&quot;, 2&#x27;000&#x27;000&#x27;000, 1,</span>
+<span id="L1191">                 900&#x27;000&#x27;000, 10, rt::RateCriticality::critical, false,</span>
+<span id="L1192">                 rt::RateLateAction::fail, 0},</span>
+<span id="L1193">                cpu_domain),</span>
+<span id="L1194">            rt::Status::ok);</span>
+<span id="L1195">  const std::array roles{rt::DeviceRatePayloadRole::output};</span>
+<span id="L1196">  ASSERT_EQ(runtime.bind_device_phase_to_rate_domain(</span>
+<span id="L1197">                {device_phase, device_domain, 800&#x27;000&#x27;000, 1, roles}),</span>
+<span id="L1198">            rt::Status::ok);</span>
+<span id="L1199">  ASSERT_EQ(runtime.bind_phase_to_rate_domain(cpu_phase, cpu_domain),</span>
+<span id="L1200">            rt::Status::ok);</span>
+<span id="L1201">  const std::array&lt;std::byte, 4&gt; initial{</span>
+<span id="L1202">      std::byte{1}, std::byte{1}, std::byte{1}, std::byte{1}};</span>
+<span id="L1203">  ASSERT_EQ(runtime.register_cross_rate_channel(</span>
+<span id="L1204">                {&quot;payload.output.channel&quot;, device_phase, cpu_phase,</span>
+<span id="L1205">                 initial.size(), initial, rt::CrossRateMode::sample_and_hold,</span>
+<span id="L1206">                 std::numeric_limits&lt;std::uint64_t&gt;::max(), {0, 4}, {}},</span>
+<span id="L1207">                consumer.channel),</span>
+<span id="L1208">            rt::Status::ok);</span>
+<span id="L1209">  ASSERT_EQ(runtime.finalize(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L1210">  ASSERT_EQ(runtime.start(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L1211">  std::atomic&lt;rt::Status&gt; step_status{rt::Status::internal_error};</span>
+<span id="L1212">  std::thread step_thread([&amp;] {</span>
+<span id="L1213">    rt::StepResult result;</span>
+<span id="L1214">    step_status.store(</span>
+<span id="L1215">        runtime.step(</span>
+<span id="L1216">            {0, std::chrono::nanoseconds(1), std::nullopt, 1&#x27;000},</span>
+<span id="L1217">            &amp;result),</span>
+<span id="L1218">        std::memory_order_release);</span>
+<span id="L1219">  });</span>
+<span id="L1220">  const auto wait_until = std::chrono::steady_clock::now() +</span>
+<span id="L1221">                          std::chrono::seconds(2);</span>
+<span id="L1222">  while (backend.manual_submitted.load(std::memory_order_acquire) != 1 &amp;&amp;</span>
+<span id="L1223">         std::chrono::steady_clock::now() &lt; wait_until) {</span>
+<span id="L1224">    std::this_thread::yield();</span>
+<span id="L1225">  }</span>
+<span id="L1226">  EXPECT_EQ(backend.manual_submitted.load(std::memory_order_acquire), 1u);</span>
+<span id="L1227">  EXPECT_FALSE(consumer.copied);</span>
+<span id="L1228">  EXPECT_TRUE(std::equal(</span>
+<span id="L1229">      backend.completion_payload.begin(), backend.completion_payload.end(),</span>
+<span id="L1230">      storage.begin()));</span>
+<span id="L1231">  backend.manual_release_count.store(1, std::memory_order_release);</span>
+<span id="L1232">  step_thread.join();</span>
+<span id="L1233">  ASSERT_EQ(step_status.load(std::memory_order_acquire), rt::Status::ok)</span>
+<span id="L1234">      &lt;&lt; runtime.last_error();</span>
+<span id="L1235">  EXPECT_TRUE(consumer.copied);</span>
+<span id="L1236">  EXPECT_EQ(consumer.payload, backend.completion_payload);</span>
+<span id="L1237">  EXPECT_EQ(consumer.read.status, rt::CrossRateReadStatus::ok);</span>
+<span id="L1238">  EXPECT_EQ(consumer.read.provenance,</span>
+<span id="L1239">            rt::CrossRateSampleProvenance::produced);</span>
+<span id="L1240">  EXPECT_EQ(consumer.read.generation, 2u);</span>
+<span id="L1241">  EXPECT_EQ(consumer.read.producer_release_sequence, 0u);</span>
+<span id="L1242">  EXPECT_EQ(consumer.read.producer_substep_ordinal, 0u);</span>
+<span id="L1243">  EXPECT_EQ(consumer.read.producer_completion_status, rt::Status::ok);</span>
+<span id="L1244">  EXPECT_EQ(consumer.read.producer_timestamp_domain_identity, 201u);</span>
+<span id="L1245">  EXPECT_EQ(consumer.read.producer_timestamp, 77u);</span>
+<span id="L1246">  EXPECT_EQ(consumer.read.age_ns, 0u);</span>
+<span id="L1247">  EXPECT_EQ(consumer.read.freshness, rt::CrossRateFreshness::fresh);</span>
+<span id="L1248">  EXPECT_FALSE(consumer.read.held);</span>
+<span id="L1249">  EXPECT_EQ(backend.last_batch.commands[0].buffers[0].bytes, 4u);</span>
+<span id="L1250">  EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1251">}</span>
+<span id="L1252"></span>
+<span id="L1253">TEST(CommandBatch, ActiveRateDispatchOverlapsIndependentDeviceReleases) {</span>
+<span id="L1254">  struct ManualClock final : rt::RuntimeClock {</span>
+<span id="L1255">    std::uint64_t now_ns() noexcept override { return 1&#x27;000; }</span>
+<span id="L1256">    rt::Status sleep_until_ns(std::uint64_t) noexcept override {</span>
+<span id="L1257">      return rt::Status::ok;</span>
+<span id="L1258">    }</span>
+<span id="L1259">  } clock;</span>
+<span id="L1260"></span>
+<span id="L1261">  BatchBackend backend;</span>
+<span id="L1262">  backend.mode.store(BatchBackend::SubmitMode::manual_completion);</span>
+<span id="L1263">  rt::Runtime runtime(clock);</span>
+<span id="L1264">  auto config = batch_config();</span>
+<span id="L1265">  config.callback_capacity = 3;</span>
+<span id="L1266">  ASSERT_EQ(runtime.configure(config), rt::Status::ok);</span>
+<span id="L1267">  ASSERT_EQ(runtime.set_rate_execution_policy({3}), rt::Status::ok);</span>
+<span id="L1268">  rt::DeviceBackendHandle backend_handle;</span>
+<span id="L1269">  ASSERT_EQ(register_backend(runtime, backend, &quot;rate.concurrent&quot;,</span>
+<span id="L1270">                             backend_handle),</span>
+<span id="L1271">            rt::Status::ok);</span>
+<span id="L1272">  std::array&lt;std::byte, 64&gt; storage{};</span>
+<span id="L1273">  rt::DeviceBufferHandle buffer;</span>
+<span id="L1274">  ASSERT_EQ(runtime.register_device_buffer(</span>
+<span id="L1275">                {&quot;rate.concurrent.buffer&quot;, backend_handle, storage}, buffer),</span>
+<span id="L1276">            rt::Status::ok);</span>
+<span id="L1277">  rt::DeviceTimelineHandle first_timeline;</span>
+<span id="L1278">  rt::DeviceTimelineHandle second_timeline;</span>
+<span id="L1279">  ASSERT_EQ(runtime.register_device_timeline(</span>
+<span id="L1280">                {&quot;rate.concurrent.first&quot;, backend_handle, 0},</span>
+<span id="L1281">                first_timeline),</span>
+<span id="L1282">            rt::Status::ok);</span>
+<span id="L1283">  ASSERT_EQ(runtime.register_device_timeline(</span>
+<span id="L1284">                {&quot;rate.concurrent.second&quot;, backend_handle, 0},</span>
+<span id="L1285">                second_timeline),</span>
+<span id="L1286">            rt::Status::ok);</span>
+<span id="L1287"></span>
+<span id="L1288">  std::atomic&lt;bool&gt; first_context{false};</span>
+<span id="L1289">  std::atomic&lt;bool&gt; second_context{false};</span>
+<span id="L1290">  DeviceRateContextSnapshot first_release;</span>
+<span id="L1291">  DeviceRateContextSnapshot second_release;</span>
+<span id="L1292">  BatchProvider first;</span>
+<span id="L1293">  BatchProvider second;</span>
+<span id="L1294">  first.declaration = dispatch_declaration(buffer, first_timeline);</span>
+<span id="L1295">  second.declaration = dispatch_declaration(buffer, second_timeline);</span>
+<span id="L1296">  first.timeout_ns = 500&#x27;000&#x27;000;</span>
+<span id="L1297">  second.timeout_ns = 500&#x27;000&#x27;000;</span>
+<span id="L1298">  first.rate_context_seen = &amp;first_context;</span>
+<span id="L1299">  second.rate_context_seen = &amp;second_context;</span>
+<span id="L1300">  first.rate_context = &amp;first_release;</span>
+<span id="L1301">  second.rate_context = &amp;second_release;</span>
+<span id="L1302">  rt::PhaseHandle cpu_phase;</span>
+<span id="L1303">  rt::PhaseHandle first_phase;</span>
+<span id="L1304">  rt::PhaseHandle second_phase;</span>
+<span id="L1305">  std::atomic&lt;bool&gt; cpu_context{false};</span>
+<span id="L1306">  ASSERT_EQ(runtime.register_callback(</span>
+<span id="L1307">                {&quot;rate.concurrent.cpu&quot;,</span>
+<span id="L1308">                 [](void *data, const rt::CallbackContext &amp;context) {</span>
+<span id="L1309">                   static_cast&lt;std::atomic&lt;bool&gt; *&gt;(data)-&gt;store(</span>
+<span id="L1310">                       context.rate_release != nullptr,</span>
+<span id="L1311">                       std::memory_order_release);</span>
+<span id="L1312">                   return rt::CallbackResult::ok;</span>
+<span id="L1313">                 },</span>
+<span id="L1314">                 &amp;cpu_context},</span>
+<span id="L1315">                cpu_phase),</span>
+<span id="L1316">            rt::Status::ok);</span>
+<span id="L1317">  ASSERT_EQ(runtime.register_device_batch_phase(</span>
+<span id="L1318">                {&quot;rate.concurrent.device.first&quot;, backend_handle,</span>
+<span id="L1319">                 &amp;provide_batch, &amp;first, first.declaration},</span>
+<span id="L1320">                first_phase),</span>
+<span id="L1321">            rt::Status::ok);</span>
+<span id="L1322">  ASSERT_EQ(runtime.register_device_batch_phase(</span>
+<span id="L1323">                {&quot;rate.concurrent.device.second&quot;, backend_handle,</span>
+<span id="L1324">                 &amp;provide_batch, &amp;second, second.declaration},</span>
+<span id="L1325">                second_phase),</span>
+<span id="L1326">            rt::Status::ok);</span>
+<span id="L1327">  rt::RateDomainHandle domain;</span>
+<span id="L1328">  ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L1329">                {&quot;rate.concurrent.domain&quot;, 1&#x27;000&#x27;000&#x27;000, 1,</span>
+<span id="L1330">                 900&#x27;000&#x27;000, 10, rt::RateCriticality::critical, false,</span>
+<span id="L1331">                 rt::RateLateAction::fail, 0},</span>
+<span id="L1332">                domain),</span>
+<span id="L1333">            rt::Status::ok);</span>
+<span id="L1334">  ASSERT_EQ(runtime.bind_phase_to_rate_domain(cpu_phase, domain),</span>
+<span id="L1335">            rt::Status::ok);</span>
+<span id="L1336">  const std::array roles{rt::DeviceRatePayloadRole::input};</span>
+<span id="L1337">  ASSERT_EQ(runtime.bind_device_phase_to_rate_domain(</span>
+<span id="L1338">                {first_phase, domain, 800&#x27;000&#x27;000, 1, roles}),</span>
+<span id="L1339">            rt::Status::ok);</span>
+<span id="L1340">  ASSERT_EQ(runtime.bind_device_phase_to_rate_domain(</span>
+<span id="L1341">                {second_phase, domain, 800&#x27;000&#x27;000, 1, roles}),</span>
+<span id="L1342">            rt::Status::ok);</span>
+<span id="L1343">  ASSERT_EQ(runtime.add_dependency(first_phase, cpu_phase), rt::Status::ok);</span>
+<span id="L1344">  ASSERT_EQ(runtime.add_dependency(second_phase, cpu_phase), rt::Status::ok);</span>
+<span id="L1345">  ASSERT_EQ(runtime.finalize(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L1346">  rt::MemoryPlan memory;</span>
+<span id="L1347">  ASSERT_TRUE(runtime.memory_plan(memory));</span>
+<span id="L1348">  EXPECT_EQ(memory.device_rate_dispatch_record_count, 3u);</span>
+<span id="L1349">  EXPECT_EQ(memory.device_rate_dependency_count, 2u);</span>
+<span id="L1350">  EXPECT_EQ(memory.device_rate_execution_slot_count, 3u);</span>
+<span id="L1351">  ASSERT_EQ(runtime.start(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L1352"></span>
+<span id="L1353">  std::atomic&lt;rt::Status&gt; step_status{rt::Status::internal_error};</span>
+<span id="L1354">  std::thread step_thread([&amp;] {</span>
+<span id="L1355">    rt::StepResult result;</span>
+<span id="L1356">    step_status.store(</span>
+<span id="L1357">        runtime.step({0, std::chrono::nanoseconds(1), std::nullopt, 1&#x27;000},</span>
+<span id="L1358">                     &amp;result),</span>
+<span id="L1359">        std::memory_order_release);</span>
+<span id="L1360">  });</span>
+<span id="L1361">  const auto wait_until = std::chrono::steady_clock::now() +</span>
+<span id="L1362">                          std::chrono::seconds(2);</span>
+<span id="L1363">  while (backend.manual_submitted.load(std::memory_order_acquire) != 2 &amp;&amp;</span>
+<span id="L1364">         std::chrono::steady_clock::now() &lt; wait_until) {</span>
+<span id="L1365">    std::this_thread::yield();</span>
+<span id="L1366">  }</span>
+<span id="L1367">  const auto submitted_before_completion =</span>
+<span id="L1368">      backend.manual_submitted.load(std::memory_order_acquire);</span>
+<span id="L1369">  const auto cpu_ran_before_completion =</span>
+<span id="L1370">      cpu_context.load(std::memory_order_acquire);</span>
+<span id="L1371">  backend.manual_release_count.store(2, std::memory_order_release);</span>
+<span id="L1372">  step_thread.join();</span>
+<span id="L1373"></span>
+<span id="L1374">  EXPECT_EQ(submitted_before_completion, 2u);</span>
+<span id="L1375">  EXPECT_FALSE(cpu_ran_before_completion);</span>
+<span id="L1376">  EXPECT_EQ(step_status.load(std::memory_order_acquire), rt::Status::ok);</span>
+<span id="L1377">  EXPECT_TRUE(cpu_context.load(std::memory_order_acquire));</span>
+<span id="L1378">  EXPECT_TRUE(first_context.load(std::memory_order_acquire));</span>
+<span id="L1379">  EXPECT_TRUE(second_context.load(std::memory_order_acquire));</span>
+<span id="L1380">  EXPECT_TRUE(first_release.seen);</span>
+<span id="L1381">  EXPECT_EQ(first_release.domain, domain);</span>
+<span id="L1382">  EXPECT_EQ(first_release.phase, first_phase);</span>
+<span id="L1383">  EXPECT_EQ(first_release.supercycle_cycle, 0u);</span>
+<span id="L1384">  EXPECT_EQ(first_release.domain_release_sequence, 0u);</span>
+<span id="L1385">  EXPECT_EQ(first_release.substep_ordinal, 0u);</span>
+<span id="L1386">  EXPECT_EQ(first_release.logical_release_ns, 0u);</span>
+<span id="L1387">  EXPECT_EQ(first_release.nominal_release_ns, 1&#x27;000u);</span>
+<span id="L1388">  EXPECT_EQ(first_release.absolute_deadline_ns, 900&#x27;001&#x27;000u);</span>
+<span id="L1389">  EXPECT_EQ(first_release.declared_budget_ns, 10u);</span>
+<span id="L1390">  EXPECT_EQ(first_release.late_action, rt::RateLateAction::fail);</span>
+<span id="L1391">  EXPECT_EQ(first_release.degradation_level, 0u);</span>
+<span id="L1392">  EXPECT_TRUE(second_release.seen);</span>
+<span id="L1393">  EXPECT_EQ(second_release.phase, second_phase);</span>
+<span id="L1394">  EXPECT_EQ(backend.batch_submit_calls.load(), 2u);</span>
+<span id="L1395">  EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1396">}</span>
+<span id="L1397"></span>
+<span id="L1398">TEST(CommandBatch, ActiveRateTimeoutIsCanceledOnceAndLateCompletionIsQuarantined) {</span>
+<span id="L1399">  struct ManualClock final : rt::RuntimeClock {</span>
+<span id="L1400">    std::uint64_t now_ns() noexcept override { return 1&#x27;000; }</span>
+<span id="L1401">    rt::Status sleep_until_ns(std::uint64_t) noexcept override {</span>
+<span id="L1402">      return rt::Status::ok;</span>
+<span id="L1403">    }</span>
+<span id="L1404">  } clock;</span>
+<span id="L1405"></span>
+<span id="L1406">  BatchBackend backend;</span>
+<span id="L1407">  backend.mode.store(BatchBackend::SubmitMode::no_completion);</span>
+<span id="L1408">  rt::Runtime runtime(clock);</span>
+<span id="L1409">  ASSERT_EQ(runtime.configure(batch_config()), rt::Status::ok);</span>
+<span id="L1410">  ASSERT_EQ(runtime.set_rate_execution_policy({1}), rt::Status::ok);</span>
+<span id="L1411">  rt::DeviceBackendHandle backend_handle;</span>
+<span id="L1412">  ASSERT_EQ(register_backend(runtime, backend, &quot;rate.timeout&quot;, backend_handle),</span>
+<span id="L1413">            rt::Status::ok);</span>
+<span id="L1414">  std::array&lt;std::byte, 64&gt; storage{};</span>
+<span id="L1415">  rt::DeviceBufferHandle buffer;</span>
+<span id="L1416">  rt::DeviceTimelineHandle timeline;</span>
+<span id="L1417">  ASSERT_EQ(runtime.register_device_buffer(</span>
+<span id="L1418">                {&quot;rate.timeout.buffer&quot;, backend_handle, storage}, buffer),</span>
+<span id="L1419">            rt::Status::ok);</span>
+<span id="L1420">  ASSERT_EQ(runtime.register_device_timeline(</span>
+<span id="L1421">                {&quot;rate.timeout.timeline&quot;, backend_handle, 0}, timeline),</span>
+<span id="L1422">            rt::Status::ok);</span>
+<span id="L1423">  BatchProvider provider;</span>
+<span id="L1424">  provider.declaration = dispatch_declaration(buffer, timeline);</span>
+<span id="L1425">  provider.timeout_ns = 100&#x27;000&#x27;000;</span>
+<span id="L1426">  rt::PhaseHandle phase;</span>
+<span id="L1427">  ASSERT_EQ(runtime.register_device_batch_phase(</span>
+<span id="L1428">                {&quot;rate.timeout.phase&quot;, backend_handle, &amp;provide_batch,</span>
+<span id="L1429">                 &amp;provider, provider.declaration},</span>
+<span id="L1430">                phase),</span>
+<span id="L1431">            rt::Status::ok);</span>
+<span id="L1432">  rt::RateDomainHandle domain;</span>
+<span id="L1433">  ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L1434">                {&quot;rate.timeout.domain&quot;, 100&#x27;000&#x27;000, 1, 50&#x27;000&#x27;000, 0,</span>
+<span id="L1435">                 rt::RateCriticality::critical, false,</span>
+<span id="L1436">                 rt::RateLateAction::fail, 0},</span>
+<span id="L1437">                domain),</span>
+<span id="L1438">            rt::Status::ok);</span>
+<span id="L1439">  const std::array roles{rt::DeviceRatePayloadRole::input};</span>
+<span id="L1440">  ASSERT_EQ(runtime.bind_device_phase_to_rate_domain(</span>
+<span id="L1441">                {phase, domain, 5&#x27;000&#x27;000, 1, roles}),</span>
+<span id="L1442">            rt::Status::ok);</span>
+<span id="L1443">  ASSERT_EQ(runtime.finalize(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L1444">  ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L1445"></span>
+<span id="L1446">  rt::StepResult result;</span>
+<span id="L1447">  EXPECT_EQ(runtime.step(</span>
+<span id="L1448">                {0, std::chrono::nanoseconds(1), std::nullopt, 1&#x27;000},</span>
+<span id="L1449">                &amp;result),</span>
+<span id="L1450">            rt::Status::device_timeout);</span>
+<span id="L1451">  EXPECT_EQ(result.rate.executed_reference_records, 1u);</span>
+<span id="L1452">  EXPECT_EQ(result.rate.failed_domain_releases, 1u);</span>
+<span id="L1453">  EXPECT_EQ(backend.batch_cancel_calls.load(), 1u);</span>
+<span id="L1454">  EXPECT_EQ(backend.last_batch.timeout_ns, 5&#x27;000&#x27;000u);</span>
+<span id="L1455"></span>
+<span id="L1456">  backend.pending_completion = {};</span>
+<span id="L1457">  backend.pending_completion.batch_id = backend.last_batch.batch_id;</span>
+<span id="L1458">  backend.pending_completion.signal_count = backend.last_batch.signal_count;</span>
+<span id="L1459">  backend.pending_completion.timestamp_domain_identity = 201;</span>
+<span id="L1460">  for (std::size_t index = 0;</span>
+<span id="L1461">       index &lt; backend.last_batch.signal_count; ++index) {</span>
+<span id="L1462">    backend.pending_completion.signals[index] =</span>
+<span id="L1463">        backend.last_batch.signals[index];</span>
+<span id="L1464">  }</span>
+<span id="L1465">  backend.completion_ready.store(1, std::memory_order_release);</span>
+<span id="L1466">  const auto wait_until = std::chrono::steady_clock::now() +</span>
+<span id="L1467">                          std::chrono::seconds(2);</span>
+<span id="L1468">  while (backend.completion_ready.load(std::memory_order_acquire) != 0 &amp;&amp;</span>
+<span id="L1469">         std::chrono::steady_clock::now() &lt; wait_until) {</span>
+<span id="L1470">    std::this_thread::yield();</span>
+<span id="L1471">  }</span>
+<span id="L1472">  EXPECT_EQ(backend.completion_ready.load(std::memory_order_acquire), 0u);</span>
+<span id="L1473">  EXPECT_EQ(backend.batch_cancel_calls.load(), 1u);</span>
+<span id="L1474">  EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L1475">  EXPECT_EQ(backend.batch_cancel_calls.load(), 1u);</span>
+<span id="L1476">}</span>
+<span id="L1477"></span>
+<span id="L1478">TEST(CommandBatch, DeviceRateBindingRejectsLegacyAndSupportsCorrection) {</span>
+<span id="L1479">  ConfiguredBatchRuntime fixture;</span>
+<span id="L1480">  fixture.configure();</span>
+<span id="L1481">  BatchProvider provider;</span>
+<span id="L1482">  provider.declaration = dispatch_declaration(fixture.buffer, fixture.timeline);</span>
+<span id="L1483">  rt::PhaseHandle phase;</span>
+<span id="L1484">  ASSERT_EQ(fixture.runtime.register_device_batch_phase(</span>
+<span id="L1485">                {&quot;rate.retry&quot;, fixture.backend_handle, &amp;provide_batch,</span>
+<span id="L1486">                 &amp;provider, provider.declaration},</span>
+<span id="L1487">                phase),</span>
+<span id="L1488">            rt::Status::ok);</span>
+<span id="L1489">  rt::RateDomainHandle domain;</span>
+<span id="L1490">  ASSERT_EQ(fixture.runtime.register_rate_domain(</span>
+<span id="L1491">                {&quot;rate.retry.domain&quot;, 10, 1, 6, 0,</span>
+<span id="L1492">                 rt::RateCriticality::normal, false},</span>
+<span id="L1493">                domain),</span>
+<span id="L1494">            rt::Status::ok);</span>
+<span id="L1495">  const std::array wrong{rt::DeviceRatePayloadRole::output};</span>
+<span id="L1496">  ASSERT_EQ(fixture.runtime.bind_device_phase_to_rate_domain(</span>
+<span id="L1497">                {phase, domain, 4, 1, wrong}),</span>
+<span id="L1498">            rt::Status::ok);</span>
+<span id="L1499">  EXPECT_EQ(fixture.runtime.finalize(), rt::Status::invalid_config);</span>
+<span id="L1500">  rt::DeviceRateAdmissionDiagnostic diagnostic;</span>
+<span id="L1501">  ASSERT_TRUE(fixture.runtime.device_rate_admission_diagnostic(diagnostic));</span>
+<span id="L1502">  EXPECT_EQ(diagnostic.status, rt::Status::invalid_config);</span>
+<span id="L1503">  EXPECT_EQ(diagnostic.phase, phase);</span>
+<span id="L1504">  EXPECT_EQ(diagnostic.reference_index,</span>
+<span id="L1505">            std::numeric_limits&lt;std::size_t&gt;::max());</span>
+<span id="L1506">  const std::array corrected{rt::DeviceRatePayloadRole::input};</span>
+<span id="L1507">  ASSERT_EQ(fixture.runtime.replace_device_rate_binding(</span>
+<span id="L1508">                {phase, domain, 4, 1, corrected}),</span>
+<span id="L1509">            rt::Status::ok);</span>
+<span id="L1510">  ASSERT_EQ(fixture.runtime.finalize(), rt::Status::ok)</span>
+<span id="L1511">      &lt;&lt; fixture.runtime.last_error();</span>
+<span id="L1512">  EXPECT_FALSE(fixture.runtime.device_rate_admission_diagnostic(diagnostic));</span>
+<span id="L1513">  EXPECT_EQ(fixture.runtime.stop(), rt::Status::ok);</span>
+<span id="L1514"></span>
+<span id="L1515">  rt::Runtime legacy;</span>
+<span id="L1516">  ASSERT_EQ(legacy.configure(batch_config()), rt::Status::ok);</span>
+<span id="L1517">  rt::PhaseHandle cpu;</span>
+<span id="L1518">  std::size_t calls = 0;</span>
+<span id="L1519">  ASSERT_EQ(legacy.register_callback({&quot;cpu&quot;, [](void* data, const auto&amp;) {</span>
+<span id="L1520">                    ++*static_cast&lt;std::size_t*&gt;(data);</span>
+<span id="L1521">                    return rt::CallbackResult::ok;</span>
+<span id="L1522">                  }, &amp;calls}, cpu),</span>
+<span id="L1523">            rt::Status::ok);</span>
+<span id="L1524">  rt::RateDomainHandle legacy_domain;</span>
+<span id="L1525">  ASSERT_EQ(legacy.register_rate_domain(</span>
+<span id="L1526">                {&quot;legacy.rate&quot;, 10, 1, 10, 1,</span>
+<span id="L1527">                 rt::RateCriticality::normal, false},</span>
+<span id="L1528">                legacy_domain),</span>
+<span id="L1529">            rt::Status::ok);</span>
+<span id="L1530">  EXPECT_EQ(legacy.bind_device_phase_to_rate_domain(</span>
+<span id="L1531">                {cpu, legacy_domain, 1, 1, {}}),</span>
+<span id="L1532">            rt::Status::invalid_argument);</span>
+<span id="L1533">}</span>
+<span id="L1534"></span>
+<span id="L1535">TEST(CommandBatch, DeviceRateIdentityIsCanonicalAndIncludesAdmissionPolicy) {</span>
+<span id="L1536">  const auto forward = device_rate_graph_id(false);</span>
+<span id="L1537">  const auto reverse = device_rate_graph_id(true);</span>
+<span id="L1538">  const auto changed_policy = device_rate_graph_id(false, 5);</span>
+<span id="L1539">  ASSERT_NE(forward, 0u);</span>
+<span id="L1540">  EXPECT_EQ(forward, reverse);</span>
+<span id="L1541">  EXPECT_NE(forward, changed_policy);</span>
+<span id="L1542">}</span>
+<span id="L1543"></span>
+<span id="L1544">TEST(CommandBatch, ExtensionDiscoveryRejectsMalformedAndPartialResults) {</span>
+<span id="L1545">  BatchBackend backend;</span>
+<span id="L1546">  auto register_with = [&amp;](rt::HalV2CommandTimelineExtension command) {</span>
+<span id="L1547">    rt::Runtime runtime;</span>
+<span id="L1548">    EXPECT_EQ(runtime.configure(batch_config()), rt::Status::ok);</span>
+<span id="L1549">    auto memory = backend.memory_extension();</span>
+<span id="L1550">    rt::DeviceBackendHandle handle;</span>
+<span id="L1551">    return runtime.register_device_backend(</span>
+<span id="L1552">        {&quot;malformed&quot;, backend.core_api(), &amp;memory, &amp;command}, handle);</span>
+<span id="L1553">  };</span>
+<span id="L1554"></span>
+<span id="L1555">  auto command = backend.command_extension();</span>
+<span id="L1556">  command.struct_size = sizeof(command) - 1;</span>
+<span id="L1557">  EXPECT_EQ(register_with(command), rt::Status::invalid_argument);</span>
+<span id="L1558">  command = backend.command_extension();</span>
+<span id="L1559">  command.extension_version = 2;</span>
+<span id="L1560">  EXPECT_EQ(register_with(command), rt::Status::invalid_argument);</span>
+<span id="L1561">  command = backend.command_extension();</span>
+<span id="L1562">  command.poll = nullptr;</span>
+<span id="L1563">  EXPECT_EQ(register_with(command), rt::Status::invalid_argument);</span>
+<span id="L1564">  command = backend.command_extension();</span>
+<span id="L1565">  command.reserved[0] = 1;</span>
+<span id="L1566">  EXPECT_EQ(register_with(command), rt::Status::invalid_argument);</span>
+<span id="L1567"></span>
+<span id="L1568">  backend.command_capabilities.max_commands_per_batch = 0;</span>
+<span id="L1569">  EXPECT_EQ(register_with(backend.command_extension()),</span>
+<span id="L1570">            rt::Status::invalid_argument);</span>
+<span id="L1571">  backend.command_capabilities.max_commands_per_batch =</span>
+<span id="L1572">      rt::hal_v2_command_capacity;</span>
+<span id="L1573">  backend.command_capabilities.max_in_flight_batches = 1;</span>
+<span id="L1574">  EXPECT_EQ(register_with(backend.command_extension()),</span>
+<span id="L1575">            rt::Status::capacity_exceeded);</span>
+<span id="L1576">  backend.command_capabilities.max_in_flight_batches = 2;</span>
+<span id="L1577">  backend.leave_capabilities_untouched.store(true);</span>
+<span id="L1578">  EXPECT_EQ(register_with(backend.command_extension()),</span>
+<span id="L1579">            rt::Status::invalid_argument);</span>
+<span id="L1580">  backend.leave_capabilities_untouched.store(false);</span>
+<span id="L1581">  backend.throw_capabilities.store(true);</span>
+<span id="L1582">  EXPECT_EQ(register_with(backend.command_extension()),</span>
+<span id="L1583">            rt::Status::device_error);</span>
+<span id="L1584">}</span>
+<span id="L1585"></span>
+<span id="L1586">TEST(CommandBatch,</span>
+<span id="L1587">     CapabilityDiscoverySeedsExactHeaderRejectsMalformedAndRetriesCleanly) {</span>
+<span id="L1588">  const auto reject_then_correct = [](auto mutate, rt::Status expected,</span>
+<span id="L1589">                                      std::size_t rejected_callback_calls) {</span>
+<span id="L1590">    BatchBackend backend;</span>
+<span id="L1591">    const auto valid_capabilities = backend.command_capabilities;</span>
+<span id="L1592">    rt::Runtime runtime;</span>
+<span id="L1593">    ASSERT_EQ(runtime.configure(batch_config()), rt::Status::ok);</span>
+<span id="L1594">    auto memory = backend.memory_extension();</span>
+<span id="L1595">    auto command = backend.command_extension();</span>
+<span id="L1596">    mutate(command, backend);</span>
+<span id="L1597"></span>
+<span id="L1598">    rt::DeviceBackendHandle rejected;</span>
+<span id="L1599">    EXPECT_EQ(runtime.register_device_backend(</span>
+<span id="L1600">                  {&quot;capability.retry&quot;, backend.core_api(), &amp;memory, &amp;command},</span>
+<span id="L1601">                  rejected),</span>
+<span id="L1602">              expected);</span>
+<span id="L1603">    EXPECT_FALSE(rejected.valid());</span>
+<span id="L1604">    EXPECT_EQ(runtime.device_backend_count(), 0u);</span>
+<span id="L1605">    EXPECT_EQ(backend.capabilities_calls.load(), rejected_callback_calls);</span>
+<span id="L1606">    if (rejected_callback_calls != 0) {</span>
+<span id="L1607">      EXPECT_TRUE(backend.incoming_capabilities_header_exact.load());</span>
+<span id="L1608">      EXPECT_TRUE(backend.incoming_capabilities_semantics_zero.load());</span>
+<span id="L1609">    }</span>
+<span id="L1610"></span>
+<span id="L1611">    backend.command_capabilities = valid_capabilities;</span>
+<span id="L1612">    backend.capabilities_status.store(rt::HalV2Status::ok);</span>
+<span id="L1613">    backend.leave_capabilities_untouched.store(false);</span>
+<span id="L1614">    backend.partially_write_capabilities.store(false);</span>
+<span id="L1615">    backend.throw_capabilities.store(false);</span>
+<span id="L1616">    command = backend.command_extension();</span>
+<span id="L1617">    rt::DeviceBackendHandle accepted;</span>
+<span id="L1618">    ASSERT_EQ(runtime.register_device_backend(</span>
+<span id="L1619">                  {&quot;capability.retry&quot;, backend.core_api(), &amp;memory, &amp;command},</span>
+<span id="L1620">                  accepted),</span>
+<span id="L1621">              rt::Status::ok);</span>
+<span id="L1622">    EXPECT_TRUE(accepted.valid());</span>
+<span id="L1623">    EXPECT_EQ(runtime.device_backend_count(), 1u);</span>
+<span id="L1624">    EXPECT_EQ(backend.capabilities_calls.load(), rejected_callback_calls + 1);</span>
+<span id="L1625">    EXPECT_TRUE(backend.incoming_capabilities_header_exact.load());</span>
+<span id="L1626">    EXPECT_TRUE(backend.incoming_capabilities_semantics_zero.load());</span>
+<span id="L1627">  };</span>
+<span id="L1628"></span>
+<span id="L1629">  reject_then_correct(</span>
+<span id="L1630">      [](auto &amp;command, auto &amp;) { command.instance = nullptr; },</span>
+<span id="L1631">      rt::Status::invalid_argument, 0);</span>
+<span id="L1632">  reject_then_correct(</span>
+<span id="L1633">      [](auto &amp;command, auto &amp;) { command.get_capabilities = nullptr; },</span>
+<span id="L1634">      rt::Status::invalid_argument, 0);</span>
+<span id="L1635">  reject_then_correct(</span>
+<span id="L1636">      [](auto &amp;, auto &amp;backend) { backend.throw_capabilities.store(true); },</span>
+<span id="L1637">      rt::Status::device_error, 1);</span>
+<span id="L1638">  reject_then_correct(</span>
+<span id="L1639">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1640">        backend.capabilities_status.store(rt::HalV2Status::error);</span>
+<span id="L1641">      },</span>
+<span id="L1642">      rt::Status::device_error, 1);</span>
+<span id="L1643">  reject_then_correct(</span>
+<span id="L1644">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1645">        backend.capabilities_status.store(rt::HalV2Status::unsupported);</span>
+<span id="L1646">      },</span>
+<span id="L1647">      rt::Status::device_error, 1);</span>
+<span id="L1648">  reject_then_correct(</span>
+<span id="L1649">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1650">        backend.capabilities_status.store(</span>
+<span id="L1651">            rt::HalV2Status::resource_exhausted);</span>
+<span id="L1652">      },</span>
+<span id="L1653">      rt::Status::resource_exhausted, 1);</span>
+<span id="L1654">  reject_then_correct(</span>
+<span id="L1655">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1656">        backend.leave_capabilities_untouched.store(true);</span>
+<span id="L1657">      },</span>
+<span id="L1658">      rt::Status::invalid_argument, 1);</span>
+<span id="L1659">  reject_then_correct(</span>
+<span id="L1660">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1661">        backend.partially_write_capabilities.store(true);</span>
+<span id="L1662">      },</span>
+<span id="L1663">      rt::Status::invalid_argument, 1);</span>
+<span id="L1664">  reject_then_correct(</span>
+<span id="L1665">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1666">        backend.command_capabilities.struct_size =</span>
+<span id="L1667">            sizeof(rt::HalV2CommandTimelineCapabilities) - 1;</span>
+<span id="L1668">      },</span>
+<span id="L1669">      rt::Status::invalid_argument, 1);</span>
+<span id="L1670">  reject_then_correct(</span>
+<span id="L1671">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1672">        backend.command_capabilities.extension_version =</span>
+<span id="L1673">            rt::hal_v2_command_timeline_extension_version + 1;</span>
+<span id="L1674">      },</span>
+<span id="L1675">      rt::Status::invalid_argument, 1);</span>
+<span id="L1676">  reject_then_correct(</span>
+<span id="L1677">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1678">        backend.command_capabilities.max_in_flight_batches = 0;</span>
+<span id="L1679">      },</span>
+<span id="L1680">      rt::Status::invalid_argument, 1);</span>
+<span id="L1681">  reject_then_correct(</span>
+<span id="L1682">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1683">        backend.command_capabilities.max_commands_per_batch = 0;</span>
+<span id="L1684">      },</span>
+<span id="L1685">      rt::Status::invalid_argument, 1);</span>
+<span id="L1686">  reject_then_correct(</span>
+<span id="L1687">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1688">        backend.command_capabilities.max_wait_points = 0;</span>
+<span id="L1689">      },</span>
+<span id="L1690">      rt::Status::invalid_argument, 1);</span>
+<span id="L1691">  reject_then_correct(</span>
+<span id="L1692">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1693">        backend.command_capabilities.max_signal_points = 0;</span>
+<span id="L1694">      },</span>
+<span id="L1695">      rt::Status::invalid_argument, 1);</span>
+<span id="L1696">  reject_then_correct(</span>
+<span id="L1697">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1698">        backend.command_capabilities.max_timelines = 0;</span>
+<span id="L1699">      },</span>
+<span id="L1700">      rt::Status::invalid_argument, 1);</span>
+<span id="L1701">  reject_then_correct(</span>
+<span id="L1702">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1703">        backend.command_capabilities.completion_batch_capacity = 0;</span>
+<span id="L1704">      },</span>
+<span id="L1705">      rt::Status::invalid_argument, 1);</span>
+<span id="L1706">  reject_then_correct(</span>
+<span id="L1707">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1708">        backend.command_capabilities.max_commands_per_batch =</span>
+<span id="L1709">            rt::hal_v2_command_capacity + 1;</span>
+<span id="L1710">      },</span>
+<span id="L1711">      rt::Status::invalid_argument, 1);</span>
+<span id="L1712">  reject_then_correct(</span>
+<span id="L1713">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1714">        backend.command_capabilities.max_wait_points =</span>
+<span id="L1715">            rt::hal_v2_timeline_wait_capacity + 1;</span>
+<span id="L1716">      },</span>
+<span id="L1717">      rt::Status::invalid_argument, 1);</span>
+<span id="L1718">  reject_then_correct(</span>
+<span id="L1719">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1720">        backend.command_capabilities.max_signal_points =</span>
+<span id="L1721">            rt::hal_v2_timeline_signal_capacity + 1;</span>
+<span id="L1722">      },</span>
+<span id="L1723">      rt::Status::invalid_argument, 1);</span>
+<span id="L1724">  reject_then_correct(</span>
+<span id="L1725">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1726">        backend.command_capabilities.max_timelines =</span>
+<span id="L1727">            rt::hal_v2_timeline_capacity + 1;</span>
+<span id="L1728">      },</span>
+<span id="L1729">      rt::Status::invalid_argument, 1);</span>
+<span id="L1730">  reject_then_correct(</span>
+<span id="L1731">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1732">        backend.command_capabilities.reserved[3] = 1;</span>
+<span id="L1733">      },</span>
+<span id="L1734">      rt::Status::invalid_argument, 1);</span>
+<span id="L1735">  reject_then_correct(</span>
+<span id="L1736">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1737">        backend.command_capabilities.max_in_flight_batches = 1;</span>
+<span id="L1738">      },</span>
+<span id="L1739">      rt::Status::capacity_exceeded, 1);</span>
+<span id="L1740">  reject_then_correct(</span>
+<span id="L1741">      [](auto &amp;, auto &amp;backend) {</span>
+<span id="L1742">        backend.command_capabilities.completion_batch_capacity = 1;</span>
+<span id="L1743">      },</span>
+<span id="L1744">      rt::Status::capacity_exceeded, 1);</span>
+<span id="L1745">}</span>
+<span id="L1746"></span>
+<span id="L1747">TEST(CommandBatch, TimelineRegistrationIsBoundedFrozenAndInstanceIsolated) {</span>
+<span id="L1748">  ConfiguredBatchRuntime one;</span>
+<span id="L1749">  one.configure();</span>
+<span id="L1750">  rt::DeviceTimelineHandle duplicate;</span>
+<span id="L1751">  EXPECT_EQ(one.runtime.register_device_timeline(</span>
+<span id="L1752">                {&quot;command.timeline&quot;, one.backend_handle, 0}, duplicate),</span>
+<span id="L1753">            rt::Status::invalid_argument);</span>
+<span id="L1754"></span>
+<span id="L1755">  ConfiguredBatchRuntime two;</span>
+<span id="L1756">  two.configure();</span>
+<span id="L1757">  EXPECT_EQ(one.runtime.register_device_timeline(</span>
+<span id="L1758">                {&quot;foreign&quot;, two.backend_handle, 0}, duplicate),</span>
+<span id="L1759">            rt::Status::invalid_handle);</span>
+<span id="L1760">  EXPECT_EQ(one.runtime.finalize(), rt::Status::ok);</span>
+<span id="L1761">  EXPECT_EQ(one.runtime.register_device_timeline(</span>
+<span id="L1762">                {&quot;late&quot;, one.backend_handle, 0}, duplicate),</span>
+<span id="L1763">            rt::Status::invalid_state);</span>
+<span id="L1764">  EXPECT_EQ(one.runtime.device_timeline_count(one.backend_handle), 1u);</span>
+<span id="L1765">  rt::DeviceTimelineInfo info;</span>
+<span id="L1766">  ASSERT_TRUE(one.runtime.device_timeline_at(one.backend_handle, 0, info));</span>
+<span id="L1767">  EXPECT_EQ(info.timeline, one.timeline);</span>
+<span id="L1768">  EXPECT_EQ(info.initial_value, 0u);</span>
+<span id="L1769">  EXPECT_EQ(info.last_accepted_value, 0u);</span>
+<span id="L1770">  EXPECT_EQ(info.completed_value, 0u);</span>
+<span id="L1771">}</span>
+<span id="L1772"></span>
+<span id="L1773">TEST(CommandBatch, ResourceBoundsRejectSeventeenthTimelineAndNinthPhase) {</span>
+<span id="L1774">  BatchBackend backend;</span>
+<span id="L1775">  rt::Runtime runtime;</span>
+<span id="L1776">  ASSERT_EQ(runtime.configure(batch_config()), rt::Status::ok);</span>
+<span id="L1777">  rt::DeviceBackendHandle backend_handle;</span>
+<span id="L1778">  ASSERT_EQ(register_backend(runtime, backend, &quot;bounded&quot;, backend_handle),</span>
+<span id="L1779">            rt::Status::ok);</span>
+<span id="L1780">  std::array&lt;std::byte, 64&gt; storage{};</span>
+<span id="L1781">  rt::DeviceBufferHandle buffer;</span>
+<span id="L1782">  ASSERT_EQ(runtime.register_device_buffer(</span>
+<span id="L1783">                {&quot;bounded.buffer&quot;, backend_handle, storage}, buffer),</span>
+<span id="L1784">            rt::Status::ok);</span>
+<span id="L1785">  std::array&lt;std::string, rt::hal_v2_timeline_capacity + 1&gt; names{};</span>
+<span id="L1786">  std::array&lt;rt::DeviceTimelineHandle, rt::hal_v2_timeline_capacity&gt;</span>
+<span id="L1787">      timelines{};</span>
+<span id="L1788">  for (std::size_t index = 0; index &lt; timelines.size(); ++index) {</span>
+<span id="L1789">    names[index] = &quot;bounded.timeline.&quot; + std::to_string(index);</span>
+<span id="L1790">    ASSERT_EQ(runtime.register_device_timeline(</span>
+<span id="L1791">                  {names[index], backend_handle, 0}, timelines[index]),</span>
+<span id="L1792">              rt::Status::ok);</span>
+<span id="L1793">  }</span>
+<span id="L1794">  names.back() = &quot;bounded.timeline.excess&quot;;</span>
+<span id="L1795">  rt::DeviceTimelineHandle excess;</span>
+<span id="L1796">  EXPECT_EQ(runtime.register_device_timeline({names.back(), backend_handle, 0},</span>
+<span id="L1797">                                             excess),</span>
+<span id="L1798">            rt::Status::capacity_exceeded);</span>
+<span id="L1799"></span>
+<span id="L1800">  BatchProvider provider;</span>
+<span id="L1801">  provider.declaration = dispatch_declaration(buffer, timelines[0]);</span>
+<span id="L1802">  std::array&lt;std::string, 9&gt; phase_names{};</span>
+<span id="L1803">  for (std::size_t index = 0; index &lt; 8; ++index) {</span>
+<span id="L1804">    phase_names[index] = &quot;bounded.phase.&quot; + std::to_string(index);</span>
+<span id="L1805">    rt::PhaseHandle phase;</span>
+<span id="L1806">    ASSERT_EQ(runtime.register_device_batch_phase(</span>
+<span id="L1807">                  {phase_names[index], backend_handle, &amp;provide_batch,</span>
+<span id="L1808">                   &amp;provider, provider.declaration},</span>
+<span id="L1809">                  phase),</span>
+<span id="L1810">              rt::Status::ok);</span>
+<span id="L1811">  }</span>
+<span id="L1812">  phase_names.back() = &quot;bounded.phase.excess&quot;;</span>
+<span id="L1813">  rt::PhaseHandle excess_phase;</span>
+<span id="L1814">  EXPECT_EQ(runtime.register_device_batch_phase(</span>
+<span id="L1815">                {phase_names.back(), backend_handle, &amp;provide_batch, &amp;provider,</span>
+<span id="L1816">                 provider.declaration},</span>
+<span id="L1817">                excess_phase),</span>
+<span id="L1818">            rt::Status::capacity_exceeded);</span>
+<span id="L1819">}</span>
+<span id="L1820"></span>
+<span id="L1821">TEST(CommandBatch, DispatchCompletesOnSubmissionAndServiceLanes) {</span>
+<span id="L1822">  ConfiguredBatchRuntime fixture;</span>
+<span id="L1823">  fixture.configure();</span>
+<span id="L1824">  BatchProvider provider;</span>
+<span id="L1825">  provider.declaration = dispatch_declaration(fixture.buffer, fixture.timeline);</span>
+<span id="L1826">  rt::PhaseHandle phase;</span>
+<span id="L1827">  ASSERT_EQ(fixture.runtime.register_device_batch_phase(</span>
+<span id="L1828">                {&quot;batch.dispatch&quot;, fixture.backend_handle, &amp;provide_batch,</span>
+<span id="L1829">                 &amp;provider, provider.declaration},</span>
+<span id="L1830">                phase),</span>
+<span id="L1831">            rt::Status::ok);</span>
+<span id="L1832">  ASSERT_TRUE(phase.valid());</span>
+<span id="L1833">  ASSERT_EQ(fixture.runtime.finalize(), rt::Status::ok);</span>
+<span id="L1834"></span>
+<span id="L1835">  rt::MemoryPlan plan;</span>
+<span id="L1836">  ASSERT_TRUE(fixture.runtime.memory_plan(plan));</span>
+<span id="L1837">  EXPECT_EQ(plan.device_batch_backend_count, 1u);</span>
+<span id="L1838">  EXPECT_EQ(plan.device_timeline_count, 1u);</span>
+<span id="L1839">  EXPECT_EQ(plan.device_batch_queue_slots, 2u);</span>
+<span id="L1840">  rt::CpuMemoryPolicyReport report;</span>
+<span id="L1841">  ASSERT_TRUE(fixture.runtime.cpu_memory_policy_report(report));</span>
+<span id="L1842">  const auto *submission =</span>
+<span id="L1843">      find_thread(report, rt::thread_role_device_submission);</span>
+<span id="L1844">  ASSERT_NE(submission, nullptr);</span>
+<span id="L1845">  EXPECT_EQ(submission-&gt;logical_instance_count, 1u);</span>
+<span id="L1846">  EXPECT_TRUE(submission-&gt;cardinality_known);</span>
+<span id="L1847"></span>
+<span id="L1848">  ASSERT_EQ(fixture.runtime.start(), rt::Status::ok);</span>
+<span id="L1849">  EXPECT_EQ(</span>
+<span id="L1850">      fixture.runtime.step({1, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1851">      rt::Status::ok);</span>
+<span id="L1852">  EXPECT_EQ(fixture.backend.batch_submit_calls.load(), 1u);</span>
+<span id="L1853">  EXPECT_EQ(fixture.backend.single_submit_calls.load(), 0u);</span>
+<span id="L1854">  EXPECT_NE(fixture.backend.last_batch.batch_id, 0u);</span>
+<span id="L1855">  EXPECT_EQ(fixture.backend.last_batch.frame_index, 1u);</span>
+<span id="L1856">  EXPECT_EQ(fixture.backend.last_batch.commands[0].buffers[0].buffer_token,</span>
+<span id="L1857">            0x1001u);</span>
+<span id="L1858">  rt::DeviceTimelineInfo info;</span>
+<span id="L1859">  ASSERT_TRUE(</span>
+<span id="L1860">      fixture.runtime.device_timeline_at(fixture.backend_handle, 0, info));</span>
+<span id="L1861">  EXPECT_EQ(info.last_accepted_value, 1u);</span>
+<span id="L1862">  EXPECT_EQ(info.completed_value, 1u);</span>
+<span id="L1863">  EXPECT_EQ(fixture.runtime.reset_device(fixture.backend_handle),</span>
+<span id="L1864">            rt::Status::ok);</span>
+<span id="L1865">  EXPECT_EQ(fixture.runtime.stop(), rt::Status::ok);</span>
+<span id="L1866">}</span>
+<span id="L1867"></span>
+<span id="L1868">TEST(CommandBatch, RepeatedSubmissionLifecyclesKeepIndependentOwnersDrained) {</span>
+<span id="L1869">  const auto run = [] {</span>
+<span id="L1870">    for (unsigned lifecycle = 0; lifecycle &lt; 8; ++lifecycle) {</span>
+<span id="L1871">      ConfiguredBatchRuntime fixture;</span>
+<span id="L1872">      fixture.configure(1);</span>
+<span id="L1873">      std::atomic&lt;std::size_t&gt; calls{0};</span>
+<span id="L1874">      BatchProvider provider;</span>
+<span id="L1875">      provider.declaration = dispatch_declaration(fixture.buffer, fixture.timeline);</span>
+<span id="L1876">      provider.callback_count = &amp;calls;</span>
+<span id="L1877">      provider.timeout_ns = 60&#x27;000&#x27;000&#x27;000;</span>
+<span id="L1878">      rt::PhaseHandle phase;</span>
+<span id="L1879">      ASSERT_EQ(fixture.runtime.register_device_batch_phase(</span>
+<span id="L1880">                    {&quot;repeated.dispatch&quot;, fixture.backend_handle, &amp;provide_batch,</span>
+<span id="L1881">                     &amp;provider, provider.declaration}, phase), rt::Status::ok);</span>
+<span id="L1882">      ASSERT_EQ(fixture.runtime.finalize(), rt::Status::ok);</span>
+<span id="L1883">      ASSERT_EQ(fixture.runtime.start(), rt::Status::ok);</span>
+<span id="L1884">      std::size_t completed = 0;</span>
+<span id="L1885">      for (std::uint64_t frame = 1; frame &lt;= 128; ++frame) {</span>
+<span id="L1886">        provider.signal_value = frame;</span>
+<span id="L1887">        const auto status = fixture.runtime.step(</span>
+<span id="L1888">            {frame, std::chrono::nanoseconds(100), std::nullopt});</span>
+<span id="L1889">        EXPECT_EQ(status, rt::Status::ok);</span>
+<span id="L1890">        if (status != rt::Status::ok) break;</span>
+<span id="L1891">        ++completed;</span>
+<span id="L1892">        rt::DeviceTimelineInfo info;</span>
+<span id="L1893">        const bool present = fixture.runtime.device_timeline_at(</span>
+<span id="L1894">            fixture.backend_handle, 0, info);</span>
+<span id="L1895">        EXPECT_TRUE(present);</span>
+<span id="L1896">        EXPECT_EQ(info.completed_value, frame);</span>
+<span id="L1897">        EXPECT_EQ(info.last_accepted_value, frame);</span>
+<span id="L1898">      }</span>
+<span id="L1899">      const auto stopped = fixture.runtime.stop();</span>
+<span id="L1900">      EXPECT_EQ(stopped, rt::Status::ok);</span>
+<span id="L1901">      if (stopped != rt::Status::ok) std::terminate();</span>
+<span id="L1902">      EXPECT_EQ(completed, 128u);</span>
+<span id="L1903">      EXPECT_EQ(calls.load(), completed);</span>
+<span id="L1904">      EXPECT_EQ(fixture.backend.batch_submit_calls.load(), completed);</span>
+<span id="L1905">      EXPECT_EQ(fixture.backend.single_submit_calls.load(), 0u);</span>
+<span id="L1906">      EXPECT_EQ(fixture.backend.batch_cancel_calls.load(), 0u);</span>
+<span id="L1907">      rt::RuntimeMetricSnapshot snapshot;</span>
+<span id="L1908">      EXPECT_EQ(fixture.runtime.metrics_snapshot(</span>
+<span id="L1909">                    rt::RuntimeMetricWindow::cumulative, nullptr, snapshot), rt::Status::ok);</span>
+<span id="L1910">      EXPECT_EQ(snapshot.samples[static_cast&lt;std::size_t&gt;(rt::RuntimeMetricId::device_submissions)].value, completed);</span>
+<span id="L1911">      EXPECT_EQ(snapshot.samples[static_cast&lt;std::size_t&gt;(rt::RuntimeMetricId::device_completions)].value, completed);</span>
+<span id="L1912">      EXPECT_EQ(snapshot.samples[static_cast&lt;std::size_t&gt;(rt::RuntimeMetricId::device_outstanding)].value, 0u);</span>
+<span id="L1913">    }</span>
+<span id="L1914">  };</span>
+<span id="L1915">  std::thread first(run), second(run);</span>
+<span id="L1916">  first.join();</span>
+<span id="L1917">  second.join();</span>
+<span id="L1918">}</span>
+<span id="L1919"></span>
+<span id="L1920">TEST(CommandBatch, PriorAcceptedWaitMayAdvanceTheSameTimeline) {</span>
+<span id="L1921">  ConfiguredBatchRuntime fixture;</span>
+<span id="L1922">  fixture.configure();</span>
+<span id="L1923">  BatchProvider first;</span>
+<span id="L1924">  first.declaration = dispatch_declaration(fixture.buffer, fixture.timeline);</span>
+<span id="L1925">  BatchProvider second;</span>
+<span id="L1926">  second.declaration = dispatch_declaration(fixture.buffer, fixture.timeline);</span>
+<span id="L1927">  second.declaration.wait_count = 1;</span>
+<span id="L1928">  second.declaration.waits[0].timeline_handle = fixture.timeline.value;</span>
+<span id="L1929">  second.wait_value = 1;</span>
+<span id="L1930">  second.signal_value = 2;</span>
+<span id="L1931">  rt::PhaseHandle first_phase;</span>
+<span id="L1932">  rt::PhaseHandle second_phase;</span>
+<span id="L1933">  ASSERT_EQ(fixture.runtime.register_device_batch_phase(</span>
+<span id="L1934">                {&quot;batch.first&quot;, fixture.backend_handle, &amp;provide_batch, &amp;first,</span>
+<span id="L1935">                 first.declaration},</span>
+<span id="L1936">                first_phase),</span>
+<span id="L1937">            rt::Status::ok);</span>
+<span id="L1938">  ASSERT_EQ(fixture.runtime.register_device_batch_phase(</span>
+<span id="L1939">                {&quot;batch.second&quot;, fixture.backend_handle, &amp;provide_batch,</span>
+<span id="L1940">                 &amp;second, second.declaration},</span>
+<span id="L1941">                second_phase),</span>
+<span id="L1942">            rt::Status::ok);</span>
+<span id="L1943">  ASSERT_EQ(fixture.runtime.add_dependency(first_phase, second_phase),</span>
+<span id="L1944">            rt::Status::ok);</span>
+<span id="L1945">  ASSERT_EQ(fixture.runtime.finalize(), rt::Status::ok);</span>
+<span id="L1946">  ASSERT_EQ(fixture.runtime.start(), rt::Status::ok);</span>
+<span id="L1947">  EXPECT_EQ(</span>
+<span id="L1948">      fixture.runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1949">      rt::Status::ok);</span>
+<span id="L1950">  EXPECT_EQ(fixture.backend.batch_submit_calls.load(), 2u);</span>
+<span id="L1951">  rt::DeviceTimelineInfo info;</span>
+<span id="L1952">  ASSERT_TRUE(</span>
+<span id="L1953">      fixture.runtime.device_timeline_at(fixture.backend_handle, 0, info));</span>
+<span id="L1954">  EXPECT_EQ(info.last_accepted_value, 2u);</span>
+<span id="L1955">  EXPECT_EQ(info.completed_value, 2u);</span>
+<span id="L1956">  EXPECT_EQ(fixture.runtime.stop(), rt::Status::ok);</span>
+<span id="L1957">}</span>
+<span id="L1958"></span>
+<span id="L1959">TEST(CommandBatch, SubmitErrorsAndExceptionsProduceOneTerminalResult) {</span>
+<span id="L1960">  for (const auto mode :</span>
+<span id="L1961">       {BatchBackend::SubmitMode::error, BatchBackend::SubmitMode::throwing}) {</span>
+<span id="L1962">    ConfiguredBatchRuntime fixture;</span>
+<span id="L1963">    fixture.configure();</span>
+<span id="L1964">    fixture.backend.mode.store(mode);</span>
+<span id="L1965">    BatchProvider provider;</span>
+<span id="L1966">    provider.declaration =</span>
+<span id="L1967">        dispatch_declaration(fixture.buffer, fixture.timeline);</span>
+<span id="L1968">    rt::PhaseHandle phase;</span>
+<span id="L1969">    ASSERT_EQ(fixture.runtime.register_device_batch_phase(</span>
+<span id="L1970">                  {&quot;batch.submit-failure&quot;, fixture.backend_handle,</span>
+<span id="L1971">                   &amp;provide_batch, &amp;provider, provider.declaration},</span>
+<span id="L1972">                  phase),</span>
+<span id="L1973">              rt::Status::ok);</span>
+<span id="L1974">    ASSERT_EQ(fixture.runtime.finalize(), rt::Status::ok);</span>
+<span id="L1975">    ASSERT_EQ(fixture.runtime.start(), rt::Status::ok);</span>
+<span id="L1976">    EXPECT_EQ(</span>
+<span id="L1977">        fixture.runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L1978">        rt::Status::device_error);</span>
+<span id="L1979">    EXPECT_EQ(fixture.backend.batch_submit_calls.load(), 1u);</span>
+<span id="L1980">    rt::DeviceTimelineInfo info;</span>
+<span id="L1981">    ASSERT_TRUE(</span>
+<span id="L1982">        fixture.runtime.device_timeline_at(fixture.backend_handle, 0, info));</span>
+<span id="L1983">    EXPECT_EQ(info.last_accepted_value, 1u);</span>
+<span id="L1984">    EXPECT_EQ(info.completed_value, 0u);</span>
+<span id="L1985">    EXPECT_EQ(fixture.runtime.stop(), rt::Status::ok);</span>
+<span id="L1986">  }</span>
+<span id="L1987">}</span>
+<span id="L1988"></span>
+<span id="L1989">TEST(CommandBatch, ProviderAndCompletionFailuresAreTerminalWithoutPublication) {</span>
+<span id="L1990">  {</span>
+<span id="L1991">    ConfiguredBatchRuntime fixture;</span>
+<span id="L1992">    fixture.configure();</span>
+<span id="L1993">    BatchProvider provider;</span>
+<span id="L1994">    provider.declaration =</span>
+<span id="L1995">        dispatch_declaration(fixture.buffer, fixture.timeline);</span>
+<span id="L1996">    provider.malformed_timeout = true;</span>
+<span id="L1997">    rt::PhaseHandle phase;</span>
+<span id="L1998">    ASSERT_EQ(fixture.runtime.register_device_batch_phase(</span>
+<span id="L1999">                  {&quot;batch.bad-provider&quot;, fixture.backend_handle, &amp;provide_batch,</span>
+<span id="L2000">                   &amp;provider, provider.declaration},</span>
+<span id="L2001">                  phase),</span>
+<span id="L2002">              rt::Status::ok);</span>
+<span id="L2003">    ASSERT_EQ(fixture.runtime.finalize(), rt::Status::ok);</span>
+<span id="L2004">    ASSERT_EQ(fixture.runtime.start(), rt::Status::ok);</span>
+<span id="L2005">    EXPECT_EQ(</span>
+<span id="L2006">        fixture.runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L2007">        rt::Status::invalid_argument);</span>
+<span id="L2008">    EXPECT_EQ(fixture.backend.batch_submit_calls.load(), 0u);</span>
+<span id="L2009">    EXPECT_EQ(fixture.runtime.stop(), rt::Status::ok);</span>
+<span id="L2010">  }</span>
+<span id="L2011">  {</span>
+<span id="L2012">    ConfiguredBatchRuntime fixture;</span>
+<span id="L2013">    fixture.configure();</span>
+<span id="L2014">    fixture.backend.mode.store(BatchBackend::SubmitMode::malformed_completion);</span>
+<span id="L2015">    BatchProvider provider;</span>
+<span id="L2016">    provider.declaration =</span>
+<span id="L2017">        dispatch_declaration(fixture.buffer, fixture.timeline);</span>
+<span id="L2018">    rt::PhaseHandle phase;</span>
+<span id="L2019">    ASSERT_EQ(fixture.runtime.register_device_batch_phase(</span>
+<span id="L2020">                  {&quot;batch.bad-completion&quot;, fixture.backend_handle,</span>
+<span id="L2021">                   &amp;provide_batch, &amp;provider, provider.declaration},</span>
+<span id="L2022">                  phase),</span>
+<span id="L2023">              rt::Status::ok);</span>
+<span id="L2024">    ASSERT_EQ(fixture.runtime.finalize(), rt::Status::ok);</span>
+<span id="L2025">    ASSERT_EQ(fixture.runtime.start(), rt::Status::ok);</span>
+<span id="L2026">    EXPECT_EQ(</span>
+<span id="L2027">        fixture.runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L2028">        rt::Status::device_error);</span>
+<span id="L2029">    rt::DeviceTimelineInfo info;</span>
+<span id="L2030">    ASSERT_TRUE(</span>
+<span id="L2031">        fixture.runtime.device_timeline_at(fixture.backend_handle, 0, info));</span>
+<span id="L2032">    EXPECT_EQ(info.completed_value, 0u);</span>
+<span id="L2033">    EXPECT_EQ(fixture.runtime.stop(), rt::Status::ok);</span>
+<span id="L2034">  }</span>
+<span id="L2035">}</span>
+<span id="L2036"></span>
+<span id="L2037">TEST(CommandBatch, TimeoutCancelsAndBlockedSubmitIsReleasedByStopRequest) {</span>
+<span id="L2038">  {</span>
+<span id="L2039">    ConfiguredBatchRuntime fixture;</span>
+<span id="L2040">    fixture.configure();</span>
+<span id="L2041">    fixture.backend.mode.store(BatchBackend::SubmitMode::no_completion);</span>
+<span id="L2042">    BatchProvider provider;</span>
+<span id="L2043">    provider.declaration =</span>
+<span id="L2044">        dispatch_declaration(fixture.buffer, fixture.timeline);</span>
+<span id="L2045">    provider.timeout_ns = 1&#x27;000&#x27;000;</span>
+<span id="L2046">    rt::PhaseHandle phase;</span>
+<span id="L2047">    ASSERT_EQ(fixture.runtime.register_device_batch_phase(</span>
+<span id="L2048">                  {&quot;batch.timeout&quot;, fixture.backend_handle, &amp;provide_batch,</span>
+<span id="L2049">                   &amp;provider, provider.declaration},</span>
+<span id="L2050">                  phase),</span>
+<span id="L2051">              rt::Status::ok);</span>
+<span id="L2052">    ASSERT_EQ(fixture.runtime.finalize(), rt::Status::ok);</span>
+<span id="L2053">    ASSERT_EQ(fixture.runtime.start(), rt::Status::ok);</span>
+<span id="L2054">    EXPECT_EQ(</span>
+<span id="L2055">        fixture.runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L2056">        rt::Status::device_timeout);</span>
+<span id="L2057">    EXPECT_EQ(fixture.backend.batch_cancel_calls.load(), 1u);</span>
+<span id="L2058">    rt::DeviceTimelineInfo info;</span>
+<span id="L2059">    ASSERT_TRUE(</span>
+<span id="L2060">        fixture.runtime.device_timeline_at(fixture.backend_handle, 0, info));</span>
+<span id="L2061">    EXPECT_EQ(info.last_accepted_value, 1u);</span>
+<span id="L2062">    EXPECT_EQ(info.completed_value, 0u);</span>
+<span id="L2063">    EXPECT_EQ(fixture.runtime.stop(), rt::Status::ok);</span>
+<span id="L2064">  }</span>
+<span id="L2065">  {</span>
+<span id="L2066">    ConfiguredBatchRuntime fixture;</span>
+<span id="L2067">    fixture.configure();</span>
+<span id="L2068">    fixture.backend.mode.store(BatchBackend::SubmitMode::blocked);</span>
+<span id="L2069">    BatchProvider provider;</span>
+<span id="L2070">    provider.declaration =</span>
+<span id="L2071">        dispatch_declaration(fixture.buffer, fixture.timeline);</span>
+<span id="L2072">    provider.timeout_ns = 1&#x27;000&#x27;000&#x27;000;</span>
+<span id="L2073">    rt::PhaseHandle phase;</span>
+<span id="L2074">    ASSERT_EQ(fixture.runtime.register_device_batch_phase(</span>
+<span id="L2075">                  {&quot;batch.blocked&quot;, fixture.backend_handle, &amp;provide_batch,</span>
+<span id="L2076">                   &amp;provider, provider.declaration},</span>
+<span id="L2077">                  phase),</span>
+<span id="L2078">              rt::Status::ok);</span>
+<span id="L2079">    ASSERT_EQ(fixture.runtime.finalize(), rt::Status::ok);</span>
+<span id="L2080">    ASSERT_EQ(fixture.runtime.start(), rt::Status::ok);</span>
+<span id="L2081">    rt::Status step_status = rt::Status::ok;</span>
+<span id="L2082">    std::thread step_thread([&amp;] {</span>
+<span id="L2083">      step_status =</span>
+<span id="L2084">          fixture.runtime.step({0, std::chrono::nanoseconds(1), std::nullopt});</span>
+<span id="L2085">    });</span>
+<span id="L2086">    while (!fixture.backend.submit_entered.load(std::memory_order_acquire)) {</span>
+<span id="L2087">      fixture.backend.submit_entered.wait(false, std::memory_order_relaxed);</span>
+<span id="L2088">    }</span>
+<span id="L2089">    EXPECT_EQ(fixture.runtime.stop(), rt::Status::invalid_state);</span>
+<span id="L2090">    step_thread.join();</span>
+<span id="L2091">    EXPECT_EQ(step_status, rt::Status::device_canceled);</span>
+<span id="L2092">    EXPECT_GE(fixture.backend.stop_request_calls.load(), 1u);</span>
+<span id="L2093">    EXPECT_EQ(fixture.runtime.stop(), rt::Status::ok);</span>
+<span id="L2094">  }</span>
+<span id="L2095">}</span>
+<span id="L2096"></span>
+<span id="L2097">TEST(CommandBatch, SaturationAcceptsOnlyTheFixedPrefixWithoutRetryOrSpill) {</span>
+<span id="L2098">  ConfiguredBatchRuntime fixture;</span>
+<span id="L2099">  fixture.configure(1);</span>
+<span id="L2100">  fixture.backend.mode.store(BatchBackend::SubmitMode::no_completion);</span>
+<span id="L2101">  std::atomic&lt;std::size_t&gt; provider_calls{0};</span>
+<span id="L2102">  std::array&lt;BatchProvider, 3&gt; providers{};</span>
+<span id="L2103">  std::array&lt;rt::DeviceTimelineHandle, 3&gt; timelines{fixture.timeline, {}, {}};</span>
+<span id="L2104">  ASSERT_EQ(</span>
+<span id="L2105">      fixture.runtime.register_device_timeline(</span>
+<span id="L2106">          {&quot;command.saturation.1&quot;, fixture.backend_handle, 0}, timelines[1]),</span>
+<span id="L2107">      rt::Status::ok);</span>
+<span id="L2108">  ASSERT_EQ(</span>
+<span id="L2109">      fixture.runtime.register_device_timeline(</span>
+<span id="L2110">          {&quot;command.saturation.2&quot;, fixture.backend_handle, 0}, timelines[2]),</span>
+<span id="L2111">      rt::Status::ok);</span>
+<span id="L2112">  for (std::size_t index = 0; index &lt; providers.size(); ++index) {</span>
+<span id="L2113">    providers[index].declaration =</span>
+<span id="L2114">        dispatch_declaration(fixture.buffer, timelines[index]);</span>
+<span id="L2115">    providers[index].signal_value = 1;</span>
+<span id="L2116">    providers[index].timeout_ns = 10&#x27;000&#x27;000;</span>
+<span id="L2117">    providers[index].callback_count = &amp;provider_calls;</span>
+<span id="L2118">    rt::PhaseHandle phase;</span>
+<span id="L2119">    const auto name = &quot;batch.saturation.&quot; + std::to_string(index);</span>
+<span id="L2120">    ASSERT_EQ(fixture.runtime.register_device_batch_phase(</span>
+<span id="L2121">                  {name, fixture.backend_handle, &amp;provide_batch,</span>
+<span id="L2122">                   &amp;providers[index], providers[index].declaration},</span>
+<span id="L2123">                  phase),</span>
+<span id="L2124">              rt::Status::ok);</span>
+<span id="L2125">  }</span>
+<span id="L2126">  ASSERT_EQ(fixture.runtime.finalize(), rt::Status::ok);</span>
+<span id="L2127">  ASSERT_EQ(fixture.runtime.start(), rt::Status::ok);</span>
+<span id="L2128">  EXPECT_EQ(</span>
+<span id="L2129">      fixture.runtime.step({0, std::chrono::nanoseconds(1), std::nullopt}),</span>
+<span id="L2130">      rt::Status::device_queue_full);</span>
+<span id="L2131">  rt::RuntimeMetricSnapshot metrics;</span>
+<span id="L2132">  rt::RuntimeMetricCursor cursor;</span>
+<span id="L2133">  ASSERT_EQ(fixture.runtime.metrics_snapshot(</span>
+<span id="L2134">                rt::RuntimeMetricWindow::cumulative, &amp;cursor, metrics),</span>
+<span id="L2135">            rt::Status::ok);</span>
+<span id="L2136">  EXPECT_EQ(metrics.samples[static_cast&lt;std::size_t&gt;(</span>
+<span id="L2137">                                rt::RuntimeMetricId::device_queue_rejections)]</span>
+<span id="L2138">                .value,</span>
+<span id="L2139">            1u);</span>
+<span id="L2140">  EXPECT_EQ(provider_calls.load(), 3u);</span>
+<span id="L2141">  EXPECT_EQ(fixture.backend.batch_submit_calls.load(), 2u);</span>
+<span id="L2142">  EXPECT_EQ(fixture.backend.batch_cancel_calls.load(), 2u);</span>
+<span id="L2143">  EXPECT_EQ(fixture.runtime.stop(), rt::Status::ok);</span>
+<span id="L2144">}</span>
+<span id="L2145"></span>
+<span id="L2146">TEST(CommandBatch, ExplicitFlushAndInvalidateOrderIsRequiredAndPreserved) {</span>
+<span id="L2147">  auto run = [](bool correct_order) {</span>
+<span id="L2148">    rt::Runtime runtime;</span>
+<span id="L2149">    BatchBackend backend;</span>
+<span id="L2150">    EXPECT_EQ(runtime.configure(batch_config()), rt::Status::ok);</span>
+<span id="L2151">    rt::DeviceBackendHandle backend_handle;</span>
+<span id="L2152">    EXPECT_EQ(register_backend(runtime, backend, &quot;ordered&quot;, backend_handle),</span>
+<span id="L2153">              rt::Status::ok);</span>
+<span id="L2154">    rt::DeviceMemoryDomainHandle domain;</span>
+<span id="L2155">    rt::HalV2MemoryDomain descriptor;</span>
+<span id="L2156">    EXPECT_TRUE(</span>
+<span id="L2157">        runtime.device_memory_domain_at(backend_handle, 1, domain, descriptor));</span>
+<span id="L2158">    std::array&lt;std::byte, 64&gt; storage{};</span>
+<span id="L2159">    rt::DeviceBufferHandle buffer;</span>
+<span id="L2160">    EXPECT_EQ(</span>
+<span id="L2161">        runtime.register_device_buffer(</span>
+<span id="L2162">            {&quot;ordered.buffer&quot;,</span>
+<span id="L2163">             backend_handle,</span>
+<span id="L2164">             domain,</span>
+<span id="L2165">             storage,</span>
+<span id="L2166">             {},</span>
+<span id="L2167">             storage.size(),</span>
+<span id="L2168">             rt::HalV2MemoryOwnership::borrowed_host,</span>
+<span id="L2169">             descriptor.access,</span>
+<span id="L2170">             rt::HalV2MemoryCoherency::explicit_flush_invalidate,</span>
+<span id="L2171">             rt::hal_v2_memory_sync_flush | rt::hal_v2_memory_sync_invalidate},</span>
+<span id="L2172">            buffer),</span>
+<span id="L2173">        rt::Status::ok);</span>
+<span id="L2174">    rt::DeviceTimelineHandle timeline;</span>
+<span id="L2175">    EXPECT_EQ(runtime.register_device_timeline(</span>
+<span id="L2176">                  {&quot;ordered.timeline&quot;, backend_handle, 0}, timeline),</span>
+<span id="L2177">              rt::Status::ok);</span>
+<span id="L2178"></span>
+<span id="L2179">    rt::DeviceCommandBatch declaration;</span>
+<span id="L2180">    declaration.command_count = 3;</span>
+<span id="L2181">    declaration.signal_count = 1;</span>
+<span id="L2182">    declaration.signals[0].timeline_handle = timeline.value;</span>
+<span id="L2183">    auto make_sync = [&amp;](std::size_t index,</span>
+<span id="L2184">                         rt::HalV2MemoryOperation operation) {</span>
+<span id="L2185">      auto &amp;command = declaration.commands[index];</span>
+<span id="L2186">      command.kind = static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L2187">          rt::HalV2CommandKind::memory_synchronization);</span>
+<span id="L2188">      command.operation = static_cast&lt;std::uint32_t&gt;(operation);</span>
+<span id="L2189">      command.target =</span>
+<span id="L2190">          reference(buffer, RTFW_DEVICE_ACCESS_READ_WRITE, storage.size());</span>
+<span id="L2191">    };</span>
+<span id="L2192">    const auto flush_index = correct_order ? 0u : 1u;</span>
+<span id="L2193">    const auto dispatch_index = correct_order ? 1u : 0u;</span>
+<span id="L2194">    make_sync(flush_index, rt::HalV2MemoryOperation::flush);</span>
+<span id="L2195">    auto &amp;dispatch = declaration.commands[dispatch_index];</span>
+<span id="L2196">    dispatch.kind = static_cast&lt;std::uint32_t&gt;(rt::HalV2CommandKind::dispatch);</span>
+<span id="L2197">    dispatch.opcode = 9;</span>
+<span id="L2198">    dispatch.buffer_count = 1;</span>
+<span id="L2199">    dispatch.buffers[0] =</span>
+<span id="L2200">        reference(buffer, RTFW_DEVICE_ACCESS_READ_WRITE, storage.size());</span>
+<span id="L2201">    make_sync(2, rt::HalV2MemoryOperation::invalidate);</span>
+<span id="L2202"></span>
+<span id="L2203">    BatchProvider provider;</span>
+<span id="L2204">    provider.declaration = declaration;</span>
+<span id="L2205">    rt::PhaseHandle phase;</span>
+<span id="L2206">    EXPECT_EQ(runtime.register_device_batch_phase(</span>
+<span id="L2207">                  {correct_order ? &quot;ordered.good&quot; : &quot;ordered.bad&quot;,</span>
+<span id="L2208">                   backend_handle, &amp;provide_batch, &amp;provider, declaration},</span>
+<span id="L2209">                  phase),</span>
+<span id="L2210">              rt::Status::ok);</span>
+<span id="L2211">    EXPECT_EQ(runtime.finalize(), rt::Status::ok);</span>
+<span id="L2212">    EXPECT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L2213">    const auto status =</span>
+<span id="L2214">        runtime.step({0, std::chrono::nanoseconds(1), std::nullopt});</span>
+<span id="L2215">    EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L2216">    if (correct_order) {</span>
+<span id="L2217">      EXPECT_EQ(backend.batch_submit_calls.load(), 1u);</span>
+<span id="L2218">      EXPECT_EQ(backend.last_batch.command_count, 3u);</span>
+<span id="L2219">    } else {</span>
+<span id="L2220">      EXPECT_EQ(backend.batch_submit_calls.load(), 0u);</span>
+<span id="L2221">    }</span>
+<span id="L2222">    return status;</span>
+<span id="L2223">  };</span>
+<span id="L2224"></span>
+<span id="L2225">  EXPECT_EQ(run(true), rt::Status::ok);</span>
+<span id="L2226">  EXPECT_EQ(run(false), rt::Status::device_error);</span>
+<span id="L2227">}</span>
+<span id="L2228"></span>
+<span id="L2229">TEST(CommandBatch, ActiveSubmitFailureRetiresWhileTimeoutLaneObserves) {</span>
+<span id="L2230">  struct ManualClock final : rt::RuntimeClock {</span>
+<span id="L2231">    std::uint64_t now_ns() noexcept override { return 1&#x27;000; }</span>
+<span id="L2232">    rt::Status sleep_until_ns(std::uint64_t) noexcept override {</span>
+<span id="L2233">      return rt::Status::ok;</span>
+<span id="L2234">    }</span>
+<span id="L2235">  } clock;</span>
+<span id="L2236"></span>
+<span id="L2237">  for (const auto mode :</span>
+<span id="L2238">       {BatchBackend::SubmitMode::error, BatchBackend::SubmitMode::throwing}) {</span>
+<span id="L2239">    for (unsigned iteration = 0; iteration &lt; 32; ++iteration) {</span>
+<span id="L2240">      SCOPED_TRACE(iteration);</span>
+<span id="L2241">      BatchBackend backend;</span>
+<span id="L2242">      backend.mode.store(mode);</span>
+<span id="L2243">      rt::Runtime runtime(clock);</span>
+<span id="L2244">      ASSERT_EQ(runtime.configure(batch_config()), rt::Status::ok);</span>
+<span id="L2245">      ASSERT_EQ(runtime.set_rate_execution_policy({1}), rt::Status::ok);</span>
+<span id="L2246">      rt::DeviceBackendHandle backend_handle;</span>
+<span id="L2247">      ASSERT_EQ(register_backend(runtime, backend, &quot;rate.retirement&quot;, backend_handle),</span>
+<span id="L2248">                rt::Status::ok);</span>
+<span id="L2249">      std::array&lt;std::byte, 64&gt; storage{};</span>
+<span id="L2250">      rt::DeviceBufferHandle buffer;</span>
+<span id="L2251">      rt::DeviceTimelineHandle timeline;</span>
+<span id="L2252">      ASSERT_EQ(runtime.register_device_buffer(</span>
+<span id="L2253">                    {&quot;rate.retirement.buffer&quot;, backend_handle, storage}, buffer),</span>
+<span id="L2254">                rt::Status::ok);</span>
+<span id="L2255">      ASSERT_EQ(runtime.register_device_timeline(</span>
+<span id="L2256">                    {&quot;rate.retirement.timeline&quot;, backend_handle, 0}, timeline),</span>
+<span id="L2257">                rt::Status::ok);</span>
+<span id="L2258">      BatchProvider provider;</span>
+<span id="L2259">      provider.declaration = dispatch_declaration(buffer, timeline);</span>
+<span id="L2260">      provider.timeout_ns = 1&#x27;000&#x27;000&#x27;000;</span>
+<span id="L2261">      rt::PhaseHandle phase;</span>
+<span id="L2262">      ASSERT_EQ(runtime.register_device_batch_phase(</span>
+<span id="L2263">                    {&quot;rate.retirement.phase&quot;, backend_handle, &amp;provide_batch,</span>
+<span id="L2264">                     &amp;provider, provider.declaration},</span>
+<span id="L2265">                    phase),</span>
+<span id="L2266">                rt::Status::ok);</span>
+<span id="L2267">      rt::RateDomainHandle domain;</span>
+<span id="L2268">      ASSERT_EQ(runtime.register_rate_domain(</span>
+<span id="L2269">                    {&quot;rate.retirement.domain&quot;, 1&#x27;000&#x27;000&#x27;000, 1, 900&#x27;000&#x27;000, 0,</span>
+<span id="L2270">                     rt::RateCriticality::critical, false,</span>
+<span id="L2271">                     rt::RateLateAction::fail, 0},</span>
+<span id="L2272">                    domain),</span>
+<span id="L2273">                rt::Status::ok);</span>
+<span id="L2274">      const std::array roles{rt::DeviceRatePayloadRole::input};</span>
+<span id="L2275">      ASSERT_EQ(runtime.bind_device_phase_to_rate_domain(</span>
+<span id="L2276">                    {phase, domain, 800&#x27;000&#x27;000, 1, roles}),</span>
+<span id="L2277">                rt::Status::ok);</span>
+<span id="L2278">      ASSERT_EQ(runtime.finalize(), rt::Status::ok) &lt;&lt; runtime.last_error();</span>
+<span id="L2279">      ASSERT_EQ(runtime.start(), rt::Status::ok);</span>
+<span id="L2280"></span>
+<span id="L2281">      rt::StepResult result;</span>
+<span id="L2282">      EXPECT_EQ(runtime.step(</span>
+<span id="L2283">                    {0, std::chrono::nanoseconds(1), std::nullopt, 1&#x27;000},</span>
+<span id="L2284">                    &amp;result),</span>
+<span id="L2285">                rt::Status::device_error);</span>
+<span id="L2286">      EXPECT_EQ(result.rate.executed_reference_records, 1u);</span>
+<span id="L2287">      EXPECT_EQ(result.rate.failed_domain_releases, 1u);</span>
+<span id="L2288">      EXPECT_EQ(backend.batch_cancel_calls.load(), 0u);</span>
+<span id="L2289">      EXPECT_EQ(backend.last_batch.timeout_ns, 800&#x27;000&#x27;000u);</span>
+<span id="L2290"></span>
+<span id="L2291">      rt::DeviceTimelineInfo info;</span>
+<span id="L2292">      ASSERT_TRUE(runtime.device_timeline_at(backend_handle, 0, info));</span>
+<span id="L2293">      EXPECT_EQ(info.last_accepted_value, 1u);</span>
+<span id="L2294">      EXPECT_EQ(info.completed_value, 0u);</span>
+<span id="L2295">      EXPECT_EQ(backend.batch_submit_calls.load(), 1u);</span>
+<span id="L2296">      EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L2297">      EXPECT_EQ(runtime.stop(), rt::Status::ok);</span>
+<span id="L2298">    }</span>
+<span id="L2299">  }</span>
+<span id="L2300">}</span></pre></html>

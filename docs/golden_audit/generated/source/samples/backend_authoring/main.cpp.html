@@ -1,0 +1,36 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/backend_authoring/main.cpp</title><h1>samples/backend_authoring/main.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;conformance.hpp&quot;</span>
+<span id="L2">#include &quot;runtime_example.hpp&quot;</span>
+<span id="L3">#include &lt;iostream&gt;</span>
+<span id="L4"></span>
+<span id="L5">int main() {</span>
+<span id="L6">    backend_kit::Backend tested;</span>
+<span id="L7">    backend_kit::Storage storage;</span>
+<span id="L8">    backend_kit::Profile profile{backend_kit::copy_opcode, &amp;tested,</span>
+<span id="L9">        [](void* p, backend_kit::Fault f) noexcept { static_cast&lt;backend_kit::Backend*&gt;(p)-&gt;inject(f); },</span>
+<span id="L10">        [](void* p) noexcept { return static_cast&lt;backend_kit::Backend*&gt;(p)-&gt;owns_setup(); },</span>
+<span id="L11">        [](void* p) noexcept { return static_cast&lt;backend_kit::Backend*&gt;(p)-&gt;registered(); }};</span>
+<span id="L12">    const auto report = backend_kit::run(tested.api(), profile, storage);</span>
+<span id="L13">    if (!report.passed()) {</span>
+<span id="L14">        for (std::size_t i = 0; i &lt; report.count; ++i)</span>
+<span id="L15">            if (!report.checks[i].passed) std::cerr &lt;&lt; report.checks[i].name &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L16">        // Never unwind borrowed storage if a substituted backend retains ownership.</span>
+<span id="L17">        if (!report.cleanup_complete) std::terminate();</span>
+<span id="L18">        return 1;</span>
+<span id="L19">    }</span>
+<span id="L20">    backend_kit::Backend native;</span>
+<span id="L21">    rt::MockDeviceBackend legacy({1, 1, 1, 1000});</span>
+<span id="L22">    backend_kit::RuntimeState state;</span>
+<span id="L23">    rt::Runtime runtime;</span>
+<span id="L24">    auto check = [&amp;](rt::Status status) {</span>
+<span id="L25">        if (status == rt::Status::ok) return true;</span>
+<span id="L26">        std::cerr &lt;&lt; runtime.last_error() &lt;&lt; &#x27;\n&#x27;; return false;</span>
+<span id="L27">    };</span>
+<span id="L28">    if (!check(backend_kit::configure(runtime, native, legacy, state))) return 1;</span>
+<span id="L29">    rt::sdk::CheckedStopGuard stop(runtime);</span>
+<span id="L30">    bool ok = check(runtime.start());</span>
+<span id="L31">    for (std::uint64_t i = 0; ok &amp;&amp; i &lt; 3; ++i)</span>
+<span id="L32">        ok = check(runtime.step({i, std::chrono::milliseconds(1)}));</span>
+<span id="L33">    const bool closed = check(stop.close());</span>
+<span id="L34">    if (!ok || !closed || state.verified != 3 || native.owns_setup() || native.registered() != 0) return 1;</span>
+<span id="L35">    std::cout &lt;&lt; &quot;backend_authoring: conformance=ok native=3 v1=3 verified=3 ownership=0\n&quot;;</span>
+<span id="L36">}</span></pre></html>

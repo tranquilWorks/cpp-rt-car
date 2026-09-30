@@ -29,5 +29,6 @@ faults resume from tick 5 in a compatible fresh owner; trusted replay itself
 rejects foreign owners and variants before side effects.
 
 The [CPU reference](golden_system.md) and [CUDA reference](golden_cuda.md) remain
-separate unchanged kits. M26-05's broader showcase and M26-06's completion audit
-remain separate batches; this guide does not claim CAP-M26 completion.
+separate unchanged kits. M26-05 delivers the broader showcase; the
+[M26-06 audit](golden_audit.md) records current capability dispositions and
+remaining gates. This guide does not claim physical or release qualification.

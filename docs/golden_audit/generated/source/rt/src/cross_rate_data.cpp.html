@@ -1,0 +1,903 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>rt/src/cross_rate_data.cpp</title><h1>rt/src/cross_rate_data.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;cross_rate_data.hpp&quot;</span>
+<span id="L2">#include &quot;rate_dispatch.hpp&quot;</span>
+<span id="L3"></span>
+<span id="L4">#include &lt;algorithm&gt;</span>
+<span id="L5">#include &lt;array&gt;</span>
+<span id="L6">#include &lt;cstring&gt;</span>
+<span id="L7">#include &lt;limits&gt;</span>
+<span id="L8">#include &lt;new&gt;</span>
+<span id="L9">#include &lt;tuple&gt;</span>
+<span id="L10"></span>
+<span id="L11">namespace {</span>
+<span id="L12"></span>
+<span id="L13">constexpr std::uint64_t kStateMask = 3;</span>
+<span id="L14">constexpr std::uint64_t kFree = 0;</span>
+<span id="L15">constexpr std::uint64_t kWriting = 1;</span>
+<span id="L16">constexpr std::uint64_t kPublished = 2;</span>
+<span id="L17">constexpr std::uint64_t kReading = 3;</span>
+<span id="L18"></span>
+<span id="L19">std::uint64_t encode_control(</span>
+<span id="L20">    std::uint64_t generation,</span>
+<span id="L21">    std::uint64_t state) noexcept {</span>
+<span id="L22">    return (generation &lt;&lt; 2u) | state;</span>
+<span id="L23">}</span>
+<span id="L24"></span>
+<span id="L25">std::uint64_t control_generation(std::uint64_t control) noexcept {</span>
+<span id="L26">    return control &gt;&gt; 2u;</span>
+<span id="L27">}</span>
+<span id="L28"></span>
+<span id="L29">std::uint64_t control_state(std::uint64_t control) noexcept {</span>
+<span id="L30">    return control &amp; kStateMask;</span>
+<span id="L31">}</span>
+<span id="L32"></span>
+<span id="L33">bool checked_add(</span>
+<span id="L34">    std::size_t left,</span>
+<span id="L35">    std::size_t right,</span>
+<span id="L36">    std::size_t&amp; output) noexcept {</span>
+<span id="L37">    if (left &gt; std::numeric_limits&lt;std::size_t&gt;::max() - right) {</span>
+<span id="L38">        return false;</span>
+<span id="L39">    }</span>
+<span id="L40">    output = left + right;</span>
+<span id="L41">    return true;</span>
+<span id="L42">}</span>
+<span id="L43"></span>
+<span id="L44">bool checked_multiply(</span>
+<span id="L45">    std::size_t left,</span>
+<span id="L46">    std::size_t right,</span>
+<span id="L47">    std::size_t&amp; output) noexcept {</span>
+<span id="L48">    if (left != 0 &amp;&amp;</span>
+<span id="L49">        right &gt; std::numeric_limits&lt;std::size_t&gt;::max() / left) {</span>
+<span id="L50">        return false;</span>
+<span id="L51">    }</span>
+<span id="L52">    output = left * right;</span>
+<span id="L53">    return true;</span>
+<span id="L54">}</span>
+<span id="L55"></span>
+<span id="L56">bool checked_add_u64(</span>
+<span id="L57">    std::uint64_t left,</span>
+<span id="L58">    std::uint64_t right,</span>
+<span id="L59">    std::uint64_t&amp; output) noexcept {</span>
+<span id="L60">    if (left &gt; std::numeric_limits&lt;std::uint64_t&gt;::max() - right) {</span>
+<span id="L61">        return false;</span>
+<span id="L62">    }</span>
+<span id="L63">    output = left + right;</span>
+<span id="L64">    return true;</span>
+<span id="L65">}</span>
+<span id="L66"></span>
+<span id="L67">bool checked_multiply_u64(</span>
+<span id="L68">    std::uint64_t left,</span>
+<span id="L69">    std::uint64_t right,</span>
+<span id="L70">    std::uint64_t&amp; output) noexcept {</span>
+<span id="L71">    if (left != 0 &amp;&amp;</span>
+<span id="L72">        right &gt; std::numeric_limits&lt;std::uint64_t&gt;::max() / left) {</span>
+<span id="L73">        return false;</span>
+<span id="L74">    }</span>
+<span id="L75">    output = left * right;</span>
+<span id="L76">    return true;</span>
+<span id="L77">}</span>
+<span id="L78"></span>
+<span id="L79">bool checked_age(</span>
+<span id="L80">    std::uint64_t supercycle,</span>
+<span id="L81">    std::uint64_t producer_time,</span>
+<span id="L82">    std::uint64_t consumer_time,</span>
+<span id="L83">    bool prior_cycle,</span>
+<span id="L84">    std::uint64_t&amp; age) noexcept {</span>
+<span id="L85">    if (!prior_cycle) {</span>
+<span id="L86">        if (producer_time &gt; consumer_time) {</span>
+<span id="L87">            return false;</span>
+<span id="L88">        }</span>
+<span id="L89">        age = consumer_time - producer_time;</span>
+<span id="L90">        return true;</span>
+<span id="L91">    }</span>
+<span id="L92">    const auto prior_tail = supercycle - producer_time;</span>
+<span id="L93">    if (consumer_time &gt;</span>
+<span id="L94">        std::numeric_limits&lt;std::uint64_t&gt;::max() - prior_tail) {</span>
+<span id="L95">        return false;</span>
+<span id="L96">    }</span>
+<span id="L97">    age = prior_tail + consumer_time;</span>
+<span id="L98">    return true;</span>
+<span id="L99">}</span>
+<span id="L100"></span>
+<span id="L101">bool valid_name(std::string_view name) noexcept {</span>
+<span id="L102">    if (name.empty() || name.size() &gt;= rt::cross_rate_channel_name_capacity) {</span>
+<span id="L103">        return false;</span>
+<span id="L104">    }</span>
+<span id="L105">    return std::all_of(name.begin(), name.end(), [](char character) {</span>
+<span id="L106">        return (character &gt;= &#x27;a&#x27; &amp;&amp; character &lt;= &#x27;z&#x27;) ||</span>
+<span id="L107">            (character &gt;= &#x27;A&#x27; &amp;&amp; character &lt;= &#x27;Z&#x27;) ||</span>
+<span id="L108">            (character &gt;= &#x27;0&#x27; &amp;&amp; character &lt;= &#x27;9&#x27;) ||</span>
+<span id="L109">            character == &#x27;.&#x27; || character == &#x27;_&#x27; || character == &#x27;:&#x27; ||</span>
+<span id="L110">            character == &#x27;/&#x27; || character == &#x27;@&#x27; || character == &#x27;-&#x27;;</span>
+<span id="L111">    });</span>
+<span id="L112">}</span>
+<span id="L113"></span>
+<span id="L114">struct SourceKey {</span>
+<span id="L115">    rt::CrossRateSampleProvenance provenance =</span>
+<span id="L116">        rt::CrossRateSampleProvenance::initial_sample;</span>
+<span id="L117">    std::size_t reference_index = rt::invalid_reference_release_index;</span>
+<span id="L118">    std::int32_t cycle = 0;</span>
+<span id="L119"></span>
+<span id="L120">    bool operator==(const SourceKey&amp;) const noexcept = default;</span>
+<span id="L121">};</span>
+<span id="L122"></span>
+<span id="L123">SourceKey source_key(</span>
+<span id="L124">    const rt::CompiledCrossRateSelection&amp; selection,</span>
+<span id="L125">    std::int32_t target_cycle = 0) noexcept {</span>
+<span id="L126">    return {</span>
+<span id="L127">        selection.provenance,</span>
+<span id="L128">        selection.producer_reference_index,</span>
+<span id="L129">        target_cycle + selection.source_cycle_offset,</span>
+<span id="L130">    };</span>
+<span id="L131">}</span>
+<span id="L132"></span>
+<span id="L133">} // namespace</span>
+<span id="L134"></span>
+<span id="L135">namespace rt::detail {</span>
+<span id="L136"></span>
+<span id="L137">Status SnapshotStore::create(</span>
+<span id="L138">    std::size_t payload_size,</span>
+<span id="L139">    std::size_t slot_count,</span>
+<span id="L140">    SnapshotStore&amp; output) noexcept {</span>
+<span id="L141">    std::size_t payload_bytes = 0;</span>
+<span id="L142">    if (payload_size == 0 || slot_count == 0 ||</span>
+<span id="L143">        !checked_multiply(payload_size, slot_count, payload_bytes)) {</span>
+<span id="L144">        return Status::invalid_config;</span>
+<span id="L145">    }</span>
+<span id="L146">    try {</span>
+<span id="L147">        SnapshotStore candidate;</span>
+<span id="L148">        candidate.payload_size_ = payload_size;</span>
+<span id="L149">        candidate.slot_count_ = slot_count;</span>
+<span id="L150">        candidate.payload_storage_bytes_ = payload_bytes;</span>
+<span id="L151">        candidate.controls_ =</span>
+<span id="L152">            std::make_unique&lt;SnapshotSlotControl[]&gt;(slot_count);</span>
+<span id="L153">        candidate.payload_ = std::make_unique&lt;std::byte[]&gt;(payload_bytes);</span>
+<span id="L154">        output = std::move(candidate);</span>
+<span id="L155">        return Status::ok;</span>
+<span id="L156">    } catch (const std::bad_alloc&amp;) {</span>
+<span id="L157">        return Status::resource_exhausted;</span>
+<span id="L158">    } catch (...) {</span>
+<span id="L159">        return Status::internal_error;</span>
+<span id="L160">    }</span>
+<span id="L161">}</span>
+<span id="L162"></span>
+<span id="L163">SnapshotStoreResult SnapshotStore::publish(</span>
+<span id="L164">    std::uint64_t generation,</span>
+<span id="L165">    std::span&lt;const std::byte&gt; payload) noexcept {</span>
+<span id="L166">    if (!controls_ || !payload_ || payload.size() != payload_size_ ||</span>
+<span id="L167">        generation == 0 || generation &gt; maximum_generation() ||</span>
+<span id="L168">        generation != next_generation_) {</span>
+<span id="L169">        return SnapshotStoreResult::invalid_argument;</span>
+<span id="L170">    }</span>
+<span id="L171">    const auto slot_index = static_cast&lt;std::size_t&gt;(</span>
+<span id="L172">        (generation - 1) % slot_count_);</span>
+<span id="L173">    auto&amp; control = controls_[slot_index].value;</span>
+<span id="L174">    auto observed = control.load(std::memory_order_acquire);</span>
+<span id="L175">    if (control_state(observed) != kFree) {</span>
+<span id="L176">        return SnapshotStoreResult::capacity_exceeded;</span>
+<span id="L177">    }</span>
+<span id="L178">    const auto writing = encode_control(generation, kWriting);</span>
+<span id="L179">    if (!control.compare_exchange_strong(</span>
+<span id="L180">            observed,</span>
+<span id="L181">            writing,</span>
+<span id="L182">            std::memory_order_acq_rel,</span>
+<span id="L183">            std::memory_order_acquire)) {</span>
+<span id="L184">        return SnapshotStoreResult::capacity_exceeded;</span>
+<span id="L185">    }</span>
+<span id="L186">    std::memcpy(</span>
+<span id="L187">        payload_.get() + slot_index * payload_size_,</span>
+<span id="L188">        payload.data(),</span>
+<span id="L189">        payload_size_);</span>
+<span id="L190">    control.store(</span>
+<span id="L191">        encode_control(generation, kPublished),</span>
+<span id="L192">        std::memory_order_release);</span>
+<span id="L193">    next_generation_ = generation == maximum_generation()</span>
+<span id="L194">        ? 0</span>
+<span id="L195">        : generation + 1;</span>
+<span id="L196">    return SnapshotStoreResult::ok;</span>
+<span id="L197">}</span>
+<span id="L198"></span>
+<span id="L199">SnapshotStoreResult SnapshotStore::copy(</span>
+<span id="L200">    std::uint64_t generation,</span>
+<span id="L201">    std::span&lt;std::byte&gt; output,</span>
+<span id="L202">    SnapshotRetention retention) noexcept {</span>
+<span id="L203">    if (!controls_ || !payload_ || output.size() != payload_size_ ||</span>
+<span id="L204">        generation == 0 || generation &gt; maximum_generation() ||</span>
+<span id="L205">        (retention != SnapshotRetention::retain &amp;&amp;</span>
+<span id="L206">         retention != SnapshotRetention::retire)) {</span>
+<span id="L207">        return SnapshotStoreResult::invalid_argument;</span>
+<span id="L208">    }</span>
+<span id="L209">    const auto slot_index = static_cast&lt;std::size_t&gt;(</span>
+<span id="L210">        (generation - 1) % slot_count_);</span>
+<span id="L211">    auto&amp; control = controls_[slot_index].value;</span>
+<span id="L212">    auto observed = control.load(std::memory_order_acquire);</span>
+<span id="L213">    const auto observed_generation = control_generation(observed);</span>
+<span id="L214">    const auto observed_state = control_state(observed);</span>
+<span id="L215">    if (observed_generation &lt; generation ||</span>
+<span id="L216">        (observed_generation == generation &amp;&amp; observed_state == kWriting)) {</span>
+<span id="L217">        return SnapshotStoreResult::not_ready;</span>
+<span id="L218">    }</span>
+<span id="L219">    if (observed_generation &gt; generation ||</span>
+<span id="L220">        (observed_generation == generation &amp;&amp; observed_state == kFree)) {</span>
+<span id="L221">        return SnapshotStoreResult::stale_generation;</span>
+<span id="L222">    }</span>
+<span id="L223">    if (observed_state != kPublished) {</span>
+<span id="L224">        return SnapshotStoreResult::not_ready;</span>
+<span id="L225">    }</span>
+<span id="L226">    const auto reading = encode_control(generation, kReading);</span>
+<span id="L227">    if (!control.compare_exchange_strong(</span>
+<span id="L228">            observed,</span>
+<span id="L229">            reading,</span>
+<span id="L230">            std::memory_order_acq_rel,</span>
+<span id="L231">            std::memory_order_acquire)) {</span>
+<span id="L232">        return SnapshotStoreResult::not_ready;</span>
+<span id="L233">    }</span>
+<span id="L234">    std::memcpy(</span>
+<span id="L235">        output.data(),</span>
+<span id="L236">        payload_.get() + slot_index * payload_size_,</span>
+<span id="L237">        payload_size_);</span>
+<span id="L238">    control.store(</span>
+<span id="L239">        encode_control(</span>
+<span id="L240">            generation,</span>
+<span id="L241">            retention == SnapshotRetention::retain ? kPublished : kFree),</span>
+<span id="L242">        std::memory_order_release);</span>
+<span id="L243">    return SnapshotStoreResult::ok;</span>
+<span id="L244">}</span>
+<span id="L245"></span>
+<span id="L246">SnapshotStoreResult SnapshotStore::retire(</span>
+<span id="L247">    std::uint64_t generation) noexcept {</span>
+<span id="L248">    if (!controls_ || generation == 0 ||</span>
+<span id="L249">        generation &gt; maximum_generation()) {</span>
+<span id="L250">        return SnapshotStoreResult::invalid_argument;</span>
+<span id="L251">    }</span>
+<span id="L252">    const auto slot_index = static_cast&lt;std::size_t&gt;(</span>
+<span id="L253">        (generation - 1) % slot_count_);</span>
+<span id="L254">    auto&amp; control = controls_[slot_index].value;</span>
+<span id="L255">    auto observed = control.load(std::memory_order_acquire);</span>
+<span id="L256">    if (control_generation(observed) != generation) {</span>
+<span id="L257">        return control_generation(observed) &lt; generation</span>
+<span id="L258">            ? SnapshotStoreResult::not_ready</span>
+<span id="L259">            : SnapshotStoreResult::stale_generation;</span>
+<span id="L260">    }</span>
+<span id="L261">    if (control_state(observed) != kPublished) {</span>
+<span id="L262">        return SnapshotStoreResult::not_ready;</span>
+<span id="L263">    }</span>
+<span id="L264">    if (!control.compare_exchange_strong(</span>
+<span id="L265">            observed,</span>
+<span id="L266">            encode_control(generation, kFree),</span>
+<span id="L267">            std::memory_order_acq_rel,</span>
+<span id="L268">            std::memory_order_acquire)) {</span>
+<span id="L269">        return SnapshotStoreResult::not_ready;</span>
+<span id="L270">    }</span>
+<span id="L271">    return SnapshotStoreResult::ok;</span>
+<span id="L272">}</span>
+<span id="L273"></span>
+<span id="L274">bool SnapshotStore::can_publish(std::uint64_t generation) const noexcept {</span>
+<span id="L275">    if (!controls_ || generation == 0 ||</span>
+<span id="L276">        generation &gt; maximum_generation() ||</span>
+<span id="L277">        generation != next_generation_) {</span>
+<span id="L278">        return false;</span>
+<span id="L279">    }</span>
+<span id="L280">    const auto slot_index = static_cast&lt;std::size_t&gt;(</span>
+<span id="L281">        (generation - 1) % slot_count_);</span>
+<span id="L282">    return control_state(</span>
+<span id="L283">        controls_[slot_index].value.load(std::memory_order_acquire)) == kFree;</span>
+<span id="L284">}</span>
+<span id="L285"></span>
+<span id="L286">SnapshotStoreResult SnapshotStore::restore_committed(</span>
+<span id="L287">    std::uint64_t generation,</span>
+<span id="L288">    std::uint64_t next_generation,</span>
+<span id="L289">    std::span&lt;const std::byte&gt; payload) noexcept {</span>
+<span id="L290">    if (!controls_ || !payload_ || payload.size() != payload_size_ ||</span>
+<span id="L291">        generation == 0 || generation &gt; maximum_generation() ||</span>
+<span id="L292">        (next_generation != 0 &amp;&amp;</span>
+<span id="L293">         (next_generation &gt; maximum_generation() ||</span>
+<span id="L294">          next_generation != generation + 1))) {</span>
+<span id="L295">        return SnapshotStoreResult::invalid_argument;</span>
+<span id="L296">    }</span>
+<span id="L297">    for (std::size_t index = 0; index &lt; slot_count_; ++index) {</span>
+<span id="L298">        controls_[index].value.store(0, std::memory_order_relaxed);</span>
+<span id="L299">    }</span>
+<span id="L300">    const auto slot_index = static_cast&lt;std::size_t&gt;(</span>
+<span id="L301">        (generation - 1) % slot_count_);</span>
+<span id="L302">    std::memcpy(</span>
+<span id="L303">        payload_.get() + slot_index * payload_size_,</span>
+<span id="L304">        payload.data(),</span>
+<span id="L305">        payload_size_);</span>
+<span id="L306">    controls_[slot_index].value.store(</span>
+<span id="L307">        encode_control(generation, kPublished),</span>
+<span id="L308">        std::memory_order_release);</span>
+<span id="L309">    next_generation_ = next_generation;</span>
+<span id="L310">    return SnapshotStoreResult::ok;</span>
+<span id="L311">}</span>
+<span id="L312"></span>
+<span id="L313">Status compile_cross_rate_data(</span>
+<span id="L314">    std::uint32_t graph_owner,</span>
+<span id="L315">    std::size_t phase_count,</span>
+<span id="L316">    const CompiledRatePlan&amp; rate_plan,</span>
+<span id="L317">    std::span&lt;const CrossRateChannelSpec&gt; channels,</span>
+<span id="L318">    const CompiledDeviceRatePlan* device_rate_plan,</span>
+<span id="L319">    std::span&lt;const CrossRateDeviceBufferSource&gt; device_buffers,</span>
+<span id="L320">    CompiledCrossRatePlan&amp; output,</span>
+<span id="L321">    CrossRateCompileDiagnostic&amp; diagnostic,</span>
+<span id="L322">    std::span&lt;const std::size_t&gt; snapshot_slot_counts) noexcept {</span>
+<span id="L323">    diagnostic = {};</span>
+<span id="L324">    // The public sampled-I/O descriptor is the only Runtime opt-in. Ordinary</span>
+<span id="L325">    // callers omit this private override and retain the exact two-slot plan.</span>
+<span id="L326">    if ((!snapshot_slot_counts.empty() &amp;&amp;</span>
+<span id="L327">         snapshot_slot_counts.size() != channels.size()) ||</span>
+<span id="L328">        std::any_of(snapshot_slot_counts.begin(), snapshot_slot_counts.end(),</span>
+<span id="L329">                    [](std::size_t count) { return count != 2 &amp;&amp; count != 4; })) {</span>
+<span id="L330">        diagnostic = {Status::invalid_argument,</span>
+<span id="L331">                      &quot;cross-rate snapshot slot counts are invalid&quot;};</span>
+<span id="L332">        return diagnostic.status;</span>
+<span id="L333">    }</span>
+<span id="L334">    const auto snapshot_slots = [&amp;](std::size_t index) {</span>
+<span id="L335">        return snapshot_slot_counts.empty() ? cross_rate_snapshot_slot_count</span>
+<span id="L336">                                           : snapshot_slot_counts[index];</span>
+<span id="L337">    };</span>
+<span id="L338">    if (channels.empty()) {</span>
+<span id="L339">        output = {};</span>
+<span id="L340">        return Status::ok;</span>
+<span id="L341">    }</span>
+<span id="L342">    if (rate_plan.domains.empty()) {</span>
+<span id="L343">        diagnostic = {</span>
+<span id="L344">            Status::invalid_config,</span>
+<span id="L345">            &quot;cross-rate channels require an explicit rate model&quot;};</span>
+<span id="L346">        return diagnostic.status;</span>
+<span id="L347">    }</span>
+<span id="L348">    if (channels.size() &gt; cross_rate_channel_capacity ||</span>
+<span id="L349">        rate_plan.bindings.size() != phase_count) {</span>
+<span id="L350">        diagnostic = {</span>
+<span id="L351">            Status::capacity_exceeded,</span>
+<span id="L352">            &quot;cross-rate channel or binding capacity exceeded&quot;};</span>
+<span id="L353">        return diagnostic.status;</span>
+<span id="L354">    }</span>
+<span id="L355"></span>
+<span id="L356">    try {</span>
+<span id="L357">        const auto compile_device_endpoint = [&amp;](const CrossRateChannelSpec&amp; channel,</span>
+<span id="L358">                                                 bool producer,</span>
+<span id="L359">                                                 CompiledCrossRateDeviceEndpoint&amp; endpoint)</span>
+<span id="L360">            -&gt; Status {</span>
+<span id="L361">            const auto phase = producer ? channel.producer : channel.consumer;</span>
+<span id="L362">            const auto&amp; selector = producer</span>
+<span id="L363">                ? channel.producer_device</span>
+<span id="L364">                : channel.consumer_device;</span>
+<span id="L365">            if (!device_rate_plan || !selector.valid()) {</span>
+<span id="L366">                return Status::invalid_config;</span>
+<span id="L367">            }</span>
+<span id="L368">            const auto phase_record = std::find_if(</span>
+<span id="L369">                device_rate_plan-&gt;phases.begin(),</span>
+<span id="L370">                device_rate_plan-&gt;phases.end(),</span>
+<span id="L371">                [&amp;](const CompiledDeviceRatePhase&amp; candidate) {</span>
+<span id="L372">                    return candidate.phase == phase;</span>
+<span id="L373">                });</span>
+<span id="L374">            if (phase_record == device_rate_plan-&gt;phases.end() ||</span>
+<span id="L375">                selector.payload_reference_ordinal &gt;=</span>
+<span id="L376">                    phase_record-&gt;payload_reference_count ||</span>
+<span id="L377">                phase_record-&gt;maximum_in_flight == 0) {</span>
+<span id="L378">                return Status::invalid_config;</span>
+<span id="L379">            }</span>
+<span id="L380">            const auto reference_index =</span>
+<span id="L381">                phase_record-&gt;first_payload_reference_index +</span>
+<span id="L382">                selector.payload_reference_ordinal;</span>
+<span id="L383">            if (reference_index &gt;= device_rate_plan-&gt;payload_references.size()) {</span>
+<span id="L384">                return Status::invalid_config;</span>
+<span id="L385">            }</span>
+<span id="L386">            const auto&amp; reference =</span>
+<span id="L387">                device_rate_plan-&gt;payload_references[reference_index];</span>
+<span id="L388">            const auto role_ok = producer</span>
+<span id="L389">                ? reference.role == DeviceRatePayloadRole::output ||</span>
+<span id="L390">                      reference.role == DeviceRatePayloadRole::input_output</span>
+<span id="L391">                : reference.role == DeviceRatePayloadRole::input ||</span>
+<span id="L392">                      reference.role == DeviceRatePayloadRole::input_output;</span>
+<span id="L393">            const auto access_ok = producer</span>
+<span id="L394">                ? reference.access == RTFW_DEVICE_ACCESS_WRITE ||</span>
+<span id="L395">                      reference.access == RTFW_DEVICE_ACCESS_READ_WRITE</span>
+<span id="L396">                : reference.access == RTFW_DEVICE_ACCESS_READ ||</span>
+<span id="L397">                      reference.access == RTFW_DEVICE_ACCESS_READ_WRITE;</span>
+<span id="L398">            const auto buffer = std::find_if(</span>
+<span id="L399">                device_buffers.begin(),</span>
+<span id="L400">                device_buffers.end(),</span>
+<span id="L401">                [&amp;](const CrossRateDeviceBufferSource&amp; candidate) {</span>
+<span id="L402">                    return candidate.buffer == reference.buffer &amp;&amp;</span>
+<span id="L403">                           candidate.backend == reference.backend;</span>
+<span id="L404">                });</span>
+<span id="L405">            const auto host_access = producer</span>
+<span id="L406">                ? RTFW_DEVICE_BUFFER_HOST_READ</span>
+<span id="L407">                : RTFW_DEVICE_BUFFER_HOST_WRITE;</span>
+<span id="L408">            if (!role_ok || !access_ok || buffer == device_buffers.end() ||</span>
+<span id="L409">                buffer-&gt;storage.empty() ||</span>
+<span id="L410">                (buffer-&gt;access &amp; host_access) == 0 ||</span>
+<span id="L411">                buffer-&gt;coherency != static_cast&lt;std::uint32_t&gt;(</span>
+<span id="L412">                    HalV2MemoryCoherency::host_coherent) ||</span>
+<span id="L413">                buffer-&gt;byte_granularity == 0 ||</span>
+<span id="L414">                buffer-&gt;offset_granularity == 0 ||</span>
+<span id="L415">                channel.payload_size % buffer-&gt;byte_granularity != 0 ||</span>
+<span id="L416">                selector.slot_stride_bytes &lt; channel.payload_size ||</span>
+<span id="L417">                selector.slot_stride_bytes % buffer-&gt;offset_granularity != 0 ||</span>
+<span id="L418">                reference.offset % buffer-&gt;offset_granularity != 0) {</span>
+<span id="L419">                return Status::invalid_config;</span>
+<span id="L420">            }</span>
+<span id="L421">            std::uint64_t slot_delta = 0;</span>
+<span id="L422">            std::uint64_t final_offset = 0;</span>
+<span id="L423">            std::uint64_t final_end = 0;</span>
+<span id="L424">            std::uint64_t envelope_end = 0;</span>
+<span id="L425">            if (!checked_multiply_u64(</span>
+<span id="L426">                    phase_record-&gt;maximum_in_flight - 1u,</span>
+<span id="L427">                    selector.slot_stride_bytes,</span>
+<span id="L428">                    slot_delta) ||</span>
+<span id="L429">                !checked_add_u64(reference.offset, slot_delta, final_offset) ||</span>
+<span id="L430">                !checked_add_u64(</span>
+<span id="L431">                    final_offset, channel.payload_size, final_end) ||</span>
+<span id="L432">                !checked_add_u64(</span>
+<span id="L433">                    reference.offset, reference.bytes, envelope_end) ||</span>
+<span id="L434">                final_end &gt; envelope_end || final_end &gt; buffer-&gt;bytes ||</span>
+<span id="L435">                final_end &gt; buffer-&gt;storage.size()) {</span>
+<span id="L436">                return Status::invalid_config;</span>
+<span id="L437">            }</span>
+<span id="L438">            endpoint.producer = producer;</span>
+<span id="L439">            endpoint.phase = phase;</span>
+<span id="L440">            endpoint.backend = reference.backend;</span>
+<span id="L441">            endpoint.buffer = reference.buffer;</span>
+<span id="L442">            endpoint.reference_kind = reference.kind;</span>
+<span id="L443">            endpoint.command_index = reference.command_index;</span>
+<span id="L444">            endpoint.command_reference_index =</span>
+<span id="L445">                reference.command_reference_index;</span>
+<span id="L446">            endpoint.envelope_offset = reference.offset;</span>
+<span id="L447">            endpoint.envelope_bytes = reference.bytes;</span>
+<span id="L448">            endpoint.slot_stride_bytes = selector.slot_stride_bytes;</span>
+<span id="L449">            endpoint.slot_count = phase_record-&gt;maximum_in_flight;</span>
+<span id="L450">            endpoint.timestamp_domain_identity = producer</span>
+<span id="L451">                ? phase_record-&gt;completion_timestamp_domain_identity</span>
+<span id="L452">                : cross_rate_runtime_logical_timestamp_domain_identity;</span>
+<span id="L453">            endpoint.host_storage = buffer-&gt;storage;</span>
+<span id="L454">            return Status::ok;</span>
+<span id="L455">        };</span>
+<span id="L456"></span>
+<span id="L457">        std::vector&lt;std::size_t&gt; binding_by_phase(</span>
+<span id="L458">            phase_count,</span>
+<span id="L459">            std::numeric_limits&lt;std::size_t&gt;::max());</span>
+<span id="L460">        for (std::size_t index = 0;</span>
+<span id="L461">             index &lt; rate_plan.bindings.size();</span>
+<span id="L462">             ++index) {</span>
+<span id="L463">            const auto&amp; binding = rate_plan.bindings[index];</span>
+<span id="L464">            if (!binding.phase.valid() ||</span>
+<span id="L465">                binding.phase.owner() != graph_owner ||</span>
+<span id="L466">                binding.phase.index() &gt;= phase_count ||</span>
+<span id="L467">                !binding.domain.valid() ||</span>
+<span id="L468">                binding.domain.owner() != graph_owner ||</span>
+<span id="L469">                binding.domain.index() &gt;= rate_plan.domains.size() ||</span>
+<span id="L470">                binding.compiled_phase_index &gt;= phase_count ||</span>
+<span id="L471">                binding_by_phase[binding.phase.index()] !=</span>
+<span id="L472">                    std::numeric_limits&lt;std::size_t&gt;::max()) {</span>
+<span id="L473">                diagnostic = {</span>
+<span id="L474">                    Status::invalid_handle,</span>
+<span id="L475">                    &quot;cross-rate endpoint binding is invalid or duplicated&quot;};</span>
+<span id="L476">                return diagnostic.status;</span>
+<span id="L477">            }</span>
+<span id="L478">            binding_by_phase[binding.phase.index()] = index;</span>
+<span id="L479">        }</span>
+<span id="L480"></span>
+<span id="L481">        std::size_t initial_bytes = 0;</span>
+<span id="L482">        std::size_t snapshot_bytes = 0;</span>
+<span id="L483">        std::size_t selection_count = 0;</span>
+<span id="L484">        for (std::size_t index = 0; index &lt; channels.size(); ++index) {</span>
+<span id="L485">            const auto&amp; channel = channels[index];</span>
+<span id="L486">            if (!valid_name(channel.name) ||</span>
+<span id="L487">                channel.mode != CrossRateMode::sample_and_hold ||</span>
+<span id="L488">                channel.payload_size == 0 ||</span>
+<span id="L489">                channel.payload_size &gt; cross_rate_payload_capacity ||</span>
+<span id="L490">                channel.initial_sample.size() != channel.payload_size) {</span>
+<span id="L491">                diagnostic = {</span>
+<span id="L492">                    Status::invalid_config,</span>
+<span id="L493">                    &quot;cross-rate channel name, mode, payload, or initial sample is invalid&quot;};</span>
+<span id="L494">                return diagnostic.status;</span>
+<span id="L495">            }</span>
+<span id="L496">            if (!channel.producer.valid() || !channel.consumer.valid() ||</span>
+<span id="L497">                channel.producer.owner() != graph_owner ||</span>
+<span id="L498">                channel.consumer.owner() != graph_owner ||</span>
+<span id="L499">                channel.producer.index() &gt;= phase_count ||</span>
+<span id="L500">                channel.consumer.index() &gt;= phase_count) {</span>
+<span id="L501">                diagnostic = {</span>
+<span id="L502">                    Status::invalid_handle,</span>
+<span id="L503">                    &quot;cross-rate channel contains an invalid or foreign endpoint&quot;};</span>
+<span id="L504">                return diagnostic.status;</span>
+<span id="L505">            }</span>
+<span id="L506">            if (channel.producer == channel.consumer) {</span>
+<span id="L507">                diagnostic = {</span>
+<span id="L508">                    Status::invalid_config,</span>
+<span id="L509">                    &quot;cross-rate channel endpoints must be distinct&quot;};</span>
+<span id="L510">                return diagnostic.status;</span>
+<span id="L511">            }</span>
+<span id="L512">            const auto producer_binding_index =</span>
+<span id="L513">                binding_by_phase[channel.producer.index()];</span>
+<span id="L514">            const auto consumer_binding_index =</span>
+<span id="L515">                binding_by_phase[channel.consumer.index()];</span>
+<span id="L516">            if (producer_binding_index ==</span>
+<span id="L517">                    std::numeric_limits&lt;std::size_t&gt;::max() ||</span>
+<span id="L518">                consumer_binding_index ==</span>
+<span id="L519">                    std::numeric_limits&lt;std::size_t&gt;::max()) {</span>
+<span id="L520">                diagnostic = {</span>
+<span id="L521">                    Status::invalid_config,</span>
+<span id="L522">                    &quot;cross-rate endpoint is not bound exactly once&quot;};</span>
+<span id="L523">                return diagnostic.status;</span>
+<span id="L524">            }</span>
+<span id="L525">            const auto&amp; producer_binding =</span>
+<span id="L526">                rate_plan.bindings[producer_binding_index];</span>
+<span id="L527">            const auto&amp; consumer_binding =</span>
+<span id="L528">                rate_plan.bindings[consumer_binding_index];</span>
+<span id="L529">            const auto producer_device =</span>
+<span id="L530">                producer_binding.phase_kind == RatePhaseKind::device;</span>
+<span id="L531">            const auto consumer_device =</span>
+<span id="L532">                consumer_binding.phase_kind == RatePhaseKind::device;</span>
+<span id="L533">            const auto producer_selector_partial =</span>
+<span id="L534">                channel.producer_device.payload_reference_ordinal !=</span>
+<span id="L535">                    invalid_device_rate_payload_reference_ordinal ||</span>
+<span id="L536">                channel.producer_device.slot_stride_bytes != 0;</span>
+<span id="L537">            const auto consumer_selector_partial =</span>
+<span id="L538">                channel.consumer_device.payload_reference_ordinal !=</span>
+<span id="L539">                    invalid_device_rate_payload_reference_ordinal ||</span>
+<span id="L540">                channel.consumer_device.slot_stride_bytes != 0;</span>
+<span id="L541">            if ((producer_device &amp;&amp; consumer_device) ||</span>
+<span id="L542">                (producer_device != channel.producer_device.valid()) ||</span>
+<span id="L543">                (consumer_device != channel.consumer_device.valid()) ||</span>
+<span id="L544">                (producer_selector_partial != producer_device) ||</span>
+<span id="L545">                (consumer_selector_partial != consumer_device)) {</span>
+<span id="L546">                diagnostic = {</span>
+<span id="L547">                    Status::invalid_config,</span>
+<span id="L548">                    &quot;cross-rate device endpoint selector is missing, malformed, or device-to-device&quot;};</span>
+<span id="L549">                return diagnostic.status;</span>
+<span id="L550">            }</span>
+<span id="L551">            if (producer_device || consumer_device) {</span>
+<span id="L552">                CompiledCrossRateDeviceEndpoint endpoint;</span>
+<span id="L553">                const auto endpoint_status = compile_device_endpoint(</span>
+<span id="L554">                    channel, producer_device, endpoint);</span>
+<span id="L555">                if (endpoint_status != Status::ok) {</span>
+<span id="L556">                    diagnostic = {</span>
+<span id="L557">                        endpoint_status,</span>
+<span id="L558">                        &quot;cross-rate device endpoint is inaccessible or conflicts with its admitted payload envelope&quot;};</span>
+<span id="L559">                    return diagnostic.status;</span>
+<span id="L560">                }</span>
+<span id="L561">            }</span>
+<span id="L562">            if (producer_binding.domain == consumer_binding.domain) {</span>
+<span id="L563">                diagnostic = {</span>
+<span id="L564">                    Status::invalid_config,</span>
+<span id="L565">                    &quot;cross-rate endpoints must use different rate domains&quot;};</span>
+<span id="L566">                return diagnostic.status;</span>
+<span id="L567">            }</span>
+<span id="L568">            for (std::size_t earlier = 0; earlier &lt; index; ++earlier) {</span>
+<span id="L569">                if (channels[earlier].name == channel.name) {</span>
+<span id="L570">                    diagnostic = {</span>
+<span id="L571">                        Status::invalid_config,</span>
+<span id="L572">                        &quot;cross-rate channel names must be unique&quot;};</span>
+<span id="L573">                    return diagnostic.status;</span>
+<span id="L574">                }</span>
+<span id="L575">                if (channels[earlier].producer == channel.producer &amp;&amp;</span>
+<span id="L576">                    channels[earlier].consumer == channel.consumer) {</span>
+<span id="L577">                    diagnostic = {</span>
+<span id="L578">                        Status::invalid_config,</span>
+<span id="L579">                        &quot;duplicate cross-rate semantic edge&quot;};</span>
+<span id="L580">                    return diagnostic.status;</span>
+<span id="L581">                }</span>
+<span id="L582">            }</span>
+<span id="L583">            std::size_t channel_snapshot_bytes = 0;</span>
+<span id="L584">            if (!checked_add(</span>
+<span id="L585">                    initial_bytes,</span>
+<span id="L586">                    channel.initial_sample.size(),</span>
+<span id="L587">                    initial_bytes) ||</span>
+<span id="L588">                initial_bytes &gt; cross_rate_initial_bytes_capacity ||</span>
+<span id="L589">                !checked_multiply(</span>
+<span id="L590">                    channel.payload_size,</span>
+<span id="L591">                    snapshot_slots(index),</span>
+<span id="L592">                    channel_snapshot_bytes) ||</span>
+<span id="L593">                !checked_add(</span>
+<span id="L594">                    snapshot_bytes,</span>
+<span id="L595">                    channel_snapshot_bytes,</span>
+<span id="L596">                    snapshot_bytes) ||</span>
+<span id="L597">                snapshot_bytes &gt; cross_rate_snapshot_bytes_capacity) {</span>
+<span id="L598">                diagnostic = {</span>
+<span id="L599">                    Status::capacity_exceeded,</span>
+<span id="L600">                    &quot;cross-rate aggregate payload storage exceeded&quot;};</span>
+<span id="L601">                return diagnostic.status;</span>
+<span id="L602">            }</span>
+<span id="L603">            std::size_t consumer_releases = 0;</span>
+<span id="L604">            for (const auto&amp; release : rate_plan.releases) {</span>
+<span id="L605">                consumer_releases += release.phase == channel.consumer ? 1u : 0u;</span>
+<span id="L606">            }</span>
+<span id="L607">            std::size_t channel_selections = 0;</span>
+<span id="L608">            if (consumer_releases == 0 ||</span>
+<span id="L609">                !checked_multiply(consumer_releases, 2, channel_selections) ||</span>
+<span id="L610">                !checked_add(</span>
+<span id="L611">                    selection_count,</span>
+<span id="L612">                    channel_selections,</span>
+<span id="L613">                    selection_count) ||</span>
+<span id="L614">                selection_count &gt; cross_rate_selection_capacity) {</span>
+<span id="L615">                diagnostic = {</span>
+<span id="L616">                    Status::capacity_exceeded,</span>
+<span id="L617">                    &quot;cross-rate selection capacity exceeded&quot;};</span>
+<span id="L618">                return diagnostic.status;</span>
+<span id="L619">            }</span>
+<span id="L620">        }</span>
+<span id="L621"></span>
+<span id="L622">        CompiledCrossRatePlan candidate;</span>
+<span id="L623">        candidate.channels.reserve(channels.size());</span>
+<span id="L624">        candidate.selections.reserve(selection_count);</span>
+<span id="L625">        candidate.stores.reserve(channels.size());</span>
+<span id="L626">        candidate.device_endpoints.reserve(channels.size());</span>
+<span id="L627">        if (std::any_of(</span>
+<span id="L628">                channels.begin(), channels.end(),</span>
+<span id="L629">                [](const CrossRateChannelSpec&amp; channel) {</span>
+<span id="L630">                    return channel.producer_device.valid() ||</span>
+<span id="L631">                           channel.consumer_device.valid();</span>
+<span id="L632">                })) {</span>
+<span id="L633">            candidate.device_endpoint_index_by_channel.assign(</span>
+<span id="L634">                channels.size(), invalid_reference_release_index);</span>
+<span id="L635">        }</span>
+<span id="L636"></span>
+<span id="L637">        for (std::size_t channel_index = 0;</span>
+<span id="L638">             channel_index &lt; channels.size();</span>
+<span id="L639">             ++channel_index) {</span>
+<span id="L640">            const auto&amp; channel = channels[channel_index];</span>
+<span id="L641">            const auto&amp; producer_binding = rate_plan.bindings[</span>
+<span id="L642">                binding_by_phase[channel.producer.index()]];</span>
+<span id="L643">            const auto&amp; consumer_binding = rate_plan.bindings[</span>
+<span id="L644">                binding_by_phase[channel.consumer.index()]];</span>
+<span id="L645"></span>
+<span id="L646">            CompiledCrossRateDeviceEndpoint device_endpoint;</span>
+<span id="L647">            const bool has_device_endpoint =</span>
+<span id="L648">                producer_binding.phase_kind == RatePhaseKind::device ||</span>
+<span id="L649">                consumer_binding.phase_kind == RatePhaseKind::device;</span>
+<span id="L650">            if (has_device_endpoint) {</span>
+<span id="L651">                const auto endpoint_status = compile_device_endpoint(</span>
+<span id="L652">                    channel,</span>
+<span id="L653">                    producer_binding.phase_kind == RatePhaseKind::device,</span>
+<span id="L654">                    device_endpoint);</span>
+<span id="L655">                if (endpoint_status != Status::ok) {</span>
+<span id="L656">                    diagnostic = {</span>
+<span id="L657">                        endpoint_status,</span>
+<span id="L658">                        &quot;cross-rate device endpoint compilation failed&quot;};</span>
+<span id="L659">                    return diagnostic.status;</span>
+<span id="L660">                }</span>
+<span id="L661">                device_endpoint.channel_index = channel_index;</span>
+<span id="L662">                std::uint64_t endpoint_end = 0;</span>
+<span id="L663">                if (!checked_add_u64(</span>
+<span id="L664">                        device_endpoint.envelope_offset,</span>
+<span id="L665">                        device_endpoint.envelope_bytes,</span>
+<span id="L666">                        endpoint_end)) {</span>
+<span id="L667">                    diagnostic = {</span>
+<span id="L668">                        Status::capacity_exceeded,</span>
+<span id="L669">                        &quot;cross-rate device endpoint envelope overflowed&quot;};</span>
+<span id="L670">                    return diagnostic.status;</span>
+<span id="L671">                }</span>
+<span id="L672">                for (const auto&amp; prior : candidate.device_endpoints) {</span>
+<span id="L673">                    if (prior.buffer != device_endpoint.buffer) {</span>
+<span id="L674">                        continue;</span>
+<span id="L675">                    }</span>
+<span id="L676">                    std::uint64_t prior_end = 0;</span>
+<span id="L677">                    if (!checked_add_u64(</span>
+<span id="L678">                            prior.envelope_offset,</span>
+<span id="L679">                            prior.envelope_bytes,</span>
+<span id="L680">                            prior_end) ||</span>
+<span id="L681">                        (device_endpoint.envelope_offset &lt; prior_end &amp;&amp;</span>
+<span id="L682">                         prior.envelope_offset &lt; endpoint_end)) {</span>
+<span id="L683">                        diagnostic = {</span>
+<span id="L684">                            Status::invalid_config,</span>
+<span id="L685">                            &quot;cross-rate device endpoint envelopes overlap&quot;};</span>
+<span id="L686">                        return diagnostic.status;</span>
+<span id="L687">                    }</span>
+<span id="L688">                }</span>
+<span id="L689">            }</span>
+<span id="L690"></span>
+<span id="L691">            std::vector&lt;std::size_t&gt; producer_releases;</span>
+<span id="L692">            std::vector&lt;std::size_t&gt; consumer_releases;</span>
+<span id="L693">            for (std::size_t reference_index = 0;</span>
+<span id="L694">                 reference_index &lt; rate_plan.releases.size();</span>
+<span id="L695">                 ++reference_index) {</span>
+<span id="L696">                const auto phase = rate_plan.releases[reference_index].phase;</span>
+<span id="L697">                if (phase == channel.producer) {</span>
+<span id="L698">                    producer_releases.push_back(reference_index);</span>
+<span id="L699">                }</span>
+<span id="L700">                if (phase == channel.consumer) {</span>
+<span id="L701">                    consumer_releases.push_back(reference_index);</span>
+<span id="L702">                }</span>
+<span id="L703">            }</span>
+<span id="L704">            if (producer_releases.empty() || consumer_releases.empty()) {</span>
+<span id="L705">                diagnostic = {</span>
+<span id="L706">                    Status::invalid_config,</span>
+<span id="L707">                    &quot;cross-rate endpoint has no reference release&quot;};</span>
+<span id="L708">                return diagnostic.status;</span>
+<span id="L709">            }</span>
+<span id="L710"></span>
+<span id="L711">            std::vector&lt;CompiledCrossRateSelection&gt; first;</span>
+<span id="L712">            std::vector&lt;CompiledCrossRateSelection&gt; repeating;</span>
+<span id="L713">            first.reserve(consumer_releases.size());</span>
+<span id="L714">            repeating.reserve(consumer_releases.size());</span>
+<span id="L715">            for (const auto consumer_reference_index : consumer_releases) {</span>
+<span id="L716">                const auto&amp; consumer_release =</span>
+<span id="L717">                    rate_plan.releases[consumer_reference_index];</span>
+<span id="L718">                const auto producer_position = std::lower_bound(</span>
+<span id="L719">                    producer_releases.begin(),</span>
+<span id="L720">                    producer_releases.end(),</span>
+<span id="L721">                    consumer_reference_index);</span>
+<span id="L722">                const bool has_in_cycle =</span>
+<span id="L723">                    producer_position != producer_releases.begin();</span>
+<span id="L724">                const auto in_cycle_reference = has_in_cycle</span>
+<span id="L725">                    ? *(producer_position - 1)</span>
+<span id="L726">                    : invalid_reference_release_index;</span>
+<span id="L727">                const auto wrap_reference = producer_releases.back();</span>
+<span id="L728"></span>
+<span id="L729">                const auto make_selection = [&amp;](bool steady) {</span>
+<span id="L730">                    CompiledCrossRateSelection selection;</span>
+<span id="L731">                    selection.channel = CrossRateChannelHandle{</span>
+<span id="L732">                        graph_owner,</span>
+<span id="L733">                        static_cast&lt;std::uint32_t&gt;(channel_index)};</span>
+<span id="L734">                    selection.channel_registration_index = channel_index;</span>
+<span id="L735">                    selection.producer = channel.producer;</span>
+<span id="L736">                    selection.consumer = channel.consumer;</span>
+<span id="L737">                    selection.producer_domain = producer_binding.domain;</span>
+<span id="L738">                    selection.consumer_domain = consumer_binding.domain;</span>
+<span id="L739">                    selection.horizon = steady</span>
+<span id="L740">                        ? CrossRateSelectionHorizon::repeating_supercycle</span>
+<span id="L741">                        : CrossRateSelectionHorizon::first_supercycle;</span>
+<span id="L742">                    selection.consumer_reference_index =</span>
+<span id="L743">                        consumer_reference_index;</span>
+<span id="L744">                    selection.consumer_release_sequence =</span>
+<span id="L745">                        consumer_release.domain_release_sequence;</span>
+<span id="L746">                    selection.consumer_substep_ordinal =</span>
+<span id="L747">                        consumer_release.substep_ordinal;</span>
+<span id="L748">                    const bool use_initial = !steady &amp;&amp; !has_in_cycle;</span>
+<span id="L749">                    if (use_initial) {</span>
+<span id="L750">                        selection.provenance =</span>
+<span id="L751">                            CrossRateSampleProvenance::initial_sample;</span>
+<span id="L752">                        selection.age_ns = consumer_release.release_time_ns;</span>
+<span id="L753">                    } else {</span>
+<span id="L754">                        const auto source_reference = has_in_cycle</span>
+<span id="L755">                            ? in_cycle_reference</span>
+<span id="L756">                            : wrap_reference;</span>
+<span id="L757">                        const auto&amp; source =</span>
+<span id="L758">                            rate_plan.releases[source_reference];</span>
+<span id="L759">                        selection.provenance =</span>
+<span id="L760">                            CrossRateSampleProvenance::produced;</span>
+<span id="L761">                        selection.producer_reference_index = source_reference;</span>
+<span id="L762">                        selection.producer_release_sequence =</span>
+<span id="L763">                            source.domain_release_sequence;</span>
+<span id="L764">                        selection.producer_substep_ordinal =</span>
+<span id="L765">                            source.substep_ordinal;</span>
+<span id="L766">                        selection.source_cycle_offset = has_in_cycle ? 0 : -1;</span>
+<span id="L767">                        if (!checked_age(</span>
+<span id="L768">                                rate_plan.supercycle_ns,</span>
+<span id="L769">                                source.release_time_ns,</span>
+<span id="L770">                                consumer_release.release_time_ns,</span>
+<span id="L771">                                !has_in_cycle,</span>
+<span id="L772">                                selection.age_ns)) {</span>
+<span id="L773">                            selection.producer_reference_index =</span>
+<span id="L774">                                invalid_reference_release_index;</span>
+<span id="L775">                        }</span>
+<span id="L776">                    }</span>
+<span id="L777">                    selection.freshness =</span>
+<span id="L778">                        channel.maximum_age_ns ==</span>
+<span id="L779">                                std::numeric_limits&lt;std::uint64_t&gt;::max() ||</span>
+<span id="L780">                            selection.age_ns &lt;= channel.maximum_age_ns</span>
+<span id="L781">                        ? CrossRateFreshness::fresh</span>
+<span id="L782">                        : CrossRateFreshness::stale;</span>
+<span id="L783">                    return selection;</span>
+<span id="L784">                };</span>
+<span id="L785">                auto first_selection = make_selection(false);</span>
+<span id="L786">                auto repeating_selection = make_selection(true);</span>
+<span id="L787">                if ((!has_in_cycle &amp;&amp;</span>
+<span id="L788">                     repeating_selection.producer_reference_index ==</span>
+<span id="L789">                         invalid_reference_release_index) ||</span>
+<span id="L790">                    (has_in_cycle &amp;&amp;</span>
+<span id="L791">                     first_selection.producer_reference_index ==</span>
+<span id="L792">                         invalid_reference_release_index)) {</span>
+<span id="L793">                    diagnostic = {</span>
+<span id="L794">                        Status::capacity_exceeded,</span>
+<span id="L795">                        &quot;cross-rate freshness age is not representable&quot;};</span>
+<span id="L796">                    return diagnostic.status;</span>
+<span id="L797">                }</span>
+<span id="L798">                first.push_back(first_selection);</span>
+<span id="L799">                repeating.push_back(repeating_selection);</span>
+<span id="L800">            }</span>
+<span id="L801">            for (std::size_t index = 1; index &lt; first.size(); ++index) {</span>
+<span id="L802">                first[index].held =</span>
+<span id="L803">                    source_key(first[index]) == source_key(first[index - 1]);</span>
+<span id="L804">            }</span>
+<span id="L805">            for (std::size_t index = 0; index &lt; repeating.size(); ++index) {</span>
+<span id="L806">                const auto previous = index == 0</span>
+<span id="L807">                    ? source_key(repeating.back(), -1)</span>
+<span id="L808">                    : source_key(repeating[index - 1]);</span>
+<span id="L809">                repeating[index].held =</span>
+<span id="L810">                    source_key(repeating[index]) == previous;</span>
+<span id="L811">            }</span>
+<span id="L812"></span>
+<span id="L813">            CompiledCrossRateChannel descriptor;</span>
+<span id="L814">            descriptor.channel = CrossRateChannelHandle{</span>
+<span id="L815">                graph_owner,</span>
+<span id="L816">                static_cast&lt;std::uint32_t&gt;(channel_index)};</span>
+<span id="L817">            std::copy(</span>
+<span id="L818">                channel.name.begin(),</span>
+<span id="L819">                channel.name.end(),</span>
+<span id="L820">                descriptor.name.begin());</span>
+<span id="L821">            descriptor.registration_index = channel_index;</span>
+<span id="L822">            descriptor.producer = channel.producer;</span>
+<span id="L823">            descriptor.consumer = channel.consumer;</span>
+<span id="L824">            descriptor.producer_domain = producer_binding.domain;</span>
+<span id="L825">            descriptor.consumer_domain = consumer_binding.domain;</span>
+<span id="L826">            descriptor.producer_compiled_phase_index =</span>
+<span id="L827">                producer_binding.compiled_phase_index;</span>
+<span id="L828">            descriptor.consumer_compiled_phase_index =</span>
+<span id="L829">                consumer_binding.compiled_phase_index;</span>
+<span id="L830">            descriptor.payload_size = channel.payload_size;</span>
+<span id="L831">            descriptor.mode = channel.mode;</span>
+<span id="L832">            descriptor.maximum_age_ns = channel.maximum_age_ns;</span>
+<span id="L833">            descriptor.first_selection_index = candidate.selections.size();</span>
+<span id="L834">            descriptor.selection_count = first.size() * 2;</span>
+<span id="L835">            descriptor.snapshot_slot_count = snapshot_slots(channel_index);</span>
+<span id="L836">            descriptor.producer_device = channel.producer_device;</span>
+<span id="L837">            descriptor.consumer_device = channel.consumer_device;</span>
+<span id="L838">            if (has_device_endpoint) {</span>
+<span id="L839">                if (device_endpoint.producer) {</span>
+<span id="L840">                    descriptor.producer_device_backend =</span>
+<span id="L841">                        device_endpoint.backend;</span>
+<span id="L842">                    descriptor.producer_device_buffer = device_endpoint.buffer;</span>
+<span id="L843">                    descriptor.producer_device_base_offset =</span>
+<span id="L844">                        device_endpoint.envelope_offset;</span>
+<span id="L845">                    descriptor.producer_device_slot_count =</span>
+<span id="L846">                        device_endpoint.slot_count;</span>
+<span id="L847">                    descriptor.producer_timestamp_domain_identity =</span>
+<span id="L848">                        device_endpoint.timestamp_domain_identity;</span>
+<span id="L849">                } else {</span>
+<span id="L850">                    descriptor.consumer_device_backend =</span>
+<span id="L851">                        device_endpoint.backend;</span>
+<span id="L852">                    descriptor.consumer_device_buffer = device_endpoint.buffer;</span>
+<span id="L853">                    descriptor.consumer_device_base_offset =</span>
+<span id="L854">                        device_endpoint.envelope_offset;</span>
+<span id="L855">                    descriptor.consumer_device_slot_count =</span>
+<span id="L856">                        device_endpoint.slot_count;</span>
+<span id="L857">                }</span>
+<span id="L858">            }</span>
+<span id="L859">            if (!checked_multiply(</span>
+<span id="L860">                    channel.payload_size,</span>
+<span id="L861">                    descriptor.snapshot_slot_count,</span>
+<span id="L862">                    descriptor.snapshot_bytes)) {</span>
+<span id="L863">                diagnostic = {</span>
+<span id="L864">                    Status::capacity_exceeded,</span>
+<span id="L865">                    &quot;cross-rate snapshot size is not representable&quot;};</span>
+<span id="L866">                return diagnostic.status;</span>
+<span id="L867">            }</span>
+<span id="L868">            candidate.channels.push_back(descriptor);</span>
+<span id="L869">            for (std::size_t index = 0; index &lt; first.size(); ++index) {</span>
+<span id="L870">                candidate.selections.push_back(first[index]);</span>
+<span id="L871">                candidate.selections.push_back(repeating[index]);</span>
+<span id="L872">            }</span>
+<span id="L873">            SnapshotStore store;</span>
+<span id="L874">            const auto store_status = SnapshotStore::create(</span>
+<span id="L875">                channel.payload_size,</span>
+<span id="L876">                descriptor.snapshot_slot_count,</span>
+<span id="L877">                store);</span>
+<span id="L878">            if (store_status != Status::ok) {</span>
+<span id="L879">                diagnostic = {</span>
+<span id="L880">                    store_status,</span>
+<span id="L881">                    &quot;cross-rate snapshot store construction failed&quot;};</span>
+<span id="L882">                return diagnostic.status;</span>
+<span id="L883">            }</span>
+<span id="L884">            candidate.stores.push_back(std::move(store));</span>
+<span id="L885">            if (has_device_endpoint) {</span>
+<span id="L886">                candidate.device_endpoint_index_by_channel[channel_index] =</span>
+<span id="L887">                    candidate.device_endpoints.size();</span>
+<span id="L888">                candidate.device_endpoints.push_back(device_endpoint);</span>
+<span id="L889">            }</span>
+<span id="L890">        }</span>
+<span id="L891"></span>
+<span id="L892">        output = std::move(candidate);</span>
+<span id="L893">        return Status::ok;</span>
+<span id="L894">    } catch (const std::bad_alloc&amp;) {</span>
+<span id="L895">        diagnostic = {Status::resource_exhausted, nullptr};</span>
+<span id="L896">        return diagnostic.status;</span>
+<span id="L897">    } catch (...) {</span>
+<span id="L898">        diagnostic = {Status::internal_error, nullptr};</span>
+<span id="L899">        return diagnostic.status;</span>
+<span id="L900">    }</span>
+<span id="L901">}</span>
+<span id="L902"></span>
+<span id="L903">} // namespace rt::detail</span></pre></html>

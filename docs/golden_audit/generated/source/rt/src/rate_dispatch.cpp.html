@@ -1,0 +1,1301 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>rt/src/rate_dispatch.cpp</title><h1>rt/src/rate_dispatch.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;rate_dispatch.hpp&quot;</span>
+<span id="L2"></span>
+<span id="L3">#include &quot;command_batch.hpp&quot;</span>
+<span id="L4"></span>
+<span id="L5">#include &lt;algorithm&gt;</span>
+<span id="L6">#include &lt;functional&gt;</span>
+<span id="L7">#include &lt;limits&gt;</span>
+<span id="L8">#include &lt;new&gt;</span>
+<span id="L9">#include &lt;tuple&gt;</span>
+<span id="L10"></span>
+<span id="L11">namespace {</span>
+<span id="L12"></span>
+<span id="L13">bool checked_add(</span>
+<span id="L14">    std::uint64_t left,</span>
+<span id="L15">    std::uint64_t right,</span>
+<span id="L16">    std::uint64_t&amp; output) noexcept {</span>
+<span id="L17">    if (left &gt; std::numeric_limits&lt;std::uint64_t&gt;::max() - right) {</span>
+<span id="L18">        return false;</span>
+<span id="L19">    }</span>
+<span id="L20">    output = left + right;</span>
+<span id="L21">    return true;</span>
+<span id="L22">}</span>
+<span id="L23"></span>
+<span id="L24">bool checked_multiply(</span>
+<span id="L25">    std::uint64_t left,</span>
+<span id="L26">    std::uint64_t right,</span>
+<span id="L27">    std::uint64_t&amp; output) noexcept {</span>
+<span id="L28">    if (left != 0 &amp;&amp;</span>
+<span id="L29">        right &gt; std::numeric_limits&lt;std::uint64_t&gt;::max() / left) {</span>
+<span id="L30">        return false;</span>
+<span id="L31">    }</span>
+<span id="L32">    output = left * right;</span>
+<span id="L33">    return true;</span>
+<span id="L34">}</span>
+<span id="L35"></span>
+<span id="L36">bool valid_action(rt::RateLateAction action) noexcept {</span>
+<span id="L37">    return action == rt::RateLateAction::skip ||</span>
+<span id="L38">        action == rt::RateLateAction::bounded_catch_up ||</span>
+<span id="L39">        action == rt::RateLateAction::hold ||</span>
+<span id="L40">        action == rt::RateLateAction::degrade ||</span>
+<span id="L41">        action == rt::RateLateAction::fail;</span>
+<span id="L42">}</span>
+<span id="L43"></span>
+<span id="L44">bool ceil_div(</span>
+<span id="L45">    std::uint64_t value,</span>
+<span id="L46">    std::uint64_t divisor,</span>
+<span id="L47">    std::uint64_t&amp; output) noexcept {</span>
+<span id="L48">    if (divisor == 0) {</span>
+<span id="L49">        return false;</span>
+<span id="L50">    }</span>
+<span id="L51">    output = value / divisor;</span>
+<span id="L52">    if (value % divisor != 0) {</span>
+<span id="L53">        if (output == std::numeric_limits&lt;std::uint64_t&gt;::max()) {</span>
+<span id="L54">            return false;</span>
+<span id="L55">        }</span>
+<span id="L56">        ++output;</span>
+<span id="L57">    }</span>
+<span id="L58">    return true;</span>
+<span id="L59">}</span>
+<span id="L60"></span>
+<span id="L61">} // namespace</span>
+<span id="L62"></span>
+<span id="L63">namespace rt::detail {</span>
+<span id="L64"></span>
+<span id="L65">Status compile_device_rate_plan(</span>
+<span id="L66">    std::uint32_t graph_owner,</span>
+<span id="L67">    std::uint32_t runtime_outstanding_capacity,</span>
+<span id="L68">    std::uint32_t runtime_completion_batch_capacity,</span>
+<span id="L69">    const CompiledRatePlan&amp; rate_plan,</span>
+<span id="L70">    std::span&lt;const DeviceRateBindingSpec&gt; bindings,</span>
+<span id="L71">    std::span&lt;const DeviceRateBackendSource&gt; backends,</span>
+<span id="L72">    std::span&lt;const DeviceRateBufferSource&gt; buffers,</span>
+<span id="L73">    std::span&lt;const DeviceRateTimelineSource&gt; timelines,</span>
+<span id="L74">    std::span&lt;const DeviceRatePhaseSource&gt; phases,</span>
+<span id="L75">    CompiledDeviceRatePlan&amp; output,</span>
+<span id="L76">    DeviceRateDiagnostic&amp; diagnostic) noexcept {</span>
+<span id="L77">    diagnostic = {};</span>
+<span id="L78">    if (bindings.empty()) {</span>
+<span id="L79">        output = {};</span>
+<span id="L80">        return Status::ok;</span>
+<span id="L81">    }</span>
+<span id="L82">    if (rate_plan.supercycle_ns == 0 || runtime_outstanding_capacity == 0 ||</span>
+<span id="L83">        runtime_completion_batch_capacity == 0 || phases.size() != bindings.size()) {</span>
+<span id="L84">        diagnostic = {Status::invalid_config,</span>
+<span id="L85">                      &quot;device-rate admission requires a finite plan and positive Runtime capacities&quot;};</span>
+<span id="L86">        return diagnostic.status;</span>
+<span id="L87">    }</span>
+<span id="L88"></span>
+<span id="L89">    const auto fail = [&amp;](Status status, const char* message,</span>
+<span id="L90">                          PhaseHandle phase = {},</span>
+<span id="L91">                          std::size_t reference = invalid_reference_release_index) {</span>
+<span id="L92">        diagnostic = {status, message, reference, phase};</span>
+<span id="L93">        return status;</span>
+<span id="L94">    };</span>
+<span id="L95">    const auto role_matches = [](DeviceRatePayloadRole role,</span>
+<span id="L96">                                 std::uint32_t access) {</span>
+<span id="L97">        return (role == DeviceRatePayloadRole::input &amp;&amp;</span>
+<span id="L98">                access == RTFW_DEVICE_ACCESS_READ) ||</span>
+<span id="L99">            (role == DeviceRatePayloadRole::output &amp;&amp;</span>
+<span id="L100">             access == RTFW_DEVICE_ACCESS_WRITE) ||</span>
+<span id="L101">            (role == DeviceRatePayloadRole::input_output &amp;&amp;</span>
+<span id="L102">             access == RTFW_DEVICE_ACCESS_READ_WRITE);</span>
+<span id="L103">    };</span>
+<span id="L104"></span>
+<span id="L105">    try {</span>
+<span id="L106">        CompiledDeviceRatePlan candidate;</span>
+<span id="L107">        candidate.phases.reserve(bindings.size());</span>
+<span id="L108">        candidate.admission_phases.reserve(bindings.size());</span>
+<span id="L109">        std::vector&lt;std::size_t&gt; plan_phase_by_registration(</span>
+<span id="L110">            rate_plan.bindings.size(), invalid_reference_release_index);</span>
+<span id="L111">        std::vector&lt;std::size_t&gt; backend_source_by_index(</span>
+<span id="L112">            backends.size(), invalid_reference_release_index);</span>
+<span id="L113">        std::vector&lt;std::size_t&gt; buffer_source_by_index(</span>
+<span id="L114">            buffers.size(), invalid_reference_release_index);</span>
+<span id="L115">        std::vector&lt;std::size_t&gt; timeline_source_by_index(</span>
+<span id="L116">            timelines.size(), invalid_reference_release_index);</span>
+<span id="L117">        std::vector&lt;std::size_t&gt; phase_source_by_index(</span>
+<span id="L118">            rate_plan.bindings.size(), invalid_reference_release_index);</span>
+<span id="L119">        std::vector&lt;bool&gt; backend_used(backends.size(), false);</span>
+<span id="L120">        std::vector&lt;std::size_t&gt; binding_order(bindings.size());</span>
+<span id="L121">        std::vector&lt;std::size_t&gt; compiled_index_by_binding(</span>
+<span id="L122">            bindings.size(), invalid_reference_release_index);</span>
+<span id="L123">        std::vector&lt;std::size_t&gt; compiled_index_by_phase(</span>
+<span id="L124">            rate_plan.bindings.size(), invalid_reference_release_index);</span>
+<span id="L125">        for (const auto&amp; compiled_binding : rate_plan.bindings) {</span>
+<span id="L126">            if (compiled_binding.phase.valid() &amp;&amp;</span>
+<span id="L127">                compiled_binding.phase.owner() == graph_owner &amp;&amp;</span>
+<span id="L128">                compiled_binding.phase.index() &lt;</span>
+<span id="L129">                    compiled_index_by_phase.size()) {</span>
+<span id="L130">                compiled_index_by_phase[compiled_binding.phase.index()] =</span>
+<span id="L131">                    compiled_binding.compiled_phase_index;</span>
+<span id="L132">            }</span>
+<span id="L133">        }</span>
+<span id="L134">        for (std::size_t index = 0; index &lt; binding_order.size(); ++index) {</span>
+<span id="L135">            binding_order[index] = index;</span>
+<span id="L136">            if (bindings[index].phase.valid() &amp;&amp;</span>
+<span id="L137">                bindings[index].phase.owner() == graph_owner &amp;&amp;</span>
+<span id="L138">                bindings[index].phase.index() &lt; compiled_index_by_phase.size()) {</span>
+<span id="L139">                compiled_index_by_binding[index] =</span>
+<span id="L140">                    compiled_index_by_phase[bindings[index].phase.index()];</span>
+<span id="L141">            }</span>
+<span id="L142">        }</span>
+<span id="L143">        std::sort(binding_order.begin(), binding_order.end(),</span>
+<span id="L144">                  [&amp;](std::size_t left, std::size_t right) {</span>
+<span id="L145">            return std::tuple{compiled_index_by_binding[left], left} &lt;</span>
+<span id="L146">                std::tuple{compiled_index_by_binding[right], right};</span>
+<span id="L147">        });</span>
+<span id="L148"></span>
+<span id="L149">        for (std::size_t index = 0; index &lt; backends.size(); ++index) {</span>
+<span id="L150">            if (!backends[index].backend.valid() ||</span>
+<span id="L151">                backends[index].backend.owner() != graph_owner ||</span>
+<span id="L152">                backends[index].backend.index() &gt;= backends.size() ||</span>
+<span id="L153">                backend_source_by_index[backends[index].backend.index()] !=</span>
+<span id="L154">                    invalid_reference_release_index) {</span>
+<span id="L155">                return fail(Status::invalid_handle,</span>
+<span id="L156">                            &quot;device-rate backend inventory contains an invalid, foreign, or duplicate handle&quot;);</span>
+<span id="L157">            }</span>
+<span id="L158">            backend_source_by_index[backends[index].backend.index()] = index;</span>
+<span id="L159">        }</span>
+<span id="L160">        for (std::size_t index = 0; index &lt; buffers.size(); ++index) {</span>
+<span id="L161">            if (!buffers[index].buffer.valid() ||</span>
+<span id="L162">                buffers[index].buffer.owner() != graph_owner ||</span>
+<span id="L163">                buffers[index].buffer.index() &gt;= buffer_source_by_index.size() ||</span>
+<span id="L164">                buffer_source_by_index[buffers[index].buffer.index()] !=</span>
+<span id="L165">                    invalid_reference_release_index) {</span>
+<span id="L166">                return fail(Status::invalid_handle,</span>
+<span id="L167">                            &quot;device-rate buffer inventory contains an invalid, foreign, or duplicate handle&quot;);</span>
+<span id="L168">            }</span>
+<span id="L169">            buffer_source_by_index[buffers[index].buffer.index()] = index;</span>
+<span id="L170">        }</span>
+<span id="L171">        for (std::size_t index = 0; index &lt; timelines.size(); ++index) {</span>
+<span id="L172">            if (!timelines[index].timeline.valid() ||</span>
+<span id="L173">                timelines[index].timeline.owner() != graph_owner ||</span>
+<span id="L174">                timelines[index].timeline.index() &gt;=</span>
+<span id="L175">                    timeline_source_by_index.size() ||</span>
+<span id="L176">                timeline_source_by_index[timelines[index].timeline.index()] !=</span>
+<span id="L177">                    invalid_reference_release_index) {</span>
+<span id="L178">                return fail(Status::invalid_handle,</span>
+<span id="L179">                            &quot;device-rate timeline inventory contains an invalid, foreign, or duplicate handle&quot;);</span>
+<span id="L180">            }</span>
+<span id="L181">            timeline_source_by_index[timelines[index].timeline.index()] = index;</span>
+<span id="L182">        }</span>
+<span id="L183">        for (std::size_t index = 0; index &lt; phases.size(); ++index) {</span>
+<span id="L184">            if (!phases[index].phase.valid() ||</span>
+<span id="L185">                phases[index].phase.owner() != graph_owner ||</span>
+<span id="L186">                phases[index].phase.index() &gt;= phase_source_by_index.size() ||</span>
+<span id="L187">                phase_source_by_index[phases[index].phase.index()] !=</span>
+<span id="L188">                    invalid_reference_release_index) {</span>
+<span id="L189">                return fail(Status::invalid_handle,</span>
+<span id="L190">                            &quot;device-rate phase inventory contains an invalid, foreign, or duplicate handle&quot;);</span>
+<span id="L191">            }</span>
+<span id="L192">            phase_source_by_index[phases[index].phase.index()] = index;</span>
+<span id="L193">        }</span>
+<span id="L194"></span>
+<span id="L195">        const auto find_buffer = [&amp;](DeviceBufferHandle handle)</span>
+<span id="L196">            -&gt; const DeviceRateBufferSource* {</span>
+<span id="L197">            if (!handle.valid() || handle.owner() != graph_owner ||</span>
+<span id="L198">                handle.index() &gt;= buffer_source_by_index.size() ||</span>
+<span id="L199">                buffer_source_by_index[handle.index()] ==</span>
+<span id="L200">                    invalid_reference_release_index) {</span>
+<span id="L201">                return nullptr;</span>
+<span id="L202">            }</span>
+<span id="L203">            return &amp;buffers[buffer_source_by_index[handle.index()]];</span>
+<span id="L204">        };</span>
+<span id="L205">        const auto find_timeline = [&amp;](DeviceTimelineHandle handle)</span>
+<span id="L206">            -&gt; const DeviceRateTimelineSource* {</span>
+<span id="L207">            if (!handle.valid() || handle.owner() != graph_owner ||</span>
+<span id="L208">                handle.index() &gt;= timeline_source_by_index.size() ||</span>
+<span id="L209">                timeline_source_by_index[handle.index()] ==</span>
+<span id="L210">                    invalid_reference_release_index) {</span>
+<span id="L211">                return nullptr;</span>
+<span id="L212">            }</span>
+<span id="L213">            return &amp;timelines[timeline_source_by_index[handle.index()]];</span>
+<span id="L214">        };</span>
+<span id="L215"></span>
+<span id="L216">        for (const auto binding_index : binding_order) {</span>
+<span id="L217">            const auto&amp; binding = bindings[binding_index];</span>
+<span id="L218">            const auto phase_source_index =</span>
+<span id="L219">                binding.phase.valid() &amp;&amp;</span>
+<span id="L220">                    binding.phase.owner() == graph_owner &amp;&amp;</span>
+<span id="L221">                    binding.phase.index() &lt; phase_source_by_index.size()</span>
+<span id="L222">                ? phase_source_by_index[binding.phase.index()]</span>
+<span id="L223">                : invalid_reference_release_index;</span>
+<span id="L224">            const auto* phase_source =</span>
+<span id="L225">                phase_source_index &lt; phases.size()</span>
+<span id="L226">                ? &amp;phases[phase_source_index]</span>
+<span id="L227">                : nullptr;</span>
+<span id="L228">            const auto compiled_index =</span>
+<span id="L229">                compiled_index_by_binding[binding_index];</span>
+<span id="L230">            const auto* compiled_binding =</span>
+<span id="L231">                compiled_index &lt; rate_plan.bindings.size()</span>
+<span id="L232">                ? &amp;rate_plan.bindings[compiled_index]</span>
+<span id="L233">                : nullptr;</span>
+<span id="L234">            if (!binding.phase.valid() ||</span>
+<span id="L235">                binding.phase.owner() != graph_owner ||</span>
+<span id="L236">                binding.phase.index() &gt;= rate_plan.bindings.size() ||</span>
+<span id="L237">                !binding.domain.valid() ||</span>
+<span id="L238">                binding.domain.owner() != graph_owner ||</span>
+<span id="L239">                binding.domain.index() &gt;= rate_plan.domains.size() ||</span>
+<span id="L240">                binding.completion_budget_ns == 0 ||</span>
+<span id="L241">                binding.maximum_in_flight == 0 ||</span>
+<span id="L242">                !valid_simulation_policy(binding.simulation) || !phase_source ||</span>
+<span id="L243">                !phase_source-&gt;declaration || !compiled_binding ||</span>
+<span id="L244">                compiled_binding-&gt;domain != binding.domain ||</span>
+<span id="L245">                compiled_binding-&gt;phase_kind != RatePhaseKind::device ||</span>
+<span id="L246">                plan_phase_by_registration[binding.phase.index()] !=</span>
+<span id="L247">                    invalid_reference_release_index) {</span>
+<span id="L248">              return fail(Status::invalid_config,</span>
+<span id="L249">                          &quot;device-rate binding has invalid ownership, policy, &quot;</span>
+<span id="L250">                          &quot;or rate identity&quot;,</span>
+<span id="L251">                          binding.phase);</span>
+<span id="L252">            }</span>
+<span id="L253">            const auto backend_index = phase_source-&gt;backend.index();</span>
+<span id="L254">            if (!phase_source-&gt;backend.valid() ||</span>
+<span id="L255">                phase_source-&gt;backend.owner() != graph_owner ||</span>
+<span id="L256">                backend_index &gt;= backend_source_by_index.size() ||</span>
+<span id="L257">                backend_source_by_index[backend_index] ==</span>
+<span id="L258">                    invalid_reference_release_index) {</span>
+<span id="L259">                return fail(Status::invalid_handle,</span>
+<span id="L260">                            &quot;device-rate phase references an invalid or foreign backend&quot;,</span>
+<span id="L261">                            binding.phase);</span>
+<span id="L262">            }</span>
+<span id="L263">            const auto&amp; backend =</span>
+<span id="L264">                backends[backend_source_by_index[backend_index]];</span>
+<span id="L265">            if (binding.simulation &amp;&amp; !backend.deterministic_mock) {</span>
+<span id="L266">              return fail(</span>
+<span id="L267">                  Status::invalid_config,</span>
+<span id="L268">                  &quot;simulation timing requires a deterministic mock backend&quot;,</span>
+<span id="L269">                  binding.phase);</span>
+<span id="L270">            }</span>
+<span id="L271">            const auto&amp; declaration = *phase_source-&gt;declaration;</span>
+<span id="L272">            if (!backend.completion_timestamp_domain_valid ||</span>
+<span id="L273">                backend.completion_timestamp_domain_identity == 0 ||</span>
+<span id="L274">                !validate_batch_declaration(declaration) ||</span>
+<span id="L275">                declaration.command_count &gt;</span>
+<span id="L276">                    backend.capabilities.max_commands_per_batch ||</span>
+<span id="L277">                declaration.wait_count &gt; backend.capabilities.max_wait_points ||</span>
+<span id="L278">                declaration.signal_count &gt;</span>
+<span id="L279">                    backend.capabilities.max_signal_points ||</span>
+<span id="L280">                binding.maximum_in_flight &gt;</span>
+<span id="L281">                    backend.capabilities.max_in_flight_batches) {</span>
+<span id="L282">                return fail(Status::invalid_config,</span>
+<span id="L283">                            &quot;device-rate phase exceeds command, timeline, timestamp, or in-flight capability&quot;,</span>
+<span id="L284">                            binding.phase);</span>
+<span id="L285">            }</span>
+<span id="L286"></span>
+<span id="L287">            CompiledDeviceRatePhase compiled;</span>
+<span id="L288">            compiled.phase = binding.phase;</span>
+<span id="L289">            compiled.domain = binding.domain;</span>
+<span id="L290">            compiled.backend = phase_source-&gt;backend;</span>
+<span id="L291">            compiled.compiled_phase_index = compiled_binding-&gt;compiled_phase_index;</span>
+<span id="L292">            compiled.completion_budget_ns = binding.completion_budget_ns;</span>
+<span id="L293">            compiled.simulation = binding.simulation;</span>
+<span id="L294">            compiled.maximum_in_flight = binding.maximum_in_flight;</span>
+<span id="L295">            compiled.command_count = declaration.command_count;</span>
+<span id="L296">            compiled.wait_count = declaration.wait_count;</span>
+<span id="L297">            compiled.signal_count = declaration.signal_count;</span>
+<span id="L298">            compiled.first_command_index = candidate.commands.size();</span>
+<span id="L299">            compiled.first_payload_reference_index =</span>
+<span id="L300">                candidate.payload_references.size();</span>
+<span id="L301">            compiled.first_timeline_reference_index =</span>
+<span id="L302">                candidate.timeline_references.size();</span>
+<span id="L303">            compiled.completion_timestamp_domain_identity =</span>
+<span id="L304">                backend.completion_timestamp_domain_identity;</span>
+<span id="L305"></span>
+<span id="L306">            std::size_t role_index = 0;</span>
+<span id="L307">            const auto add_reference = [&amp;](const HalV2BufferReference&amp; reference,</span>
+<span id="L308">                                           std::uint32_t command_index,</span>
+<span id="L309">                                           std::uint32_t command_reference_index,</span>
+<span id="L310">                                           DeviceRateReferenceKind kind) -&gt; Status {</span>
+<span id="L311">                if (role_index &gt;= binding.payload_roles.size()) {</span>
+<span id="L312">                    return Status::invalid_config;</span>
+<span id="L313">                }</span>
+<span id="L314">                const DeviceBufferHandle buffer{reference.buffer_token};</span>
+<span id="L315">                const auto* source = find_buffer(buffer);</span>
+<span id="L316">                const auto role = binding.payload_roles[role_index++];</span>
+<span id="L317">                const auto required_access =</span>
+<span id="L318">                    reference.access == RTFW_DEVICE_ACCESS_READ</span>
+<span id="L319">                    ? RTFW_DEVICE_BUFFER_DEVICE_READ</span>
+<span id="L320">                    : reference.access == RTFW_DEVICE_ACCESS_WRITE</span>
+<span id="L321">                    ? RTFW_DEVICE_BUFFER_DEVICE_WRITE</span>
+<span id="L322">                    : reference.access == RTFW_DEVICE_ACCESS_READ_WRITE</span>
+<span id="L323">                    ? RTFW_DEVICE_BUFFER_DEVICE_READ |</span>
+<span id="L324">                          RTFW_DEVICE_BUFFER_DEVICE_WRITE</span>
+<span id="L325">                    : 0u;</span>
+<span id="L326">                if (!source || source-&gt;backend != phase_source-&gt;backend ||</span>
+<span id="L327">                    required_access == 0 ||</span>
+<span id="L328">                    (required_access &amp; ~source-&gt;access) != 0 ||</span>
+<span id="L329">                    !role_matches(role, reference.access) ||</span>
+<span id="L330">                    reference.bytes == 0 || reference.offset &gt; source-&gt;bytes ||</span>
+<span id="L331">                    reference.bytes &gt; source-&gt;bytes - reference.offset ||</span>
+<span id="L332">                    source-&gt;byte_granularity == 0 ||</span>
+<span id="L333">                    source-&gt;offset_granularity == 0 ||</span>
+<span id="L334">                    reference.bytes % source-&gt;byte_granularity != 0 ||</span>
+<span id="L335">                    reference.offset % source-&gt;offset_granularity != 0) {</span>
+<span id="L336">                    return Status::invalid_config;</span>
+<span id="L337">                }</span>
+<span id="L338">                candidate.payload_references.push_back({</span>
+<span id="L339">                    binding.phase,</span>
+<span id="L340">                    phase_source-&gt;backend,</span>
+<span id="L341">                    buffer,</span>
+<span id="L342">                    command_index,</span>
+<span id="L343">                    command_reference_index,</span>
+<span id="L344">                    kind,</span>
+<span id="L345">                    role,</span>
+<span id="L346">                    reference.access,</span>
+<span id="L347">                    reference.offset,</span>
+<span id="L348">                    reference.bytes,</span>
+<span id="L349">                });</span>
+<span id="L350">                return Status::ok;</span>
+<span id="L351">            };</span>
+<span id="L352"></span>
+<span id="L353">            for (std::uint32_t command_index = 0;</span>
+<span id="L354">                 command_index &lt; declaration.command_count; ++command_index) {</span>
+<span id="L355">                const auto&amp; command = declaration.commands[command_index];</span>
+<span id="L356">                CompiledDeviceRateCommand compiled_command;</span>
+<span id="L357">                compiled_command.phase = binding.phase;</span>
+<span id="L358">                compiled_command.command_index = command_index;</span>
+<span id="L359">                compiled_command.kind =</span>
+<span id="L360">                    static_cast&lt;HalV2CommandKind&gt;(command.kind);</span>
+<span id="L361">                compiled_command.operation =</span>
+<span id="L362">                    static_cast&lt;HalV2MemoryOperation&gt;(command.operation);</span>
+<span id="L363">                compiled_command.opcode = command.opcode;</span>
+<span id="L364">                compiled_command.flags = command.flags;</span>
+<span id="L365">                compiled_command.first_payload_reference_index =</span>
+<span id="L366">                    candidate.payload_references.size();</span>
+<span id="L367">                Status reference_status = Status::ok;</span>
+<span id="L368">                if (compiled_command.kind == HalV2CommandKind::dispatch) {</span>
+<span id="L369">                    for (std::uint32_t reference_index = 0;</span>
+<span id="L370">                         reference_index &lt; command.buffer_count;</span>
+<span id="L371">                         ++reference_index) {</span>
+<span id="L372">                        reference_status = add_reference(</span>
+<span id="L373">                            command.buffers[reference_index], command_index,</span>
+<span id="L374">                            reference_index,</span>
+<span id="L375">                            DeviceRateReferenceKind::dispatch_buffer);</span>
+<span id="L376">                        if (reference_status != Status::ok) {</span>
+<span id="L377">                            break;</span>
+<span id="L378">                        }</span>
+<span id="L379">                    }</span>
+<span id="L380">                } else if (compiled_command.kind == HalV2CommandKind::copy) {</span>
+<span id="L381">                    reference_status = add_reference(</span>
+<span id="L382">                        command.source, command_index, 0,</span>
+<span id="L383">                        DeviceRateReferenceKind::copy_source);</span>
+<span id="L384">                    if (reference_status == Status::ok) {</span>
+<span id="L385">                        reference_status = add_reference(</span>
+<span id="L386">                            command.destination, command_index, 1,</span>
+<span id="L387">                            DeviceRateReferenceKind::copy_destination);</span>
+<span id="L388">                    }</span>
+<span id="L389">                } else {</span>
+<span id="L390">                    reference_status = add_reference(</span>
+<span id="L391">                        command.target, command_index, 0,</span>
+<span id="L392">                        DeviceRateReferenceKind::synchronization_target);</span>
+<span id="L393">                }</span>
+<span id="L394">                if (reference_status != Status::ok) {</span>
+<span id="L395">                    return fail(Status::invalid_config,</span>
+<span id="L396">                                &quot;device-rate payload roles do not exactly match the copied declaration&quot;,</span>
+<span id="L397">                                binding.phase);</span>
+<span id="L398">                }</span>
+<span id="L399">                compiled_command.payload_reference_count =</span>
+<span id="L400">                    candidate.payload_references.size() -</span>
+<span id="L401">                    compiled_command.first_payload_reference_index;</span>
+<span id="L402">                candidate.commands.push_back(compiled_command);</span>
+<span id="L403">            }</span>
+<span id="L404">            if (role_index != binding.payload_roles.size()) {</span>
+<span id="L405">                return fail(Status::invalid_config,</span>
+<span id="L406">                            &quot;device-rate payload-role inventory has extra entries&quot;,</span>
+<span id="L407">                            binding.phase);</span>
+<span id="L408">            }</span>
+<span id="L409">            compiled.payload_reference_count =</span>
+<span id="L410">                candidate.payload_references.size() -</span>
+<span id="L411">                compiled.first_payload_reference_index;</span>
+<span id="L412"></span>
+<span id="L413">            for (std::uint32_t index = 0; index &lt; declaration.wait_count;</span>
+<span id="L414">                 ++index) {</span>
+<span id="L415">                const DeviceTimelineHandle timeline{</span>
+<span id="L416">                    declaration.waits[index].timeline_handle};</span>
+<span id="L417">                const auto* source = find_timeline(timeline);</span>
+<span id="L418">                if (!source || source-&gt;backend != phase_source-&gt;backend ||</span>
+<span id="L419">                    std::any_of(</span>
+<span id="L420">                        declaration.waits.begin(),</span>
+<span id="L421">                        declaration.waits.begin() + index,</span>
+<span id="L422">                        [&amp;](const auto&amp; prior) {</span>
+<span id="L423">                            return prior.timeline_handle == timeline.value;</span>
+<span id="L424">                        })) {</span>
+<span id="L425">                    return fail(Status::invalid_config,</span>
+<span id="L426">                                &quot;device-rate wait timeline is foreign or duplicated&quot;,</span>
+<span id="L427">                                binding.phase);</span>
+<span id="L428">                }</span>
+<span id="L429">                candidate.timeline_references.push_back({</span>
+<span id="L430">                    binding.phase, phase_source-&gt;backend, timeline,</span>
+<span id="L431">                    DeviceRateTimelineRole::wait, index});</span>
+<span id="L432">            }</span>
+<span id="L433">            for (std::uint32_t index = 0; index &lt; declaration.signal_count;</span>
+<span id="L434">                 ++index) {</span>
+<span id="L435">                const DeviceTimelineHandle timeline{</span>
+<span id="L436">                    declaration.signals[index].timeline_handle};</span>
+<span id="L437">                const auto* source = find_timeline(timeline);</span>
+<span id="L438">                if (!source || source-&gt;backend != phase_source-&gt;backend ||</span>
+<span id="L439">                    std::any_of(</span>
+<span id="L440">                        declaration.signals.begin(),</span>
+<span id="L441">                        declaration.signals.begin() + index,</span>
+<span id="L442">                        [&amp;](const auto&amp; prior) {</span>
+<span id="L443">                            return prior.timeline_handle == timeline.value;</span>
+<span id="L444">                        })) {</span>
+<span id="L445">                    return fail(Status::invalid_config,</span>
+<span id="L446">                                &quot;device-rate signal timeline is foreign or duplicated&quot;,</span>
+<span id="L447">                                binding.phase);</span>
+<span id="L448">                }</span>
+<span id="L449">                candidate.timeline_references.push_back({</span>
+<span id="L450">                    binding.phase, phase_source-&gt;backend, timeline,</span>
+<span id="L451">                    DeviceRateTimelineRole::signal, index});</span>
+<span id="L452">            }</span>
+<span id="L453">            compiled.timeline_reference_count =</span>
+<span id="L454">                candidate.timeline_references.size() -</span>
+<span id="L455">                compiled.first_timeline_reference_index;</span>
+<span id="L456">            plan_phase_by_registration[binding.phase.index()] =</span>
+<span id="L457">                candidate.phases.size();</span>
+<span id="L458">            backend_used[backend_source_by_index[backend_index]] = true;</span>
+<span id="L459">            candidate.phases.push_back(compiled);</span>
+<span id="L460">            candidate.admission_phases.push_back({</span>
+<span id="L461">                binding.phase, phase_source-&gt;backend,</span>
+<span id="L462">                binding.completion_budget_ns, binding.maximum_in_flight, 0});</span>
+<span id="L463">        }</span>
+<span id="L464"></span>
+<span id="L465">        std::vector&lt;std::size_t&gt; signal_owner(timelines.size(),</span>
+<span id="L466">                                               invalid_reference_release_index);</span>
+<span id="L467">        const auto timeline_ordinal = [&amp;](DeviceTimelineHandle handle) {</span>
+<span id="L468">            if (!handle.valid() || handle.owner() != graph_owner ||</span>
+<span id="L469">                handle.index() &gt;= timeline_source_by_index.size()) {</span>
+<span id="L470">                return invalid_reference_release_index;</span>
+<span id="L471">            }</span>
+<span id="L472">            return timeline_source_by_index[handle.index()];</span>
+<span id="L473">        };</span>
+<span id="L474">        for (std::size_t phase_index = 0;</span>
+<span id="L475">             phase_index &lt; candidate.phases.size(); ++phase_index) {</span>
+<span id="L476">            const auto&amp; phase = candidate.phases[phase_index];</span>
+<span id="L477">            for (std::size_t index = phase.first_timeline_reference_index;</span>
+<span id="L478">                 index &lt; phase.first_timeline_reference_index +</span>
+<span id="L479">                     phase.timeline_reference_count; ++index) {</span>
+<span id="L480">                const auto&amp; reference = candidate.timeline_references[index];</span>
+<span id="L481">                if (reference.role != DeviceRateTimelineRole::signal) {</span>
+<span id="L482">                    continue;</span>
+<span id="L483">                }</span>
+<span id="L484">                const auto ordinal = timeline_ordinal(reference.timeline);</span>
+<span id="L485">                if (ordinal == invalid_reference_release_index ||</span>
+<span id="L486">                    signal_owner[ordinal] != invalid_reference_release_index) {</span>
+<span id="L487">                    return fail(Status::invalid_config,</span>
+<span id="L488">                                &quot;device-rate timeline progress has multiple signal owners&quot;,</span>
+<span id="L489">                                phase.phase);</span>
+<span id="L490">                }</span>
+<span id="L491">                signal_owner[ordinal] = phase_index;</span>
+<span id="L492">            }</span>
+<span id="L493">        }</span>
+<span id="L494">        std::vector&lt;std::vector&lt;std::size_t&gt;&gt; wait_graph(candidate.phases.size());</span>
+<span id="L495">        std::vector&lt;std::size_t&gt; indegree(candidate.phases.size(), 0);</span>
+<span id="L496">        for (std::size_t phase_index = 0;</span>
+<span id="L497">             phase_index &lt; candidate.phases.size(); ++phase_index) {</span>
+<span id="L498">            const auto&amp; phase = candidate.phases[phase_index];</span>
+<span id="L499">            for (std::size_t index = phase.first_timeline_reference_index;</span>
+<span id="L500">                 index &lt; phase.first_timeline_reference_index +</span>
+<span id="L501">                     phase.timeline_reference_count; ++index) {</span>
+<span id="L502">                const auto&amp; reference = candidate.timeline_references[index];</span>
+<span id="L503">                if (reference.role != DeviceRateTimelineRole::wait) {</span>
+<span id="L504">                    continue;</span>
+<span id="L505">                }</span>
+<span id="L506">                const auto ordinal = timeline_ordinal(reference.timeline);</span>
+<span id="L507">                const auto owner = ordinal == invalid_reference_release_index</span>
+<span id="L508">                    ? invalid_reference_release_index</span>
+<span id="L509">                    : signal_owner[ordinal];</span>
+<span id="L510">                if (owner == invalid_reference_release_index) {</span>
+<span id="L511">                    if (ordinal == invalid_reference_release_index ||</span>
+<span id="L512">                        timelines[ordinal].initial_value == 0) {</span>
+<span id="L513">                        return fail(Status::invalid_config,</span>
+<span id="L514">                                    &quot;device-rate wait cannot be proven available&quot;,</span>
+<span id="L515">                                    phase.phase);</span>
+<span id="L516">                    }</span>
+<span id="L517">                    continue;</span>
+<span id="L518">                }</span>
+<span id="L519">                if (owner == phase_index) {</span>
+<span id="L520">                    return fail(Status::invalid_config,</span>
+<span id="L521">                                &quot;device-rate wait graph contains a cycle&quot;,</span>
+<span id="L522">                                phase.phase);</span>
+<span id="L523">                }</span>
+<span id="L524">                if (std::find(wait_graph[owner].begin(), wait_graph[owner].end(),</span>
+<span id="L525">                              phase_index) == wait_graph[owner].end()) {</span>
+<span id="L526">                    wait_graph[owner].push_back(phase_index);</span>
+<span id="L527">                    ++indegree[phase_index];</span>
+<span id="L528">                }</span>
+<span id="L529">            }</span>
+<span id="L530">        }</span>
+<span id="L531">        std::vector&lt;std::size_t&gt; ready;</span>
+<span id="L532">        for (std::size_t index = 0; index &lt; indegree.size(); ++index) {</span>
+<span id="L533">            if (indegree[index] == 0) {</span>
+<span id="L534">                ready.push_back(index);</span>
+<span id="L535">            }</span>
+<span id="L536">        }</span>
+<span id="L537">        std::size_t visited = 0;</span>
+<span id="L538">        while (!ready.empty()) {</span>
+<span id="L539">            const auto current = ready.back();</span>
+<span id="L540">            ready.pop_back();</span>
+<span id="L541">            ++visited;</span>
+<span id="L542">            for (const auto next : wait_graph[current]) {</span>
+<span id="L543">                if (--indegree[next] == 0) {</span>
+<span id="L544">                    ready.push_back(next);</span>
+<span id="L545">                }</span>
+<span id="L546">            }</span>
+<span id="L547">        }</span>
+<span id="L548">        if (visited != candidate.phases.size()) {</span>
+<span id="L549">            return fail(Status::invalid_config,</span>
+<span id="L550">                        &quot;device-rate wait graph contains a cycle&quot;);</span>
+<span id="L551">        }</span>
+<span id="L552"></span>
+<span id="L553">        for (std::size_t index = 0; index &lt; backends.size(); ++index) {</span>
+<span id="L554">            if (!backend_used[index]) {</span>
+<span id="L555">                continue;</span>
+<span id="L556">            }</span>
+<span id="L557">            candidate.admission_backends.push_back({</span>
+<span id="L558">                backends[index].backend,</span>
+<span id="L559">                backends[index].capabilities.max_in_flight_batches,</span>
+<span id="L560">                std::min&lt;std::uint32_t&gt;(</span>
+<span id="L561">                    runtime_completion_batch_capacity,</span>
+<span id="L562">                    backends[index].capabilities.completion_batch_capacity),</span>
+<span id="L563">                0,</span>
+<span id="L564">                0,</span>
+<span id="L565">            });</span>
+<span id="L566">        }</span>
+<span id="L567">        std::vector&lt;std::size_t&gt; admission_backend_by_source(</span>
+<span id="L568">            backends.size(), invalid_reference_release_index);</span>
+<span id="L569">        for (std::size_t index = 0;</span>
+<span id="L570">             index &lt; candidate.admission_backends.size(); ++index) {</span>
+<span id="L571">            const auto backend = candidate.admission_backends[index].backend;</span>
+<span id="L572">            admission_backend_by_source[</span>
+<span id="L573">                backend_source_by_index[backend.index()]] = index;</span>
+<span id="L574">        }</span>
+<span id="L575"></span>
+<span id="L576">        struct Event {</span>
+<span id="L577">            std::uint64_t time = 0;</span>
+<span id="L578">            bool release = false;</span>
+<span id="L579">            std::size_t interval = 0;</span>
+<span id="L580">        };</span>
+<span id="L581">        std::vector&lt;Event&gt; events;</span>
+<span id="L582">        std::vector&lt;std::pair&lt;std::uint64_t, std::size_t&gt;&gt; completions;</span>
+<span id="L583">        events.reserve(rate_plan.releases.size() * 2);</span>
+<span id="L584">        completions.reserve(rate_plan.releases.size());</span>
+<span id="L585">        const auto supercycle = rate_plan.supercycle_ns;</span>
+<span id="L586">        for (std::size_t reference_index = 0;</span>
+<span id="L587">             reference_index &lt; rate_plan.releases.size(); ++reference_index) {</span>
+<span id="L588">            const auto&amp; release = rate_plan.releases[reference_index];</span>
+<span id="L589">            if (release.phase_kind != RatePhaseKind::device) {</span>
+<span id="L590">                continue;</span>
+<span id="L591">            }</span>
+<span id="L592">            if (release.phase.index() &gt;= plan_phase_by_registration.size() ||</span>
+<span id="L593">                plan_phase_by_registration[release.phase.index()] ==</span>
+<span id="L594">                    invalid_reference_release_index) {</span>
+<span id="L595">                return fail(Status::invalid_config,</span>
+<span id="L596">                            &quot;active device reference has no admitted command-batch policy&quot;,</span>
+<span id="L597">                            release.phase, reference_index);</span>
+<span id="L598">            }</span>
+<span id="L599">            const auto phase_index =</span>
+<span id="L600">                plan_phase_by_registration[release.phase.index()];</span>
+<span id="L601">            const auto&amp; phase = candidate.phases[phase_index];</span>
+<span id="L602">            std::uint64_t budget_deadline = 0;</span>
+<span id="L603">            if (!checked_add(release.release_time_ns,</span>
+<span id="L604">                             phase.completion_budget_ns, budget_deadline)) {</span>
+<span id="L605">                return fail(Status::capacity_exceeded,</span>
+<span id="L606">                            &quot;device-rate completion-budget arithmetic overflowed&quot;,</span>
+<span id="L607">                            release.phase, reference_index);</span>
+<span id="L608">            }</span>
+<span id="L609">            const auto completion =</span>
+<span id="L610">                std::min(release.deadline_time_ns, budget_deadline);</span>
+<span id="L611">            if (completion &lt;= release.release_time_ns ||</span>
+<span id="L612">                completion - release.release_time_ns &gt; supercycle) {</span>
+<span id="L613">                return fail(Status::invalid_config,</span>
+<span id="L614">                            &quot;device-rate completion cannot drain within one repeating horizon&quot;,</span>
+<span id="L615">                            release.phase, reference_index);</span>
+<span id="L616">            }</span>
+<span id="L617">            const auto interval_index = candidate.admission_intervals.size();</span>
+<span id="L618">            const auto carry = completion &gt; supercycle;</span>
+<span id="L619">            const auto phase_limit = phase.maximum_in_flight;</span>
+<span id="L620">            const auto backend_source =</span>
+<span id="L621">                backend_source_by_index[phase.backend.index()];</span>
+<span id="L622">            const auto&amp; backend_report = candidate.admission_backends[</span>
+<span id="L623">                admission_backend_by_source[backend_source]];</span>
+<span id="L624">            const auto backend_limit = backend_report.maximum_in_flight;</span>
+<span id="L625">            auto constraint = DeviceRateAdmissionConstraint::phase_in_flight;</span>
+<span id="L626">            auto constraint_limit = phase_limit;</span>
+<span id="L627">            if (backend_limit &lt; constraint_limit) {</span>
+<span id="L628">                constraint = DeviceRateAdmissionConstraint::backend_in_flight;</span>
+<span id="L629">                constraint_limit = backend_limit;</span>
+<span id="L630">            }</span>
+<span id="L631">            if (runtime_outstanding_capacity &lt; constraint_limit) {</span>
+<span id="L632">                constraint = DeviceRateAdmissionConstraint::runtime_outstanding;</span>
+<span id="L633">                constraint_limit = runtime_outstanding_capacity;</span>
+<span id="L634">            }</span>
+<span id="L635">            candidate.admission_intervals.push_back({</span>
+<span id="L636">                reference_index, release.phase, release.domain, phase.backend,</span>
+<span id="L637">                release.release_time_ns, completion, release.substep_ordinal,</span>
+<span id="L638">                release.optional, carry, constraint, constraint_limit, 0});</span>
+<span id="L639">            if (release.optional) {</span>
+<span id="L640">                continue;</span>
+<span id="L641">            }</span>
+<span id="L642">            events.push_back({release.release_time_ns, true, interval_index});</span>
+<span id="L643">            if (carry) {</span>
+<span id="L644">                events.push_back({completion - supercycle, false,</span>
+<span id="L645">                                  interval_index});</span>
+<span id="L646">            } else {</span>
+<span id="L647">                events.push_back({completion, false, interval_index});</span>
+<span id="L648">            }</span>
+<span id="L649">            completions.push_back({completion % supercycle, interval_index});</span>
+<span id="L650">        }</span>
+<span id="L651"></span>
+<span id="L652">        std::sort(events.begin(), events.end(), [](const auto&amp; left,</span>
+<span id="L653">                                                   const auto&amp; right) {</span>
+<span id="L654">            return std::tie(left.time, left.release, left.interval) &lt;</span>
+<span id="L655">                std::tie(right.time, right.release, right.interval);</span>
+<span id="L656">        });</span>
+<span id="L657">        std::vector&lt;std::uint32_t&gt; phase_demand(candidate.phases.size(), 0);</span>
+<span id="L658">        std::vector&lt;std::uint32_t&gt; backend_demand(backends.size(), 0);</span>
+<span id="L659">        std::uint32_t global_demand = 0;</span>
+<span id="L660">        const auto phase_index_for = [&amp;](PhaseHandle phase) {</span>
+<span id="L661">            return plan_phase_by_registration[phase.index()];</span>
+<span id="L662">        };</span>
+<span id="L663">        const auto backend_index_for = [&amp;](DeviceBackendHandle backend) {</span>
+<span id="L664">            return backend_source_by_index[backend.index()];</span>
+<span id="L665">        };</span>
+<span id="L666">        for (std::size_t interval_index = 0;</span>
+<span id="L667">             interval_index &lt; candidate.admission_intervals.size();</span>
+<span id="L668">             ++interval_index) {</span>
+<span id="L669">            const auto&amp; interval = candidate.admission_intervals[interval_index];</span>
+<span id="L670">            if (interval.optional || !interval.carries_across_supercycle) {</span>
+<span id="L671">                continue;</span>
+<span id="L672">            }</span>
+<span id="L673">            const auto phase_index = phase_index_for(interval.phase);</span>
+<span id="L674">            const auto backend_index = backend_index_for(interval.backend);</span>
+<span id="L675">            ++phase_demand[phase_index];</span>
+<span id="L676">            ++backend_demand[backend_index];</span>
+<span id="L677">            ++global_demand;</span>
+<span id="L678">            if (phase_demand[phase_index] &gt;</span>
+<span id="L679">                    candidate.phases[phase_index].maximum_in_flight ||</span>
+<span id="L680">                backend_demand[backend_index] &gt;</span>
+<span id="L681">                    backends[backend_index].capabilities.max_in_flight_batches ||</span>
+<span id="L682">                global_demand &gt; runtime_outstanding_capacity) {</span>
+<span id="L683">                return fail(Status::invalid_config,</span>
+<span id="L684">                            &quot;device-rate cyclic carry exceeds an in-flight capacity&quot;,</span>
+<span id="L685">                            interval.phase, interval.reference_index);</span>
+<span id="L686">            }</span>
+<span id="L687">        }</span>
+<span id="L688">        const auto initial_phase_demand = phase_demand;</span>
+<span id="L689">        const auto initial_backend_demand = backend_demand;</span>
+<span id="L690">        const auto initial_global_demand = global_demand;</span>
+<span id="L691">        for (std::size_t index = 0; index &lt; phase_demand.size(); ++index) {</span>
+<span id="L692">            candidate.admission_phases[index].peak_in_flight =</span>
+<span id="L693">                phase_demand[index];</span>
+<span id="L694">        }</span>
+<span id="L695">        for (auto&amp; report : candidate.admission_backends) {</span>
+<span id="L696">            report.peak_in_flight =</span>
+<span id="L697">                backend_demand[backend_index_for(report.backend)];</span>
+<span id="L698">        }</span>
+<span id="L699">        candidate.report.peak_global_in_flight = global_demand;</span>
+<span id="L700">        for (std::size_t event_index = 0; event_index &lt; events.size();) {</span>
+<span id="L701">            const auto time = events[event_index].time;</span>
+<span id="L702">            std::size_t cursor = event_index;</span>
+<span id="L703">            while (cursor &lt; events.size() &amp;&amp; events[cursor].time == time &amp;&amp;</span>
+<span id="L704">                   !events[cursor].release) {</span>
+<span id="L705">                const auto&amp; interval =</span>
+<span id="L706">                    candidate.admission_intervals[events[cursor].interval];</span>
+<span id="L707">                --phase_demand[phase_index_for(interval.phase)];</span>
+<span id="L708">                --backend_demand[backend_index_for(interval.backend)];</span>
+<span id="L709">                --global_demand;</span>
+<span id="L710">                ++cursor;</span>
+<span id="L711">            }</span>
+<span id="L712">            while (cursor &lt; events.size() &amp;&amp; events[cursor].time == time &amp;&amp;</span>
+<span id="L713">                   events[cursor].release) {</span>
+<span id="L714">                auto&amp; interval =</span>
+<span id="L715">                    candidate.admission_intervals[events[cursor].interval];</span>
+<span id="L716">                const auto phase_index = phase_index_for(interval.phase);</span>
+<span id="L717">                const auto backend_index = backend_index_for(interval.backend);</span>
+<span id="L718">                ++phase_demand[phase_index];</span>
+<span id="L719">                ++backend_demand[backend_index];</span>
+<span id="L720">                ++global_demand;</span>
+<span id="L721">                interval.demand_at_release = phase_demand[phase_index];</span>
+<span id="L722">                auto&amp; phase_report = candidate.admission_phases[phase_index];</span>
+<span id="L723">                phase_report.peak_in_flight = std::max(</span>
+<span id="L724">                    phase_report.peak_in_flight, phase_demand[phase_index]);</span>
+<span id="L725">                auto&amp; backend_report = candidate.admission_backends[</span>
+<span id="L726">                    admission_backend_by_source[backend_index]];</span>
+<span id="L727">                backend_report.peak_in_flight = std::max(</span>
+<span id="L728">                    backend_report.peak_in_flight,</span>
+<span id="L729">                    backend_demand[backend_index]);</span>
+<span id="L730">                candidate.report.peak_global_in_flight = std::max(</span>
+<span id="L731">                    candidate.report.peak_global_in_flight, global_demand);</span>
+<span id="L732">                if (phase_demand[phase_index] &gt;</span>
+<span id="L733">                        candidate.phases[phase_index].maximum_in_flight ||</span>
+<span id="L734">                    backend_demand[backend_index] &gt;</span>
+<span id="L735">                        backends[backend_index].capabilities.max_in_flight_batches ||</span>
+<span id="L736">                    global_demand &gt; runtime_outstanding_capacity) {</span>
+<span id="L737">                    return fail(Status::invalid_config,</span>
+<span id="L738">                                &quot;device-rate release exceeds an in-flight capacity&quot;,</span>
+<span id="L739">                                interval.phase, interval.reference_index);</span>
+<span id="L740">                }</span>
+<span id="L741">                ++cursor;</span>
+<span id="L742">            }</span>
+<span id="L743">            event_index = cursor;</span>
+<span id="L744">        }</span>
+<span id="L745">        if (global_demand != initial_global_demand ||</span>
+<span id="L746">            phase_demand != initial_phase_demand ||</span>
+<span id="L747">            backend_demand != initial_backend_demand) {</span>
+<span id="L748">            return fail(Status::invalid_config,</span>
+<span id="L749">                        &quot;device-rate admission is not cyclically balanced&quot;);</span>
+<span id="L750">        }</span>
+<span id="L751"></span>
+<span id="L752">        std::sort(completions.begin(), completions.end(),</span>
+<span id="L753">                  [&amp;](const auto&amp; left, const auto&amp; right) {</span>
+<span id="L754">            const auto&amp; left_interval = candidate.admission_intervals[left.second];</span>
+<span id="L755">            const auto&amp; right_interval = candidate.admission_intervals[right.second];</span>
+<span id="L756">            return std::tie(left.first, left_interval.backend.value,</span>
+<span id="L757">                            left_interval.reference_index) &lt;</span>
+<span id="L758">                std::tie(right.first, right_interval.backend.value,</span>
+<span id="L759">                         right_interval.reference_index);</span>
+<span id="L760">        });</span>
+<span id="L761">        for (std::size_t index = 0; index &lt; completions.size();) {</span>
+<span id="L762">            const auto&amp; first = candidate.admission_intervals[</span>
+<span id="L763">                completions[index].second];</span>
+<span id="L764">            std::size_t end = index + 1;</span>
+<span id="L765">            while (end &lt; completions.size() &amp;&amp;</span>
+<span id="L766">                   completions[end].first == completions[index].first &amp;&amp;</span>
+<span id="L767">                   candidate.admission_intervals[completions[end].second].backend ==</span>
+<span id="L768">                       first.backend) {</span>
+<span id="L769">                ++end;</span>
+<span id="L770">            }</span>
+<span id="L771">            const auto count = static_cast&lt;std::uint32_t&gt;(end - index);</span>
+<span id="L772">            auto&amp; backend_report = candidate.admission_backends[</span>
+<span id="L773">                admission_backend_by_source[</span>
+<span id="L774">                    backend_source_by_index[first.backend.index()]]];</span>
+<span id="L775">            backend_report.peak_completions =</span>
+<span id="L776">                std::max(backend_report.peak_completions, count);</span>
+<span id="L777">            if (count &gt; backend_report.completion_batch_capacity) {</span>
+<span id="L778">                return fail(Status::invalid_config,</span>
+<span id="L779">                            &quot;device-rate poll boundary exceeds completion-batch capacity&quot;,</span>
+<span id="L780">                            first.phase, first.reference_index);</span>
+<span id="L781">            }</span>
+<span id="L782">            index = end;</span>
+<span id="L783">        }</span>
+<span id="L784"></span>
+<span id="L785">        candidate.report.supercycle_ns = supercycle;</span>
+<span id="L786">        candidate.report.runtime_outstanding_capacity =</span>
+<span id="L787">            runtime_outstanding_capacity;</span>
+<span id="L788">        candidate.report.runtime_completion_batch_capacity =</span>
+<span id="L789">            runtime_completion_batch_capacity;</span>
+<span id="L790">        candidate.report.backend_count = candidate.admission_backends.size();</span>
+<span id="L791">        candidate.report.phase_count = candidate.admission_phases.size();</span>
+<span id="L792">        candidate.report.interval_count =</span>
+<span id="L793">            candidate.admission_intervals.size();</span>
+<span id="L794">        output = std::move(candidate);</span>
+<span id="L795">        return Status::ok;</span>
+<span id="L796">    } catch (const std::bad_alloc&amp;) {</span>
+<span id="L797">        return fail(Status::resource_exhausted, nullptr);</span>
+<span id="L798">    } catch (...) {</span>
+<span id="L799">        return fail(Status::internal_error, nullptr);</span>
+<span id="L800">    }</span>
+<span id="L801">}</span>
+<span id="L802"></span>
+<span id="L803">Status compile_rate_dispatch(</span>
+<span id="L804">    std::uint32_t graph_owner,</span>
+<span id="L805">    DeterminismTier determinism_tier,</span>
+<span id="L806">    const RateExecutionPolicy&amp; policy,</span>
+<span id="L807">    std::span&lt;const GraphDependency&gt; dependencies,</span>
+<span id="L808">    const CompiledRatePlan&amp; rate_plan,</span>
+<span id="L809">    std::span&lt;const CrossRateChannelSpec&gt; channels,</span>
+<span id="L810">    const CompiledDeviceRatePlan* device_rate_plan,</span>
+<span id="L811">    CompiledRateDispatchPlan&amp; output,</span>
+<span id="L812">    RateDispatchDiagnostic&amp; diagnostic) noexcept {</span>
+<span id="L813">    diagnostic = {};</span>
+<span id="L814">    if (policy.maximum_dispatch_records_per_step == 0 ||</span>
+<span id="L815">        policy.maximum_dispatch_records_per_step &gt;</span>
+<span id="L816">            reference_release_capacity ||</span>
+<span id="L817">        policy.host_policy_version == 0 ||</span>
+<span id="L818">        policy.consecutive_late_threshold == 0 ||</span>
+<span id="L819">        policy.consecutive_on_time_threshold == 0 ||</span>
+<span id="L820">        policy.consecutive_late_threshold &gt; rate_policy_threshold_limit ||</span>
+<span id="L821">        policy.consecutive_on_time_threshold &gt; rate_policy_threshold_limit ||</span>
+<span id="L822">        policy.rate_telemetry_capacity &gt; rate_telemetry_capacity_limit) {</span>
+<span id="L823">        diagnostic = {</span>
+<span id="L824">            Status::invalid_config,</span>
+<span id="L825">            &quot;active rate execution requires valid positive policy fields and bounded telemetry&quot;};</span>
+<span id="L826">        return diagnostic.status;</span>
+<span id="L827">    }</span>
+<span id="L828">    if (determinism_tier != DeterminismTier::unspecified) {</span>
+<span id="L829">        diagnostic = {</span>
+<span id="L830">            Status::invalid_config,</span>
+<span id="L831">            &quot;active M16-03 rate execution supports only D0 unspecified&quot;};</span>
+<span id="L832">        return diagnostic.status;</span>
+<span id="L833">    }</span>
+<span id="L834">    if (rate_plan.domains.empty() || rate_plan.releases.empty() ||</span>
+<span id="L835">        rate_plan.supercycle_ns == 0 ||</span>
+<span id="L836">        rate_plan.domains.size() &gt; rate_domain_capacity) {</span>
+<span id="L837">        diagnostic = {</span>
+<span id="L838">            Status::invalid_config,</span>
+<span id="L839">            &quot;active rate execution requires a finite explicit rate plan&quot;};</span>
+<span id="L840">        return diagnostic.status;</span>
+<span id="L841">    }</span>
+<span id="L842"></span>
+<span id="L843">    try {</span>
+<span id="L844">        std::array&lt;bool, rate_domain_capacity&gt; producer_domains{};</span>
+<span id="L845">        std::array&lt;bool, rate_domain_capacity&gt; cpu_domains{};</span>
+<span id="L846">        for (const auto&amp; binding : rate_plan.bindings) {</span>
+<span id="L847">            if (binding.phase_kind == RatePhaseKind::cpu &amp;&amp;</span>
+<span id="L848">                binding.domain.valid() &amp;&amp;</span>
+<span id="L849">                binding.domain.index() &lt; rate_plan.domains.size()) {</span>
+<span id="L850">                cpu_domains[binding.domain.index()] = true;</span>
+<span id="L851">            }</span>
+<span id="L852">        }</span>
+<span id="L853">        for (const auto&amp; channel : channels) {</span>
+<span id="L854">            if (!channel.producer.valid() ||</span>
+<span id="L855">                channel.producer.owner() != graph_owner ||</span>
+<span id="L856">                channel.producer.index() &gt;= rate_plan.bindings.size() ||</span>
+<span id="L857">                !channel.consumer.valid() ||</span>
+<span id="L858">                channel.consumer.owner() != graph_owner ||</span>
+<span id="L859">                channel.consumer.index() &gt;= rate_plan.bindings.size()) {</span>
+<span id="L860">                diagnostic = {</span>
+<span id="L861">                    Status::invalid_handle,</span>
+<span id="L862">                    &quot;active cross-rate endpoint is invalid&quot;};</span>
+<span id="L863">                return diagnostic.status;</span>
+<span id="L864">            }</span>
+<span id="L865">            const auto producer_binding = std::find_if(</span>
+<span id="L866">                rate_plan.bindings.begin(),</span>
+<span id="L867">                rate_plan.bindings.end(),</span>
+<span id="L868">                [&amp;](const CompiledRateBinding&amp; candidate) {</span>
+<span id="L869">                    return candidate.phase == channel.producer;</span>
+<span id="L870">                });</span>
+<span id="L871">            const auto consumer_binding = std::find_if(</span>
+<span id="L872">                rate_plan.bindings.begin(),</span>
+<span id="L873">                rate_plan.bindings.end(),</span>
+<span id="L874">                [&amp;](const CompiledRateBinding&amp; candidate) {</span>
+<span id="L875">                    return candidate.phase == channel.consumer;</span>
+<span id="L876">                });</span>
+<span id="L877">            if (producer_binding == rate_plan.bindings.end() ||</span>
+<span id="L878">                consumer_binding == rate_plan.bindings.end() ||</span>
+<span id="L879">                !producer_binding-&gt;domain.valid() ||</span>
+<span id="L880">                !consumer_binding-&gt;domain.valid() ||</span>
+<span id="L881">                producer_binding-&gt;domain.index() &gt;= rate_plan.domains.size() ||</span>
+<span id="L882">                consumer_binding-&gt;domain.index() &gt;= rate_plan.domains.size()) {</span>
+<span id="L883">                diagnostic = {</span>
+<span id="L884">                    Status::invalid_handle,</span>
+<span id="L885">                    &quot;active cross-rate endpoint has no valid domain&quot;};</span>
+<span id="L886">                return diagnostic.status;</span>
+<span id="L887">            }</span>
+<span id="L888">            if (rate_plan.domains[producer_binding-&gt;domain.index()].optional ||</span>
+<span id="L889">                rate_plan.domains[consumer_binding-&gt;domain.index()].optional) {</span>
+<span id="L890">                diagnostic = {</span>
+<span id="L891">                    Status::invalid_config,</span>
+<span id="L892">                    &quot;optional domains cannot produce or consume active cross-rate channels&quot;};</span>
+<span id="L893">                return diagnostic.status;</span>
+<span id="L894">            }</span>
+<span id="L895">            producer_domains[producer_binding-&gt;domain.index()] = true;</span>
+<span id="L896">        }</span>
+<span id="L897"></span>
+<span id="L898">        for (std::size_t index = 0;</span>
+<span id="L899">             index &lt; rate_plan.domains.size();</span>
+<span id="L900">             ++index) {</span>
+<span id="L901">            const auto&amp; domain = rate_plan.domains[index];</span>
+<span id="L902">            if (domain.period_ns == 0 ||</span>
+<span id="L903">                domain.relative_deadline_ns == 0 ||</span>
+<span id="L904">                (cpu_domains[index] &amp;&amp;</span>
+<span id="L905">                 domain.relative_deadline_ns &gt; domain.period_ns) ||</span>
+<span id="L906">                !valid_action(domain.late_action) ||</span>
+<span id="L907">                (domain.late_action == RateLateAction::bounded_catch_up &amp;&amp;</span>
+<span id="L908">                 domain.bounded_catch_up_limit == 0) ||</span>
+<span id="L909">                (domain.late_action != RateLateAction::bounded_catch_up &amp;&amp;</span>
+<span id="L910">                 domain.bounded_catch_up_limit != 0) ||</span>
+<span id="L911">                (domain.late_action == RateLateAction::skip &amp;&amp;</span>
+<span id="L912">                 producer_domains[index])) {</span>
+<span id="L913">                diagnostic = {</span>
+<span id="L914">                    Status::invalid_config,</span>
+<span id="L915">                    &quot;active rate domain has invalid deadline, budget, optionality, late action, or catch-up bound&quot;};</span>
+<span id="L916">                return diagnostic.status;</span>
+<span id="L917">            }</span>
+<span id="L918">        }</span>
+<span id="L919">        for (const auto&amp; binding : rate_plan.bindings) {</span>
+<span id="L920">            if (binding.phase_kind == RatePhaseKind::device &amp;&amp;</span>
+<span id="L921">                (!device_rate_plan ||</span>
+<span id="L922">                 std::none_of(</span>
+<span id="L923">                     device_rate_plan-&gt;phases.begin(),</span>
+<span id="L924">                     device_rate_plan-&gt;phases.end(),</span>
+<span id="L925">                     [&amp;](const auto&amp; phase) {</span>
+<span id="L926">                         return phase.phase == binding.phase &amp;&amp;</span>
+<span id="L927">                             phase.domain == binding.domain;</span>
+<span id="L928">                     }))) {</span>
+<span id="L929">                diagnostic = {</span>
+<span id="L930">                    Status::invalid_config,</span>
+<span id="L931">                    &quot;active device rate execution requires an admitted HAL-v2 command-batch phase&quot;};</span>
+<span id="L932">                return diagnostic.status;</span>
+<span id="L933">            }</span>
+<span id="L934">        }</span>
+<span id="L935"></span>
+<span id="L936">        std::vector&lt;std::size_t&gt; domain_by_phase(</span>
+<span id="L937">            rate_plan.bindings.size(),</span>
+<span id="L938">            std::numeric_limits&lt;std::size_t&gt;::max());</span>
+<span id="L939">        for (const auto&amp; binding : rate_plan.bindings) {</span>
+<span id="L940">            if (!binding.phase.valid() ||</span>
+<span id="L941">                binding.phase.owner() != graph_owner ||</span>
+<span id="L942">                binding.phase.index() &gt;= domain_by_phase.size() ||</span>
+<span id="L943">                !binding.domain.valid() ||</span>
+<span id="L944">                binding.domain.owner() != graph_owner ||</span>
+<span id="L945">                binding.domain.index() &gt;= rate_plan.domains.size()) {</span>
+<span id="L946">                diagnostic = {</span>
+<span id="L947">                    Status::invalid_handle,</span>
+<span id="L948">                    &quot;active rate binding is invalid&quot;};</span>
+<span id="L949">                return diagnostic.status;</span>
+<span id="L950">            }</span>
+<span id="L951">            domain_by_phase[binding.phase.index()] = binding.domain.index();</span>
+<span id="L952">        }</span>
+<span id="L953">        for (const auto&amp; dependency : dependencies) {</span>
+<span id="L954">            if (!dependency.prerequisite.valid() ||</span>
+<span id="L955">                !dependency.dependent.valid() ||</span>
+<span id="L956">                dependency.prerequisite.index() &gt;= domain_by_phase.size() ||</span>
+<span id="L957">                dependency.dependent.index() &gt;= domain_by_phase.size() ||</span>
+<span id="L958">                domain_by_phase[dependency.prerequisite.index()] !=</span>
+<span id="L959">                    domain_by_phase[dependency.dependent.index()]) {</span>
+<span id="L960">                diagnostic = {</span>
+<span id="L961">                    Status::invalid_config,</span>
+<span id="L962">                    &quot;active rate execution rejects ordinary cross-domain graph dependencies; use a cross-rate channel&quot;};</span>
+<span id="L963">                return diagnostic.status;</span>
+<span id="L964">            }</span>
+<span id="L965">        }</span>
+<span id="L966"></span>
+<span id="L967">        CompiledRateDispatchPlan candidate;</span>
+<span id="L968">        candidate.policy = policy;</span>
+<span id="L969">        candidate.admission.reserve(rate_plan.releases.size());</span>
+<span id="L970">        candidate.groups.reserve(rate_plan.releases.size());</span>
+<span id="L971">        candidate.optional_shed_order.reserve(rate_plan.domains.size());</span>
+<span id="L972">        candidate.device_phase_by_reference.assign(</span>
+<span id="L973">            rate_plan.releases.size(),</span>
+<span id="L974">            std::numeric_limits&lt;std::size_t&gt;::max());</span>
+<span id="L975">        candidate.producer_channel_offsets.assign(</span>
+<span id="L976">            rate_plan.bindings.size() + 1, 0);</span>
+<span id="L977">        const auto has_device_consumer = std::any_of(</span>
+<span id="L978">            channels.begin(), channels.end(),</span>
+<span id="L979">            [](const CrossRateChannelSpec&amp; channel) {</span>
+<span id="L980">                return channel.consumer_device.valid();</span>
+<span id="L981">            });</span>
+<span id="L982">        if (has_device_consumer) {</span>
+<span id="L983">            candidate.consumer_channel_offsets.assign(</span>
+<span id="L984">                rate_plan.bindings.size() + 1, 0);</span>
+<span id="L985">        }</span>
+<span id="L986">        for (const auto&amp; channel : channels) {</span>
+<span id="L987">            ++candidate.producer_channel_offsets[</span>
+<span id="L988">                channel.producer.index() + 1];</span>
+<span id="L989">            if (has_device_consumer &amp;&amp; channel.consumer_device.valid()) {</span>
+<span id="L990">                ++candidate.consumer_channel_offsets[</span>
+<span id="L991">                    channel.consumer.index() + 1];</span>
+<span id="L992">            }</span>
+<span id="L993">        }</span>
+<span id="L994">        for (std::size_t index = 1;</span>
+<span id="L995">             index &lt; candidate.producer_channel_offsets.size(); ++index) {</span>
+<span id="L996">            candidate.producer_channel_offsets[index] +=</span>
+<span id="L997">                candidate.producer_channel_offsets[index - 1];</span>
+<span id="L998">            if (has_device_consumer) {</span>
+<span id="L999">                candidate.consumer_channel_offsets[index] +=</span>
+<span id="L1000">                    candidate.consumer_channel_offsets[index - 1];</span>
+<span id="L1001">            }</span>
+<span id="L1002">        }</span>
+<span id="L1003">        candidate.producer_channel_indices.resize(channels.size());</span>
+<span id="L1004">        if (has_device_consumer) {</span>
+<span id="L1005">            candidate.consumer_channel_indices.resize(</span>
+<span id="L1006">                static_cast&lt;std::size_t&gt;(std::count_if(</span>
+<span id="L1007">                    channels.begin(), channels.end(),</span>
+<span id="L1008">                    [](const CrossRateChannelSpec&amp; channel) {</span>
+<span id="L1009">                        return channel.consumer_device.valid();</span>
+<span id="L1010">                    })));</span>
+<span id="L1011">        }</span>
+<span id="L1012">        auto next_producer_channel = candidate.producer_channel_offsets;</span>
+<span id="L1013">        auto next_consumer_channel = candidate.consumer_channel_offsets;</span>
+<span id="L1014">        for (std::size_t channel_index = 0;</span>
+<span id="L1015">             channel_index &lt; channels.size(); ++channel_index) {</span>
+<span id="L1016">            const auto phase_index = channels[channel_index].producer.index();</span>
+<span id="L1017">            candidate.producer_channel_indices[</span>
+<span id="L1018">                next_producer_channel[phase_index]++] = channel_index;</span>
+<span id="L1019">            if (has_device_consumer &amp;&amp;</span>
+<span id="L1020">                channels[channel_index].consumer_device.valid()) {</span>
+<span id="L1021">                const auto consumer_phase_index =</span>
+<span id="L1022">                    channels[channel_index].consumer.index();</span>
+<span id="L1023">                candidate.consumer_channel_indices[</span>
+<span id="L1024">                    next_consumer_channel[consumer_phase_index]++] =</span>
+<span id="L1025">                        channel_index;</span>
+<span id="L1026">            }</span>
+<span id="L1027">        }</span>
+<span id="L1028">        for (std::size_t index = 0; index &lt; rate_plan.domains.size(); ++index) {</span>
+<span id="L1029">            if (rate_plan.domains[index].optional) {</span>
+<span id="L1030">                candidate.optional_shed_order.push_back(index);</span>
+<span id="L1031">            }</span>
+<span id="L1032">        }</span>
+<span id="L1033">        std::sort(</span>
+<span id="L1034">            candidate.optional_shed_order.begin(),</span>
+<span id="L1035">            candidate.optional_shed_order.end(),</span>
+<span id="L1036">            [&amp;](std::size_t left, std::size_t right) {</span>
+<span id="L1037">                const auto left_criticality = static_cast&lt;std::uint8_t&gt;(</span>
+<span id="L1038">                    rate_plan.domains[left].criticality);</span>
+<span id="L1039">                const auto right_criticality = static_cast&lt;std::uint8_t&gt;(</span>
+<span id="L1040">                    rate_plan.domains[right].criticality);</span>
+<span id="L1041">                return left_criticality != right_criticality</span>
+<span id="L1042">                    ? left_criticality &lt; right_criticality</span>
+<span id="L1043">                    : left &gt; right;</span>
+<span id="L1044">            });</span>
+<span id="L1045"></span>
+<span id="L1046">        std::uint64_t previous_finish = 0;</span>
+<span id="L1047">        for (std::size_t index = 0;</span>
+<span id="L1048">             index &lt; rate_plan.releases.size();</span>
+<span id="L1049">             ++index) {</span>
+<span id="L1050">            const auto&amp; release = rate_plan.releases[index];</span>
+<span id="L1051">            if ((release.phase_kind != RatePhaseKind::cpu &amp;&amp;</span>
+<span id="L1052">                 release.phase_kind != RatePhaseKind::device) ||</span>
+<span id="L1053">                release.relative_deadline_ns == 0 ||</span>
+<span id="L1054">                release.domain_registration_index &gt;=</span>
+<span id="L1055">                    rate_plan.domains.size()) {</span>
+<span id="L1056">                diagnostic = {</span>
+<span id="L1057">                    Status::invalid_config,</span>
+<span id="L1058">                    &quot;active reference record is ambiguous or unsupported&quot;,</span>
+<span id="L1059">                    index};</span>
+<span id="L1060">                return diagnostic.status;</span>
+<span id="L1061">            }</span>
+<span id="L1062">            if (release.phase_kind == RatePhaseKind::cpu &amp;&amp;</span>
+<span id="L1063">                release.budget_wcet_ns == 0) {</span>
+<span id="L1064">                diagnostic = {</span>
+<span id="L1065">                    Status::invalid_config,</span>
+<span id="L1066">                    &quot;active CPU reference record requires a declared budget&quot;,</span>
+<span id="L1067">                    index};</span>
+<span id="L1068">                return diagnostic.status;</span>
+<span id="L1069">            }</span>
+<span id="L1070">            if (release.phase_kind == RatePhaseKind::device) {</span>
+<span id="L1071">                const auto admitted = std::find_if(</span>
+<span id="L1072">                    device_rate_plan-&gt;phases.begin(),</span>
+<span id="L1073">                    device_rate_plan-&gt;phases.end(),</span>
+<span id="L1074">                    [&amp;](const CompiledDeviceRatePhase&amp; phase) {</span>
+<span id="L1075">                        return phase.phase == release.phase &amp;&amp;</span>
+<span id="L1076">                               phase.domain == release.domain;</span>
+<span id="L1077">                    });</span>
+<span id="L1078">                if (admitted == device_rate_plan-&gt;phases.end()) {</span>
+<span id="L1079">                    diagnostic = {</span>
+<span id="L1080">                        Status::invalid_config,</span>
+<span id="L1081">                        &quot;active device reference has no admitted execution record&quot;,</span>
+<span id="L1082">                        index};</span>
+<span id="L1083">                    return diagnostic.status;</span>
+<span id="L1084">                }</span>
+<span id="L1085">                candidate.device_phase_by_reference[index] =</span>
+<span id="L1086">                    static_cast&lt;std::size_t&gt;(std::distance(</span>
+<span id="L1087">                        device_rate_plan-&gt;phases.begin(), admitted));</span>
+<span id="L1088">            }</span>
+<span id="L1089">            if (!release.optional &amp;&amp;</span>
+<span id="L1090">                release.phase_kind == RatePhaseKind::cpu) {</span>
+<span id="L1091">                const auto declared_start =</span>
+<span id="L1092">                    std::max(previous_finish, release.release_time_ns);</span>
+<span id="L1093">                std::uint64_t declared_finish = 0;</span>
+<span id="L1094">                if (!checked_add(</span>
+<span id="L1095">                        declared_start,</span>
+<span id="L1096">                        release.budget_wcet_ns,</span>
+<span id="L1097">                        declared_finish)) {</span>
+<span id="L1098">                    diagnostic = {</span>
+<span id="L1099">                        Status::capacity_exceeded,</span>
+<span id="L1100">                        &quot;declared-budget admission arithmetic overflowed&quot;,</span>
+<span id="L1101">                        index};</span>
+<span id="L1102">                    return diagnostic.status;</span>
+<span id="L1103">                }</span>
+<span id="L1104">                if (declared_finish &gt; release.deadline_time_ns) {</span>
+<span id="L1105">                    diagnostic = {</span>
+<span id="L1106">                        Status::invalid_config,</span>
+<span id="L1107">                        &quot;declared-budget admission found an infeasible mandatory record&quot;,</span>
+<span id="L1108">                        index};</span>
+<span id="L1109">                    return diagnostic.status;</span>
+<span id="L1110">                }</span>
+<span id="L1111">                candidate.admission.push_back({</span>
+<span id="L1112">                    index,</span>
+<span id="L1113">                    declared_start,</span>
+<span id="L1114">                    declared_finish,</span>
+<span id="L1115">                    release.deadline_time_ns,</span>
+<span id="L1116">                });</span>
+<span id="L1117">                previous_finish = declared_finish;</span>
+<span id="L1118">            }</span>
+<span id="L1119"></span>
+<span id="L1120">            if (candidate.groups.empty() ||</span>
+<span id="L1121">                candidate.groups.back().domain_registration_index !=</span>
+<span id="L1122">                    release.domain_registration_index ||</span>
+<span id="L1123">                candidate.groups.back().domain_release_sequence !=</span>
+<span id="L1124">                    release.domain_release_sequence) {</span>
+<span id="L1125">                candidate.groups.push_back({</span>
+<span id="L1126">                    index,</span>
+<span id="L1127">                    1,</span>
+<span id="L1128">                    release.domain_registration_index,</span>
+<span id="L1129">                    release.domain_release_sequence,</span>
+<span id="L1130">                    release.release_time_ns,</span>
+<span id="L1131">                });</span>
+<span id="L1132">            } else {</span>
+<span id="L1133">                ++candidate.groups.back().reference_count;</span>
+<span id="L1134">            }</span>
+<span id="L1135">        }</span>
+<span id="L1136">        if (previous_finish &gt; rate_plan.supercycle_ns) {</span>
+<span id="L1137">            diagnostic = {</span>
+<span id="L1138">                Status::invalid_config,</span>
+<span id="L1139">                &quot;declared-budget admission is not idle at the supercycle boundary&quot;,</span>
+<span id="L1140">                rate_plan.releases.size() - 1};</span>
+<span id="L1141">            return diagnostic.status;</span>
+<span id="L1142">        }</span>
+<span id="L1143">        for (const auto&amp; group : candidate.groups) {</span>
+<span id="L1144">            auto&amp; records = candidate.records_per_domain_release[</span>
+<span id="L1145">                group.domain_registration_index];</span>
+<span id="L1146">            if (records == 0) {</span>
+<span id="L1147">                records = group.reference_count;</span>
+<span id="L1148">            } else if (records != group.reference_count) {</span>
+<span id="L1149">                diagnostic = {</span>
+<span id="L1150">                    Status::invalid_config,</span>
+<span id="L1151">                    &quot;active domain release has an ambiguous record count&quot;,</span>
+<span id="L1152">                    group.first_reference_index};</span>
+<span id="L1153">                return diagnostic.status;</span>
+<span id="L1154">            }</span>
+<span id="L1155">        }</span>
+<span id="L1156">        candidate.device_dependency_offsets.resize(</span>
+<span id="L1157">            rate_plan.releases.size() + 1, 0);</span>
+<span id="L1158">        for (const auto&amp; group : candidate.groups) {</span>
+<span id="L1159">            std::size_t device_records = 0;</span>
+<span id="L1160">            const auto group_end =</span>
+<span id="L1161">                group.first_reference_index + group.reference_count;</span>
+<span id="L1162">            for (std::size_t reference_index = group.first_reference_index;</span>
+<span id="L1163">                 reference_index &lt; group_end; ++reference_index) {</span>
+<span id="L1164">                if (candidate.device_phase_by_reference[reference_index] !=</span>
+<span id="L1165">                    std::numeric_limits&lt;std::size_t&gt;::max()) {</span>
+<span id="L1166">                    ++device_records;</span>
+<span id="L1167">                }</span>
+<span id="L1168">                const auto&amp; dependent = rate_plan.releases[reference_index];</span>
+<span id="L1169">                for (const auto&amp; dependency : dependencies) {</span>
+<span id="L1170">                    if (dependency.dependent != dependent.phase) {</span>
+<span id="L1171">                        continue;</span>
+<span id="L1172">                    }</span>
+<span id="L1173">                    for (std::size_t prerequisite_index =</span>
+<span id="L1174">                             group.first_reference_index;</span>
+<span id="L1175">                         prerequisite_index &lt; reference_index;</span>
+<span id="L1176">                         ++prerequisite_index) {</span>
+<span id="L1177">                        if (rate_plan.releases[prerequisite_index].phase ==</span>
+<span id="L1178">                                dependency.prerequisite &amp;&amp;</span>
+<span id="L1179">                            candidate.device_phase_by_reference[</span>
+<span id="L1180">                                prerequisite_index] !=</span>
+<span id="L1181">                                std::numeric_limits&lt;std::size_t&gt;::max()) {</span>
+<span id="L1182">                            candidate.device_dependencies.push_back(</span>
+<span id="L1183">                                prerequisite_index);</span>
+<span id="L1184">                            break;</span>
+<span id="L1185">                        }</span>
+<span id="L1186">                    }</span>
+<span id="L1187">                }</span>
+<span id="L1188">                candidate.device_dependency_offsets[reference_index + 1] =</span>
+<span id="L1189">                    candidate.device_dependencies.size();</span>
+<span id="L1190">            }</span>
+<span id="L1191">            candidate.maximum_device_records_per_group = std::max(</span>
+<span id="L1192">                candidate.maximum_device_records_per_group,</span>
+<span id="L1193">                device_records);</span>
+<span id="L1194">        }</span>
+<span id="L1195">        for (const auto&amp; group : candidate.groups) {</span>
+<span id="L1196">            ++candidate.domain_group_offsets[</span>
+<span id="L1197">                group.domain_registration_index + 1];</span>
+<span id="L1198">        }</span>
+<span id="L1199">        for (std::size_t index = 1;</span>
+<span id="L1200">             index &lt; candidate.domain_group_offsets.size();</span>
+<span id="L1201">             ++index) {</span>
+<span id="L1202">            candidate.domain_group_offsets[index] +=</span>
+<span id="L1203">                candidate.domain_group_offsets[index - 1];</span>
+<span id="L1204">        }</span>
+<span id="L1205">        candidate.domain_group_indices.resize(candidate.groups.size());</span>
+<span id="L1206">        auto next_group = candidate.domain_group_offsets;</span>
+<span id="L1207">        for (std::size_t group_index = 0;</span>
+<span id="L1208">             group_index &lt; candidate.groups.size();</span>
+<span id="L1209">             ++group_index) {</span>
+<span id="L1210">            const auto domain = candidate.groups[group_index]</span>
+<span id="L1211">                .domain_registration_index;</span>
+<span id="L1212">            candidate.domain_group_indices[next_group[domain]++] =</span>
+<span id="L1213">                group_index;</span>
+<span id="L1214">        }</span>
+<span id="L1215"></span>
+<span id="L1216">        output = std::move(candidate);</span>
+<span id="L1217">        return Status::ok;</span>
+<span id="L1218">    } catch (const std::bad_alloc&amp;) {</span>
+<span id="L1219">        diagnostic = {Status::resource_exhausted, nullptr};</span>
+<span id="L1220">        return diagnostic.status;</span>
+<span id="L1221">    } catch (...) {</span>
+<span id="L1222">        diagnostic = {Status::internal_error, nullptr};</span>
+<span id="L1223">        return diagnostic.status;</span>
+<span id="L1224">    }</span>
+<span id="L1225">}</span>
+<span id="L1226"></span>
+<span id="L1227">Status count_due_domain_releases(</span>
+<span id="L1228">    const CompiledRatePlan&amp; rate_plan,</span>
+<span id="L1229">    const CompiledRateDispatchPlan&amp; dispatch_plan,</span>
+<span id="L1230">    std::size_t domain_index,</span>
+<span id="L1231">    std::uint64_t cursor_ns,</span>
+<span id="L1232">    std::uint64_t end_ns,</span>
+<span id="L1233">    std::uint64_t&amp; domain_releases,</span>
+<span id="L1234">    std::uint64_t&amp; reference_records) noexcept {</span>
+<span id="L1235">    domain_releases = 0;</span>
+<span id="L1236">    reference_records = 0;</span>
+<span id="L1237">    if (cursor_ns &gt; end_ns || domain_index &gt;= rate_plan.domains.size()) {</span>
+<span id="L1238">        return Status::invalid_argument;</span>
+<span id="L1239">    }</span>
+<span id="L1240">    const auto period = rate_plan.domains[domain_index].period_ns;</span>
+<span id="L1241">    const auto records =</span>
+<span id="L1242">        dispatch_plan.records_per_domain_release[domain_index];</span>
+<span id="L1243">    std::uint64_t first_sequence = 0;</span>
+<span id="L1244">    std::uint64_t end_sequence = 0;</span>
+<span id="L1245">    if (period == 0 || records == 0 ||</span>
+<span id="L1246">        !ceil_div(cursor_ns, period, first_sequence) ||</span>
+<span id="L1247">        !ceil_div(end_ns, period, end_sequence) ||</span>
+<span id="L1248">        end_sequence &lt; first_sequence) {</span>
+<span id="L1249">        return Status::invalid_argument;</span>
+<span id="L1250">    }</span>
+<span id="L1251">    domain_releases = end_sequence - first_sequence;</span>
+<span id="L1252">    if (!checked_multiply(</span>
+<span id="L1253">            domain_releases,</span>
+<span id="L1254">            static_cast&lt;std::uint64_t&gt;(records),</span>
+<span id="L1255">            reference_records)) {</span>
+<span id="L1256">        domain_releases = 0;</span>
+<span id="L1257">        return Status::capacity_exceeded;</span>
+<span id="L1258">    }</span>
+<span id="L1259">    return Status::ok;</span>
+<span id="L1260">}</span>
+<span id="L1261"></span>
+<span id="L1262">Status count_due_rate_work(</span>
+<span id="L1263">    const CompiledRatePlan&amp; rate_plan,</span>
+<span id="L1264">    const CompiledRateDispatchPlan&amp; dispatch_plan,</span>
+<span id="L1265">    std::uint64_t cursor_ns,</span>
+<span id="L1266">    std::uint64_t end_ns,</span>
+<span id="L1267">    RateDueCounts&amp; output) noexcept {</span>
+<span id="L1268">    RateDueCounts candidate;</span>
+<span id="L1269">    if (cursor_ns &gt; end_ns) {</span>
+<span id="L1270">        return Status::invalid_argument;</span>
+<span id="L1271">    }</span>
+<span id="L1272">    for (std::size_t domain = 0;</span>
+<span id="L1273">         domain &lt; rate_plan.domains.size();</span>
+<span id="L1274">         ++domain) {</span>
+<span id="L1275">        std::uint64_t releases = 0;</span>
+<span id="L1276">        std::uint64_t records = 0;</span>
+<span id="L1277">        const auto status = count_due_domain_releases(</span>
+<span id="L1278">            rate_plan,</span>
+<span id="L1279">            dispatch_plan,</span>
+<span id="L1280">            domain,</span>
+<span id="L1281">            cursor_ns,</span>
+<span id="L1282">            end_ns,</span>
+<span id="L1283">            releases,</span>
+<span id="L1284">            records);</span>
+<span id="L1285">        if (status != Status::ok ||</span>
+<span id="L1286">            !checked_add(</span>
+<span id="L1287">                candidate.domain_releases,</span>
+<span id="L1288">                releases,</span>
+<span id="L1289">                candidate.domain_releases) ||</span>
+<span id="L1290">            !checked_add(</span>
+<span id="L1291">                candidate.reference_records,</span>
+<span id="L1292">                records,</span>
+<span id="L1293">                candidate.reference_records)) {</span>
+<span id="L1294">            return Status::capacity_exceeded;</span>
+<span id="L1295">        }</span>
+<span id="L1296">    }</span>
+<span id="L1297">    output = candidate;</span>
+<span id="L1298">    return Status::ok;</span>
+<span id="L1299">}</span>
+<span id="L1300"></span>
+<span id="L1301">} // namespace rt::detail</span></pre></html>

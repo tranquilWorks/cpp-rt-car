@@ -50,6 +50,25 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'tests/golden_audit/test_plan.py',
+    'docs/golden_audit.md',
+    'docs/golden_audit/capabilities.json',
+    'docs/golden_audit/guide.html',
+    'docs/golden_audit/requirements-binding.json',
+    'docs/golden_audit/requirements.json',
+    'docs/golden_audit/requirements.yaml',
+    'docs/golden_audit/source-map.json',
+    'samples/golden_audit/README.md',
+    'samples/golden_audit/catalog.py',
+    'samples/golden_audit/provenance.py',
+    'samples/golden_audit/run.py',
+    'tests/golden_audit/CMakeLists.txt',
+    'tests/golden_audit/negative_evidence.py',
+    'tests/golden_audit/test_catalog.py',
+    'tests/golden_audit/verify_package.py',
+    'tools/check_golden_audit.py',
+    'tools/generate_golden_audit.py',
+
     'tests/golden_showcase/process_suite.py',
     'docs/golden_showcase.md',
     'tools/check_golden_showcase.py',

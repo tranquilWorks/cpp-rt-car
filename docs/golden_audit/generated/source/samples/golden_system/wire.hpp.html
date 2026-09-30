@@ -1,0 +1,208 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_system/wire.hpp</title><h1>samples/golden_system/wire.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2">#include &quot;model.hpp&quot;</span>
+<span id="L3">namespace golden::cil {</span>
+<span id="L4">enum class Code {</span>
+<span id="L5">  ok,</span>
+<span id="L6">  empty,</span>
+<span id="L7">  full,</span>
+<span id="L8">  not_ready,</span>
+<span id="L9">  invalid,</span>
+<span id="L10">  schema,</span>
+<span id="L11">  generation,</span>
+<span id="L12">  sequence,</span>
+<span id="L13">  future,</span>
+<span id="L14">  expired,</span>
+<span id="L15">  correlation,</span>
+<span id="L16">  closed,</span>
+<span id="L17">  attached,</span>
+<span id="L18">  exhausted,</span>
+<span id="L19">  io,</span>
+<span id="L20">  not_found,</span>
+<span id="L21">  exists,</span>
+<span id="L22">  timeout,</span>
+<span id="L23">  no_ack</span>
+<span id="L24">};</span>
+<span id="L25">inline constexpr std::string_view name(Code c) noexcept {</span>
+<span id="L26">  switch (c) {</span>
+<span id="L27">  case Code::ok:</span>
+<span id="L28">    return &quot;ok&quot;;</span>
+<span id="L29">  case Code::empty:</span>
+<span id="L30">    return &quot;empty&quot;;</span>
+<span id="L31">  case Code::full:</span>
+<span id="L32">    return &quot;full&quot;;</span>
+<span id="L33">  case Code::not_ready:</span>
+<span id="L34">    return &quot;not_ready&quot;;</span>
+<span id="L35">  case Code::invalid:</span>
+<span id="L36">    return &quot;invalid&quot;;</span>
+<span id="L37">  case Code::schema:</span>
+<span id="L38">    return &quot;schema&quot;;</span>
+<span id="L39">  case Code::generation:</span>
+<span id="L40">    return &quot;generation&quot;;</span>
+<span id="L41">  case Code::sequence:</span>
+<span id="L42">    return &quot;sequence&quot;;</span>
+<span id="L43">  case Code::future:</span>
+<span id="L44">    return &quot;future&quot;;</span>
+<span id="L45">  case Code::expired:</span>
+<span id="L46">    return &quot;expired&quot;;</span>
+<span id="L47">  case Code::correlation:</span>
+<span id="L48">    return &quot;correlation&quot;;</span>
+<span id="L49">  case Code::closed:</span>
+<span id="L50">    return &quot;closed&quot;;</span>
+<span id="L51">  case Code::attached:</span>
+<span id="L52">    return &quot;attached&quot;;</span>
+<span id="L53">  case Code::exhausted:</span>
+<span id="L54">    return &quot;exhausted&quot;;</span>
+<span id="L55">  case Code::io:</span>
+<span id="L56">    return &quot;io&quot;;</span>
+<span id="L57">  case Code::not_found:</span>
+<span id="L58">    return &quot;not_found&quot;;</span>
+<span id="L59">  case Code::exists:</span>
+<span id="L60">    return &quot;exists&quot;;</span>
+<span id="L61">  case Code::timeout:</span>
+<span id="L62">    return &quot;timeout&quot;;</span>
+<span id="L63">  case Code::no_ack:</span>
+<span id="L64">    return &quot;no_ack&quot;;</span>
+<span id="L65">  }</span>
+<span id="L66">  return &quot;unknown&quot;;</span>
+<span id="L67">}</span>
+<span id="L68">inline constexpr std::uint32_t magic =</span>
+<span id="L69">    0x314c3647; // G6L1, distinct from M25 scalar CIL1.</span>
+<span id="L70">inline constexpr std::size_t wire_size = 3200;</span>
+<span id="L71">using Wire = std::array&lt;std::byte, wire_size&gt;;</span>
+<span id="L72">enum class Kind : std::uint32_t { plant = 1, command = 2 };</span>
+<span id="L73">struct Record {</span>
+<span id="L74">  Kind kind = Kind::plant;</span>
+<span id="L75">  std::uint32_t count = 16;</span>
+<span id="L76">  std::int32_t target = 8, gain = 1;</span>
+<span id="L77">  std::uint64_t generation = 0, sequence = 0, issued_tick = 0, expiry_tick = 1,</span>
+<span id="L78">                correlation = 0;</span>
+<span id="L79">  Vector values{};</span>
+<span id="L80">};</span>
+<span id="L81">inline Code fields(const Record &amp;r) noexcept {</span>
+<span id="L82">  if (r.kind != Kind::plant &amp;&amp; r.kind != Kind::command)</span>
+<span id="L83">    return Code::schema;</span>
+<span id="L84">  if (!r.generation || !r.sequence || !r.count || r.count &gt; fixed::capacity ||</span>
+<span id="L85">      r.target &lt; -64 || r.target &gt; 64 || r.gain &lt; 0 || r.gain &gt; 4 ||</span>
+<span id="L86">      r.issued_tick &gt;= fixed::maximum_ticks ||</span>
+<span id="L87">      r.expiry_tick != r.issued_tick + 1)</span>
+<span id="L88">    return Code::invalid;</span>
+<span id="L89">  if (r.sequence == UINT64_MAX)</span>
+<span id="L90">    return Code::exhausted;</span>
+<span id="L91">  if ((r.kind == Kind::plant &amp;&amp; r.correlation) ||</span>
+<span id="L92">      (r.kind == Kind::command &amp;&amp; !r.correlation))</span>
+<span id="L93">    return Code::correlation;</span>
+<span id="L94">  for (const auto &amp;axis : r.values)</span>
+<span id="L95">    for (std::size_t i = 0; i &lt; fixed::capacity; ++i) {</span>
+<span id="L96">      const auto v = axis[i];</span>
+<span id="L97">      if (i &gt;= r.count &amp;&amp; v)</span>
+<span id="L98">        return Code::invalid;</span>
+<span id="L99">      if (v &lt; -4176 || v &gt; 4176 ||</span>
+<span id="L100">          (r.kind == Kind::command &amp;&amp; (v &lt; -4 || v &gt; 4)))</span>
+<span id="L101">        return Code::invalid;</span>
+<span id="L102">    }</span>
+<span id="L103">  return Code::ok;</span>
+<span id="L104">}</span>
+<span id="L105">inline Code encode(const Record &amp;r, Wire &amp;out) noexcept {</span>
+<span id="L106">  auto c = fields(r);</span>
+<span id="L107">  if (c != Code::ok)</span>
+<span id="L108">    return c;</span>
+<span id="L109">  Wire w{};</span>
+<span id="L110">  put(w, 0, magic, 4);</span>
+<span id="L111">  put(w, 4, 1, 4);</span>
+<span id="L112">  put(w, 8, wire_size, 4);</span>
+<span id="L113">  put(w, 12, static_cast&lt;std::uint32_t&gt;(r.kind), 4);</span>
+<span id="L114">  put(w, 16, r.count, 4);</span>
+<span id="L115">  put32(w, 20, r.target);</span>
+<span id="L116">  put32(w, 24, r.gain);</span>
+<span id="L117">  put(w, 28, 1, 4); // logical host tick domain</span>
+<span id="L118">  put(w, 32, r.generation, 8);</span>
+<span id="L119">  put(w, 40, r.sequence, 8);</span>
+<span id="L120">  put(w, 48, r.issued_tick, 8);</span>
+<span id="L121">  put(w, 56, r.expiry_tick, 8);</span>
+<span id="L122">  put(w, 64, r.correlation, 8);</span>
+<span id="L123">  std::size_t at = 128;</span>
+<span id="L124">  for (const auto &amp;axis : r.values)</span>
+<span id="L125">    for (auto v : axis) {</span>
+<span id="L126">      put32(w, at, v);</span>
+<span id="L127">      at += 4;</span>
+<span id="L128">    }</span>
+<span id="L129">  // Digest binds header and payload with the digest word zeroed.</span>
+<span id="L130">  put(w, 72, digest(w), 8);</span>
+<span id="L131">  out = w;</span>
+<span id="L132">  return Code::ok;</span>
+<span id="L133">}</span>
+<span id="L134">inline Code decode(std::span&lt;const std::byte&gt; bytes, Record &amp;out) noexcept {</span>
+<span id="L135">  if (bytes.size() != wire_size || get(bytes, 0, 4) != magic ||</span>
+<span id="L136">      get(bytes, 4, 4) != 1 || get(bytes, 8, 4) != wire_size ||</span>
+<span id="L137">      get(bytes, 28, 4) != 1)</span>
+<span id="L138">    return Code::schema;</span>
+<span id="L139">  for (std::size_t i = 80; i &lt; 128; ++i)</span>
+<span id="L140">    if (bytes[i] != std::byte{})</span>
+<span id="L141">      return Code::schema;</span>
+<span id="L142">  Wire w;</span>
+<span id="L143">  std::copy(bytes.begin(), bytes.end(), w.begin());</span>
+<span id="L144">  const auto checksum = get(w, 72, 8);</span>
+<span id="L145">  put(w, 72, 0, 8);</span>
+<span id="L146">  if (checksum != digest(w))</span>
+<span id="L147">    return Code::schema;</span>
+<span id="L148">  Record r;</span>
+<span id="L149">  r.kind = static_cast&lt;Kind&gt;(get(w, 12, 4));</span>
+<span id="L150">  r.count = static_cast&lt;std::uint32_t&gt;(get(w, 16, 4));</span>
+<span id="L151">  r.target = get32(w, 20);</span>
+<span id="L152">  r.gain = get32(w, 24);</span>
+<span id="L153">  r.generation = get(w, 32, 8);</span>
+<span id="L154">  r.sequence = get(w, 40, 8);</span>
+<span id="L155">  r.issued_tick = get(w, 48, 8);</span>
+<span id="L156">  r.expiry_tick = get(w, 56, 8);</span>
+<span id="L157">  r.correlation = get(w, 64, 8);</span>
+<span id="L158">  std::size_t at = 128;</span>
+<span id="L159">  for (auto &amp;axis : r.values)</span>
+<span id="L160">    for (auto &amp;v : axis) {</span>
+<span id="L161">      v = get32(w, at);</span>
+<span id="L162">      at += 4;</span>
+<span id="L163">    }</span>
+<span id="L164">  auto c = fields(r);</span>
+<span id="L165">  if (c == Code::ok)</span>
+<span id="L166">    out = r;</span>
+<span id="L167">  return c;</span>
+<span id="L168">}</span>
+<span id="L169">struct Sequence {</span>
+<span id="L170">  std::uint64_t next = 1;</span>
+<span id="L171">  Code inspect(std::uint64_t value) const noexcept {</span>
+<span id="L172">    return next == UINT64_MAX ? Code::exhausted</span>
+<span id="L173">                              : (value == next ? Code::ok : Code::sequence);</span>
+<span id="L174">  }</span>
+<span id="L175">  void advance() noexcept {</span>
+<span id="L176">    if (next != UINT64_MAX)</span>
+<span id="L177">      ++next;</span>
+<span id="L178">  }</span>
+<span id="L179">};</span>
+<span id="L180">inline Code accept(const Wire &amp;w, Kind kind, std::uint64_t generation,</span>
+<span id="L181">                   Sequence &amp;sequence, std::uint64_t now, Record &amp;out,</span>
+<span id="L182">                   const Record *plant = nullptr) noexcept {</span>
+<span id="L183">  Record r;</span>
+<span id="L184">  auto c = decode(w, r);</span>
+<span id="L185">  if (c != Code::ok)</span>
+<span id="L186">    return c;</span>
+<span id="L187">  if (r.kind != kind)</span>
+<span id="L188">    return Code::schema;</span>
+<span id="L189">  if (r.generation != generation)</span>
+<span id="L190">    return Code::generation;</span>
+<span id="L191">  c = sequence.inspect(r.sequence);</span>
+<span id="L192">  if (c != Code::ok)</span>
+<span id="L193">    return c;</span>
+<span id="L194">  if (r.issued_tick &gt; now)</span>
+<span id="L195">    return Code::future;</span>
+<span id="L196">  if (r.expiry_tick &lt;= now)</span>
+<span id="L197">    return Code::expired;</span>
+<span id="L198">  if (kind == Kind::command &amp;&amp;</span>
+<span id="L199">      (!plant || r.correlation != plant-&gt;sequence ||</span>
+<span id="L200">       r.issued_tick != plant-&gt;issued_tick ||</span>
+<span id="L201">       r.expiry_tick != plant-&gt;expiry_tick || r.count != plant-&gt;count ||</span>
+<span id="L202">       r.target != plant-&gt;target || r.gain != plant-&gt;gain))</span>
+<span id="L203">    return Code::correlation;</span>
+<span id="L204">  out = r;</span>
+<span id="L205">  sequence.advance();</span>
+<span id="L206">  return Code::ok;</span>
+<span id="L207">}</span>
+<span id="L208">} // namespace golden::cil</span></pre></html>

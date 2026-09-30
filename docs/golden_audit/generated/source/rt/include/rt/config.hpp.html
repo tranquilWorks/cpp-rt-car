@@ -1,0 +1,408 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>rt/include/rt/config.hpp</title><h1>rt/include/rt/config.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2"></span>
+<span id="L3">#include &lt;array&gt;</span>
+<span id="L4">#include &lt;cstddef&gt;</span>
+<span id="L5">#include &lt;cstdint&gt;</span>
+<span id="L6">#include &lt;string_view&gt;</span>
+<span id="L7"></span>
+<span id="L8">#include &lt;rt/status.hpp&gt;</span>
+<span id="L9"></span>
+<span id="L10">namespace rt {</span>
+<span id="L11"></span>
+<span id="L12">inline constexpr std::uint32_t runtime_config_schema_version = 7;</span>
+<span id="L13">inline constexpr std::size_t observability_identifier_capacity = 64;</span>
+<span id="L14">inline constexpr std::size_t cpu_set_capacity = 256;</span>
+<span id="L15">inline constexpr std::size_t thread_name_capacity = 32;</span>
+<span id="L16">inline constexpr std::size_t thread_policy_request_capacity = 16;</span>
+<span id="L17">inline constexpr std::size_t memory_policy_request_capacity = 16;</span>
+<span id="L18">inline constexpr std::size_t resource_accounting_declaration_capacity = 32;</span>
+<span id="L19">inline constexpr std::uint32_t memory_provider_api_version = 1;</span>
+<span id="L20">inline constexpr std::size_t rate_domain_capacity = 64;</span>
+<span id="L21">inline constexpr std::size_t rate_domain_name_capacity = 64;</span>
+<span id="L22">inline constexpr std::uint32_t rate_domain_substep_capacity = 64;</span>
+<span id="L23">inline constexpr std::size_t reference_release_capacity = 65&#x27;536;</span>
+<span id="L24">inline constexpr std::size_t cross_rate_channel_capacity = 256;</span>
+<span id="L25">inline constexpr std::size_t cross_rate_channel_name_capacity = 64;</span>
+<span id="L26">inline constexpr std::size_t cross_rate_payload_capacity = 64 * 1024;</span>
+<span id="L27">inline constexpr std::size_t cross_rate_initial_bytes_capacity = 1024 * 1024;</span>
+<span id="L28">inline constexpr std::size_t cross_rate_selection_capacity = 262&#x27;144;</span>
+<span id="L29">inline constexpr std::size_t cross_rate_snapshot_slot_count = 2;</span>
+<span id="L30">inline constexpr std::size_t cross_rate_snapshot_bytes_capacity =</span>
+<span id="L31">    2 * 1024 * 1024;</span>
+<span id="L32"></span>
+<span id="L33">enum class RateCriticality : std::uint8_t {</span>
+<span id="L34">    background,</span>
+<span id="L35">    normal,</span>
+<span id="L36">    critical,</span>
+<span id="L37">};</span>
+<span id="L38"></span>
+<span id="L39">enum class NumericalMode : std::uint8_t {</span>
+<span id="L40">    precise,</span>
+<span id="L41">    fused_multiply_add,</span>
+<span id="L42">};</span>
+<span id="L43"></span>
+<span id="L44">enum class ExecutorPolicy : std::uint8_t {</span>
+<span id="L45">    static_deterministic,</span>
+<span id="L46">    bounded_throughput,</span>
+<span id="L47">    host_adapter,</span>
+<span id="L48">};</span>
+<span id="L49"></span>
+<span id="L50">enum class OverloadPolicy : std::uint8_t {</span>
+<span id="L51">    reject_submission,</span>
+<span id="L52">    fail_frame,</span>
+<span id="L53">};</span>
+<span id="L54"></span>
+<span id="L55">enum class PlatformPreflightMode : std::uint8_t {</span>
+<span id="L56">    disabled,</span>
+<span id="L57">    strict,</span>
+<span id="L58">};</span>
+<span id="L59"></span>
+<span id="L60">enum class DeterminismTier : std::uint8_t {</span>
+<span id="L61">    unspecified = 0,</span>
+<span id="L62">    schedule_independent = 1,</span>
+<span id="L63">    reproducible_build = 2,</span>
+<span id="L64">    portable_deterministic = 3,</span>
+<span id="L65">};</span>
+<span id="L66"></span>
+<span id="L67">// Stable, source-level role identifiers. Values at or above custom_first are</span>
+<span id="L68">// reserved for additive accelerator/service roles. A custom role remains</span>
+<span id="L69">// externally owned and verify-only until a later runtime version recognizes</span>
+<span id="L70">// and owns it.</span>
+<span id="L71">struct ThreadRoleId {</span>
+<span id="L72">    std::uint32_t value = 0;</span>
+<span id="L73"></span>
+<span id="L74">    [[nodiscard]] constexpr bool operator==(</span>
+<span id="L75">        const ThreadRoleId&amp;) const noexcept = default;</span>
+<span id="L76">};</span>
+<span id="L77"></span>
+<span id="L78">inline constexpr ThreadRoleId thread_role_frame{1};</span>
+<span id="L79">inline constexpr ThreadRoleId thread_role_executor_worker{2};</span>
+<span id="L80">inline constexpr ThreadRoleId thread_role_watchdog{3};</span>
+<span id="L81">inline constexpr ThreadRoleId thread_role_device_service{4};</span>
+<span id="L82">inline constexpr ThreadRoleId thread_role_xdma_io{5};</span>
+<span id="L83">inline constexpr ThreadRoleId thread_role_device_submission{6};</span>
+<span id="L84">inline constexpr std::uint32_t thread_role_custom_first = 0x0001&#x27;0000u;</span>
+<span id="L85"></span>
+<span id="L86">[[nodiscard]] constexpr std::uint64_t thread_resource_accounting_key(</span>
+<span id="L87">    ThreadRoleId role) noexcept {</span>
+<span id="L88">    return (std::uint64_t{1} &lt;&lt; 32u) |</span>
+<span id="L89">        static_cast&lt;std::uint64_t&gt;(role.value);</span>
+<span id="L90">}</span>
+<span id="L91"></span>
+<span id="L92">// Stable memory accounting identities. Each resolved report contains exactly</span>
+<span id="L93">// one row for every identifier below, including zero-cardinality categories.</span>
+<span id="L94">struct MemoryRegionId {</span>
+<span id="L95">    std::uint32_t value = 0;</span>
+<span id="L96"></span>
+<span id="L97">    [[nodiscard]] constexpr bool operator==(</span>
+<span id="L98">        const MemoryRegionId&amp;) const noexcept = default;</span>
+<span id="L99">};</span>
+<span id="L100"></span>
+<span id="L101">inline constexpr MemoryRegionId memory_region_runtime_control{1};</span>
+<span id="L102">inline constexpr MemoryRegionId memory_region_executor_control{2};</span>
+<span id="L103">inline constexpr MemoryRegionId memory_region_device_control{3};</span>
+<span id="L104">inline constexpr MemoryRegionId memory_region_phase_scratch{4};</span>
+<span id="L105">inline constexpr MemoryRegionId memory_region_task_scratch{5};</span>
+<span id="L106">inline constexpr MemoryRegionId memory_region_trace_storage{6};</span>
+<span id="L107">inline constexpr MemoryRegionId memory_region_registered_state{7};</span>
+<span id="L108">inline constexpr MemoryRegionId memory_region_backend_control{8};</span>
+<span id="L109">inline constexpr MemoryRegionId memory_region_registered_device_buffer{9};</span>
+<span id="L110">inline constexpr MemoryRegionId memory_region_runtime_thread_stack{10};</span>
+<span id="L111">inline constexpr MemoryRegionId memory_region_external_thread_stack{11};</span>
+<span id="L112">inline constexpr MemoryRegionId memory_region_host_provider{12};</span>
+<span id="L113"></span>
+<span id="L114">[[nodiscard]] constexpr std::uint64_t memory_resource_accounting_key(</span>
+<span id="L115">    MemoryRegionId region) noexcept {</span>
+<span id="L116">    return (std::uint64_t{2} &lt;&lt; 32u) |</span>
+<span id="L117">        static_cast&lt;std::uint64_t&gt;(region.value);</span>
+<span id="L118">}</span>
+<span id="L119"></span>
+<span id="L120">enum class PolicyRequirement : std::uint8_t {</span>
+<span id="L121">    best_effort,</span>
+<span id="L122">    strict,</span>
+<span id="L123">};</span>
+<span id="L124"></span>
+<span id="L125">enum class SchedulingClass : std::uint8_t {</span>
+<span id="L126">    inherit,</span>
+<span id="L127">    normal,</span>
+<span id="L128">    fifo,</span>
+<span id="L129">    round_robin,</span>
+<span id="L130">};</span>
+<span id="L131"></span>
+<span id="L132">enum class WaitStrategy : std::uint8_t {</span>
+<span id="L133">    inherit,</span>
+<span id="L134">    spin,</span>
+<span id="L135">    yield,</span>
+<span id="L136">    park,</span>
+<span id="L137">};</span>
+<span id="L138"></span>
+<span id="L139">struct CpuSetRequest {</span>
+<span id="L140">    std::size_t count = 0;</span>
+<span id="L141">    std::array&lt;std::uint32_t, cpu_set_capacity&gt; cpu_ids{};</span>
+<span id="L142">};</span>
+<span id="L143"></span>
+<span id="L144">struct ThreadPolicy {</span>
+<span id="L145">    PolicyRequirement requirement = PolicyRequirement::best_effort;</span>
+<span id="L146">    CpuSetRequest cpu_set{};</span>
+<span id="L147">    SchedulingClass scheduling_class = SchedulingClass::inherit;</span>
+<span id="L148">    std::int32_t scheduling_priority = 0;</span>
+<span id="L149">    // -1 inherits the current placement. Nonnegative values name a NUMA node.</span>
+<span id="L150">    std::int32_t numa_node = -1;</span>
+<span id="L151">    WaitStrategy wait_strategy = WaitStrategy::inherit;</span>
+<span id="L152">    // Zero retains the implementation/host default.</span>
+<span id="L153">    std::size_t stack_bytes = 0;</span>
+<span id="L154">    std::size_t guard_bytes = 0;</span>
+<span id="L155">    // Empty means unnamed/inherit. Nonempty values are NUL-terminated and use</span>
+<span id="L156">    // [A-Za-z0-9._-].</span>
+<span id="L157">    std::array&lt;char, thread_name_capacity&gt; name{};</span>
+<span id="L158">};</span>
+<span id="L159"></span>
+<span id="L160">struct ThreadPolicyRequest {</span>
+<span id="L161">    ThreadRoleId role{};</span>
+<span id="L162">    ThreadPolicy policy{};</span>
+<span id="L163">};</span>
+<span id="L164"></span>
+<span id="L165">enum class PolicyToggle : std::uint8_t {</span>
+<span id="L166">    inherit,</span>
+<span id="L167">    disabled,</span>
+<span id="L168">    enabled,</span>
+<span id="L169">};</span>
+<span id="L170"></span>
+<span id="L171">enum class MemoryProviderOwnership : std::uint8_t {</span>
+<span id="L172">    inherit,</span>
+<span id="L173">    runtime,</span>
+<span id="L174">    host,</span>
+<span id="L175">    backend,</span>
+<span id="L176">    borrowed,</span>
+<span id="L177">};</span>
+<span id="L178"></span>
+<span id="L179">enum class PageRounding : std::uint8_t {</span>
+<span id="L180">    inherit,</span>
+<span id="L181">    none,</span>
+<span id="L182">    base_page,</span>
+<span id="L183">};</span>
+<span id="L184"></span>
+<span id="L185">enum class HugePagePreference : std::uint8_t {</span>
+<span id="L186">    inherit,</span>
+<span id="L187">    disabled,</span>
+<span id="L188">    prefer,</span>
+<span id="L189">};</span>
+<span id="L190"></span>
+<span id="L191">enum class FirstTouchPolicy : std::uint8_t {</span>
+<span id="L192">    inherit,</span>
+<span id="L193">    none,</span>
+<span id="L194">    caller,</span>
+<span id="L195">    owner_thread,</span>
+<span id="L196">};</span>
+<span id="L197"></span>
+<span id="L198">enum class RollbackIntent : std::uint8_t {</span>
+<span id="L199">    inherit,</span>
+<span id="L200">    none,</span>
+<span id="L201">    release,</span>
+<span id="L202">};</span>
+<span id="L203"></span>
+<span id="L204">struct MemoryPolicy {</span>
+<span id="L205">    PolicyRequirement requirement = PolicyRequirement::best_effort;</span>
+<span id="L206">    MemoryProviderOwnership provider = MemoryProviderOwnership::inherit;</span>
+<span id="L207">    // Zero retains the category&#x27;s current alignment.</span>
+<span id="L208">    std::size_t alignment = 0;</span>
+<span id="L209">    PageRounding page_rounding = PageRounding::inherit;</span>
+<span id="L210">    std::size_t guard_bytes_before = 0;</span>
+<span id="L211">    std::size_t guard_bytes_after = 0;</span>
+<span id="L212">    PolicyToggle prefault = PolicyToggle::inherit;</span>
+<span id="L213">    PolicyToggle locking = PolicyToggle::inherit;</span>
+<span id="L214">    PolicyToggle pinning = PolicyToggle::inherit;</span>
+<span id="L215">    HugePagePreference huge_pages = HugePagePreference::inherit;</span>
+<span id="L216">    PolicyToggle huge_page_fallback = PolicyToggle::inherit;</span>
+<span id="L217">    // -1 inherits the current placement. Nonnegative values name a NUMA node.</span>
+<span id="L218">    std::int32_t numa_node = -1;</span>
+<span id="L219">    FirstTouchPolicy first_touch = FirstTouchPolicy::inherit;</span>
+<span id="L220">    PolicyToggle residency_verification = PolicyToggle::inherit;</span>
+<span id="L221">    RollbackIntent rollback = RollbackIntent::inherit;</span>
+<span id="L222">};</span>
+<span id="L223"></span>
+<span id="L224">struct MemoryPolicyRequest {</span>
+<span id="L225">    MemoryRegionId region{};</span>
+<span id="L226">    MemoryPolicy policy{};</span>
+<span id="L227">};</span>
+<span id="L228"></span>
+<span id="L229">// Trusted configuring-time accounting metadata for storage the runtime does</span>
+<span id="L230">// not own and cannot inspect. The key must identify one of the stable thread</span>
+<span id="L231">// or memory rows above. A declaration reports logical bytes only: it never</span>
+<span id="L232">// authorizes mutation or establishes residency, locking, pinning, or hardware</span>
+<span id="L233">// qualification.</span>
+<span id="L234">struct ResourceAccountingDeclaration {</span>
+<span id="L235">    std::uint64_t accounting_key = 0;</span>
+<span id="L236">    std::size_t logical_region_count = 0;</span>
+<span id="L237">    std::size_t accounted_bytes = 0;</span>
+<span id="L238">};</span>
+<span id="L239"></span>
+<span id="L240">enum class MemoryProviderCapability : std::uint64_t {</span>
+<span id="L241">    none = 0,</span>
+<span id="L242">    guard_pages = std::uint64_t{1} &lt;&lt; 0,</span>
+<span id="L243">    explicit_huge_pages = std::uint64_t{1} &lt;&lt; 1,</span>
+<span id="L244">    policy_operations = std::uint64_t{1} &lt;&lt; 2,</span>
+<span id="L245">    independent_observation = std::uint64_t{1} &lt;&lt; 3,</span>
+<span id="L246">    pinning = std::uint64_t{1} &lt;&lt; 4,</span>
+<span id="L247">    numa_binding = std::uint64_t{1} &lt;&lt; 5,</span>
+<span id="L248">};</span>
+<span id="L249"></span>
+<span id="L250">[[nodiscard]] constexpr std::uint64_t memory_provider_capability_bit(</span>
+<span id="L251">    MemoryProviderCapability capability) noexcept {</span>
+<span id="L252">    return static_cast&lt;std::uint64_t&gt;(capability);</span>
+<span id="L253">}</span>
+<span id="L254"></span>
+<span id="L255">struct MemoryProviderAcquireRequest {</span>
+<span id="L256">    MemoryRegionId region{};</span>
+<span id="L257">    std::size_t logical_bytes = 0;</span>
+<span id="L258">    std::size_t required_alignment = 0;</span>
+<span id="L259">    PageRounding page_rounding = PageRounding::none;</span>
+<span id="L260">    std::size_t guard_bytes_before = 0;</span>
+<span id="L261">    std::size_t guard_bytes_after = 0;</span>
+<span id="L262">    HugePagePreference huge_pages = HugePagePreference::disabled;</span>
+<span id="L263">    PolicyToggle huge_page_fallback = PolicyToggle::disabled;</span>
+<span id="L264">    std::int32_t numa_node = -1;</span>
+<span id="L265">    RollbackIntent rollback = RollbackIntent::release;</span>
+<span id="L266">};</span>
+<span id="L267"></span>
+<span id="L268">struct MemoryProviderAllocation {</span>
+<span id="L269">    void* token = nullptr;</span>
+<span id="L270">    std::byte* allocation_base = nullptr;</span>
+<span id="L271">    std::size_t allocation_bytes = 0;</span>
+<span id="L272">    std::byte* usable_data = nullptr;</span>
+<span id="L273">    std::size_t usable_bytes = 0;</span>
+<span id="L274">    std::size_t committed_bytes = 0;</span>
+<span id="L275">    std::size_t alignment = 0;</span>
+<span id="L276">    std::size_t actual_page_bytes = 0;</span>
+<span id="L277">    std::size_t guard_bytes_before = 0;</span>
+<span id="L278">    std::size_t guard_bytes_after = 0;</span>
+<span id="L279">    bool explicit_huge_pages = false;</span>
+<span id="L280">    bool used_huge_page_fallback = false;</span>
+<span id="L281">    std::int32_t provider_error = 0;</span>
+<span id="L282">};</span>
+<span id="L283"></span>
+<span id="L284">struct MemoryProviderObservation {</span>
+<span id="L285">    std::size_t resident_bytes = 0;</span>
+<span id="L286">    std::size_t locked_bytes = 0;</span>
+<span id="L287">    std::size_t pinned_bytes = 0;</span>
+<span id="L288">    std::int32_t numa_node = -1;</span>
+<span id="L289">    bool prefaulted = false;</span>
+<span id="L290">    bool caller_first_touched = false;</span>
+<span id="L291">    bool independently_observed = false;</span>
+<span id="L292">    std::int32_t system_error = 0;</span>
+<span id="L293">};</span>
+<span id="L294"></span>
+<span id="L295">using MemoryProviderAcquire = Status (*)(</span>
+<span id="L296">    void* user_data,</span>
+<span id="L297">    const MemoryProviderAcquireRequest&amp; request,</span>
+<span id="L298">    MemoryProviderAllocation&amp; allocation) noexcept;</span>
+<span id="L299">using MemoryProviderApply = Status (*)(</span>
+<span id="L300">    void* user_data,</span>
+<span id="L301">    void* token,</span>
+<span id="L302">    const MemoryPolicy&amp; resolved,</span>
+<span id="L303">    MemoryProviderObservation&amp; applied) noexcept;</span>
+<span id="L304">using MemoryProviderObserve = Status (*)(</span>
+<span id="L305">    void* user_data,</span>
+<span id="L306">    void* token,</span>
+<span id="L307">    const MemoryPolicy&amp; resolved,</span>
+<span id="L308">    MemoryProviderObservation&amp; observed) noexcept;</span>
+<span id="L309">// Once apply is invoked for a token, rollback is invoked once for that attempt</span>
+<span id="L310">// before retry or release, including when apply reports failure. Implementations</span>
+<span id="L311">// must therefore make rollback safe for a partially applied operation and</span>
+<span id="L312">// retryable when rollback itself reports failure.</span>
+<span id="L313">using MemoryProviderRollback = Status (*)(</span>
+<span id="L314">    void* user_data,</span>
+<span id="L315">    void* token,</span>
+<span id="L316">    const MemoryPolicy&amp; resolved,</span>
+<span id="L317">    const MemoryProviderObservation&amp; applied) noexcept;</span>
+<span id="L318">using MemoryProviderRelease = void (*)(</span>
+<span id="L319">    void* user_data,</span>
+<span id="L320">    void* token,</span>
+<span id="L321">    RollbackIntent intent) noexcept;</span>
+<span id="L322"></span>
+<span id="L323">// The runtime copies this bounded callback table while configuring and borrows</span>
+<span id="L324">// user_data until checked stop (or best-effort destruction) has released every</span>
+<span id="L325">// acquired token. Provider callbacks must not reenter the Runtime.</span>
+<span id="L326">struct MemoryProvider {</span>
+<span id="L327">    std::uint32_t struct_size = sizeof(MemoryProvider);</span>
+<span id="L328">    std::uint32_t api_version = memory_provider_api_version;</span>
+<span id="L329">    std::uint64_t capabilities = 0;</span>
+<span id="L330">    void* user_data = nullptr;</span>
+<span id="L331">    MemoryProviderAcquire acquire = nullptr;</span>
+<span id="L332">    MemoryProviderApply apply = nullptr;</span>
+<span id="L333">    MemoryProviderObserve observe = nullptr;</span>
+<span id="L334">    MemoryProviderRollback rollback = nullptr;</span>
+<span id="L335">    MemoryProviderRelease release = nullptr;</span>
+<span id="L336">    std::array&lt;std::uint64_t, 4&gt; reserved{};</span>
+<span id="L337">};</span>
+<span id="L338"></span>
+<span id="L339">// This policy is intentionally separate from RuntimeConfig schema 7. It is a</span>
+<span id="L340">// C++ source API and is not a JSON/profile or stable-C-ABI field.</span>
+<span id="L341">struct CpuMemoryPolicy {</span>
+<span id="L342">    std::size_t thread_policy_count = 0;</span>
+<span id="L343">    std::array&lt;ThreadPolicyRequest, thread_policy_request_capacity&gt;</span>
+<span id="L344">        thread_policies{};</span>
+<span id="L345">    std::size_t memory_policy_count = 0;</span>
+<span id="L346">    std::array&lt;MemoryPolicyRequest, memory_policy_request_capacity&gt;</span>
+<span id="L347">        memory_policies{};</span>
+<span id="L348">    // Appended M15-04 closure fields preserve the pre-M15-04 aggregate prefix.</span>
+<span id="L349">    PolicyRequirement accounting_requirement =</span>
+<span id="L350">        PolicyRequirement::best_effort;</span>
+<span id="L351">    std::size_t accounting_declaration_count = 0;</span>
+<span id="L352">    std::array&lt;</span>
+<span id="L353">        ResourceAccountingDeclaration,</span>
+<span id="L354">        resource_accounting_declaration_capacity&gt;</span>
+<span id="L355">        accounting_declarations{};</span>
+<span id="L356">};</span>
+<span id="L357"></span>
+<span id="L358">struct RuntimeConfig {</span>
+<span id="L359">    std::size_t callback_capacity = 64;</span>
+<span id="L360">    std::size_t scratch_bytes = 64 * 1024;</span>
+<span id="L361">    std::size_t trace_capacity = 1024;</span>
+<span id="L362">    NumericalMode numerical_mode = NumericalMode::precise;</span>
+<span id="L363">    ExecutorPolicy executor_policy = ExecutorPolicy::static_deterministic;</span>
+<span id="L364">    std::size_t worker_count = 1;</span>
+<span id="L365">    std::size_t executor_queue_capacity = 1024;</span>
+<span id="L366">    std::size_t scratch_alignment = 64;</span>
+<span id="L367">    std::size_t task_scratch_bytes = 4 * 1024;</span>
+<span id="L368">    std::size_t task_scratch_slots = 1024;</span>
+<span id="L369">    std::size_t memory_budget_bytes = 256 * 1024 * 1024;</span>
+<span id="L370">    OverloadPolicy overload_policy = OverloadPolicy::reject_submission;</span>
+<span id="L371">    std::uint64_t watchdog_timeout_ns = 0;</span>
+<span id="L372">    std::uint32_t watchdog_max_degradation_level = 0;</span>
+<span id="L373">    PlatformPreflightMode platform_preflight_mode =</span>
+<span id="L374">        PlatformPreflightMode::disabled;</span>
+<span id="L375">    // D1 is an explicit application contract: only registered canonical state</span>
+<span id="L376">    // is compared, and callbacks must obey the restrictions documented in</span>
+<span id="L377">    // docs/determinism_replay.md. D2 and D3 are reserved and rejected.</span>
+<span id="L378">    DeterminismTier determinism_tier = DeterminismTier::unspecified;</span>
+<span id="L379">    std::size_t state_capacity = 64;</span>
+<span id="L380">    std::size_t snapshot_max_bytes = 1024 * 1024;</span>
+<span id="L381">    std::size_t replay_input_capacity = 4096;</span>
+<span id="L382">    std::size_t input_log_max_bytes = 1024 * 1024;</span>
+<span id="L383">    std::size_t device_backend_capacity = 1;</span>
+<span id="L384">    std::size_t device_buffer_capacity = 64;</span>
+<span id="L385">    std::size_t device_outstanding_capacity = 64;</span>
+<span id="L386">    std::size_t device_completion_batch = 16;</span>
+<span id="L387">    // Stable caller-supplied provenance copied into every observability</span>
+<span id="L388">    // snapshot. IDs use [A-Za-z0-9._:/@-] and must be NUL terminated.</span>
+<span id="L389">    std::array&lt;char, observability_identifier_capacity&gt; workload_id{</span>
+<span id="L390">        &#x27;u&#x27;, &#x27;n&#x27;, &#x27;s&#x27;, &#x27;p&#x27;, &#x27;e&#x27;, &#x27;c&#x27;, &#x27;i&#x27;, &#x27;f&#x27;, &#x27;i&#x27;, &#x27;e&#x27;, &#x27;d&#x27;, &#x27;\0&#x27;};</span>
+<span id="L391">};</span>
+<span id="L392"></span>
+<span id="L393">// Applies one strict schema key to a typed configuration. The supported keys</span>
+<span id="L394">// are callback_capacity, scratch_bytes, trace_capacity, numerical_mode,</span>
+<span id="L395">// executor_policy, worker_count, executor_queue_capacity, scratch_alignment,</span>
+<span id="L396">// task_scratch_bytes, task_scratch_slots, memory_budget_bytes,</span>
+<span id="L397">// overload_policy, watchdog_timeout_ns, watchdog_max_degradation_level,</span>
+<span id="L398">// platform_preflight_mode, determinism_tier, state_capacity,</span>
+<span id="L399">// snapshot_max_bytes, replay_input_capacity, input_log_max_bytes,</span>
+<span id="L400">// device_backend_capacity, device_buffer_capacity,</span>
+<span id="L401">// device_outstanding_capacity, device_completion_batch, and workload_id.</span>
+<span id="L402">// Unknown keys and partially parsed values are rejected.</span>
+<span id="L403">[[nodiscard]] Status set_runtime_config_value(</span>
+<span id="L404">    RuntimeConfig&amp; config,</span>
+<span id="L405">    std::string_view key,</span>
+<span id="L406">    std::string_view value) noexcept;</span>
+<span id="L407"></span>
+<span id="L408">} // namespace rt</span></pre></html>

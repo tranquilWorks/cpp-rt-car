@@ -1,0 +1,118 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_system/controller.cpp</title><h1>samples/golden_system/controller.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;common.hpp&quot;</span>
+<span id="L2">#include &lt;cstdlib&gt;</span>
+<span id="L3">namespace cil = golden::cil;</span>
+<span id="L4">int main(int argc, char **argv) {</span>
+<span id="L5">  cil::Options o;</span>
+<span id="L6">  if (!cil::options(argc, argv, o)) {</span>
+<span id="L7">    std::cerr &lt;&lt; &quot;usage: golden_controller NAME GENERATION TIMEOUT_MS &quot;</span>
+<span id="L8">                 &quot;[FIXTURE_MODE]\n&quot;;</span>
+<span id="L9">    return 2;</span>
+<span id="L10">  }</span>
+<span id="L11">  constexpr std::array modes{&quot;normal&quot;, &quot;schema&quot;,  &quot;generation&quot;,  &quot;sequence&quot;,</span>
+<span id="L12">                             &quot;future&quot;, &quot;expired&quot;, &quot;correlation&quot;, &quot;replay&quot;,</span>
+<span id="L13">                             &quot;crash&quot;,  &quot;partial&quot;, &quot;no_ack&quot;,      &quot;hold&quot;,</span>
+<span id="L14">                             &quot;linger&quot;};</span>
+<span id="L15">  if (std::find(modes.begin(), modes.end(), o.mode) == modes.end())</span>
+<span id="L16">    return 2;</span>
+<span id="L17">  cil::Mapping mapping;</span>
+<span id="L18">  auto status = cil::Code::not_found;</span>
+<span id="L19">  const auto startup = cil::deadline(o);</span>
+<span id="L20">  do {</span>
+<span id="L21">    status = mapping.open(o.key, false);</span>
+<span id="L22">    if (status == cil::Code::ok)</span>
+<span id="L23">      status = cil::attach(*mapping.region(), o.generation);</span>
+<span id="L24">    if (status == cil::Code::ok)</span>
+<span id="L25">      break;</span>
+<span id="L26">    if (mapping.close() != cil::Code::ok)</span>
+<span id="L27">      return 2;</span>
+<span id="L28">    if (status != cil::Code::not_found &amp;&amp; status != cil::Code::not_ready)</span>
+<span id="L29">      break;</span>
+<span id="L30">    cil::pause();</span>
+<span id="L31">  } while (cil::now_ns() &lt; startup);</span>
+<span id="L32">  if (status != cil::Code::ok) {</span>
+<span id="L33">    std::cerr &lt;&lt; &quot;setup=&quot; &lt;&lt; cil::name(status) &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L34">    return cil::closed(mapping, status);</span>
+<span id="L35">  }</span>
+<span id="L36">  auto &amp;region = *mapping.region();</span>
+<span id="L37">  cil::Endpoint endpoint{&amp;region, o.generation, {}, {}, false};</span>
+<span id="L38">  std::cout &lt;&lt; &quot;ready controller\n&quot; &lt;&lt; std::flush;</span>
+<span id="L39">  cil::Wire first{};</span>
+<span id="L40">  std::size_t sent = 0;</span>
+<span id="L41">  const auto lifetime = cil::now_ns() + 30&#x27;000&#x27;000&#x27;000ULL;</span>
+<span id="L42">  while (!cil::load(region.stopping) &amp;&amp; cil::now_ns() &lt; lifetime) {</span>
+<span id="L43">    if (o.mode == &quot;hold&quot; || o.mode == &quot;linger&quot;) {</span>
+<span id="L44">      cil::pause();</span>
+<span id="L45">      continue;</span>
+<span id="L46">    }</span>
+<span id="L47">    cil::Record plant;</span>
+<span id="L48">    status = endpoint.receive(0, plant);</span>
+<span id="L49">    if (status == cil::Code::empty) {</span>
+<span id="L50">      cil::pause();</span>
+<span id="L51">      continue;</span>
+<span id="L52">    }</span>
+<span id="L53">    if (status != cil::Code::ok)</span>
+<span id="L54">      break;</span>
+<span id="L55">    if (o.mode == &quot;crash&quot;)</span>
+<span id="L56">      std::_Exit(77);</span>
+<span id="L57">    cil::Record command = plant;</span>
+<span id="L58">    command.kind = cil::Kind::command;</span>
+<span id="L59">    command.sequence = endpoint.sent.next;</span>
+<span id="L60">    command.correlation = plant.sequence;</span>
+<span id="L61">    for (std::size_t a = 0; a &lt; 3; ++a)</span>
+<span id="L62">      for (std::size_t i = 0; i &lt; plant.count; ++i)</span>
+<span id="L63">        command.values[a][i] =</span>
+<span id="L64">            golden::effort(plant.values[a][i], plant.target, plant.gain);</span>
+<span id="L65">    cil::Wire wire;</span>
+<span id="L66">    if (cil::encode(command, wire) != cil::Code::ok) {</span>
+<span id="L67">      status = cil::Code::invalid;</span>
+<span id="L68">      break;</span>
+<span id="L69">    }</span>
+<span id="L70">    if (!sent)</span>
+<span id="L71">      first = wire;</span>
+<span id="L72">    if (o.mode == &quot;partial&quot;) {</span>
+<span id="L73">      region.commands.bytes[0] = std::byte{0xee};</span>
+<span id="L74">      std::_Exit(78);</span>
+<span id="L75">    }</span>
+<span id="L76">    if (o.mode == &quot;schema&quot;)</span>
+<span id="L77">      wire[4] = std::byte{9};</span>
+<span id="L78">    else if (o.mode == &quot;generation&quot;)</span>
+<span id="L79">      golden::put(wire, 32, o.generation + 1, 8);</span>
+<span id="L80">    else if (o.mode == &quot;sequence&quot;)</span>
+<span id="L81">      golden::put(wire, 40, command.sequence + 1, 8);</span>
+<span id="L82">    else if (o.mode == &quot;future&quot;) {</span>
+<span id="L83">      golden::put(wire, 48, plant.issued_tick + 1, 8);</span>
+<span id="L84">      golden::put(wire, 56, plant.expiry_tick + 1, 8);</span>
+<span id="L85">    } else if (o.mode == &quot;expired&quot; &amp;&amp; plant.issued_tick) {</span>
+<span id="L86">      golden::put(wire, 48, plant.issued_tick - 1, 8);</span>
+<span id="L87">      golden::put(wire, 56, plant.expiry_tick - 1, 8);</span>
+<span id="L88">    } else if (o.mode == &quot;correlation&quot;)</span>
+<span id="L89">      golden::put(wire, 64, plant.sequence + 1, 8);</span>
+<span id="L90">    if (o.mode != &quot;schema&quot;) {</span>
+<span id="L91">      golden::put(wire, 72, 0, 8);</span>
+<span id="L92">      golden::put(wire, 72, golden::digest(wire), 8);</span>
+<span id="L93">    }</span>
+<span id="L94">    if (o.mode == &quot;replay&quot; &amp;&amp; sent == 1)</span>
+<span id="L95">      wire = first;</span>
+<span id="L96">    status = cil::push(region.commands, wire);</span>
+<span id="L97">    if (status != cil::Code::ok)</span>
+<span id="L98">      break;</span>
+<span id="L99">    endpoint.sent.advance();</span>
+<span id="L100">    ++sent;</span>
+<span id="L101">  }</span>
+<span id="L102">  if (o.mode == &quot;linger&quot;) {</span>
+<span id="L103">    std::cout &lt;&lt; &quot;stopped old controller\n&quot; &lt;&lt; std::flush;</span>
+<span id="L104">    const auto until = cil::now_ns() + 2&#x27;000&#x27;000&#x27;000ULL;</span>
+<span id="L105">    while (cil::now_ns() &lt; until) {</span>
+<span id="L106">      (void)cil::push(region.commands, first);</span>
+<span id="L107">      cil::pause();</span>
+<span id="L108">    }</span>
+<span id="L109">  }</span>
+<span id="L110">  endpoint.detach();</span>
+<span id="L111">  if (o.mode != &quot;no_ack&quot; &amp;&amp; o.mode != &quot;linger&quot;)</span>
+<span id="L112">    cil::store(region.acknowledged, 1);</span>
+<span id="L113">  if (status == cil::Code::empty || status == cil::Code::closed)</span>
+<span id="L114">    status = cil::Code::ok;</span>
+<span id="L115">  std::cout &lt;&lt; &quot;controller status=&quot; &lt;&lt; cil::name(status) &lt;&lt; &quot; sent=&quot; &lt;&lt; sent</span>
+<span id="L116">            &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L117">  return cil::closed(mapping, status);</span>
+<span id="L118">}</span></pre></html>

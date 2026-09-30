@@ -1,0 +1,1226 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tools/qualification.py</title><h1>tools/qualification.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#!/usr/bin/env python3</span>
+<span id="L2">&quot;&quot;&quot;Bounded offline validation and proposal tooling for RTFW qualification.&quot;&quot;&quot;</span>
+<span id="L3"></span>
+<span id="L4">from __future__ import annotations</span>
+<span id="L5"></span>
+<span id="L6">import argparse</span>
+<span id="L7">import decimal</span>
+<span id="L8">import datetime</span>
+<span id="L9">import hashlib</span>
+<span id="L10">import json</span>
+<span id="L11">import math</span>
+<span id="L12">import os</span>
+<span id="L13">import pathlib</span>
+<span id="L14">import re</span>
+<span id="L15">import stat</span>
+<span id="L16">import sys</span>
+<span id="L17">import tempfile</span>
+<span id="L18">import unicodedata</span>
+<span id="L19">from dataclasses import dataclass</span>
+<span id="L20">from typing import Any, Callable, Iterable</span>
+<span id="L21"></span>
+<span id="L22"></span>
+<span id="L23">SCHEMA_VERSION = 1</span>
+<span id="L24">SCOPES = (&quot;nvidia&quot;, &quot;xdma&quot;, &quot;combined&quot;, &quot;rt1&quot;, &quot;rt2&quot;)</span>
+<span id="L25">EVIDENCE_CLASSES = (&quot;synthetic_fixture&quot;, &quot;qualification_campaign&quot;)</span>
+<span id="L26">TRIAL_KINDS = (</span>
+<span id="L27">    &quot;functional&quot;,</span>
+<span id="L28">    &quot;endurance&quot;,</span>
+<span id="L29">    &quot;thermal&quot;,</span>
+<span id="L30">    &quot;saturation&quot;,</span>
+<span id="L31">    &quot;device_loss&quot;,</span>
+<span id="L32">    &quot;reset_rebind&quot;,</span>
+<span id="L33">    &quot;shutdown&quot;,</span>
+<span id="L34">)</span>
+<span id="L35">RAW_POPULATIONS = (</span>
+<span id="L36">    &quot;release&quot;,</span>
+<span id="L37">    &quot;wake&quot;,</span>
+<span id="L38">    &quot;compute&quot;,</span>
+<span id="L39">    &quot;submit&quot;,</span>
+<span id="L40">    &quot;poll&quot;,</span>
+<span id="L41">    &quot;completion&quot;,</span>
+<span id="L42">    &quot;slack&quot;,</span>
+<span id="L43">    &quot;miss&quot;,</span>
+<span id="L44">    &quot;temperature&quot;,</span>
+<span id="L45">    &quot;clock&quot;,</span>
+<span id="L46">    &quot;power&quot;,</span>
+<span id="L47">    &quot;memory&quot;,</span>
+<span id="L48">    &quot;queue&quot;,</span>
+<span id="L49">    &quot;error&quot;,</span>
+<span id="L50">    &quot;recovery&quot;,</span>
+<span id="L51">)</span>
+<span id="L52">MAX_JSON_BYTES = 1024 * 1024</span>
+<span id="L53">MAX_NESTING_DEPTH = 32</span>
+<span id="L54">MAX_STRING_CHARS = 4096</span>
+<span id="L55">MAX_COLLECTION_ITEMS = 4096</span>
+<span id="L56">MAX_ERRORS = 128</span>
+<span id="L57">MAX_ARTIFACTS = 256</span>
+<span id="L58">MAX_ARTIFACT_BYTES = 64 * 1024 * 1024</span>
+<span id="L59">MAX_ARTIFACT_TOTAL_BYTES = 512 * 1024 * 1024</span>
+<span id="L60">MAX_ARTIFACT_TREE_DEPTH = 8</span>
+<span id="L61">MAX_ARTIFACT_TREE_ENTRIES = MAX_ARTIFACTS * (MAX_ARTIFACT_TREE_DEPTH + 1)</span>
+<span id="L62">MAX_DURATION_SECONDS = 31_536_000</span>
+<span id="L63">MAX_SAMPLE_COUNT = 10_000_000</span>
+<span id="L64">MAX_TRIALS = 64</span>
+<span id="L65">MAX_THRESHOLDS = 128</span>
+<span id="L66">MAX_EXCEPTIONS = 32</span>
+<span id="L67">MAX_IDENTIFIER = 128</span>
+<span id="L68">MAX_TEXT = 1024</span>
+<span id="L69">SHA256_PATTERN = re.compile(r&quot;[0-9a-f]{64}&quot;)</span>
+<span id="L70">COMMIT_PATTERN = re.compile(r&quot;[0-9a-f]{40}&quot;)</span>
+<span id="L71">IDENTIFIER_PATTERN = re.compile(r&quot;[a-z0-9][a-z0-9._-]{0,127}&quot;)</span>
+<span id="L72">TIME_PATTERN = re.compile(</span>
+<span id="L73">    r&quot;\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T&quot;</span>
+<span id="L74">    r&quot;(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\dZ&quot;</span>
+<span id="L75">)</span>
+<span id="L76"></span>
+<span id="L77"></span>
+<span id="L78">class DuplicateKeyError(ValueError):</span>
+<span id="L79">    pass</span>
+<span id="L80"></span>
+<span id="L81"></span>
+<span id="L82">class ValidationFailure(ValueError):</span>
+<span id="L83">    def __init__(self, errors: Iterable[str]):</span>
+<span id="L84">        self.errors = tuple(errors)</span>
+<span id="L85">        super().__init__(&quot;; &quot;.join(self.errors))</span>
+<span id="L86"></span>
+<span id="L87"></span>
+<span id="L88">class ArtifactLimitError(ValueError):</span>
+<span id="L89">    pass</span>
+<span id="L90"></span>
+<span id="L91"></span>
+<span id="L92">class ErrorCollector:</span>
+<span id="L93">    def __init__(self) -&gt; None:</span>
+<span id="L94">        self.errors: list[str] = []</span>
+<span id="L95"></span>
+<span id="L96">    def add(self, message: str) -&gt; None:</span>
+<span id="L97">        if len(self.errors) &lt; MAX_ERRORS:</span>
+<span id="L98">            self.errors.append(message)</span>
+<span id="L99">        elif len(self.errors) == MAX_ERRORS:</span>
+<span id="L100">            self.errors.append(&quot;additional validation errors omitted&quot;)</span>
+<span id="L101"></span>
+<span id="L102">    def require(self, condition: bool, message: str) -&gt; bool:</span>
+<span id="L103">        if not condition:</span>
+<span id="L104">            self.add(message)</span>
+<span id="L105">        return condition</span>
+<span id="L106"></span>
+<span id="L107">    def finish(self) -&gt; None:</span>
+<span id="L108">        if self.errors:</span>
+<span id="L109">            raise ValidationFailure(self.errors)</span>
+<span id="L110"></span>
+<span id="L111"></span>
+<span id="L112">@dataclass(frozen=True)</span>
+<span id="L113">class LoadedDocument:</span>
+<span id="L114">    path: pathlib.Path</span>
+<span id="L115">    raw: bytes</span>
+<span id="L116">    value: dict[str, Any]</span>
+<span id="L117">    sha256: str</span>
+<span id="L118"></span>
+<span id="L119"></span>
+<span id="L120">@dataclass(frozen=True)</span>
+<span id="L121">class ValidatedSet:</span>
+<span id="L122">    plan: LoadedDocument</span>
+<span id="L123">    record: LoadedDocument</span>
+<span id="L124">    review: LoadedDocument</span>
+<span id="L125">    artifact_manifest_sha256: str</span>
+<span id="L126">    artifact_digests: tuple[dict[str, Any], ...]</span>
+<span id="L127"></span>
+<span id="L128"></span>
+<span id="L129">def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -&gt; dict[str, Any]:</span>
+<span id="L130">    result: dict[str, Any] = {}</span>
+<span id="L131">    for key, value in pairs:</span>
+<span id="L132">        if key in result:</span>
+<span id="L133">            raise DuplicateKeyError(f&quot;duplicate JSON key: {key!r}&quot;)</span>
+<span id="L134">        result[key] = value</span>
+<span id="L135">    return result</span>
+<span id="L136"></span>
+<span id="L137"></span>
+<span id="L138">def _reject_constant(value: str) -&gt; None:</span>
+<span id="L139">    raise ValueError(f&quot;non-finite JSON number is forbidden: {value}&quot;)</span>
+<span id="L140"></span>
+<span id="L141"></span>
+<span id="L142">def _lexical_depth(raw: bytes) -&gt; int:</span>
+<span id="L143">    depth = 0</span>
+<span id="L144">    maximum = 0</span>
+<span id="L145">    in_string = False</span>
+<span id="L146">    escaped = False</span>
+<span id="L147">    for byte in raw:</span>
+<span id="L148">        character = chr(byte)</span>
+<span id="L149">        if in_string:</span>
+<span id="L150">            if escaped:</span>
+<span id="L151">                escaped = False</span>
+<span id="L152">            elif character == &quot;\\&quot;:</span>
+<span id="L153">                escaped = True</span>
+<span id="L154">            elif character == &#x27;&quot;&#x27;:</span>
+<span id="L155">                in_string = False</span>
+<span id="L156">        elif character == &#x27;&quot;&#x27;:</span>
+<span id="L157">            in_string = True</span>
+<span id="L158">        elif character in &quot;[{&quot;:</span>
+<span id="L159">            depth += 1</span>
+<span id="L160">            maximum = max(maximum, depth)</span>
+<span id="L161">            if maximum &gt; MAX_NESTING_DEPTH:</span>
+<span id="L162">                return maximum</span>
+<span id="L163">        elif character in &quot;]}&quot;:</span>
+<span id="L164">            depth -= 1</span>
+<span id="L165">    return maximum</span>
+<span id="L166"></span>
+<span id="L167"></span>
+<span id="L168">def _bounded_walk(value: Any, path: str, errors: ErrorCollector, depth: int = 0) -&gt; None:</span>
+<span id="L169">    if depth &gt; MAX_NESTING_DEPTH:</span>
+<span id="L170">        errors.add(f&quot;{path}: nesting exceeds {MAX_NESTING_DEPTH}&quot;)</span>
+<span id="L171">        return</span>
+<span id="L172">    if isinstance(value, str):</span>
+<span id="L173">        errors.require(</span>
+<span id="L174">            len(value) &lt;= MAX_STRING_CHARS,</span>
+<span id="L175">            f&quot;{path}: string exceeds {MAX_STRING_CHARS} characters&quot;,</span>
+<span id="L176">        )</span>
+<span id="L177">    elif isinstance(value, list):</span>
+<span id="L178">        if not errors.require(</span>
+<span id="L179">            len(value) &lt;= MAX_COLLECTION_ITEMS,</span>
+<span id="L180">            f&quot;{path}: array exceeds {MAX_COLLECTION_ITEMS} items&quot;,</span>
+<span id="L181">        ):</span>
+<span id="L182">            return</span>
+<span id="L183">        for index, item in enumerate(value):</span>
+<span id="L184">            _bounded_walk(item, f&quot;{path}[{index}]&quot;, errors, depth + 1)</span>
+<span id="L185">    elif isinstance(value, dict):</span>
+<span id="L186">        if not errors.require(</span>
+<span id="L187">            len(value) &lt;= MAX_COLLECTION_ITEMS,</span>
+<span id="L188">            f&quot;{path}: object exceeds {MAX_COLLECTION_ITEMS} properties&quot;,</span>
+<span id="L189">        ):</span>
+<span id="L190">            return</span>
+<span id="L191">        for key, item in value.items():</span>
+<span id="L192">            if not isinstance(key, str):</span>
+<span id="L193">                errors.add(f&quot;{path}: object key must be a string&quot;)</span>
+<span id="L194">                continue</span>
+<span id="L195">            _bounded_walk(key, f&quot;{path}.&lt;key&gt;&quot;, errors, depth + 1)</span>
+<span id="L196">            _bounded_walk(item, f&quot;{path}.{key}&quot;, errors, depth + 1)</span>
+<span id="L197"></span>
+<span id="L198"></span>
+<span id="L199">def load_document(path: pathlib.Path, expected_type: str) -&gt; LoadedDocument:</span>
+<span id="L200">    errors = ErrorCollector()</span>
+<span id="L201">    try:</span>
+<span id="L202">        if path.is_symlink() or not path.is_file():</span>
+<span id="L203">            raise ValueError(&quot;document must be a regular non-symlink file&quot;)</span>
+<span id="L204">        size = path.stat().st_size</span>
+<span id="L205">        if size &gt; MAX_JSON_BYTES:</span>
+<span id="L206">            raise ValueError(f&quot;document exceeds {MAX_JSON_BYTES} bytes&quot;)</span>
+<span id="L207">        raw = path.read_bytes()</span>
+<span id="L208">        if raw.startswith(b&quot;\xef\xbb\xbf&quot;):</span>
+<span id="L209">            raise ValueError(&quot;UTF-8 BOM is forbidden&quot;)</span>
+<span id="L210">        if _lexical_depth(raw) &gt; MAX_NESTING_DEPTH:</span>
+<span id="L211">            raise ValueError(f&quot;JSON nesting exceeds {MAX_NESTING_DEPTH}&quot;)</span>
+<span id="L212">        text = raw.decode(&quot;utf-8&quot;, errors=&quot;strict&quot;)</span>
+<span id="L213">        value = json.loads(</span>
+<span id="L214">            text,</span>
+<span id="L215">            object_pairs_hook=_reject_duplicate_keys,</span>
+<span id="L216">            parse_float=decimal.Decimal,</span>
+<span id="L217">            parse_int=int,</span>
+<span id="L218">            parse_constant=_reject_constant,</span>
+<span id="L219">        )</span>
+<span id="L220">    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:</span>
+<span id="L221">        raise ValidationFailure((f&quot;{expected_type}: cannot parse: {exc}&quot;,)) from exc</span>
+<span id="L222">    if not isinstance(value, dict):</span>
+<span id="L223">        errors.add(f&quot;{expected_type}: top-level value must be an object&quot;)</span>
+<span id="L224">    else:</span>
+<span id="L225">        _bounded_walk(value, expected_type, errors)</span>
+<span id="L226">        if value.get(&quot;document_type&quot;) != expected_type:</span>
+<span id="L227">            errors.add(f&quot;{expected_type}: document_type mismatch&quot;)</span>
+<span id="L228">        if value.get(&quot;schema_version&quot;) != SCHEMA_VERSION:</span>
+<span id="L229">            errors.add(f&quot;{expected_type}: schema_version must be {SCHEMA_VERSION}&quot;)</span>
+<span id="L230">    errors.finish()</span>
+<span id="L231">    return LoadedDocument(path, raw, value, hashlib.sha256(raw).hexdigest())</span>
+<span id="L232"></span>
+<span id="L233"></span>
+<span id="L234">def _is_int(value: Any) -&gt; bool:</span>
+<span id="L235">    return isinstance(value, int) and not isinstance(value, bool)</span>
+<span id="L236"></span>
+<span id="L237"></span>
+<span id="L238">def _is_number(value: Any) -&gt; bool:</span>
+<span id="L239">    return (</span>
+<span id="L240">        (_is_int(value) or isinstance(value, decimal.Decimal))</span>
+<span id="L241">        and decimal.Decimal(value).is_finite()</span>
+<span id="L242">    )</span>
+<span id="L243"></span>
+<span id="L244"></span>
+<span id="L245">def _closed_object(</span>
+<span id="L246">    value: Any,</span>
+<span id="L247">    path: str,</span>
+<span id="L248">    required: set[str],</span>
+<span id="L249">    optional: set[str],</span>
+<span id="L250">    errors: ErrorCollector,</span>
+<span id="L251">) -&gt; dict[str, Any]:</span>
+<span id="L252">    if not isinstance(value, dict):</span>
+<span id="L253">        errors.add(f&quot;{path}: must be an object&quot;)</span>
+<span id="L254">        return {}</span>
+<span id="L255">    keys = set(value)</span>
+<span id="L256">    for key in sorted(required - keys):</span>
+<span id="L257">        errors.add(f&quot;{path}: missing required property {key}&quot;)</span>
+<span id="L258">    for key in sorted(keys - required - optional):</span>
+<span id="L259">        errors.add(f&quot;{path}: unknown property {key}&quot;)</span>
+<span id="L260">    return value</span>
+<span id="L261"></span>
+<span id="L262"></span>
+<span id="L263">def _string(</span>
+<span id="L264">    value: Any,</span>
+<span id="L265">    path: str,</span>
+<span id="L266">    errors: ErrorCollector,</span>
+<span id="L267">    *,</span>
+<span id="L268">    minimum: int = 1,</span>
+<span id="L269">    maximum: int = MAX_TEXT,</span>
+<span id="L270">    pattern: re.Pattern[str] | None = None,</span>
+<span id="L271">) -&gt; str:</span>
+<span id="L272">    if not isinstance(value, str):</span>
+<span id="L273">        errors.add(f&quot;{path}: must be a string&quot;)</span>
+<span id="L274">        return &quot;&quot;</span>
+<span id="L275">    if not minimum &lt;= len(value) &lt;= maximum:</span>
+<span id="L276">        errors.add(f&quot;{path}: length must be between {minimum} and {maximum}&quot;)</span>
+<span id="L277">    if any(ord(character) &lt; 0x20 for character in value):</span>
+<span id="L278">        errors.add(f&quot;{path}: control characters are forbidden&quot;)</span>
+<span id="L279">    if pattern is not None and pattern.fullmatch(value) is None:</span>
+<span id="L280">        errors.add(f&quot;{path}: has a noncanonical value&quot;)</span>
+<span id="L281">    return value</span>
+<span id="L282"></span>
+<span id="L283"></span>
+<span id="L284">def _integer(</span>
+<span id="L285">    value: Any,</span>
+<span id="L286">    path: str,</span>
+<span id="L287">    errors: ErrorCollector,</span>
+<span id="L288">    minimum: int,</span>
+<span id="L289">    maximum: int,</span>
+<span id="L290">) -&gt; int:</span>
+<span id="L291">    if not _is_int(value) or not minimum &lt;= value &lt;= maximum:</span>
+<span id="L292">        errors.add(f&quot;{path}: must be an integer in [{minimum}, {maximum}]&quot;)</span>
+<span id="L293">        return minimum</span>
+<span id="L294">    return value</span>
+<span id="L295"></span>
+<span id="L296"></span>
+<span id="L297">def _boolean(value: Any, path: str, errors: ErrorCollector) -&gt; bool:</span>
+<span id="L298">    if not isinstance(value, bool):</span>
+<span id="L299">        errors.add(f&quot;{path}: must be a boolean&quot;)</span>
+<span id="L300">        return False</span>
+<span id="L301">    return value</span>
+<span id="L302"></span>
+<span id="L303"></span>
+<span id="L304">def _identifier(value: Any, path: str, errors: ErrorCollector) -&gt; str:</span>
+<span id="L305">    return _string(</span>
+<span id="L306">        value,</span>
+<span id="L307">        path,</span>
+<span id="L308">        errors,</span>
+<span id="L309">        maximum=MAX_IDENTIFIER,</span>
+<span id="L310">        pattern=IDENTIFIER_PATTERN,</span>
+<span id="L311">    )</span>
+<span id="L312"></span>
+<span id="L313"></span>
+<span id="L314">def _digest(value: Any, path: str, errors: ErrorCollector) -&gt; str:</span>
+<span id="L315">    return _string(value, path, errors, minimum=64, maximum=64, pattern=SHA256_PATTERN)</span>
+<span id="L316"></span>
+<span id="L317"></span>
+<span id="L318">def _commit(value: Any, path: str, errors: ErrorCollector) -&gt; str:</span>
+<span id="L319">    return _string(value, path, errors, minimum=40, maximum=40, pattern=COMMIT_PATTERN)</span>
+<span id="L320"></span>
+<span id="L321"></span>
+<span id="L322">def _timestamp(value: Any, path: str, errors: ErrorCollector) -&gt; str:</span>
+<span id="L323">    result = _string(value, path, errors, minimum=20, maximum=20, pattern=TIME_PATTERN)</span>
+<span id="L324">    if TIME_PATTERN.fullmatch(result):</span>
+<span id="L325">        try:</span>
+<span id="L326">            datetime.datetime.strptime(result, &quot;%Y-%m-%dT%H:%M:%SZ&quot;)</span>
+<span id="L327">        except ValueError:</span>
+<span id="L328">            errors.add(f&quot;{path}: invalid UTC calendar time&quot;)</span>
+<span id="L329">    return result</span>
+<span id="L330"></span>
+<span id="L331"></span>
+<span id="L332">def _unique_ids(</span>
+<span id="L333">    values: Any,</span>
+<span id="L334">    path: str,</span>
+<span id="L335">    errors: ErrorCollector,</span>
+<span id="L336">    *,</span>
+<span id="L337">    minimum: int,</span>
+<span id="L338">    maximum: int,</span>
+<span id="L339">) -&gt; list[dict[str, Any]]:</span>
+<span id="L340">    if not isinstance(values, list) or not minimum &lt;= len(values) &lt;= maximum:</span>
+<span id="L341">        errors.add(f&quot;{path}: item count must be in [{minimum}, {maximum}]&quot;)</span>
+<span id="L342">        return []</span>
+<span id="L343">    result: list[dict[str, Any]] = []</span>
+<span id="L344">    seen: set[str] = set()</span>
+<span id="L345">    for index, value in enumerate(values):</span>
+<span id="L346">        if not isinstance(value, dict):</span>
+<span id="L347">            errors.add(f&quot;{path}[{index}]: must be an object&quot;)</span>
+<span id="L348">            continue</span>
+<span id="L349">        identity = _identifier(value.get(&quot;id&quot;), f&quot;{path}[{index}].id&quot;, errors)</span>
+<span id="L350">        if identity in seen:</span>
+<span id="L351">            errors.add(f&quot;{path}: duplicate identity {identity}&quot;)</span>
+<span id="L352">        seen.add(identity)</span>
+<span id="L353">        result.append(value)</span>
+<span id="L354">    return result</span>
+<span id="L355"></span>
+<span id="L356"></span>
+<span id="L357">def _validate_source(value: Any, path: str, errors: ErrorCollector) -&gt; dict[str, Any]:</span>
+<span id="L358">    obj = _closed_object(</span>
+<span id="L359">        value,</span>
+<span id="L360">        path,</span>
+<span id="L361">        {&quot;commit&quot;, &quot;build_id&quot;, &quot;product_version&quot;},</span>
+<span id="L362">        set(),</span>
+<span id="L363">        errors,</span>
+<span id="L364">    )</span>
+<span id="L365">    _commit(obj.get(&quot;commit&quot;), f&quot;{path}.commit&quot;, errors)</span>
+<span id="L366">    _identifier(obj.get(&quot;build_id&quot;), f&quot;{path}.build_id&quot;, errors)</span>
+<span id="L367">    _string(</span>
+<span id="L368">        obj.get(&quot;product_version&quot;),</span>
+<span id="L369">        f&quot;{path}.product_version&quot;,</span>
+<span id="L370">        errors,</span>
+<span id="L371">        maximum=32,</span>
+<span id="L372">        pattern=re.compile(r&quot;(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)&quot;),</span>
+<span id="L373">    )</span>
+<span id="L374">    return obj</span>
+<span id="L375"></span>
+<span id="L376"></span>
+<span id="L377">def _validate_host(value: Any, path: str, errors: ErrorCollector) -&gt; dict[str, Any]:</span>
+<span id="L378">    obj = _closed_object(</span>
+<span id="L379">        value,</span>
+<span id="L380">        path,</span>
+<span id="L381">        {&quot;cpu&quot;, &quot;motherboard&quot;, &quot;bios_firmware&quot;, &quot;memory&quot;, &quot;operating_system&quot;, &quot;kernel&quot;, &quot;compiler&quot;},</span>
+<span id="L382">        set(),</span>
+<span id="L383">        errors,</span>
+<span id="L384">    )</span>
+<span id="L385">    for name in (&quot;cpu&quot;, &quot;motherboard&quot;, &quot;bios_firmware&quot;, &quot;memory&quot;, &quot;operating_system&quot;, &quot;compiler&quot;):</span>
+<span id="L386">        _string(obj.get(name), f&quot;{path}.{name}&quot;, errors)</span>
+<span id="L387">    kernel = _closed_object(</span>
+<span id="L388">        obj.get(&quot;kernel&quot;),</span>
+<span id="L389">        f&quot;{path}.kernel&quot;,</span>
+<span id="L390">        {&quot;version&quot;, &quot;configuration_sha256&quot;, &quot;boot_parameters&quot;},</span>
+<span id="L391">        set(),</span>
+<span id="L392">        errors,</span>
+<span id="L393">    )</span>
+<span id="L394">    _string(kernel.get(&quot;version&quot;), f&quot;{path}.kernel.version&quot;, errors)</span>
+<span id="L395">    _digest(kernel.get(&quot;configuration_sha256&quot;), f&quot;{path}.kernel.configuration_sha256&quot;, errors)</span>
+<span id="L396">    _string(kernel.get(&quot;boot_parameters&quot;), f&quot;{path}.kernel.boot_parameters&quot;, errors)</span>
+<span id="L397">    return obj</span>
+<span id="L398"></span>
+<span id="L399"></span>
+<span id="L400">def _validate_topology(value: Any, path: str, errors: ErrorCollector) -&gt; dict[str, Any]:</span>
+<span id="L401">    obj = _closed_object(</span>
+<span id="L402">        value,</span>
+<span id="L403">        path,</span>
+<span id="L404">        {&quot;numa&quot;, &quot;iommu&quot;, &quot;irq&quot;, &quot;power&quot;},</span>
+<span id="L405">        set(),</span>
+<span id="L406">        errors,</span>
+<span id="L407">    )</span>
+<span id="L408">    for name in (&quot;numa&quot;, &quot;iommu&quot;, &quot;irq&quot;, &quot;power&quot;):</span>
+<span id="L409">        _string(obj.get(name), f&quot;{path}.{name}&quot;, errors)</span>
+<span id="L410">    return obj</span>
+<span id="L411"></span>
+<span id="L412"></span>
+<span id="L413">def _validate_policy(</span>
+<span id="L414">    value: Any,</span>
+<span id="L415">    path: str,</span>
+<span id="L416">    errors: ErrorCollector,</span>
+<span id="L417">    scope: str,</span>
+<span id="L418">) -&gt; dict[str, Any]:</span>
+<span id="L419">    obj = _closed_object(</span>
+<span id="L420">        value,</span>
+<span id="L421">        path,</span>
+<span id="L422">        {&quot;runtime&quot;, &quot;threads&quot;, &quot;memory&quot;, &quot;time&quot;, &quot;measured_host_policy&quot;, &quot;rt2&quot;},</span>
+<span id="L423">        set(),</span>
+<span id="L424">        errors,</span>
+<span id="L425">    )</span>
+<span id="L426">    for name in (&quot;runtime&quot;, &quot;threads&quot;, &quot;memory&quot;, &quot;time&quot;, &quot;measured_host_policy&quot;):</span>
+<span id="L427">        _string(obj.get(name), f&quot;{path}.{name}&quot;, errors)</span>
+<span id="L428">    rt2 = _closed_object(</span>
+<span id="L429">        obj.get(&quot;rt2&quot;),</span>
+<span id="L430">        f&quot;{path}.rt2&quot;,</span>
+<span id="L431">        {&quot;applicable&quot;, &quot;preempt_rt&quot;, &quot;isolation&quot;, &quot;irq_placement&quot;, &quot;scheduling&quot;, &quot;locking&quot;},</span>
+<span id="L432">        set(),</span>
+<span id="L433">        errors,</span>
+<span id="L434">    )</span>
+<span id="L435">    applicable = _boolean(rt2.get(&quot;applicable&quot;), f&quot;{path}.rt2.applicable&quot;, errors)</span>
+<span id="L436">    preempt_rt = _boolean(rt2.get(&quot;preempt_rt&quot;), f&quot;{path}.rt2.preempt_rt&quot;, errors)</span>
+<span id="L437">    for name in (&quot;isolation&quot;, &quot;irq_placement&quot;, &quot;scheduling&quot;, &quot;locking&quot;):</span>
+<span id="L438">        _string(rt2.get(name), f&quot;{path}.rt2.{name}&quot;, errors)</span>
+<span id="L439">    if scope == &quot;rt2&quot;:</span>
+<span id="L440">        errors.require(applicable and preempt_rt, f&quot;{path}.rt2: RT2 requires applicable PREEMPT_RT evidence&quot;)</span>
+<span id="L441">    else:</span>
+<span id="L442">        errors.require(not applicable and not preempt_rt, f&quot;{path}.rt2: must be inapplicable outside RT2&quot;)</span>
+<span id="L443">    return obj</span>
+<span id="L444"></span>
+<span id="L445"></span>
+<span id="L446">def _validate_workload(value: Any, path: str, errors: ErrorCollector) -&gt; dict[str, Any]:</span>
+<span id="L447">    obj = _closed_object(value, path, {&quot;id&quot;, &quot;input_id&quot;, &quot;input_sha256&quot;}, set(), errors)</span>
+<span id="L448">    _identifier(obj.get(&quot;id&quot;), f&quot;{path}.id&quot;, errors)</span>
+<span id="L449">    _identifier(obj.get(&quot;input_id&quot;), f&quot;{path}.input_id&quot;, errors)</span>
+<span id="L450">    _digest(obj.get(&quot;input_sha256&quot;), f&quot;{path}.input_sha256&quot;, errors)</span>
+<span id="L451">    return obj</span>
+<span id="L452"></span>
+<span id="L453"></span>
+<span id="L454">def _validate_measurement(value: Any, path: str, errors: ErrorCollector) -&gt; dict[str, Any]:</span>
+<span id="L455">    obj = _closed_object(</span>
+<span id="L456">        value,</span>
+<span id="L457">        path,</span>
+<span id="L458">        {&quot;warmup_samples&quot;, &quot;duration_seconds&quot;, &quot;sample_count&quot;},</span>
+<span id="L459">        set(),</span>
+<span id="L460">        errors,</span>
+<span id="L461">    )</span>
+<span id="L462">    _integer(obj.get(&quot;warmup_samples&quot;), f&quot;{path}.warmup_samples&quot;, errors, 0, MAX_SAMPLE_COUNT)</span>
+<span id="L463">    _integer(obj.get(&quot;duration_seconds&quot;), f&quot;{path}.duration_seconds&quot;, errors, 1, MAX_DURATION_SECONDS)</span>
+<span id="L464">    _integer(obj.get(&quot;sample_count&quot;), f&quot;{path}.sample_count&quot;, errors, 1, MAX_SAMPLE_COUNT)</span>
+<span id="L465">    return obj</span>
+<span id="L466"></span>
+<span id="L467"></span>
+<span id="L468">def _validate_nvidia(value: Any, path: str, errors: ErrorCollector) -&gt; dict[str, Any]:</span>
+<span id="L469">    obj = _closed_object(</span>
+<span id="L470">        value,</span>
+<span id="L471">        path,</span>
+<span id="L472">        {&quot;gpu&quot;, &quot;pci_bdf&quot;, &quot;pcie_link&quot;, &quot;cuda_driver&quot;, &quot;cuda_toolkit&quot;, &quot;firmware&quot;, &quot;power_policy&quot;, &quot;clock_policy&quot;},</span>
+<span id="L473">        set(),</span>
+<span id="L474">        errors,</span>
+<span id="L475">    )</span>
+<span id="L476">    for name in obj:</span>
+<span id="L477">        _string(obj.get(name), f&quot;{path}.{name}&quot;, errors)</span>
+<span id="L478">    return obj</span>
+<span id="L479"></span>
+<span id="L480"></span>
+<span id="L481">def _validate_xdma(value: Any, path: str, errors: ErrorCollector) -&gt; dict[str, Any]:</span>
+<span id="L482">    obj = _closed_object(</span>
+<span id="L483">        value,</span>
+<span id="L484">        path,</span>
+<span id="L485">        {&quot;fpga_part&quot;, &quot;pci_bdf&quot;, &quot;pcie_link&quot;, &quot;driver_revision&quot;, &quot;module_parameters&quot;, &quot;firmware_or_bitstream_sha256&quot;, &quot;ip_configuration&quot;, &quot;memory_map&quot;},</span>
+<span id="L486">        set(),</span>
+<span id="L487">        errors,</span>
+<span id="L488">    )</span>
+<span id="L489">    for name in obj:</span>
+<span id="L490">        if name == &quot;firmware_or_bitstream_sha256&quot;:</span>
+<span id="L491">            _digest(obj.get(name), f&quot;{path}.{name}&quot;, errors)</span>
+<span id="L492">        else:</span>
+<span id="L493">            _string(obj.get(name), f&quot;{path}.{name}&quot;, errors)</span>
+<span id="L494">    return obj</span>
+<span id="L495"></span>
+<span id="L496"></span>
+<span id="L497">def _validate_accelerator(</span>
+<span id="L498">    value: Any,</span>
+<span id="L499">    path: str,</span>
+<span id="L500">    errors: ErrorCollector,</span>
+<span id="L501">    scope: str,</span>
+<span id="L502">) -&gt; dict[str, Any]:</span>
+<span id="L503">    obj = _closed_object(value, path, set(), {&quot;nvidia&quot;, &quot;xdma&quot;, &quot;host_staging&quot;}, errors)</span>
+<span id="L504">    has_nvidia = &quot;nvidia&quot; in obj</span>
+<span id="L505">    has_xdma = &quot;xdma&quot; in obj</span>
+<span id="L506">    has_staging = &quot;host_staging&quot; in obj</span>
+<span id="L507">    if has_nvidia:</span>
+<span id="L508">        _validate_nvidia(obj[&quot;nvidia&quot;], f&quot;{path}.nvidia&quot;, errors)</span>
+<span id="L509">    if has_xdma:</span>
+<span id="L510">        _validate_xdma(obj[&quot;xdma&quot;], f&quot;{path}.xdma&quot;, errors)</span>
+<span id="L511">    if has_staging:</span>
+<span id="L512">        staging = _closed_object(</span>
+<span id="L513">            obj[&quot;host_staging&quot;],</span>
+<span id="L514">            f&quot;{path}.host_staging&quot;,</span>
+<span id="L515">            {&quot;path&quot;, &quot;direct_peer_dma&quot;},</span>
+<span id="L516">            set(),</span>
+<span id="L517">            errors,</span>
+<span id="L518">        )</span>
+<span id="L519">        _string(staging.get(&quot;path&quot;), f&quot;{path}.host_staging.path&quot;, errors)</span>
+<span id="L520">        direct = _boolean(staging.get(&quot;direct_peer_dma&quot;), f&quot;{path}.host_staging.direct_peer_dma&quot;, errors)</span>
+<span id="L521">        errors.require(not direct, f&quot;{path}.host_staging.direct_peer_dma must be false&quot;)</span>
+<span id="L522">    required = {</span>
+<span id="L523">        &quot;nvidia&quot;: (True, False, False),</span>
+<span id="L524">        &quot;xdma&quot;: (False, True, False),</span>
+<span id="L525">        &quot;combined&quot;: (True, True, True),</span>
+<span id="L526">        &quot;rt1&quot;: (False, False, False),</span>
+<span id="L527">        &quot;rt2&quot;: (False, False, False),</span>
+<span id="L528">    }.get(scope)</span>
+<span id="L529">    if required is not None:</span>
+<span id="L530">        errors.require(</span>
+<span id="L531">            (has_nvidia, has_xdma, has_staging) == required,</span>
+<span id="L532">            f&quot;{path}: accelerator identities do not match scope {scope}&quot;,</span>
+<span id="L533">        )</span>
+<span id="L534">    return obj</span>
+<span id="L535"></span>
+<span id="L536"></span>
+<span id="L537">def _validate_trials(value: Any, path: str, errors: ErrorCollector, scope: str) -&gt; list[dict[str, Any]]:</span>
+<span id="L538">    trials = _unique_ids(value, path, errors, minimum=len(TRIAL_KINDS), maximum=MAX_TRIALS)</span>
+<span id="L539">    kinds: set[str] = set()</span>
+<span id="L540">    device_scope = scope in (&quot;nvidia&quot;, &quot;xdma&quot;, &quot;combined&quot;)</span>
+<span id="L541">    for index, trial in enumerate(trials):</span>
+<span id="L542">        item = _closed_object(</span>
+<span id="L543">            trial,</span>
+<span id="L544">            f&quot;{path}[{index}]&quot;,</span>
+<span id="L545">            {&quot;id&quot;, &quot;kind&quot;, &quot;required&quot;, &quot;applicability&quot;, &quot;rationale&quot;},</span>
+<span id="L546">            set(),</span>
+<span id="L547">            errors,</span>
+<span id="L548">        )</span>
+<span id="L549">        kind = item.get(&quot;kind&quot;)</span>
+<span id="L550">        if kind not in TRIAL_KINDS:</span>
+<span id="L551">            errors.add(f&quot;{path}[{index}].kind: invalid trial kind&quot;)</span>
+<span id="L552">        elif kind in kinds:</span>
+<span id="L553">            errors.add(f&quot;{path}: duplicate trial kind {kind}&quot;)</span>
+<span id="L554">        else:</span>
+<span id="L555">            kinds.add(kind)</span>
+<span id="L556">        required = _boolean(item.get(&quot;required&quot;), f&quot;{path}[{index}].required&quot;, errors)</span>
+<span id="L557">        applicability = item.get(&quot;applicability&quot;)</span>
+<span id="L558">        if applicability not in (&quot;applicable&quot;, &quot;not_applicable&quot;):</span>
+<span id="L559">            errors.add(f&quot;{path}[{index}].applicability: invalid value&quot;)</span>
+<span id="L560">        _string(item.get(&quot;rationale&quot;), f&quot;{path}[{index}].rationale&quot;, errors)</span>
+<span id="L561">        if kind in (&quot;device_loss&quot;, &quot;reset_rebind&quot;) and not device_scope:</span>
+<span id="L562">            errors.require(not required and applicability == &quot;not_applicable&quot;, f&quot;{path}[{index}]: device trial must be explicitly not applicable&quot;)</span>
+<span id="L563">        else:</span>
+<span id="L564">            errors.require(required and applicability == &quot;applicable&quot;, f&quot;{path}[{index}]: mandatory trial must be applicable and required&quot;)</span>
+<span id="L565">    errors.require(kinds == set(TRIAL_KINDS), f&quot;{path}: must cover every required trial kind exactly once&quot;)</span>
+<span id="L566">    return trials</span>
+<span id="L567"></span>
+<span id="L568"></span>
+<span id="L569">def _validate_thresholds(value: Any, path: str, errors: ErrorCollector) -&gt; list[dict[str, Any]]:</span>
+<span id="L570">    thresholds = _unique_ids(value, path, errors, minimum=1, maximum=MAX_THRESHOLDS)</span>
+<span id="L571">    for index, threshold in enumerate(thresholds):</span>
+<span id="L572">        item = _closed_object(</span>
+<span id="L573">            threshold,</span>
+<span id="L574">            f&quot;{path}[{index}]&quot;,</span>
+<span id="L575">            {&quot;id&quot;, &quot;metric&quot;, &quot;unit&quot;, &quot;population&quot;, &quot;statistic&quot;, &quot;comparison&quot;, &quot;bound&quot;, &quot;miss_allowance&quot;, &quot;error_allowance&quot;},</span>
+<span id="L576">            set(),</span>
+<span id="L577">            errors,</span>
+<span id="L578">        )</span>
+<span id="L579">        for name in (&quot;metric&quot;, &quot;unit&quot;, &quot;population&quot;, &quot;statistic&quot;):</span>
+<span id="L580">            _identifier(item.get(name), f&quot;{path}[{index}].{name}&quot;, errors)</span>
+<span id="L581">        if item.get(&quot;comparison&quot;) not in (&quot;le&quot;, &quot;lt&quot;, &quot;ge&quot;, &quot;gt&quot;, &quot;eq&quot;):</span>
+<span id="L582">            errors.add(f&quot;{path}[{index}].comparison: invalid comparison&quot;)</span>
+<span id="L583">        if not _is_number(item.get(&quot;bound&quot;)):</span>
+<span id="L584">            errors.add(f&quot;{path}[{index}].bound: must be a finite number&quot;)</span>
+<span id="L585">        _integer(item.get(&quot;miss_allowance&quot;), f&quot;{path}[{index}].miss_allowance&quot;, errors, 0, MAX_SAMPLE_COUNT)</span>
+<span id="L586">        _integer(item.get(&quot;error_allowance&quot;), f&quot;{path}[{index}].error_allowance&quot;, errors, 0, MAX_SAMPLE_COUNT)</span>
+<span id="L587">    return thresholds</span>
+<span id="L588"></span>
+<span id="L589"></span>
+<span id="L590">def validate_plan(plan: dict[str, Any], errors: ErrorCollector) -&gt; None:</span>
+<span id="L591">    obj = _closed_object(</span>
+<span id="L592">        plan,</span>
+<span id="L593">        &quot;plan&quot;,</span>
+<span id="L594">        {&quot;schema_version&quot;, &quot;document_type&quot;, &quot;evidence_class&quot;, &quot;campaign_id&quot;, &quot;tuple_id&quot;, &quot;scope&quot;, &quot;source&quot;, &quot;host&quot;, &quot;topology&quot;, &quot;policy&quot;, &quot;workload&quot;, &quot;measurement&quot;, &quot;accelerator&quot;, &quot;trials&quot;, &quot;thresholds&quot;},</span>
+<span id="L595">        set(),</span>
+<span id="L596">        errors,</span>
+<span id="L597">    )</span>
+<span id="L598">    if obj.get(&quot;evidence_class&quot;) not in EVIDENCE_CLASSES:</span>
+<span id="L599">        errors.add(&quot;plan.evidence_class: invalid value&quot;)</span>
+<span id="L600">    _identifier(obj.get(&quot;campaign_id&quot;), &quot;plan.campaign_id&quot;, errors)</span>
+<span id="L601">    _identifier(obj.get(&quot;tuple_id&quot;), &quot;plan.tuple_id&quot;, errors)</span>
+<span id="L602">    scope = obj.get(&quot;scope&quot;)</span>
+<span id="L603">    if scope not in SCOPES:</span>
+<span id="L604">        errors.add(&quot;plan.scope: invalid value&quot;)</span>
+<span id="L605">        scope = &quot;&quot;</span>
+<span id="L606">    _validate_source(obj.get(&quot;source&quot;), &quot;plan.source&quot;, errors)</span>
+<span id="L607">    _validate_host(obj.get(&quot;host&quot;), &quot;plan.host&quot;, errors)</span>
+<span id="L608">    _validate_topology(obj.get(&quot;topology&quot;), &quot;plan.topology&quot;, errors)</span>
+<span id="L609">    _validate_policy(obj.get(&quot;policy&quot;), &quot;plan.policy&quot;, errors, scope)</span>
+<span id="L610">    _validate_workload(obj.get(&quot;workload&quot;), &quot;plan.workload&quot;, errors)</span>
+<span id="L611">    _validate_measurement(obj.get(&quot;measurement&quot;), &quot;plan.measurement&quot;, errors)</span>
+<span id="L612">    _validate_accelerator(obj.get(&quot;accelerator&quot;), &quot;plan.accelerator&quot;, errors, scope)</span>
+<span id="L613">    _validate_trials(obj.get(&quot;trials&quot;), &quot;plan.trials&quot;, errors, scope)</span>
+<span id="L614">    thresholds = _validate_thresholds(obj.get(&quot;thresholds&quot;), &quot;plan.thresholds&quot;, errors)</span>
+<span id="L615">    populations = {threshold.get(&quot;population&quot;) for threshold in thresholds}</span>
+<span id="L616">    if scope in (&quot;rt1&quot;, &quot;rt2&quot;):</span>
+<span id="L617">        errors.require(&quot;latency&quot; in populations, &quot;plan.thresholds: RT1/RT2 requires latency population&quot;)</span>
+<span id="L618">        errors.require(&quot;deadline&quot; in populations, &quot;plan.thresholds: RT1/RT2 requires deadline population&quot;)</span>
+<span id="L619"></span>
+<span id="L620"></span>
+<span id="L621">def _safe_relative_path(raw: Any) -&gt; pathlib.PurePosixPath | None:</span>
+<span id="L622">    if (</span>
+<span id="L623">        not isinstance(raw, str)</span>
+<span id="L624">        or not raw</span>
+<span id="L625">        or len(raw) &gt; 512</span>
+<span id="L626">        or &quot;\\&quot; in raw</span>
+<span id="L627">        or &quot;:&quot; in raw</span>
+<span id="L628">        or &quot;//&quot; in raw</span>
+<span id="L629">        or any(ord(character) &lt; 0x20 for character in raw)</span>
+<span id="L630">        or unicodedata.normalize(&quot;NFC&quot;, raw) != raw</span>
+<span id="L631">    ):</span>
+<span id="L632">        return None</span>
+<span id="L633">    path = pathlib.PurePosixPath(raw)</span>
+<span id="L634">    reserved = {&quot;CON&quot;, &quot;PRN&quot;, &quot;AUX&quot;, &quot;NUL&quot;} | {</span>
+<span id="L635">        f&quot;{prefix}{index}&quot; for prefix in (&quot;COM&quot;, &quot;LPT&quot;) for index in range(1, 10)</span>
+<span id="L636">    }</span>
+<span id="L637">    if (</span>
+<span id="L638">        path.is_absolute()</span>
+<span id="L639">        or path.as_posix() != raw</span>
+<span id="L640">        or any(part in (&quot;&quot;, &quot;.&quot;, &quot;..&quot;) for part in path.parts)</span>
+<span id="L641">        or any(part.endswith((&quot; &quot;, &quot;.&quot;)) for part in path.parts)</span>
+<span id="L642">        or any(part.split(&quot;.&quot;, 1)[0].upper() in reserved for part in path.parts)</span>
+<span id="L643">    ):</span>
+<span id="L644">        return None</span>
+<span id="L645">    if len(path.parts) &gt; MAX_ARTIFACT_TREE_DEPTH:</span>
+<span id="L646">        return None</span>
+<span id="L647">    return path</span>
+<span id="L648"></span>
+<span id="L649"></span>
+<span id="L650">def _canonical_bytes(value: Any) -&gt; bytes:</span>
+<span id="L651">    return (json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(&quot;,&quot;, &quot;:&quot;)) + &quot;\n&quot;).encode(&quot;utf-8&quot;)</span>
+<span id="L652"></span>
+<span id="L653"></span>
+<span id="L654">def _manifest_digest(entries: list[dict[str, Any]]) -&gt; str:</span>
+<span id="L655">    domain = b&quot;rtfw-qualification-artifact-manifest-v1\0&quot;</span>
+<span id="L656">    return hashlib.sha256(domain + _canonical_bytes(entries)).hexdigest()</span>
+<span id="L657"></span>
+<span id="L658"></span>
+<span id="L659">def _validate_manifest_shape(value: Any, path: str, errors: ErrorCollector) -&gt; list[dict[str, Any]]:</span>
+<span id="L660">    if not isinstance(value, list) or not 1 &lt;= len(value) &lt;= MAX_ARTIFACTS:</span>
+<span id="L661">        errors.add(f&quot;{path}: artifact count must be in [1, {MAX_ARTIFACTS}]&quot;)</span>
+<span id="L662">        return []</span>
+<span id="L663">    result: list[dict[str, Any]] = []</span>
+<span id="L664">    seen: set[str] = set()</span>
+<span id="L665">    portable_seen: set[str] = set()</span>
+<span id="L666">    previous = &quot;&quot;</span>
+<span id="L667">    aggregate = 0</span>
+<span id="L668">    for index, entry in enumerate(value):</span>
+<span id="L669">        item = _closed_object(entry, f&quot;{path}[{index}]&quot;, {&quot;path&quot;, &quot;size_bytes&quot;, &quot;sha256&quot;}, set(), errors)</span>
+<span id="L670">        relative = _safe_relative_path(item.get(&quot;path&quot;))</span>
+<span id="L671">        raw = item.get(&quot;path&quot;) if isinstance(item.get(&quot;path&quot;), str) else &quot;&quot;</span>
+<span id="L672">        if relative is None:</span>
+<span id="L673">            errors.add(f&quot;{path}[{index}].path: unsafe or noncanonical path&quot;)</span>
+<span id="L674">        if raw in seen:</span>
+<span id="L675">            errors.add(f&quot;{path}: duplicate artifact path {raw}&quot;)</span>
+<span id="L676">        seen.add(raw)</span>
+<span id="L677">        portable = unicodedata.normalize(&quot;NFC&quot;, raw).casefold()</span>
+<span id="L678">        if portable in portable_seen:</span>
+<span id="L679">            errors.add(f&quot;{path}: nonportable artifact path collision {raw}&quot;)</span>
+<span id="L680">        portable_seen.add(portable)</span>
+<span id="L681">        if index and raw &lt;= previous:</span>
+<span id="L682">            errors.add(f&quot;{path}: entries must be strictly sorted by path&quot;)</span>
+<span id="L683">        previous = raw</span>
+<span id="L684">        size = _integer(item.get(&quot;size_bytes&quot;), f&quot;{path}[{index}].size_bytes&quot;, errors, 0, MAX_ARTIFACT_BYTES)</span>
+<span id="L685">        aggregate += size</span>
+<span id="L686">        _digest(item.get(&quot;sha256&quot;), f&quot;{path}[{index}].sha256&quot;, errors)</span>
+<span id="L687">        result.append(item)</span>
+<span id="L688">    errors.require(aggregate &lt;= MAX_ARTIFACT_TOTAL_BYTES, f&quot;{path}: aggregate bytes exceed {MAX_ARTIFACT_TOTAL_BYTES}&quot;)</span>
+<span id="L689">    return result</span>
+<span id="L690"></span>
+<span id="L691"></span>
+<span id="L692">def _validate_raw_populations(value: Any, path: str, errors: ErrorCollector) -&gt; list[dict[str, Any]]:</span>
+<span id="L693">    items = _unique_ids(value, path, errors, minimum=len(RAW_POPULATIONS), maximum=len(RAW_POPULATIONS))</span>
+<span id="L694">    names: set[str] = set()</span>
+<span id="L695">    for index, item in enumerate(items):</span>
+<span id="L696">        obj = _closed_object(item, f&quot;{path}[{index}]&quot;, {&quot;id&quot;, &quot;artifact_path&quot;}, set(), errors)</span>
+<span id="L697">        name = obj.get(&quot;id&quot;)</span>
+<span id="L698">        if name not in RAW_POPULATIONS:</span>
+<span id="L699">            errors.add(f&quot;{path}[{index}].id: unknown raw population&quot;)</span>
+<span id="L700">        else:</span>
+<span id="L701">            names.add(name)</span>
+<span id="L702">        if _safe_relative_path(obj.get(&quot;artifact_path&quot;)) is None:</span>
+<span id="L703">            errors.add(f&quot;{path}[{index}].artifact_path: unsafe path&quot;)</span>
+<span id="L704">    errors.require(names == set(RAW_POPULATIONS), f&quot;{path}: incomplete raw population set&quot;)</span>
+<span id="L705">    return items</span>
+<span id="L706"></span>
+<span id="L707"></span>
+<span id="L708">def _validate_trends(value: Any, path: str, errors: ErrorCollector, *, thermal: bool) -&gt; list[dict[str, Any]]:</span>
+<span id="L709">    items = _unique_ids(value, path, errors, minimum=1, maximum=64)</span>
+<span id="L710">    for index, item in enumerate(items):</span>
+<span id="L711">        obj = _closed_object(item, f&quot;{path}[{index}]&quot;, {&quot;id&quot;, &quot;start&quot;, &quot;end&quot;, &quot;maximum&quot;, &quot;stable&quot;}, set(), errors)</span>
+<span id="L712">        values: dict[str, decimal.Decimal] = {}</span>
+<span id="L713">        for name in (&quot;start&quot;, &quot;end&quot;, &quot;maximum&quot;):</span>
+<span id="L714">            if not _is_number(obj.get(name)):</span>
+<span id="L715">                errors.add(f&quot;{path}[{index}].{name}: must be a finite number&quot;)</span>
+<span id="L716">            else:</span>
+<span id="L717">                values[name] = decimal.Decimal(obj[name])</span>
+<span id="L718">        stable = _boolean(obj.get(&quot;stable&quot;), f&quot;{path}[{index}].stable&quot;, errors)</span>
+<span id="L719">        errors.require(stable, f&quot;{path}[{index}]: trend must be stable&quot;)</span>
+<span id="L720">        if len(values) == 3:</span>
+<span id="L721">            errors.require(</span>
+<span id="L722">                values[&quot;maximum&quot;] &gt;= max(values[&quot;start&quot;], values[&quot;end&quot;]),</span>
+<span id="L723">                f&quot;{path}[{index}].maximum: must cover start and end&quot;,</span>
+<span id="L724">            )</span>
+<span id="L725">            if thermal:</span>
+<span id="L726">                for name, measured in values.items():</span>
+<span id="L727">                    errors.require(</span>
+<span id="L728">                        decimal.Decimal(&quot;-100&quot;) &lt;= measured &lt;= decimal.Decimal(&quot;300&quot;),</span>
+<span id="L729">                        f&quot;{path}[{index}].{name}: thermal value out of range&quot;,</span>
+<span id="L730">                    )</span>
+<span id="L731">            else:</span>
+<span id="L732">                errors.require(</span>
+<span id="L733">                    values[&quot;end&quot;] &lt;= values[&quot;start&quot;],</span>
+<span id="L734">                    f&quot;{path}[{index}]: stable resource trend must not grow&quot;,</span>
+<span id="L735">                )</span>
+<span id="L736">    return items</span>
+<span id="L737"></span>
+<span id="L738"></span>
+<span id="L739">def _threshold_passed(comparison: str, observed: decimal.Decimal, bound: decimal.Decimal) -&gt; bool:</span>
+<span id="L740">    return {</span>
+<span id="L741">        &quot;le&quot;: observed &lt;= bound,</span>
+<span id="L742">        &quot;lt&quot;: observed &lt; bound,</span>
+<span id="L743">        &quot;ge&quot;: observed &gt;= bound,</span>
+<span id="L744">        &quot;gt&quot;: observed &gt; bound,</span>
+<span id="L745">        &quot;eq&quot;: observed == bound,</span>
+<span id="L746">    }.get(comparison, False)</span>
+<span id="L747"></span>
+<span id="L748"></span>
+<span id="L749">def _exact_equal(left: Any, right: Any) -&gt; bool:</span>
+<span id="L750">    if type(left) is not type(right):</span>
+<span id="L751">        return False</span>
+<span id="L752">    if isinstance(left, dict):</span>
+<span id="L753">        return set(left) == set(right) and all(</span>
+<span id="L754">            _exact_equal(left[key], right[key]) for key in left</span>
+<span id="L755">        )</span>
+<span id="L756">    if isinstance(left, list):</span>
+<span id="L757">        return len(left) == len(right) and all(</span>
+<span id="L758">            _exact_equal(a, b) for a, b in zip(left, right)</span>
+<span id="L759">        )</span>
+<span id="L760">    return left == right</span>
+<span id="L761"></span>
+<span id="L762"></span>
+<span id="L763">def validate_record(record: dict[str, Any], plan: dict[str, Any], plan_digest: str, errors: ErrorCollector) -&gt; None:</span>
+<span id="L764">    obj = _closed_object(</span>
+<span id="L765">        record,</span>
+<span id="L766">        &quot;record&quot;,</span>
+<span id="L767">        {&quot;schema_version&quot;, &quot;document_type&quot;, &quot;evidence_class&quot;, &quot;campaign_id&quot;, &quot;tuple_id&quot;, &quot;scope&quot;, &quot;plan_sha256&quot;, &quot;source&quot;, &quot;host&quot;, &quot;topology&quot;, &quot;policy&quot;, &quot;workload&quot;, &quot;accelerator&quot;, &quot;started_at&quot;, &quot;ended_at&quot;, &quot;artifact_manifest&quot;, &quot;evidence_manifest_sha256&quot;, &quot;raw_populations&quot;, &quot;resource_trends&quot;, &quot;thermal_trends&quot;, &quot;device_health&quot;, &quot;trials&quot;, &quot;thresholds&quot;, &quot;overall_result&quot;},</span>
+<span id="L768">        set(),</span>
+<span id="L769">        errors,</span>
+<span id="L770">    )</span>
+<span id="L771">    for name in (&quot;evidence_class&quot;, &quot;campaign_id&quot;, &quot;tuple_id&quot;, &quot;scope&quot;, &quot;source&quot;, &quot;host&quot;, &quot;topology&quot;, &quot;policy&quot;, &quot;workload&quot;, &quot;accelerator&quot;):</span>
+<span id="L772">        errors.require(obj.get(name) == plan.get(name), f&quot;record.{name}: diverges from plan&quot;)</span>
+<span id="L773">    _digest(obj.get(&quot;plan_sha256&quot;), &quot;record.plan_sha256&quot;, errors)</span>
+<span id="L774">    errors.require(obj.get(&quot;plan_sha256&quot;) == plan_digest, &quot;record.plan_sha256: exact plan digest mismatch&quot;)</span>
+<span id="L775">    started = _timestamp(obj.get(&quot;started_at&quot;), &quot;record.started_at&quot;, errors)</span>
+<span id="L776">    ended = _timestamp(obj.get(&quot;ended_at&quot;), &quot;record.ended_at&quot;, errors)</span>
+<span id="L777">    errors.require(not started or not ended or started &lt; ended, &quot;record: start time must precede end time&quot;)</span>
+<span id="L778">    manifest = _validate_manifest_shape(obj.get(&quot;artifact_manifest&quot;), &quot;record.artifact_manifest&quot;, errors)</span>
+<span id="L779">    expected_manifest_digest = _manifest_digest(manifest)</span>
+<span id="L780">    _digest(obj.get(&quot;evidence_manifest_sha256&quot;), &quot;record.evidence_manifest_sha256&quot;, errors)</span>
+<span id="L781">    errors.require(obj.get(&quot;evidence_manifest_sha256&quot;) == expected_manifest_digest, &quot;record.evidence_manifest_sha256: canonical manifest digest mismatch&quot;)</span>
+<span id="L782">    raw = _validate_raw_populations(obj.get(&quot;raw_populations&quot;), &quot;record.raw_populations&quot;, errors)</span>
+<span id="L783">    listed_paths = {entry.get(&quot;path&quot;) for entry in manifest}</span>
+<span id="L784">    for entry in raw:</span>
+<span id="L785">        errors.require(entry.get(&quot;artifact_path&quot;) in listed_paths, f&quot;record.raw_populations: unlisted artifact reference {entry.get(&#x27;artifact_path&#x27;)}&quot;)</span>
+<span id="L786">    _validate_trends(obj.get(&quot;resource_trends&quot;), &quot;record.resource_trends&quot;, errors, thermal=False)</span>
+<span id="L787">    _validate_trends(obj.get(&quot;thermal_trends&quot;), &quot;record.thermal_trends&quot;, errors, thermal=True)</span>
+<span id="L788">    health = _closed_object(obj.get(&quot;device_health&quot;), &quot;record.device_health&quot;, {&quot;healthy&quot;, &quot;losses&quot;, &quot;recovered&quot;}, set(), errors)</span>
+<span id="L789">    healthy = _boolean(health.get(&quot;healthy&quot;), &quot;record.device_health.healthy&quot;, errors)</span>
+<span id="L790">    losses = _integer(health.get(&quot;losses&quot;), &quot;record.device_health.losses&quot;, errors, 0, MAX_SAMPLE_COUNT)</span>
+<span id="L791">    recovered = _boolean(health.get(&quot;recovered&quot;), &quot;record.device_health.recovered&quot;, errors)</span>
+<span id="L792">    errors.require(healthy and losses == 0 and recovered, &quot;record.device_health: passing record requires healthy recovered device state with zero unresolved losses&quot;)</span>
+<span id="L793"></span>
+<span id="L794">    planned_trials = {item.get(&quot;id&quot;): item for item in plan.get(&quot;trials&quot;, []) if isinstance(item, dict)}</span>
+<span id="L795">    results = _unique_ids(obj.get(&quot;trials&quot;), &quot;record.trials&quot;, errors, minimum=len(planned_trials), maximum=MAX_TRIALS)</span>
+<span id="L796">    errors.require({item.get(&quot;id&quot;) for item in results} == set(planned_trials), &quot;record.trials: result identities differ from plan&quot;)</span>
+<span id="L797">    for index, result in enumerate(results):</span>
+<span id="L798">        trial = _closed_object(result, f&quot;record.trials[{index}]&quot;, {&quot;id&quot;, &quot;status&quot;, &quot;artifact_path&quot;, &quot;recovery&quot;}, set(), errors)</span>
+<span id="L799">        identity = trial.get(&quot;id&quot;)</span>
+<span id="L800">        planned = planned_trials.get(identity, {})</span>
+<span id="L801">        status_value = trial.get(&quot;status&quot;)</span>
+<span id="L802">        if status_value not in (&quot;pass&quot;, &quot;not_applicable&quot;):</span>
+<span id="L803">            errors.add(f&quot;record.trials[{index}].status: passing record requires pass or not_applicable&quot;)</span>
+<span id="L804">        expected_status = &quot;pass&quot; if planned.get(&quot;applicability&quot;) == &quot;applicable&quot; else &quot;not_applicable&quot;</span>
+<span id="L805">        errors.require(status_value == expected_status, f&quot;record.trials[{index}].status: conflicts with planned applicability&quot;)</span>
+<span id="L806">        artifact_path = trial.get(&quot;artifact_path&quot;)</span>
+<span id="L807">        if status_value == &quot;pass&quot;:</span>
+<span id="L808">            errors.require(_safe_relative_path(artifact_path) is not None and artifact_path in listed_paths, f&quot;record.trials[{index}].artifact_path: must reference a listed artifact&quot;)</span>
+<span id="L809">        elif artifact_path is not None:</span>
+<span id="L810">            errors.add(f&quot;record.trials[{index}].artifact_path: must be null when not applicable&quot;)</span>
+<span id="L811">        recovery = _closed_object(trial.get(&quot;recovery&quot;), f&quot;record.trials[{index}].recovery&quot;, {&quot;attempted&quot;, &quot;success&quot;, &quot;details&quot;}, set(), errors)</span>
+<span id="L812">        attempted = _boolean(recovery.get(&quot;attempted&quot;), f&quot;record.trials[{index}].recovery.attempted&quot;, errors)</span>
+<span id="L813">        success = _boolean(recovery.get(&quot;success&quot;), f&quot;record.trials[{index}].recovery.success&quot;, errors)</span>
+<span id="L814">        _string(recovery.get(&quot;details&quot;), f&quot;record.trials[{index}].recovery.details&quot;, errors)</span>
+<span id="L815">        if planned.get(&quot;kind&quot;) == &quot;reset_rebind&quot; and planned.get(&quot;applicability&quot;) == &quot;applicable&quot;:</span>
+<span id="L816">            errors.require(attempted and success, f&quot;record.trials[{index}].recovery: reset-rebind recovery must succeed&quot;)</span>
+<span id="L817">        else:</span>
+<span id="L818">            errors.require(success, f&quot;record.trials[{index}].recovery: recovery state must be successful&quot;)</span>
+<span id="L819"></span>
+<span id="L820">    planned_thresholds = {item.get(&quot;id&quot;): item for item in plan.get(&quot;thresholds&quot;, []) if isinstance(item, dict)}</span>
+<span id="L821">    evaluations = _unique_ids(obj.get(&quot;thresholds&quot;), &quot;record.thresholds&quot;, errors, minimum=len(planned_thresholds), maximum=MAX_THRESHOLDS)</span>
+<span id="L822">    errors.require({item.get(&quot;id&quot;) for item in evaluations} == set(planned_thresholds), &quot;record.thresholds: evaluation identities differ from plan&quot;)</span>
+<span id="L823">    for index, evaluation in enumerate(evaluations):</span>
+<span id="L824">        item = _closed_object(evaluation, f&quot;record.thresholds[{index}]&quot;, {&quot;id&quot;, &quot;definition&quot;, &quot;observed&quot;, &quot;misses&quot;, &quot;errors&quot;, &quot;passed&quot;}, set(), errors)</span>
+<span id="L825">        planned = planned_thresholds.get(item.get(&quot;id&quot;))</span>
+<span id="L826">        errors.require(_exact_equal(item.get(&quot;definition&quot;), planned), f&quot;record.thresholds[{index}].definition: threshold drift&quot;)</span>
+<span id="L827">        observed_value = item.get(&quot;observed&quot;)</span>
+<span id="L828">        if not _is_number(observed_value):</span>
+<span id="L829">            errors.add(f&quot;record.thresholds[{index}].observed: must be a finite number&quot;)</span>
+<span id="L830">            observed = decimal.Decimal(0)</span>
+<span id="L831">        else:</span>
+<span id="L832">            observed = decimal.Decimal(observed_value)</span>
+<span id="L833">        misses = _integer(item.get(&quot;misses&quot;), f&quot;record.thresholds[{index}].misses&quot;, errors, 0, MAX_SAMPLE_COUNT)</span>
+<span id="L834">        error_count = _integer(item.get(&quot;errors&quot;), f&quot;record.thresholds[{index}].errors&quot;, errors, 0, MAX_SAMPLE_COUNT)</span>
+<span id="L835">        passed = _boolean(item.get(&quot;passed&quot;), f&quot;record.thresholds[{index}].passed&quot;, errors)</span>
+<span id="L836">        computed = False</span>
+<span id="L837">        if isinstance(planned, dict) and _is_number(planned.get(&quot;bound&quot;)):</span>
+<span id="L838">            computed = (</span>
+<span id="L839">                _threshold_passed(str(planned.get(&quot;comparison&quot;)), observed, decimal.Decimal(planned[&quot;bound&quot;]))</span>
+<span id="L840">                and misses &lt;= planned.get(&quot;miss_allowance&quot;, -1)</span>
+<span id="L841">                and error_count &lt;= planned.get(&quot;error_allowance&quot;, -1)</span>
+<span id="L842">            )</span>
+<span id="L843">        errors.require(passed == computed, f&quot;record.thresholds[{index}].passed: does not match predeclared comparison and allowances&quot;)</span>
+<span id="L844">        errors.require(computed, f&quot;record.thresholds[{index}]: threshold failed&quot;)</span>
+<span id="L845">    errors.require(obj.get(&quot;overall_result&quot;) == &quot;pass&quot;, &quot;record.overall_result: passing review requires pass&quot;)</span>
+<span id="L846"></span>
+<span id="L847"></span>
+<span id="L848">def validate_review(</span>
+<span id="L849">    review: dict[str, Any],</span>
+<span id="L850">    plan: dict[str, Any],</span>
+<span id="L851">    record: dict[str, Any],</span>
+<span id="L852">    plan_digest: str,</span>
+<span id="L853">    record_digest: str,</span>
+<span id="L854">    errors: ErrorCollector,</span>
+<span id="L855">) -&gt; None:</span>
+<span id="L856">    obj = _closed_object(</span>
+<span id="L857">        review,</span>
+<span id="L858">        &quot;review&quot;,</span>
+<span id="L859">        {&quot;schema_version&quot;, &quot;document_type&quot;, &quot;evidence_class&quot;, &quot;scope&quot;, &quot;tuple_id&quot;, &quot;plan_sha256&quot;, &quot;record_sha256&quot;, &quot;evidence_manifest_sha256&quot;, &quot;reviewer&quot;, &quot;reviewed_at&quot;, &quot;decision&quot;, &quot;rationale&quot;, &quot;exceptions&quot;, &quot;pre_run_provenance_verified&quot;, &quot;reviewer_authentication&quot;},</span>
+<span id="L860">        set(),</span>
+<span id="L861">        errors,</span>
+<span id="L862">    )</span>
+<span id="L863">    for name in (&quot;evidence_class&quot;, &quot;scope&quot;, &quot;tuple_id&quot;):</span>
+<span id="L864">        errors.require(obj.get(name) == plan.get(name) == record.get(name), f&quot;review.{name}: identity mismatch&quot;)</span>
+<span id="L865">    _digest(obj.get(&quot;plan_sha256&quot;), &quot;review.plan_sha256&quot;, errors)</span>
+<span id="L866">    _digest(obj.get(&quot;record_sha256&quot;), &quot;review.record_sha256&quot;, errors)</span>
+<span id="L867">    _digest(obj.get(&quot;evidence_manifest_sha256&quot;), &quot;review.evidence_manifest_sha256&quot;, errors)</span>
+<span id="L868">    errors.require(obj.get(&quot;plan_sha256&quot;) == plan_digest, &quot;review.plan_sha256: mismatch&quot;)</span>
+<span id="L869">    errors.require(obj.get(&quot;record_sha256&quot;) == record_digest, &quot;review.record_sha256: mismatch&quot;)</span>
+<span id="L870">    errors.require(obj.get(&quot;evidence_manifest_sha256&quot;) == record.get(&quot;evidence_manifest_sha256&quot;), &quot;review.evidence_manifest_sha256: mismatch&quot;)</span>
+<span id="L871">    _identifier(obj.get(&quot;reviewer&quot;), &quot;review.reviewer&quot;, errors)</span>
+<span id="L872">    _timestamp(obj.get(&quot;reviewed_at&quot;), &quot;review.reviewed_at&quot;, errors)</span>
+<span id="L873">    errors.require(obj.get(&quot;decision&quot;) == &quot;pass&quot;, &quot;review.decision: explicit passing decision required&quot;)</span>
+<span id="L874">    _string(obj.get(&quot;rationale&quot;), &quot;review.rationale&quot;, errors)</span>
+<span id="L875">    exceptions = obj.get(&quot;exceptions&quot;)</span>
+<span id="L876">    if not isinstance(exceptions, list) or len(exceptions) &gt; MAX_EXCEPTIONS:</span>
+<span id="L877">        errors.add(f&quot;review.exceptions: must be an array of at most {MAX_EXCEPTIONS}&quot;)</span>
+<span id="L878">    elif exceptions:</span>
+<span id="L879">        errors.add(&quot;review.exceptions: a proposal cannot carry exceptions&quot;)</span>
+<span id="L880">    chronology = _boolean(obj.get(&quot;pre_run_provenance_verified&quot;), &quot;review.pre_run_provenance_verified&quot;, errors)</span>
+<span id="L881">    errors.require(chronology, &quot;review.pre_run_provenance_verified: human external pre-run verification is required&quot;)</span>
+<span id="L882">    errors.require(obj.get(&quot;reviewer_authentication&quot;) == &quot;attribution_only&quot;, &quot;review.reviewer_authentication: must remain attribution_only&quot;)</span>
+<span id="L883"></span>
+<span id="L884"></span>
+<span id="L885">def _sha256_file(path: pathlib.Path, aggregate_remaining: int) -&gt; tuple[int, str]:</span>
+<span id="L886">    digest = hashlib.sha256()</span>
+<span id="L887">    size = 0</span>
+<span id="L888">    flags = os.O_RDONLY | getattr(os, &quot;O_BINARY&quot;, 0) | getattr(os, &quot;O_NOFOLLOW&quot;, 0)</span>
+<span id="L889">    descriptor = os.open(path, flags)</span>
+<span id="L890">    with os.fdopen(descriptor, &quot;rb&quot;) as stream:</span>
+<span id="L891">        status = os.fstat(stream.fileno())</span>
+<span id="L892">        if not stat.S_ISREG(status.st_mode):</span>
+<span id="L893">            raise ValueError(&quot;artifact changed to a nonregular file&quot;)</span>
+<span id="L894">        if status.st_size &gt; MAX_ARTIFACT_BYTES:</span>
+<span id="L895">            raise ArtifactLimitError(</span>
+<span id="L896">                f&quot;artifact exceeds {MAX_ARTIFACT_BYTES} bytes&quot;</span>
+<span id="L897">            )</span>
+<span id="L898">        if status.st_size &gt; aggregate_remaining:</span>
+<span id="L899">            raise ArtifactLimitError(</span>
+<span id="L900">                f&quot;aggregate bytes exceed {MAX_ARTIFACT_TOTAL_BYTES}&quot;</span>
+<span id="L901">            )</span>
+<span id="L902">        while True:</span>
+<span id="L903">            chunk = stream.read(1024 * 1024)</span>
+<span id="L904">            if not chunk:</span>
+<span id="L905">                break</span>
+<span id="L906">            size += len(chunk)</span>
+<span id="L907">            if size &gt; MAX_ARTIFACT_BYTES:</span>
+<span id="L908">                raise ArtifactLimitError(</span>
+<span id="L909">                    f&quot;artifact exceeds {MAX_ARTIFACT_BYTES} bytes&quot;</span>
+<span id="L910">                )</span>
+<span id="L911">            if size &gt; aggregate_remaining:</span>
+<span id="L912">                raise ArtifactLimitError(</span>
+<span id="L913">                    f&quot;aggregate bytes exceed {MAX_ARTIFACT_TOTAL_BYTES}&quot;</span>
+<span id="L914">                )</span>
+<span id="L915">            digest.update(chunk)</span>
+<span id="L916">    return size, digest.hexdigest()</span>
+<span id="L917"></span>
+<span id="L918"></span>
+<span id="L919">def _scan_artifact_tree(</span>
+<span id="L920">    root: pathlib.Path,</span>
+<span id="L921">    errors: ErrorCollector,</span>
+<span id="L922">) -&gt; tuple[tuple[pathlib.Path, str, int], ...]:</span>
+<span id="L923">    stack: list[tuple[pathlib.Path, pathlib.PurePosixPath]] = [</span>
+<span id="L924">        (root, pathlib.PurePosixPath())</span>
+<span id="L925">    ]</span>
+<span id="L926">    files: list[tuple[pathlib.Path, str, int]] = []</span>
+<span id="L927">    entry_count = 0</span>
+<span id="L928">    file_count = 0</span>
+<span id="L929">    while stack:</span>
+<span id="L930">        directory, relative_directory = stack.pop()</span>
+<span id="L931">        try:</span>
+<span id="L932">            names: list[str] = []</span>
+<span id="L933">            with os.scandir(directory) as entries:</span>
+<span id="L934">                for entry in entries:</span>
+<span id="L935">                    entry_count += 1</span>
+<span id="L936">                    if entry_count &gt; MAX_ARTIFACT_TREE_ENTRIES:</span>
+<span id="L937">                        errors.add(</span>
+<span id="L938">                            &quot;artifacts: tree entry count exceeds &quot;</span>
+<span id="L939">                            f&quot;{MAX_ARTIFACT_TREE_ENTRIES}&quot;</span>
+<span id="L940">                        )</span>
+<span id="L941">                        return tuple(files)</span>
+<span id="L942">                    names.append(entry.name)</span>
+<span id="L943">        except OSError as exc:</span>
+<span id="L944">            display = relative_directory.as_posix() or &quot;.&quot;</span>
+<span id="L945">            errors.add(f&quot;artifacts: cannot scan directory {display}: {exc}&quot;)</span>
+<span id="L946">            continue</span>
+<span id="L947"></span>
+<span id="L948">        for name in reversed(sorted(names)):</span>
+<span id="L949">            child = directory / name</span>
+<span id="L950">            relative = relative_directory / name</span>
+<span id="L951">            raw = relative.as_posix()</span>
+<span id="L952">            try:</span>
+<span id="L953">                mode = child.lstat().st_mode</span>
+<span id="L954">            except OSError as exc:</span>
+<span id="L955">                errors.add(f&quot;artifacts: cannot inspect directory entry {raw}: {exc}&quot;)</span>
+<span id="L956">                continue</span>
+<span id="L957">            if stat.S_ISLNK(mode):</span>
+<span id="L958">                errors.add(f&quot;artifacts: symlink entry {raw}&quot;)</span>
+<span id="L959">                file_count += 1</span>
+<span id="L960">                if file_count &gt; MAX_ARTIFACTS:</span>
+<span id="L961">                    errors.add(f&quot;artifacts: file count exceeds {MAX_ARTIFACTS}&quot;)</span>
+<span id="L962">                    return tuple(files)</span>
+<span id="L963">                continue</span>
+<span id="L964">            if stat.S_ISDIR(mode):</span>
+<span id="L965">                if len(relative.parts) &gt; MAX_ARTIFACT_TREE_DEPTH:</span>
+<span id="L966">                    errors.add(</span>
+<span id="L967">                        f&quot;artifacts: directory depth exceeds {MAX_ARTIFACT_TREE_DEPTH}&quot;</span>
+<span id="L968">                    )</span>
+<span id="L969">                    continue</span>
+<span id="L970">                stack.append((child, relative))</span>
+<span id="L971">                continue</span>
+<span id="L972">            file_count += 1</span>
+<span id="L973">            if file_count &gt; MAX_ARTIFACTS:</span>
+<span id="L974">                errors.add(f&quot;artifacts: file count exceeds {MAX_ARTIFACTS}&quot;)</span>
+<span id="L975">                return tuple(files)</span>
+<span id="L976">            files.append((child, raw, mode))</span>
+<span id="L977">    return tuple(files)</span>
+<span id="L978"></span>
+<span id="L979"></span>
+<span id="L980">def verify_artifacts(</span>
+<span id="L981">    artifact_dir: pathlib.Path,</span>
+<span id="L982">    manifest: list[dict[str, Any]],</span>
+<span id="L983">    errors: ErrorCollector,</span>
+<span id="L984">) -&gt; tuple[dict[str, Any], ...]:</span>
+<span id="L985">    try:</span>
+<span id="L986">        if artifact_dir.is_symlink() or not artifact_dir.is_dir():</span>
+<span id="L987">            raise ValueError(&quot;artifact root must be a regular non-symlink directory&quot;)</span>
+<span id="L988">        root = artifact_dir.resolve(strict=True)</span>
+<span id="L989">    except (OSError, ValueError) as exc:</span>
+<span id="L990">        errors.add(f&quot;artifacts: invalid root: {exc}&quot;)</span>
+<span id="L991">        return ()</span>
+<span id="L992">    listed = {str(item.get(&quot;path&quot;)): item for item in manifest}</span>
+<span id="L993">    present: set[str] = set()</span>
+<span id="L994">    aggregate = 0</span>
+<span id="L995">    for path, raw, mode in _scan_artifact_tree(root, errors):</span>
+<span id="L996">        present.add(raw)</span>
+<span id="L997">        try:</span>
+<span id="L998">            resolved = path.resolve(strict=True)</span>
+<span id="L999">            resolved.relative_to(root)</span>
+<span id="L1000">        except (OSError, ValueError) as exc:</span>
+<span id="L1001">            errors.add(f&quot;artifacts: invalid file {raw}: {exc}&quot;)</span>
+<span id="L1002">            continue</span>
+<span id="L1003">        if not stat.S_ISREG(mode):</span>
+<span id="L1004">            errors.add(f&quot;artifacts: {raw} is not a regular non-symlink file&quot;)</span>
+<span id="L1005">            continue</span>
+<span id="L1006">        if raw not in listed:</span>
+<span id="L1007">            errors.add(f&quot;artifacts: unlisted file {raw}&quot;)</span>
+<span id="L1008">            continue</span>
+<span id="L1009">        try:</span>
+<span id="L1010">            size, digest = _sha256_file(</span>
+<span id="L1011">                path,</span>
+<span id="L1012">                MAX_ARTIFACT_TOTAL_BYTES - aggregate,</span>
+<span id="L1013">            )</span>
+<span id="L1014">        except ArtifactLimitError as exc:</span>
+<span id="L1015">            errors.add(f&quot;artifacts: cannot hash {raw}: {exc}&quot;)</span>
+<span id="L1016">            break</span>
+<span id="L1017">        except (OSError, ValueError) as exc:</span>
+<span id="L1018">            errors.add(f&quot;artifacts: cannot hash {raw}: {exc}&quot;)</span>
+<span id="L1019">            continue</span>
+<span id="L1020">        aggregate += size</span>
+<span id="L1021">        entry = listed[raw]</span>
+<span id="L1022">        if size != entry.get(&quot;size_bytes&quot;):</span>
+<span id="L1023">            errors.add(f&quot;artifacts: size mismatch for {raw}&quot;)</span>
+<span id="L1024">        if digest != entry.get(&quot;sha256&quot;):</span>
+<span id="L1025">            errors.add(f&quot;artifacts: digest mismatch for {raw}&quot;)</span>
+<span id="L1026">    missing = sorted(set(listed) - present)</span>
+<span id="L1027">    for raw in missing:</span>
+<span id="L1028">        errors.add(f&quot;artifacts: listed file is missing: {raw}&quot;)</span>
+<span id="L1029">    errors.require(aggregate &lt;= MAX_ARTIFACT_TOTAL_BYTES, f&quot;artifacts: aggregate bytes exceed {MAX_ARTIFACT_TOTAL_BYTES}&quot;)</span>
+<span id="L1030">    return tuple(dict(entry) for entry in manifest)</span>
+<span id="L1031"></span>
+<span id="L1032"></span>
+<span id="L1033">def validate_set(</span>
+<span id="L1034">    plan_path: pathlib.Path,</span>
+<span id="L1035">    record_path: pathlib.Path,</span>
+<span id="L1036">    review_path: pathlib.Path,</span>
+<span id="L1037">    artifact_dir: pathlib.Path,</span>
+<span id="L1038">) -&gt; ValidatedSet:</span>
+<span id="L1039">    plan = load_document(plan_path, &quot;campaign_plan&quot;)</span>
+<span id="L1040">    record = load_document(record_path, &quot;qualification_record&quot;)</span>
+<span id="L1041">    review = load_document(review_path, &quot;promotion_review&quot;)</span>
+<span id="L1042">    errors = ErrorCollector()</span>
+<span id="L1043">    validate_plan(plan.value, errors)</span>
+<span id="L1044">    validate_record(record.value, plan.value, plan.sha256, errors)</span>
+<span id="L1045">    validate_review(review.value, plan.value, record.value, plan.sha256, record.sha256, errors)</span>
+<span id="L1046">    manifest = record.value.get(&quot;artifact_manifest&quot;)</span>
+<span id="L1047">    artifact_digests = verify_artifacts(artifact_dir, manifest if isinstance(manifest, list) else [], errors)</span>
+<span id="L1048">    if plan.value.get(&quot;scope&quot;) == &quot;combined&quot; and plan.value.get(&quot;evidence_class&quot;) != &quot;synthetic_fixture&quot;:</span>
+<span id="L1049">        errors.add(&quot;combined qualification is blocked until the M17-05 native path prerequisite is repaired&quot;)</span>
+<span id="L1050">    errors.finish()</span>
+<span id="L1051">    return ValidatedSet(</span>
+<span id="L1052">        plan,</span>
+<span id="L1053">        record,</span>
+<span id="L1054">        review,</span>
+<span id="L1055">        str(record.value[&quot;evidence_manifest_sha256&quot;]),</span>
+<span id="L1056">        artifact_digests,</span>
+<span id="L1057">    )</span>
+<span id="L1058"></span>
+<span id="L1059"></span>
+<span id="L1060">def build_proposal(validated: ValidatedSet) -&gt; dict[str, Any]:</span>
+<span id="L1061">    plan = validated.plan.value</span>
+<span id="L1062">    record = validated.record.value</span>
+<span id="L1063">    review = validated.review.value</span>
+<span id="L1064">    evidence_class = str(plan[&quot;evidence_class&quot;])</span>
+<span id="L1065">    return {</span>
+<span id="L1066">        &quot;schema_version&quot;: SCHEMA_VERSION,</span>
+<span id="L1067">        &quot;document_type&quot;: &quot;promotion_proposal&quot;,</span>
+<span id="L1068">        &quot;evidence_class&quot;: evidence_class,</span>
+<span id="L1069">        &quot;claim_scope&quot;: plan[&quot;scope&quot;],</span>
+<span id="L1070">        &quot;tuple_id&quot;: plan[&quot;tuple_id&quot;],</span>
+<span id="L1071">        &quot;proposal_label&quot;: &quot;proposal_only&quot;,</span>
+<span id="L1072">        &quot;promotion_action&quot;: &quot;human_matrix_change_required&quot;,</span>
+<span id="L1073">        &quot;support_matrix_eligible&quot;: evidence_class == &quot;qualification_campaign&quot;,</span>
+<span id="L1074">        &quot;reviewer_authentication&quot;: &quot;attribution_only&quot;,</span>
+<span id="L1075">        &quot;chronology_proof&quot;: &quot;external_human_verification_only&quot;,</span>
+<span id="L1076">        &quot;source&quot;: plan[&quot;source&quot;],</span>
+<span id="L1077">        &quot;workload&quot;: plan[&quot;workload&quot;],</span>
+<span id="L1078">        &quot;digests&quot;: {</span>
+<span id="L1079">            &quot;plan_sha256&quot;: validated.plan.sha256,</span>
+<span id="L1080">            &quot;record_sha256&quot;: validated.record.sha256,</span>
+<span id="L1081">            &quot;review_sha256&quot;: validated.review.sha256,</span>
+<span id="L1082">            &quot;evidence_manifest_sha256&quot;: validated.artifact_manifest_sha256,</span>
+<span id="L1083">            &quot;artifacts&quot;: list(validated.artifact_digests),</span>
+<span id="L1084">        },</span>
+<span id="L1085">        &quot;decision&quot;: review[&quot;decision&quot;],</span>
+<span id="L1086">        &quot;overall_result&quot;: record[&quot;overall_result&quot;],</span>
+<span id="L1087">    }</span>
+<span id="L1088"></span>
+<span id="L1089"></span>
+<span id="L1090">def _same_file(left: pathlib.Path, right: pathlib.Path) -&gt; bool:</span>
+<span id="L1091">    try:</span>
+<span id="L1092">        return left.resolve(strict=True) == right.resolve(strict=True)</span>
+<span id="L1093">    except OSError:</span>
+<span id="L1094">        return left.absolute() == right.absolute()</span>
+<span id="L1095"></span>
+<span id="L1096"></span>
+<span id="L1097">def write_new_atomic(path: pathlib.Path, data: bytes, forbidden: Iterable[pathlib.Path]) -&gt; None:</span>
+<span id="L1098">    if not path.name or path.name in (&quot;.&quot;, &quot;..&quot;):</span>
+<span id="L1099">        raise ValueError(&quot;output path must name a file&quot;)</span>
+<span id="L1100">    for source in forbidden:</span>
+<span id="L1101">        if _same_file(path, source):</span>
+<span id="L1102">            raise ValueError(&quot;output must not alias an input or artifact root&quot;)</span>
+<span id="L1103">    if path.exists() or path.is_symlink():</span>
+<span id="L1104">        raise FileExistsError(&quot;output path already exists&quot;)</span>
+<span id="L1105">    parent = path.parent</span>
+<span id="L1106">    if parent.is_symlink() or not parent.is_dir():</span>
+<span id="L1107">        raise ValueError(&quot;output parent must be an existing non-symlink directory&quot;)</span>
+<span id="L1108">    temporary_name: str | None = None</span>
+<span id="L1109">    published = False</span>
+<span id="L1110">    try:</span>
+<span id="L1111">        descriptor, temporary_name = tempfile.mkstemp(prefix=f&quot;.{path.name}.&quot;, suffix=&quot;.tmp&quot;, dir=parent)</span>
+<span id="L1112">        with os.fdopen(descriptor, &quot;wb&quot;) as stream:</span>
+<span id="L1113">            stream.write(data)</span>
+<span id="L1114">            stream.flush()</span>
+<span id="L1115">            os.fsync(stream.fileno())</span>
+<span id="L1116">        os.link(temporary_name, path)</span>
+<span id="L1117">        published = True</span>
+<span id="L1118">        if os.name != &quot;nt&quot;:</span>
+<span id="L1119">            directory_descriptor = os.open(parent, os.O_RDONLY)</span>
+<span id="L1120">            try:</span>
+<span id="L1121">                os.fsync(directory_descriptor)</span>
+<span id="L1122">            finally:</span>
+<span id="L1123">                os.close(directory_descriptor)</span>
+<span id="L1124">    except BaseException:</span>
+<span id="L1125">        if published:</span>
+<span id="L1126">            try:</span>
+<span id="L1127">                path.unlink()</span>
+<span id="L1128">            except FileNotFoundError:</span>
+<span id="L1129">                pass</span>
+<span id="L1130">        raise</span>
+<span id="L1131">    finally:</span>
+<span id="L1132">        if temporary_name is not None:</span>
+<span id="L1133">            try:</span>
+<span id="L1134">                os.unlink(temporary_name)</span>
+<span id="L1135">            except FileNotFoundError:</span>
+<span id="L1136">                pass</span>
+<span id="L1137"></span>
+<span id="L1138"></span>
+<span id="L1139">def validate_proposal_shape(value: dict[str, Any], errors: ErrorCollector) -&gt; None:</span>
+<span id="L1140">    obj = _closed_object(</span>
+<span id="L1141">        value,</span>
+<span id="L1142">        &quot;proposal&quot;,</span>
+<span id="L1143">        {&quot;schema_version&quot;, &quot;document_type&quot;, &quot;evidence_class&quot;, &quot;claim_scope&quot;, &quot;tuple_id&quot;, &quot;proposal_label&quot;, &quot;promotion_action&quot;, &quot;support_matrix_eligible&quot;, &quot;reviewer_authentication&quot;, &quot;chronology_proof&quot;, &quot;source&quot;, &quot;workload&quot;, &quot;digests&quot;, &quot;decision&quot;, &quot;overall_result&quot;},</span>
+<span id="L1144">        set(),</span>
+<span id="L1145">        errors,</span>
+<span id="L1146">    )</span>
+<span id="L1147">    errors.require(obj.get(&quot;evidence_class&quot;) in EVIDENCE_CLASSES, &quot;proposal.evidence_class: invalid value&quot;)</span>
+<span id="L1148">    errors.require(obj.get(&quot;claim_scope&quot;) in SCOPES, &quot;proposal.claim_scope: invalid value&quot;)</span>
+<span id="L1149">    _identifier(obj.get(&quot;tuple_id&quot;), &quot;proposal.tuple_id&quot;, errors)</span>
+<span id="L1150">    errors.require(obj.get(&quot;proposal_label&quot;) == &quot;proposal_only&quot;, &quot;proposal.proposal_label mismatch&quot;)</span>
+<span id="L1151">    errors.require(obj.get(&quot;promotion_action&quot;) == &quot;human_matrix_change_required&quot;, &quot;proposal.promotion_action mismatch&quot;)</span>
+<span id="L1152">    _boolean(obj.get(&quot;support_matrix_eligible&quot;), &quot;proposal.support_matrix_eligible&quot;, errors)</span>
+<span id="L1153">    errors.require(obj.get(&quot;reviewer_authentication&quot;) == &quot;attribution_only&quot;, &quot;proposal.reviewer_authentication mismatch&quot;)</span>
+<span id="L1154">    errors.require(obj.get(&quot;chronology_proof&quot;) == &quot;external_human_verification_only&quot;, &quot;proposal.chronology_proof mismatch&quot;)</span>
+<span id="L1155">    _validate_source(obj.get(&quot;source&quot;), &quot;proposal.source&quot;, errors)</span>
+<span id="L1156">    _validate_workload(obj.get(&quot;workload&quot;), &quot;proposal.workload&quot;, errors)</span>
+<span id="L1157">    digests = _closed_object(obj.get(&quot;digests&quot;), &quot;proposal.digests&quot;, {&quot;plan_sha256&quot;, &quot;record_sha256&quot;, &quot;review_sha256&quot;, &quot;evidence_manifest_sha256&quot;, &quot;artifacts&quot;}, set(), errors)</span>
+<span id="L1158">    for name in (&quot;plan_sha256&quot;, &quot;record_sha256&quot;, &quot;review_sha256&quot;, &quot;evidence_manifest_sha256&quot;):</span>
+<span id="L1159">        _digest(digests.get(name), f&quot;proposal.digests.{name}&quot;, errors)</span>
+<span id="L1160">    _validate_manifest_shape(digests.get(&quot;artifacts&quot;), &quot;proposal.digests.artifacts&quot;, errors)</span>
+<span id="L1161"></span>
+<span id="L1162"></span>
+<span id="L1163">def _parser() -&gt; argparse.ArgumentParser:</span>
+<span id="L1164">    parser = argparse.ArgumentParser(description=__doc__)</span>
+<span id="L1165">    commands = parser.add_subparsers(dest=&quot;command&quot;, required=True)</span>
+<span id="L1166">    for name in (&quot;validate&quot;, &quot;propose&quot;):</span>
+<span id="L1167">        command = commands.add_parser(name)</span>
+<span id="L1168">        command.add_argument(&quot;--plan&quot;, type=pathlib.Path, required=True)</span>
+<span id="L1169">        command.add_argument(&quot;--record&quot;, type=pathlib.Path, required=True)</span>
+<span id="L1170">        command.add_argument(&quot;--review&quot;, type=pathlib.Path, required=True)</span>
+<span id="L1171">        command.add_argument(&quot;--artifact-dir&quot;, type=pathlib.Path, required=True)</span>
+<span id="L1172">        if name == &quot;propose&quot;:</span>
+<span id="L1173">            command.add_argument(&quot;--output&quot;, type=pathlib.Path, required=True)</span>
+<span id="L1174">    verify = commands.add_parser(&quot;verify-proposal&quot;)</span>
+<span id="L1175">    verify.add_argument(&quot;--proposal&quot;, type=pathlib.Path, required=True)</span>
+<span id="L1176">    verify.add_argument(&quot;--plan&quot;, type=pathlib.Path, required=True)</span>
+<span id="L1177">    verify.add_argument(&quot;--record&quot;, type=pathlib.Path, required=True)</span>
+<span id="L1178">    verify.add_argument(&quot;--review&quot;, type=pathlib.Path, required=True)</span>
+<span id="L1179">    verify.add_argument(&quot;--artifact-dir&quot;, type=pathlib.Path, default=pathlib.Path(&quot;tests/qualification_fixtures/artifacts&quot;))</span>
+<span id="L1180">    return parser</span>
+<span id="L1181"></span>
+<span id="L1182"></span>
+<span id="L1183">def main(argv: list[str] | None = None) -&gt; int:</span>
+<span id="L1184">    args = _parser().parse_args(argv)</span>
+<span id="L1185">    try:</span>
+<span id="L1186">        validated = validate_set(args.plan, args.record, args.review, args.artifact_dir)</span>
+<span id="L1187">        proposal = build_proposal(validated)</span>
+<span id="L1188">        canonical = _canonical_bytes(proposal)</span>
+<span id="L1189">        if args.command == &quot;validate&quot;:</span>
+<span id="L1190">            print(f&quot;Qualification set OK ({validated.plan.value[&#x27;scope&#x27;]}, {validated.plan.value[&#x27;evidence_class&#x27;]})&quot;)</span>
+<span id="L1191">            return 0</span>
+<span id="L1192">        if args.command == &quot;propose&quot;:</span>
+<span id="L1193">            artifact_root = args.artifact_dir.resolve()</span>
+<span id="L1194">            try:</span>
+<span id="L1195">                args.output.resolve().relative_to(artifact_root)</span>
+<span id="L1196">            except ValueError:</span>
+<span id="L1197">                pass</span>
+<span id="L1198">            else:</span>
+<span id="L1199">                raise ValueError(&quot;output must not be inside the artifact root&quot;)</span>
+<span id="L1200">            write_new_atomic(</span>
+<span id="L1201">                args.output,</span>
+<span id="L1202">                canonical,</span>
+<span id="L1203">                (args.plan, args.record, args.review, args.artifact_dir),</span>
+<span id="L1204">            )</span>
+<span id="L1205">            print(&quot;Promotion proposal created (proposal_only; human_matrix_change_required)&quot;)</span>
+<span id="L1206">            return 0</span>
+<span id="L1207"></span>
+<span id="L1208">        loaded = load_document(args.proposal, &quot;promotion_proposal&quot;)</span>
+<span id="L1209">        proposal_errors = ErrorCollector()</span>
+<span id="L1210">        validate_proposal_shape(loaded.value, proposal_errors)</span>
+<span id="L1211">        proposal_errors.require(loaded.raw == canonical, &quot;proposal: bytes are not the canonical proposal for the supplied inputs&quot;)</span>
+<span id="L1212">        proposal_errors.finish()</span>
+<span id="L1213">        print(&quot;Promotion proposal OK (proposal_only; human_matrix_change_required)&quot;)</span>
+<span id="L1214">        return 0</span>
+<span id="L1215">    except (OSError, ValidationFailure, ValueError) as exc:</span>
+<span id="L1216">        print(&quot;Qualification failed:&quot;, file=sys.stderr)</span>
+<span id="L1217">        if isinstance(exc, ValidationFailure):</span>
+<span id="L1218">            for message in exc.errors:</span>
+<span id="L1219">                print(f&quot;  - {message}&quot;, file=sys.stderr)</span>
+<span id="L1220">        else:</span>
+<span id="L1221">            print(f&quot;  - {exc}&quot;, file=sys.stderr)</span>
+<span id="L1222">        return 1</span>
+<span id="L1223"></span>
+<span id="L1224"></span>
+<span id="L1225">if __name__ == &quot;__main__&quot;:</span>
+<span id="L1226">    raise SystemExit(main())</span></pre></html>

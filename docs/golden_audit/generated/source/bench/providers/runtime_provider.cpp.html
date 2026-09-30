@@ -1,0 +1,89 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>bench/providers/runtime_provider.cpp</title><h1>bench/providers/runtime_provider.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;runtime_cases/support.hpp&quot;</span>
+<span id="L2">#include &lt;cstring&gt;</span>
+<span id="L3"></span>
+<span id="L4">namespace rtfw::benchmark::runtime {</span>
+<span id="L5">namespace {</span>
+<span id="L6">constexpr Case catalog[]{</span>
+<span id="L7">#include &quot;runtime_cases/catalog.inc&quot;</span>
+<span id="L8">};</span>
+<span id="L9">}</span>
+<span id="L10">std::span&lt;const Case&gt; cases() noexcept {return catalog;}</span>
+<span id="L11">const char* family_name(Family f) noexcept {</span>
+<span id="L12">    switch(f) {</span>
+<span id="L13">    case Family::rates:return &quot;rates&quot;;case Family::channels:return &quot;channels&quot;;</span>
+<span id="L14">    case Family::shedding:return &quot;shedding&quot;;case Family::controls:return &quot;controls&quot;;</span>
+<span id="L15">    case Family::checkpoint:return &quot;checkpoint&quot;;case Family::replay:return &quot;replay&quot;;</span>
+<span id="L16">    case Family::watchdog:return &quot;watchdog&quot;;case Family::telemetry:return &quot;telemetry&quot;;</span>
+<span id="L17">    case Family::capacity:return &quot;capacity&quot;;case Family::device:return &quot;device&quot;;</span>
+<span id="L18">    case Family::composition:return &quot;composition&quot;;</span>
+<span id="L19">    } return &quot;invalid&quot;;</span>
+<span id="L20">}</span>
+<span id="L21">struct Provider::State {</span>
+<span id="L22">    const Case* selected{};</span>
+<span id="L23">    std::unique_ptr&lt;detail::Fixture&gt; fixture;</span>
+<span id="L24">    std::uint64_t calls{};</span>
+<span id="L25">    bool failed{};</span>
+<span id="L26">};</span>
+<span id="L27">Provider::Provider():state_(std::make_unique&lt;State&gt;()) {}</span>
+<span id="L28">Provider::~Provider() {if(finish()!=Status::ok) std::terminate();}</span>
+<span id="L29">ProviderV1 Provider::table() noexcept {</span>
+<span id="L30">    ProviderV1 p;p.id=&quot;rtfw.runtime&quot;;p.case_count=std::size(catalog);p.user=this;</span>
+<span id="L31">    p.describe=describe;p.invoke=invoke;return p;</span>
+<span id="L32">}</span>
+<span id="L33">Status Provider::describe(void*,std::size_t index,Descriptor&amp; d) {</span>
+<span id="L34">    if(index&gt;=std::size(catalog)) return Status::not_found;</span>
+<span id="L35">    const auto&amp; c=catalog[index];d={};d.case_id=c.id;d.subsystem=family_name(c.family);</span>
+<span id="L36">    d.implementation=&quot;public-runtime-v1&quot;;d.configuration=c.scope;d.workload_kind=c.mode;</span>
+<span id="L37">    const auto text=std::string(c.id)+&quot;|&quot;+c.scope+&quot;|&quot;+std::to_string(c.count)+&quot;|&quot;+</span>
+<span id="L38">        std::to_string(c.width)+&quot;|&quot;+std::to_string(c.bytes)+&quot;|&quot;+</span>
+<span id="L39">        std::to_string(c.capacity)+&quot;|&quot;+std::to_string(c.variant);</span>
+<span id="L40">    d.workload_sha256=sha256(text);</span>
+<span id="L41">    d.parameters={{&quot;count&quot;,c.count,c.count,c.count},{&quot;width&quot;,c.width,c.width,c.width},</span>
+<span id="L42">        {&quot;bytes&quot;,c.bytes,c.bytes,c.bytes},{&quot;capacity&quot;,c.capacity,c.capacity,c.capacity},</span>
+<span id="L43">        {&quot;variant&quot;,c.variant,c.variant,c.variant}};</span>
+<span id="L44">    d.counters={{&quot;operations&quot;,c.unit},{&quot;callbacks&quot;,&quot;count&quot;},{&quot;rejected&quot;,&quot;count&quot;},</span>
+<span id="L45">        {&quot;records&quot;,&quot;count&quot;},{&quot;bytes&quot;,&quot;bytes&quot;},{&quot;transitions&quot;,&quot;count&quot;},{&quot;gaps&quot;,&quot;count&quot;},</span>
+<span id="L46">        {&quot;rate_actions&quot;,&quot;records&quot;},{&quot;mixed_actions&quot;,&quot;records&quot;},{&quot;control_actions&quot;,&quot;records&quot;},</span>
+<span id="L47">        {&quot;admissions&quot;,&quot;admissions&quot;},{&quot;peak_outstanding&quot;,&quot;batches&quot;}};</span>
+<span id="L48">    if(c.family==Family::composition || (c.family==Family::replay &amp;&amp; std::string_view(c.mode)==&quot;active&quot;))</span>
+<span id="L49">        d.counters[3].unit=&quot;copies&quot;;</span>
+<span id="L50">    return Status::ok;</span>
+<span id="L51">}</span>
+<span id="L52">Status Provider::prepare(std::string_view id) {</span>
+<span id="L53">    if(state_-&gt;fixture) return Status::busy;</span>
+<span id="L54">    const auto it=std::find_if(std::begin(catalog),std::end(catalog),[&amp;](const Case&amp; c){return id==c.id;});</span>
+<span id="L55">    if(it==std::end(catalog)) return Status::not_found;</span>
+<span id="L56">    std::unique_ptr&lt;detail::Fixture&gt; fixture;</span>
+<span id="L57">    switch(it-&gt;family) {</span>
+<span id="L58">    case Family::rates:fixture=detail::make_rates(*it);break;</span>
+<span id="L59">    case Family::channels:fixture=detail::make_channels(*it);break;</span>
+<span id="L60">    case Family::shedding:fixture=detail::make_shedding(*it);break;</span>
+<span id="L61">    case Family::controls:fixture=detail::make_controls(*it);break;</span>
+<span id="L62">    case Family::checkpoint:fixture=detail::make_checkpoint(*it);break;</span>
+<span id="L63">    case Family::replay:fixture=detail::make_replay(*it);break;</span>
+<span id="L64">    case Family::watchdog:fixture=detail::make_watchdog(*it);break;</span>
+<span id="L65">    case Family::telemetry:fixture=detail::make_telemetry(*it);break;</span>
+<span id="L66">    case Family::capacity:fixture=detail::make_capacity(*it);break;</span>
+<span id="L67">    case Family::device:fixture=detail::make_device(*it);break;</span>
+<span id="L68">    case Family::composition:fixture=detail::make_composition(*it);break;</span>
+<span id="L69">    }</span>
+<span id="L70">    if(!fixture) return Status::provider_error;</span>
+<span id="L71">    state_-&gt;selected=it;state_-&gt;fixture=std::move(fixture);state_-&gt;calls=0;state_-&gt;failed=false;</span>
+<span id="L72">    return Status::ok;</span>
+<span id="L73">}</span>
+<span id="L74">Status Provider::invoke(void* opaque,std::string_view id,std::uint64_t ordinal,Observation&amp; out) {</span>
+<span id="L75">    auto&amp; s=*static_cast&lt;Provider*&gt;(opaque)-&gt;state_;</span>
+<span id="L76">    if(!s.fixture || s.failed || id!=s.selected-&gt;id || ordinal!=s.calls) return Status::invalid;</span>
+<span id="L77">    try {</span>
+<span id="L78">        const auto m=s.fixture-&gt;run(ordinal);++s.calls;m.observe(out);</span>
+<span id="L79">        if(!m.correct){s.failed=true;return Status::invariant_failed;}</span>
+<span id="L80">        return Status::ok;</span>
+<span id="L81">    } catch(...) {s.failed=true;return Status::invariant_failed;}</span>
+<span id="L82">}</span>
+<span id="L83">Status Provider::finish() noexcept {</span>
+<span id="L84">    if(state_-&gt;fixture &amp;&amp; state_-&gt;fixture-&gt;finish()!=rt::Status::ok) return Status::provider_error;</span>
+<span id="L85">    state_-&gt;fixture.reset();state_-&gt;selected=nullptr;return Status::ok;</span>
+<span id="L86">}</span>
+<span id="L87">bool Provider::prepared() const noexcept {return static_cast&lt;bool&gt;(state_-&gt;fixture);}</span>
+<span id="L88">std::uint64_t Provider::invocations() const noexcept {return state_-&gt;calls;}</span>
+<span id="L89">} // namespace rtfw::benchmark::runtime</span></pre></html>
