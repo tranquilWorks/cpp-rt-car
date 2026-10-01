@@ -705,3 +705,15 @@ Canonical binding amendment #593 merged at 9418f441013d9341a6fbeac00fb898d20a3a7
 Refresh only the existing capability product-source digest for the approved
 experimental watchdog header; all coverage inventory/status/support claims remain
 unchanged. Final local/hosted/integration gates remain mandatory.
+
+## M27-04 activation
+
+Canonical plan595 merged at 9035589abc4826167e2850733defc67051de8369, blob c7aac2d05ca409e1808b848b979afe7c6f214416.
+The owner selected04 after completed target288/control594. Deliver only the
+optional installed telemetry source kit with bounded host queue, explicit
+clock/owner/loss semantics and real native Perfetto/OTLP/Windows ETW consumers.
+Preserve Runtime, default SDK, experimental/native sources, original tests and
+prior evidence. Full local/all32 exact-head/native/sanitizer/static/relocated
+gates and guarded target/canonical closure remain required under standing
+scoped publication/merge authority. M27-05..08 and external qualification/
+Unreal/human/signing/release/deployment remain inactive.

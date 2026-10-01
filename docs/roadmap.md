@@ -1,3 +1,18 @@
+# M27-04 telemetry implementation candidate
+
+M27-03 target288/control594 is complete. Canonical M27-04 plan595 merged at
+9035589abc4826167e2850733defc67051de8369 with local and hosted validation PASS.
+The owner selected04 only. The optional host telemetry kit implements bounded
+schema2 capture, native Perfetto/OTLP and Windows TraceLogging. Portable queue/
+parser tests, real Trace Processor/Collector and repository contract initially
+pass. Windows ETL/TDH collection, final sanitizers/static/relocated packages,
+full profiles/all32 exact-head gates, risk review and guarded integration remain
+pending. See docs/evidence/M27-04-2026-10-01.md. No completion or Windows claim yet.
+Runtime/native/experimental/old tests and default SDK remain protected. Later
+05..08 and hardware/RT/Unreal/human/signing/release/deployment remain inactive.
+
+## Previous checkpoints
+
 # M27-03 implementation and focused verification complete
 
 Only M27-03 is selected. Canonical plans590/591/592/593 are integrated.

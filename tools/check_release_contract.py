@@ -50,6 +50,21 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'integrations/telemetry/CMakeLists.txt',
+    'integrations/telemetry/README.md',
+    'integrations/telemetry/etw.cpp',
+    'integrations/telemetry/etw.hpp',
+    'integrations/telemetry/export.py',
+    'integrations/telemetry/main.cpp',
+    'integrations/telemetry/requirements.txt',
+    'integrations/telemetry/telemetry.cpp',
+    'integrations/telemetry/telemetry.hpp',
+    'tests/telemetry_export/CMakeLists.txt',
+    'tests/telemetry_export/etw_native.cpp',
+    'tests/telemetry_export/main.cpp',
+    'tests/telemetry_export/test_spool.py',
+    'tests/telemetry_export/verify_native.py',
+
     'tests/startup_poll_reliability/CMakeLists.txt',
     'tests/startup_poll_reliability/main.cpp',
     'tests/startup_poll_reliability/verify_package.py',
