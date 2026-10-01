@@ -1,0 +1,195 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/telemetry_export/etw_native.cpp</title><h1>tests/telemetry_export/etw_native.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">// Actual Windows ETL collection + TDH decoding. No mock, skip or admin fallback.</span>
+<span id="L2">#include &quot;etw.hpp&quot;</span>
+<span id="L3">#include &lt;evntrace.h&gt;</span>
+<span id="L4">#include &lt;evntcons.h&gt;</span>
+<span id="L5">#include &lt;tdh.h&gt;</span>
+<span id="L6">#include &lt;algorithm&gt;</span>
+<span id="L7">#include &lt;array&gt;</span>
+<span id="L8">#include &lt;climits&gt;</span>
+<span id="L9">#include &lt;cwchar&gt;</span>
+<span id="L10">#include &lt;cstring&gt;</span>
+<span id="L11">#include &lt;filesystem&gt;</span>
+<span id="L12">#include &lt;atomic&gt;</span>
+<span id="L13">#include &lt;iostream&gt;</span>
+<span id="L14">#include &lt;map&gt;</span>
+<span id="L15">#include &lt;stdexcept&gt;</span>
+<span id="L16">#include &lt;string&gt;</span>
+<span id="L17">#include &lt;vector&gt;</span>
+<span id="L18"></span>
+<span id="L19">namespace {</span>
+<span id="L20">void need(bool value, const char* what) { if (!value) throw std::runtime_error(what); }</span>
+<span id="L21">void win(ULONG status, const char* what) {</span>
+<span id="L22">    if (status != ERROR_SUCCESS) throw std::runtime_error(std::string(what) + &quot;: &quot; + std::to_string(status));</span>
+<span id="L23">}</span>
+<span id="L24">class Clock final : public rt::RuntimeClock {</span>
+<span id="L25">    std::atomic&lt;std::uint64_t&gt; time_{1000};</span>
+<span id="L26">public:</span>
+<span id="L27">    std::uint64_t now_ns() noexcept override { return time_.fetch_add(1, std::memory_order_relaxed); }</span>
+<span id="L28">};</span>
+<span id="L29">rt::CallbackResult callback(void*, const rt::CallbackContext&amp;) { return rt::CallbackResult::ok; }</span>
+<span id="L30">void ok(rt::Status s) { need(s == rt::Status::ok, rt::status_message(s)); }</span>
+<span id="L31">std::vector&lt;std::byte&gt; property(EVENT_RECORD* event, const wchar_t* name) {</span>
+<span id="L32">    PROPERTY_DATA_DESCRIPTOR d{};</span>
+<span id="L33">    d.PropertyName = reinterpret_cast&lt;ULONGLONG&gt;(name);</span>
+<span id="L34">    d.ArrayIndex = ULONG_MAX;</span>
+<span id="L35">    ULONG size = 0;</span>
+<span id="L36">    win(TdhGetPropertySize(event, 0, nullptr, 1, &amp;d, &amp;size), &quot;TDH size&quot;);</span>
+<span id="L37">    need(size &lt;= 4096, &quot;TDH property bound&quot;);</span>
+<span id="L38">    std::vector&lt;std::byte&gt; value(size);</span>
+<span id="L39">    win(TdhGetProperty(event, 0, nullptr, 1, &amp;d, size, reinterpret_cast&lt;PBYTE&gt;(value.data())), &quot;TDH property&quot;);</span>
+<span id="L40">    return value;</span>
+<span id="L41">}</span>
+<span id="L42">std::uint64_t u64(EVENT_RECORD* e, const wchar_t* name) {</span>
+<span id="L43">    const auto v = property(e, name); need(v.size() == 8, &quot;TDH uint64 size&quot;);</span>
+<span id="L44">    std::uint64_t result = 0; std::memcpy(&amp;result, v.data(), 8); return result;</span>
+<span id="L45">}</span>
+<span id="L46">std::string text(EVENT_RECORD* e, const wchar_t* name) {</span>
+<span id="L47">    const auto v = property(e, name); need(!v.empty() &amp;&amp; v.back() == std::byte{0}, &quot;TDH string terminator&quot;);</span>
+<span id="L48">    return {reinterpret_cast&lt;const char*&gt;(v.data()), v.size() - 1};</span>
+<span id="L49">}</span>
+<span id="L50">struct Decode {</span>
+<span id="L51">    std::map&lt;std::string, rtfw_telemetry::Snapshot&gt; owners;</span>
+<span id="L52">    std::map&lt;std::string, std::vector&lt;std::uint64_t&gt;&gt; sequences;</span>
+<span id="L53">    unsigned snapshots = 0, events = 0, metrics = 0;</span>
+<span id="L54">    std::string failure;</span>
+<span id="L55">};</span>
+<span id="L56">void WINAPI consume(EVENT_RECORD* event) {</span>
+<span id="L57">    auto&amp; state = *static_cast&lt;Decode*&gt;(event-&gt;UserContext);</span>
+<span id="L58">    if (!IsEqualGUID(event-&gt;EventHeader.ProviderId, rtfw_telemetry::Etw::provider_id())) return;</span>
+<span id="L59">    try {</span>
+<span id="L60">        ULONG size = 0;</span>
+<span id="L61">        need(TdhGetEventInformation(event, 0, nullptr, nullptr, &amp;size) == ERROR_INSUFFICIENT_BUFFER,</span>
+<span id="L62">             &quot;TDH native metadata size&quot;);</span>
+<span id="L63">        std::vector&lt;std::byte&gt; bytes(size);</span>
+<span id="L64">        auto* info = reinterpret_cast&lt;TRACE_EVENT_INFO*&gt;(bytes.data());</span>
+<span id="L65">        win(TdhGetEventInformation(event, 0, nullptr, info, &amp;size), &quot;TDH native metadata&quot;);</span>
+<span id="L66">        need(info-&gt;DecodingSource == DecodingSourceTlg, &quot;native TraceLogging schema&quot;);</span>
+<span id="L67">        need(info-&gt;EventNameOffset != 0 &amp;&amp; info-&gt;EventNameOffset &lt; size, &quot;event name metadata&quot;);</span>
+<span id="L68">        const auto* name = reinterpret_cast&lt;const wchar_t*&gt;(bytes.data() + info-&gt;EventNameOffset);</span>
+<span id="L69">        const auto session = text(event, L&quot;Session&quot;);</span>
+<span id="L70">        const auto it = state.owners.find(session);</span>
+<span id="L71">        need(it != state.owners.end() &amp;&amp; u64(event, L&quot;RuntimeId&quot;) == it-&gt;second.metrics.metadata.runtime_id, &quot;collected owner identity&quot;);</span>
+<span id="L72">        need(u64(event, L&quot;BatchSequence&quot;) == 1, &quot;collected batch identity&quot;);</span>
+<span id="L73">        if (std::wcscmp(name, L&quot;Snapshot&quot;) == 0) {</span>
+<span id="L74">            ++state.snapshots;</span>
+<span id="L75">            need(u64(event, L&quot;RuntimeAnchorNs&quot;) == 1000 &amp;&amp; u64(event, L&quot;UnixAnchorNs&quot;) == 1700000000000000000ULL,</span>
+<span id="L76">                 &quot;collected clock correlation&quot;);</span>
+<span id="L77">            need(u64(event, L&quot;RuntimeLost&quot;) == 0 &amp;&amp; u64(event, L&quot;QueueFull&quot;) == 0, &quot;collected losses&quot;);</span>
+<span id="L78">        } else if (std::wcscmp(name, L&quot;RuntimeEvent&quot;) == 0) {</span>
+<span id="L79">            ++state.events;</span>
+<span id="L80">            const auto timestamp = u64(event, L&quot;RuntimeTimestampNs&quot;);</span>
+<span id="L81">            need(u64(event, L&quot;UnixTimestampNs&quot;) == 1700000000000000000ULL + timestamp - 1000,</span>
+<span id="L82">                 &quot;collected exact timestamp&quot;);</span>
+<span id="L83">            const auto sequence = u64(event, L&quot;Sequence&quot;);</span>
+<span id="L84">            const auto&amp; expected = it-&gt;second;</span>
+<span id="L85">            const auto found = std::find_if(expected.events.begin(), expected.events.begin() + expected.trace.events_read,</span>
+<span id="L86">                [&amp;](const auto&amp; e) { return e.sequence == sequence; });</span>
+<span id="L87">            need(found != expected.events.begin() + expected.trace.events_read, &quot;collected sequence belongs to owner&quot;);</span>
+<span id="L88">            need(found-&gt;timestamp_ns == timestamp &amp;&amp; found-&gt;frame_index == u64(event, L&quot;Frame&quot;) &amp;&amp;</span>
+<span id="L89">                 found-&gt;value == u64(event, L&quot;Value&quot;) &amp;&amp; text(event, L&quot;Name&quot;) == rt::runtime_trace_event_name(found-&gt;type),</span>
+<span id="L90">                 &quot;exact collected Runtime event fields&quot;);</span>
+<span id="L91">            state.sequences[session].push_back(sequence);</span>
+<span id="L92">        } else if (std::wcscmp(name, L&quot;RuntimeMetric&quot;) == 0) {</span>
+<span id="L93">            ++state.metrics;</span>
+<span id="L94">            need(!text(event, L&quot;Name&quot;).empty(), &quot;collected metric name&quot;);</span>
+<span id="L95">            const auto name = text(event, L&quot;Name&quot;);</span>
+<span id="L96">            bool found = false;</span>
+<span id="L97">            for (std::size_t i = 0; i &lt; rt::runtime_metric_count; ++i) {</span>
+<span id="L98">                rt::RuntimeMetricDefinition d;</span>
+<span id="L99">                need(rt::runtime_metric_definition(i, d), &quot;metric definition&quot;);</span>
+<span id="L100">                if (name == d.name) { found = true; need(u64(event, L&quot;Value&quot;) == it-&gt;second.metrics.samples[i].value,</span>
+<span id="L101">                    &quot;exact collected metric value&quot;); }</span>
+<span id="L102">            }</span>
+<span id="L103">            need(found, &quot;native metric identity&quot;);</span>
+<span id="L104">        } else throw std::runtime_error(&quot;unexpected native event&quot;);</span>
+<span id="L105">    } catch (const std::exception&amp; e) { state.failure = e.what(); }</span>
+<span id="L106">}</span>
+<span id="L107">struct Session {</span>
+<span id="L108">    struct Buffer { EVENT_TRACE_PROPERTIES properties{}; wchar_t name[128]{}; wchar_t file[1024]{}; } buffer;</span>
+<span id="L109">    TRACEHANDLE handle = 0;</span>
+<span id="L110">    explicit Session(const std::filesystem::path&amp; path) {</span>
+<span id="L111">        auto&amp; p = buffer.properties;</span>
+<span id="L112">        p.Wnode.BufferSize = sizeof(buffer);</span>
+<span id="L113">        p.Wnode.Flags = WNODE_FLAG_TRACED_GUID;</span>
+<span id="L114">        p.Wnode.ClientContext = 1; // ETW QPC delivery timestamps, distinct from payload clock</span>
+<span id="L115">        p.Wnode.Guid = rtfw_telemetry::Etw::provider_id();</span>
+<span id="L116">        p.BufferSize = 64; p.MinimumBuffers = 2; p.MaximumBuffers = 8;</span>
+<span id="L117">        p.LogFileMode = EVENT_TRACE_FILE_MODE_SEQUENTIAL | EVENT_TRACE_PRIVATE_LOGGER_MODE | EVENT_TRACE_PRIVATE_IN_PROC;</span>
+<span id="L118">        p.LoggerNameOffset = offsetof(Buffer, name); p.LogFileNameOffset = offsetof(Buffer, file);</span>
+<span id="L119">        const auto name = L&quot;RTFW-M27-04-&quot; + std::to_wstring(GetCurrentProcessId());</span>
+<span id="L120">        need(name.size() &lt; 128 &amp;&amp; path.wstring().size() &lt; 1024, &quot;session path bound&quot;);</span>
+<span id="L121">        std::copy(name.begin(), name.end(), buffer.name);</span>
+<span id="L122">        const auto file = path.wstring(); std::copy(file.begin(), file.end(), buffer.file);</span>
+<span id="L123">        win(StartTraceW(&amp;handle, buffer.name, &amp;p), &quot;StartTrace private in-process&quot;);</span>
+<span id="L124">    }</span>
+<span id="L125">    ~Session() { if (handle) (void)ControlTraceW(handle, nullptr, &amp;buffer.properties, EVENT_TRACE_CONTROL_STOP); }</span>
+<span id="L126">    void enable(bool enabled) {</span>
+<span id="L127">        win(EnableTraceEx2(handle, &amp;rtfw_telemetry::Etw::provider_id(),</span>
+<span id="L128">            enabled ? EVENT_CONTROL_CODE_ENABLE_PROVIDER : EVENT_CONTROL_CODE_DISABLE_PROVIDER,</span>
+<span id="L129">            4, 1, 0, 0, nullptr), &quot;EnableTraceEx2&quot;);</span>
+<span id="L130">    }</span>
+<span id="L131">    void stop() {</span>
+<span id="L132">        win(ControlTraceW(handle, nullptr, &amp;buffer.properties, EVENT_TRACE_CONTROL_STOP), &quot;ETW stop/flush&quot;);</span>
+<span id="L133">        handle = 0;</span>
+<span id="L134">        need(buffer.properties.EventsLost == 0 &amp;&amp; buffer.properties.LogBuffersLost == 0, &quot;ETW collector loss&quot;);</span>
+<span id="L135">    }</span>
+<span id="L136">};</span>
+<span id="L137">}</span>
+<span id="L138">int main() {</span>
+<span id="L139">    try {</span>
+<span id="L140">        Clock clock_a, clock_b;</span>
+<span id="L141">        rt::Runtime a(clock_a), b(clock_b);</span>
+<span id="L142">        rt::RuntimeConfig config; config.trace_capacity = 64;</span>
+<span id="L143">        for (auto* runtime : {&amp;a, &amp;b}) {</span>
+<span id="L144">            ok(runtime-&gt;configure(config));</span>
+<span id="L145">            ok(runtime-&gt;register_callback({&quot;etw.example&quot;, callback, nullptr}));</span>
+<span id="L146">            ok(runtime-&gt;finalize()); ok(runtime-&gt;start());</span>
+<span id="L147">            for (std::uint64_t frame = 0; frame &lt; 3; ++frame)</span>
+<span id="L148">                ok(runtime-&gt;step({frame, std::chrono::milliseconds(1), {}}));</span>
+<span id="L149">            ok(runtime-&gt;stop());</span>
+<span id="L150">        }</span>
+<span id="L151">        rtfw_telemetry::Queue qa({&quot;etw-owner-a&quot;, &quot;synthetic&quot;, 1000, 1700000000000000000ULL, 7});</span>
+<span id="L152">        rtfw_telemetry::Queue qb({&quot;etw-owner-b&quot;, &quot;synthetic&quot;, 1000, 1700000000000000000ULL, 7});</span>
+<span id="L153">        ok(qa.capture(a)); ok(qb.capture(b));</span>
+<span id="L154">        rtfw_telemetry::Etw survivor;</span>
+<span id="L155">        need(!qa.drain_one([&amp;](const auto&amp; s) { return survivor.write(s); }), &quot;disabled ETW must retain queue&quot;);</span>
+<span id="L156">        const auto path = std::filesystem::absolute(&quot;m27-04-native-&quot; + std::to_string(GetCurrentProcessId()) + &quot;.etl&quot;);</span>
+<span id="L157">        std::filesystem::remove(path);</span>
+<span id="L158">        Session session(path); session.enable(true);</span>
+<span id="L159">        Decode state;</span>
+<span id="L160">        {</span>
+<span id="L161">            rtfw_telemetry::Etw second;</span>
+<span id="L162">            need(qa.drain_one([&amp;](const auto&amp; s) {</span>
+<span id="L163">                state.owners.emplace(s.context.session, s);</span>
+<span id="L164">                return second.write(s);</span>
+<span id="L165">            }), &quot;ETW first emission&quot;);</span>
+<span id="L166">        }</span>
+<span id="L167">        // Unregistering one instance must leave the other usable.</span>
+<span id="L168">        need(qb.drain_one([&amp;](const auto&amp; s) {</span>
+<span id="L169">            state.owners.emplace(s.context.session, s);</span>
+<span id="L170">            return survivor.write(s);</span>
+<span id="L171">        }), &quot;ETW surviving instance emission&quot;);</span>
+<span id="L172">        session.enable(false); session.stop();</span>
+<span id="L173">        EVENT_TRACE_LOGFILEW log{};</span>
+<span id="L174">        auto filename = path.wstring(); log.LogFileName = filename.data();</span>
+<span id="L175">        log.ProcessTraceMode = PROCESS_TRACE_MODE_EVENT_RECORD;</span>
+<span id="L176">        log.EventRecordCallback = consume; log.Context = &amp;state;</span>
+<span id="L177">        TRACEHANDLE reader = OpenTraceW(&amp;log);</span>
+<span id="L178">        need(reader != INVALID_PROCESSTRACE_HANDLE, &quot;OpenTrace ETL&quot;);</span>
+<span id="L179">        const auto processed = ProcessTrace(&amp;reader, 1, nullptr, nullptr);</span>
+<span id="L180">        const auto closed = CloseTrace(reader);</span>
+<span id="L181">        win(processed, &quot;ProcessTrace actual ETL&quot;); win(closed, &quot;CloseTrace&quot;);</span>
+<span id="L182">        need(state.failure.empty(), state.failure.c_str());</span>
+<span id="L183">        need(state.snapshots == 2 &amp;&amp; state.events == 30 &amp;&amp; state.metrics == 64, &quot;exact native decoded event counts&quot;);</span>
+<span id="L184">        for (auto&amp; [owner, sequences] : state.sequences) {</span>
+<span id="L185">            const auto&amp; expected = state.owners.at(owner);</span>
+<span id="L186">            std::sort(sequences.begin(), sequences.end());</span>
+<span id="L187">            need(sequences.size() == expected.trace.events_read, &quot;all owner events collected&quot;);</span>
+<span id="L188">            for (std::size_t i = 0; i &lt; sequences.size(); ++i)</span>
+<span id="L189">                need(sequences[i] == expected.events[i].sequence, &quot;no collected duplicate/gap&quot;);</span>
+<span id="L190">        }</span>
+<span id="L191">        std::cout &lt;&lt; &quot;PASS native Windows ETL/TDH: 2 owners, 2 snapshots, 30 Runtime events, 64 metrics, zero collector losses; &quot;</span>
+<span id="L192">                  &lt;&lt; path.string() &lt;&lt; &#x27;\n&#x27;;</span>
+<span id="L193">        return 0;</span>
+<span id="L194">    } catch (const std::exception&amp; e) { std::cerr &lt;&lt; e.what() &lt;&lt; &#x27;\n&#x27;; return 1; }</span>
+<span id="L195">}</span></pre></html>

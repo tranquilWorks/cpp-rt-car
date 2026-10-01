@@ -48,11 +48,16 @@ bool valid_snapshot(const Snapshot& s) noexcept {
         m.schema_version != 2 || m.trace_event_size != 64 || m.metric_sample_size != 16 ||
         m.metric_count != rt::runtime_metric_count || s.metrics.sample_count != rt::runtime_metric_count ||
         s.metrics.window != rt::RuntimeMetricWindow::interval ||
-        s.trace.events_read > max_events || s.trace.metadata.runtime_id != m.runtime_id ||
+        s.trace.events_read > max_events || s.trace.events_read > m.trace_capacity ||
+        s.trace.metadata.runtime_id != m.runtime_id ||
         s.trace.metadata.config_id != m.config_id || s.trace.metadata.schema_version != 2 ||
         !token(identifier(m.build_id)) || !token(identifier(m.workload_id)) ||
         s.metrics.window_start_ns > s.metrics.window_end_ns ||
         s.trace.first_sequence > s.trace.next_sequence) return false;
+    const auto span = s.trace.next_sequence - s.trace.first_sequence;
+    if (span < s.trace.events_read) return false;
+    const auto holes = span - s.trace.events_read;
+    if (s.trace.lost_events < holes || (s.batch_sequence == 1 && s.trace.lost_events != holes)) return false;
     std::uint64_t mapped = 0;
     if (!map_timestamp(s.context, s.metrics.window_start_ns, mapped) ||
         !map_timestamp(s.context, s.metrics.window_end_ns, mapped)) return false;

@@ -1,0 +1,84 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>integrations/telemetry/etw.cpp</title><h1>integrations/telemetry/etw.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;etw.hpp&quot;</span>
+<span id="L2">#ifdef _WIN32</span>
+<span id="L3">#include &lt;TraceLoggingProvider.h&gt;</span>
+<span id="L4">#include &lt;stdexcept&gt;</span>
+<span id="L5"></span>
+<span id="L6">namespace rtfw_telemetry {</span>
+<span id="L7">namespace {</span>
+<span id="L8">TRACELOGGING_DEFINE_PROVIDER(provider, &quot;RTFW.Telemetry&quot;,</span>
+<span id="L9">    (0x7744f8d4, 0xbb73, 0x4f12, 0x9b, 0xe6, 0x49, 0xe1, 0x59, 0x81, 0x13, 0x70));</span>
+<span id="L10">const GUID guid{0x7744f8d4, 0xbb73, 0x4f12, {0x9b, 0xe6, 0x49, 0xe1, 0x59, 0x81, 0x13, 0x70}};</span>
+<span id="L11">std::mutex provider_mutex;</span>
+<span id="L12">std::size_t references = 0;</span>
+<span id="L13">}</span>
+<span id="L14">Etw::Etw() {</span>
+<span id="L15">    const std::lock_guard lock(provider_mutex);</span>
+<span id="L16">    if (references == 0 &amp;&amp; TraceLoggingRegister(provider) != ERROR_SUCCESS)</span>
+<span id="L17">        throw std::runtime_error(&quot;ETW registration failed&quot;);</span>
+<span id="L18">    ++references;</span>
+<span id="L19">}</span>
+<span id="L20">Etw::~Etw() {</span>
+<span id="L21">    const std::lock_guard lock(provider_mutex);</span>
+<span id="L22">    if (--references == 0) TraceLoggingUnregister(provider);</span>
+<span id="L23">}</span>
+<span id="L24">const GUID&amp; Etw::provider_id() noexcept { return guid; }</span>
+<span id="L25">bool Etw::write(const Snapshot&amp; s) {</span>
+<span id="L26">    if (!valid_snapshot(s)) return false;</span>
+<span id="L27">    const std::lock_guard lock(provider_mutex);</span>
+<span id="L28">    if (!TraceLoggingProviderEnabled(provider, 4, 1)) return false;</span>
+<span id="L29">    const auto&amp; c = s.context;</span>
+<span id="L30">    const auto&amp; m = s.metrics.metadata;</span>
+<span id="L31">    TraceLoggingWrite(provider, &quot;Snapshot&quot;, TraceLoggingLevel(4), TraceLoggingKeyword(1),</span>
+<span id="L32">        TraceLoggingString(c.session.c_str(), &quot;Session&quot;),</span>
+<span id="L33">        TraceLoggingUInt64(m.runtime_id, &quot;RuntimeId&quot;), TraceLoggingUInt64(m.config_id, &quot;ConfigId&quot;),</span>
+<span id="L34">        TraceLoggingUInt64(s.batch_sequence, &quot;BatchSequence&quot;),</span>
+<span id="L35">        TraceLoggingString(m.build_id.data(), &quot;BuildId&quot;), TraceLoggingString(m.workload_id.data(), &quot;WorkloadId&quot;),</span>
+<span id="L36">        TraceLoggingString(c.clock_domain.c_str(), &quot;ClockDomain&quot;),</span>
+<span id="L37">        TraceLoggingUInt64(c.runtime_anchor_ns, &quot;RuntimeAnchorNs&quot;),</span>
+<span id="L38">        TraceLoggingUInt64(c.unix_anchor_ns, &quot;UnixAnchorNs&quot;),</span>
+<span id="L39">        TraceLoggingUInt64(c.uncertainty_ns, &quot;UncertaintyNs&quot;),</span>
+<span id="L40">        TraceLoggingUInt64(s.queue_full, &quot;QueueFull&quot;), TraceLoggingUInt64(s.trace.lost_events, &quot;RuntimeLost&quot;),</span>
+<span id="L41">        TraceLoggingUInt64(s.trace.remaining_sequence_count, &quot;RemainingSequences&quot;),</span>
+<span id="L42">        TraceLoggingUInt64(s.trace.first_sequence, &quot;FirstSequence&quot;),</span>
+<span id="L43">        TraceLoggingUInt64(s.trace.next_sequence, &quot;NextSequence&quot;),</span>
+<span id="L44">        TraceLoggingUInt64(s.metrics.snapshot_sequence, &quot;MetricSequence&quot;),</span>
+<span id="L45">        TraceLoggingUInt64(s.metrics.window_start_ns, &quot;WindowStartNs&quot;),</span>
+<span id="L46">        TraceLoggingUInt64(s.metrics.window_end_ns, &quot;WindowEndNs&quot;),</span>
+<span id="L47">        TraceLoggingUInt32(m.schema_version, &quot;RuntimeSchema&quot;),</span>
+<span id="L48">        TraceLoggingUInt32(m.runtime_version_major, &quot;VersionMajor&quot;),</span>
+<span id="L49">        TraceLoggingUInt32(m.runtime_version_minor, &quot;VersionMinor&quot;),</span>
+<span id="L50">        TraceLoggingUInt32(m.runtime_version_patch, &quot;VersionPatch&quot;),</span>
+<span id="L51">        TraceLoggingUInt64(m.trace_capacity, &quot;TraceCapacity&quot;),</span>
+<span id="L52">        TraceLoggingUInt8(1, &quot;MetricWindow&quot;));</span>
+<span id="L53">    for (std::size_t i = 0; i &lt; s.trace.events_read; ++i) {</span>
+<span id="L54">        const auto&amp; e = s.events[i];</span>
+<span id="L55">        std::uint64_t unix_ns = 0;</span>
+<span id="L56">        if (!map_timestamp(c, e.timestamp_ns, unix_ns)) return false;</span>
+<span id="L57">        TraceLoggingWrite(provider, &quot;RuntimeEvent&quot;, TraceLoggingLevel(4), TraceLoggingKeyword(1),</span>
+<span id="L58">            TraceLoggingString(c.session.c_str(), &quot;Session&quot;),</span>
+<span id="L59">            TraceLoggingUInt64(m.runtime_id, &quot;RuntimeId&quot;),</span>
+<span id="L60">            TraceLoggingUInt64(s.batch_sequence, &quot;BatchSequence&quot;),</span>
+<span id="L61">            TraceLoggingString(rt::runtime_trace_event_name(e.type), &quot;Name&quot;),</span>
+<span id="L62">            TraceLoggingUInt16(static_cast&lt;std::uint16_t&gt;(e.type), &quot;Type&quot;),</span>
+<span id="L63">            TraceLoggingUInt64(e.sequence, &quot;Sequence&quot;), TraceLoggingUInt64(e.timestamp_ns, &quot;RuntimeTimestampNs&quot;),</span>
+<span id="L64">            TraceLoggingUInt64(unix_ns, &quot;UnixTimestampNs&quot;), TraceLoggingUInt64(e.frame_index, &quot;Frame&quot;),</span>
+<span id="L65">            TraceLoggingUInt32(e.callback_index, &quot;Callback&quot;), TraceLoggingUInt32(e.worker_index, &quot;Worker&quot;),</span>
+<span id="L66">            TraceLoggingUInt16(static_cast&lt;std::uint16_t&gt;(e.producer), &quot;Producer&quot;),</span>
+<span id="L67">            TraceLoggingInt32(static_cast&lt;std::int32_t&gt;(e.status), &quot;Status&quot;), TraceLoggingUInt64(e.value, &quot;Value&quot;));</span>
+<span id="L68">    }</span>
+<span id="L69">    for (std::size_t i = 0; i &lt; s.metrics.sample_count; ++i) {</span>
+<span id="L70">        rt::RuntimeMetricDefinition d;</span>
+<span id="L71">        if (!rt::runtime_metric_definition(i, d)) return false;</span>
+<span id="L72">        const std::string metric_name(d.name); // Keep a terminated copy alive through emission.</span>
+<span id="L73">        TraceLoggingWrite(provider, &quot;RuntimeMetric&quot;, TraceLoggingLevel(4), TraceLoggingKeyword(1),</span>
+<span id="L74">            TraceLoggingString(c.session.c_str(), &quot;Session&quot;),</span>
+<span id="L75">            TraceLoggingUInt64(m.runtime_id, &quot;RuntimeId&quot;),</span>
+<span id="L76">            TraceLoggingUInt64(s.batch_sequence, &quot;BatchSequence&quot;),</span>
+<span id="L77">            TraceLoggingString(metric_name.c_str(), &quot;Name&quot;), TraceLoggingUInt16(static_cast&lt;std::uint16_t&gt;(d.id), &quot;Id&quot;),</span>
+<span id="L78">            TraceLoggingUInt8(static_cast&lt;std::uint8_t&gt;(d.kind), &quot;Kind&quot;),</span>
+<span id="L79">            TraceLoggingUInt64(s.metrics.samples[i].value, &quot;Value&quot;));</span>
+<span id="L80">    }</span>
+<span id="L81">    return true; // emission attempted; collector delivery remains unacknowledged</span>
+<span id="L82">}</span>
+<span id="L83">} // namespace rtfw_telemetry</span>
+<span id="L84">#endif</span></pre></html>

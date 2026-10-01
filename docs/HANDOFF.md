@@ -1,15 +1,20 @@
-# M27-04 telemetry implementation candidate
+# M27-04 implementation and verification checkpoint
 
-M27-03 target288/control594 is complete. Canonical M27-04 plan595 merged at
-9035589abc4826167e2850733defc67051de8369 with local and hosted validation PASS.
-The owner selected04 only. The optional host telemetry kit implements bounded
-schema2 capture, native Perfetto/OTLP and Windows TraceLogging. Portable queue/
-parser tests, real Trace Processor/Collector and repository contract initially
-pass. Windows ETL/TDH collection, final sanitizers/static/relocated packages,
-full profiles/all32 exact-head gates, risk review and guarded integration remain
-pending. See docs/evidence/M27-04-2026-10-01.md. No completion or Windows claim yet.
-Runtime/native/experimental/old tests and default SDK remain protected. Later
-05..08 and hardware/RT/Unreal/human/signing/release/deployment remain inactive.
+The optional installed host telemetry source kit implements bounded schema2
+capture and native Perfetto, OTLP/HTTP and Windows ETW output, with explicit
+clock/owner/loss and shutdown semantics. Real Trace Processor/Collector and
+installed Windows ETL/TDH consumers have passed scoped format checks. Local
+queue/parser, sanitizer/static, relocated-package/71 SDK and preserved25
+observability/no-allocation evidence is retained under M27-04. The sample clock
+race and unreported spool-loss gap were reproduced and corrected.
+
+The exact final-head complete155/160 profiles, all32 hosted records and guarded
+merge disposition are recorded in target PR289 and the canonical M27-04 closure;
+this pre-commit checkpoint does not waive those gates. Earlier failures remain
+retained, including the unrelated unchanged Windows sampled-simulation timeout.
+Runtime/default SDK/ABI/schema, native/experimental code and prior tests remain
+unchanged. M27-05..08 stay inactive. Broader security/provenance/platform and
+hardware/RT/Unreal/human/signing/release obligations remain separate.
 
 ## Previous checkpoints
 

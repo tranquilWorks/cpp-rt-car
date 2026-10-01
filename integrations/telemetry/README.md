@@ -79,7 +79,8 @@ not implicitly flush, persist or report anything; explicitly close/drain first.
 The spool parser bounds input to 8 MiB, 64 batches and 128 KiB per line. It rejects
 unknown/duplicate fields, unsupported schemas, malformed records, nonfinite or
 out-of-range values, changed owner provenance, duplicate/missing interior
-batches, overlapping trace sequences and discontinuous metric intervals. A file
+batches, overlapping trace sequences, unaccounted sequence holes, inconsistent loss totals,
+changed trace capacity and discontinuous metric intervals. A file
 may begin at any batch sequence; absent prior history is not inferred. Each file
 is a bounded export unit; cross-file deduplication/continuity is the consumer's
 responsibility. The caller retains the spool; exports never remove it.

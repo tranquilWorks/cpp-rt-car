@@ -1,0 +1,153 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/telemetry_export/main.cpp</title><h1>tests/telemetry_export/main.cpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#include &quot;telemetry.hpp&quot;</span>
+<span id="L2">#include &lt;atomic&gt;</span>
+<span id="L3">#include &lt;iostream&gt;</span>
+<span id="L4">#include &lt;limits&gt;</span>
+<span id="L5">#include &lt;sstream&gt;</span>
+<span id="L6">#include &lt;stdexcept&gt;</span>
+<span id="L7">#include &lt;thread&gt;</span>
+<span id="L8"></span>
+<span id="L9">namespace {</span>
+<span id="L10">void need(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }</span>
+<span id="L11">void ok(rt::Status s) { need(s == rt::Status::ok, rt::status_message(s)); }</span>
+<span id="L12">class Clock final : public rt::RuntimeClock {</span>
+<span id="L13">public:</span>
+<span id="L14">    std::uint64_t now_ns() noexcept override { return now_.fetch_add(1, std::memory_order_relaxed); }</span>
+<span id="L15">private:</span>
+<span id="L16">    std::atomic&lt;std::uint64_t&gt; now_{1000};</span>
+<span id="L17">};</span>
+<span id="L18">rt::CallbackResult callback(void*, const rt::CallbackContext&amp;) { return rt::CallbackResult::ok; }</span>
+<span id="L19">struct Owner {</span>
+<span id="L20">    Clock clock;</span>
+<span id="L21">    rt::Runtime runtime{clock};</span>
+<span id="L22">    explicit Owner(std::size_t capacity = 8) {</span>
+<span id="L23">        rt::RuntimeConfig c;</span>
+<span id="L24">        c.trace_capacity = capacity;</span>
+<span id="L25">        ok(runtime.configure(c));</span>
+<span id="L26">        ok(runtime.register_callback({&quot;test.telemetry&quot;, callback, nullptr}));</span>
+<span id="L27">        ok(runtime.finalize()); ok(runtime.start());</span>
+<span id="L28">    }</span>
+<span id="L29">    ~Owner() { (void)runtime.stop(); }</span>
+<span id="L30">    void frame(std::uint64_t n) { ok(runtime.step({n, std::chrono::milliseconds(1), {}})); }</span>
+<span id="L31">};</span>
+<span id="L32">rtfw_telemetry::Context context(const char* session = &quot;test-owner&quot;) {</span>
+<span id="L33">    return {session, &quot;synthetic&quot;, 1000, 1700000000000000000ULL, 17};</span>
+<span id="L34">}</span>
+<span id="L35">class FailedStream final : public std::streambuf {</span>
+<span id="L36">    std::streamsize xsputn(const char*, std::streamsize) override { return 0; }</span>
+<span id="L37">    int_type overflow(int_type) override { return traits_type::eof(); }</span>
+<span id="L38">};</span>
+<span id="L39">void lifecycle() {</span>
+<span id="L40">    Owner owner, foreign;</span>
+<span id="L41">    rtfw_telemetry::Queue q(context(), 1);</span>
+<span id="L42">    q.set_enabled(false);</span>
+<span id="L43">    need(q.capture(owner.runtime) == rt::Status::invalid_state, &quot;disabled capture&quot;);</span>
+<span id="L44">    q.set_enabled(true); ok(q.capture(owner.runtime));</span>
+<span id="L45">    need(q.capture(owner.runtime) == rt::Status::queue_full, &quot;full capture&quot;);</span>
+<span id="L46">    rtfw_telemetry::Snapshot first;</span>
+<span id="L47">    need(!q.drain_one([&amp;](const auto&amp; s) { first = s; return false; }), &quot;failed sink&quot;);</span>
+<span id="L48">    FailedStream buffer; std::ostream failed(&amp;buffer);</span>
+<span id="L49">    need(!q.drain_one([&amp;](const auto&amp; s) { return rtfw_telemetry::write_json(s, failed); }), &quot;failed stream&quot;);</span>
+<span id="L50">    try { q.drain_one([](const auto&amp;) -&gt; bool { throw std::runtime_error(&quot;sink&quot;); }); }</span>
+<span id="L51">    catch (const std::runtime_error&amp;) {}</span>
+<span id="L52">    need(q.statistics().pending == 1 &amp;&amp; q.statistics().sink_failures == 3, &quot;failed writes retain snapshot&quot;);</span>
+<span id="L53">    auto missing = first;</span>
+<span id="L54">    --missing.trace.events_read;</span>
+<span id="L55">    need(!rtfw_telemetry::valid_snapshot(missing), &quot;missing fresh event requires reported loss&quot;);</span>
+<span id="L56">    std::ostringstream output; output &lt;&lt; std::hex;</span>
+<span id="L57">    need(q.drain_one([&amp;](const auto&amp; s) {</span>
+<span id="L58">        need(s.trace.next_sequence == first.trace.next_sequence &amp;&amp; s.batch_sequence == 1, &quot;retry identity&quot;);</span>
+<span id="L59">        return rtfw_telemetry::write_json(s, output);</span>
+<span id="L60">    }), &quot;retry succeeds&quot;);</span>
+<span id="L61">    need(output.str().find(&quot;1700000000000000000&quot;) != std::string::npos, &quot;locale independent decimal&quot;);</span>
+<span id="L62">    need(q.capture(foreign.runtime) != rt::Status::ok, &quot;foreign Runtime rejected&quot;);</span>
+<span id="L63">    for (std::uint64_t i = 0; i &lt; 40; ++i) owner.frame(i);</span>
+<span id="L64">    ok(q.capture(owner.runtime));</span>
+<span id="L65">    need(q.drain_one([&amp;](const auto&amp; s) {</span>
+<span id="L66">        need(s.batch_sequence == 2 &amp;&amp; s.queue_full == 1, &quot;accepted sequence/full count&quot;);</span>
+<span id="L67">        need(s.metrics.samples[0].value == 40, &quot;full/foreign capture did not consume interval cursor&quot;);</span>
+<span id="L68">        need(s.trace.lost_events &gt; 0 &amp;&amp; s.trace.events_read == 8, &quot;actual Runtime overwrite accounted&quot;);</span>
+<span id="L69">        auto bad = s; bad.events[0].record_size = 63;</span>
+<span id="L70">        need(!rtfw_telemetry::valid_snapshot(bad), &quot;malformed record rejected&quot;);</span>
+<span id="L71">        bad = s; bad.events[0].reserved1 = 1;</span>
+<span id="L72">        need(!rtfw_telemetry::valid_snapshot(bad), &quot;reserved bytes rejected&quot;);</span>
+<span id="L73">        bad = s; bad.metrics.samples[1].id = rt::RuntimeMetricId::frames_started;</span>
+<span id="L74">        need(!rtfw_telemetry::valid_snapshot(bad), &quot;metric identity rejected&quot;);</span>
+<span id="L75">        return true;</span>
+<span id="L76">    }), &quot;drain overwritten range&quot;);</span>
+<span id="L77">    owner.frame(40); ok(q.capture(owner.runtime));</span>
+<span id="L78">    q.close(); need(q.capture(owner.runtime) == rt::Status::invalid_state, &quot;closed capture&quot;);</span>
+<span id="L79">    need(q.statistics().pending == 1, &quot;close keeps pending&quot;);</span>
+<span id="L80">    q.close(true); q.close(true);</span>
+<span id="L81">    const auto stats = q.statistics();</span>
+<span id="L82">    need(stats.pending == 0 &amp;&amp; stats.closed &amp;&amp; stats.discarded_batches == 1 &amp;&amp; stats.discarded_events == 4,</span>
+<span id="L83">         &quot;discard accounting/idempotence&quot;);</span>
+<span id="L84">    need(stats.disabled == 1 &amp;&amp; stats.full == 1 &amp;&amp; stats.capture_failures == 1 &amp;&amp; stats.drained == 2,</span>
+<span id="L85">         &quot;independent counters&quot;);</span>
+<span id="L86">}</span>
+<span id="L87">void bounds() {</span>
+<span id="L88">    for (const auto capacity : {std::size_t{0}, std::size_t{65}}) {</span>
+<span id="L89">        bool rejected = false;</span>
+<span id="L90">        try { rtfw_telemetry::Queue q(context(), capacity); }</span>
+<span id="L91">        catch (const std::invalid_argument&amp;) { rejected = true; }</span>
+<span id="L92">        need(rejected, &quot;queue capacity bounds&quot;);</span>
+<span id="L93">    }</span>
+<span id="L94">    auto c = context(); c.session = &quot;bad\&quot;identity&quot;;</span>
+<span id="L95">    need(!rtfw_telemetry::valid_context(c), &quot;invalid session&quot;);</span>
+<span id="L96">    std::uint64_t mapped = 0;</span>
+<span id="L97">    c = {&quot;x&quot;, &quot;y&quot;, 100, 10, 0};</span>
+<span id="L98">    need(!rtfw_telemetry::map_timestamp(c, 1, mapped), &quot;timestamp underflow&quot;);</span>
+<span id="L99">    c = {&quot;x&quot;, &quot;y&quot;, 1, std::numeric_limits&lt;std::uint64_t&gt;::max(), 0};</span>
+<span id="L100">    need(!rtfw_telemetry::map_timestamp(c, 2, mapped), &quot;timestamp overflow&quot;);</span>
+<span id="L101">    Owner owner(512);</span>
+<span id="L102">    rtfw_telemetry::Queue q(context(), 2);</span>
+<span id="L103">    for (std::uint64_t i = 0; i &lt; 100; ++i) owner.frame(i);</span>
+<span id="L104">    ok(q.capture(owner.runtime));</span>
+<span id="L105">    std::uint64_t next = 0;</span>
+<span id="L106">    need(q.drain_one([&amp;](const auto&amp; s) {</span>
+<span id="L107">        need(s.trace.events_read == 256 &amp;&amp; s.trace.remaining_sequence_count &gt; 0, &quot;bounded partial read&quot;);</span>
+<span id="L108">        next = s.trace.next_sequence;</span>
+<span id="L109">        return true;</span>
+<span id="L110">    }), &quot;first partial read&quot;);</span>
+<span id="L111">    ok(q.capture(owner.runtime));</span>
+<span id="L112">    need(q.drain_one([&amp;](const auto&amp; s) {</span>
+<span id="L113">        need(s.trace.events_read &gt; 0 &amp;&amp; s.events[0].sequence == next &amp;&amp; s.trace.remaining_sequence_count == 0,</span>
+<span id="L114">             &quot;partial read resumes without duplication&quot;);</span>
+<span id="L115">        return true;</span>
+<span id="L116">    }), &quot;second partial read&quot;);</span>
+<span id="L117">}</span>
+<span id="L118">void concurrent(const char* session) {</span>
+<span id="L119">    Owner owner(64);</span>
+<span id="L120">    rtfw_telemetry::Queue q(context(session), 2);</span>
+<span id="L121">    std::atomic&lt;bool&gt; done{false};</span>
+<span id="L122">    std::atomic&lt;unsigned&gt; consumed{0};</span>
+<span id="L123">    std::atomic&lt;bool&gt; valid{true};</span>
+<span id="L124">    std::thread consumer([&amp;] {</span>
+<span id="L125">        while (!done.load() || q.statistics().pending != 0) {</span>
+<span id="L126">            q.drain_one([&amp;](const auto&amp; s) {</span>
+<span id="L127">                if (!rtfw_telemetry::valid_snapshot(s) || s.context.session != session) valid.store(false);</span>
+<span id="L128">                consumed.fetch_add(1); return true;</span>
+<span id="L129">            });</span>
+<span id="L130">            std::this_thread::yield();</span>
+<span id="L131">        }</span>
+<span id="L132">    });</span>
+<span id="L133">    for (std::uint64_t n = 0; n &lt; 100; ++n) {</span>
+<span id="L134">        owner.frame(n);</span>
+<span id="L135">        rt::Status result;</span>
+<span id="L136">        do { result = q.capture(owner.runtime); std::this_thread::yield(); } while (result == rt::Status::queue_full);</span>
+<span id="L137">        if (result != rt::Status::ok) valid.store(false);</span>
+<span id="L138">    }</span>
+<span id="L139">    q.close(); done.store(true); consumer.join();</span>
+<span id="L140">    need(valid.load() &amp;&amp; consumed.load() == 100, &quot;concurrent consumer/owner isolation&quot;);</span>
+<span id="L141">}</span>
+<span id="L142">}</span>
+<span id="L143">int main() {</span>
+<span id="L144">    try {</span>
+<span id="L145">        lifecycle(); bounds();</span>
+<span id="L146">        std::exception_ptr failure;</span>
+<span id="L147">        std::thread other([&amp;] { try { concurrent(&quot;second-owner&quot;); } catch (...) { failure = std::current_exception(); } });</span>
+<span id="L148">        concurrent(&quot;first-owner&quot;); other.join();</span>
+<span id="L149">        if (failure) std::rethrow_exception(failure);</span>
+<span id="L150">        std::cout &lt;&lt; &quot;PASS bounded queue, cursor conservation, loss, malformed records, concurrent owners and shutdown\n&quot;;</span>
+<span id="L151">        return 0;</span>
+<span id="L152">    } catch (const std::exception&amp; e) { std::cerr &lt;&lt; e.what() &lt;&lt; &#x27;\n&#x27;; return 1; }</span>
+<span id="L153">}</span></pre></html>

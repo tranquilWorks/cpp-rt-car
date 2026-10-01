@@ -1,0 +1,72 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>integrations/telemetry/telemetry.hpp</title><h1>integrations/telemetry/telemetry.hpp</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#pragma once</span>
+<span id="L2"></span>
+<span id="L3">// Optional source kit. Every operation belongs on a non-RT host lane.</span>
+<span id="L4">#include &lt;rt/runtime.hpp&gt;</span>
+<span id="L5">#include &lt;array&gt;</span>
+<span id="L6">#include &lt;cstdint&gt;</span>
+<span id="L7">#include &lt;functional&gt;</span>
+<span id="L8">#include &lt;iosfwd&gt;</span>
+<span id="L9">#include &lt;mutex&gt;</span>
+<span id="L10">#include &lt;string&gt;</span>
+<span id="L11">#include &lt;vector&gt;</span>
+<span id="L12"></span>
+<span id="L13">namespace rtfw_telemetry {</span>
+<span id="L14">inline constexpr std::size_t max_events = 256;</span>
+<span id="L15">inline constexpr std::size_t max_batches = 64;</span>
+<span id="L16"></span>
+<span id="L17">// Caller certifies an offset-only mapping of its Runtime clock to Unix ns.</span>
+<span id="L18">// This does not measure synchronization, clock drift or RT timing accuracy.</span>
+<span id="L19">struct Context {</span>
+<span id="L20">    std::string session;</span>
+<span id="L21">    std::string clock_domain;</span>
+<span id="L22">    std::uint64_t runtime_anchor_ns = 0;</span>
+<span id="L23">    std::uint64_t unix_anchor_ns = 0;</span>
+<span id="L24">    std::uint64_t uncertainty_ns = 0;</span>
+<span id="L25">};</span>
+<span id="L26">struct Statistics {</span>
+<span id="L27">    std::uint64_t accepted = 0, drained = 0, full = 0, disabled = 0;</span>
+<span id="L28">    std::uint64_t capture_failures = 0, sink_failures = 0;</span>
+<span id="L29">    std::uint64_t discarded_batches = 0, discarded_events = 0;</span>
+<span id="L30">    std::size_t pending = 0;</span>
+<span id="L31">    bool closed = false;</span>
+<span id="L32">};</span>
+<span id="L33">struct Snapshot {</span>
+<span id="L34">    Context context;</span>
+<span id="L35">    std::uint64_t batch_sequence = 0;</span>
+<span id="L36">    std::uint64_t queue_full = 0;</span>
+<span id="L37">    rt::RuntimeMetricSnapshot metrics;</span>
+<span id="L38">    rt::RuntimeTraceReadResult trace;</span>
+<span id="L39">    std::array&lt;rt::RuntimeTraceEvent, max_events&gt; events{};</span>
+<span id="L40">};</span>
+<span id="L41"></span>
+<span id="L42">bool valid_context(const Context&amp;) noexcept;</span>
+<span id="L43">bool map_timestamp(const Context&amp;, std::uint64_t runtime_ns, std::uint64_t&amp; unix_ns) noexcept;</span>
+<span id="L44">bool valid_snapshot(const Snapshot&amp;) noexcept;</span>
+<span id="L45">bool write_json(const Snapshot&amp;, std::ostream&amp;);</span>
+<span id="L46"></span>
+<span id="L47">// One Runtime owner per queue. Caller serializes capture with ALL Runtime</span>
+<span id="L48">// control/step calls. A separate host consumer may drain concurrently.</span>
+<span id="L49">class Queue final {</span>
+<span id="L50">public:</span>
+<span id="L51">    explicit Queue(Context context, std::size_t capacity = 4);</span>
+<span id="L52">    Queue(const Queue&amp;) = delete;</span>
+<span id="L53">    Queue&amp; operator=(const Queue&amp;) = delete;</span>
+<span id="L54">    rt::Status capture(rt::Runtime&amp;);</span>
+<span id="L55">    // Sink runs under the queue lock, must not reenter, and acknowledges the</span>
+<span id="L56">    // entire snapshot. Failure/exception retains it; partial writes can duplicate.</span>
+<span id="L57">    bool drain_one(const std::function&lt;bool(const Snapshot&amp;)&gt;&amp; sink);</span>
+<span id="L58">    void set_enabled(bool);</span>
+<span id="L59">    void close(bool discard = false);</span>
+<span id="L60">    Statistics statistics() const;</span>
+<span id="L61">private:</span>
+<span id="L62">    Context context_;</span>
+<span id="L63">    mutable std::mutex mutex_;</span>
+<span id="L64">    std::vector&lt;Snapshot&gt; slots_;</span>
+<span id="L65">    std::size_t head_ = 0;</span>
+<span id="L66">    bool enabled_ = true;</span>
+<span id="L67">    Statistics stats_;</span>
+<span id="L68">    rt::RuntimeMetricCursor metric_cursor_;</span>
+<span id="L69">    rt::RuntimeTraceCursor trace_cursor_;</span>
+<span id="L70">    std::uint64_t runtime_id_ = 0;</span>
+<span id="L71">};</span>
+<span id="L72">} // namespace rtfw_telemetry</span></pre></html>
