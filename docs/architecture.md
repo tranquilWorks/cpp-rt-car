@@ -649,3 +649,38 @@ retains device_timeout and unknown safety, while start may return invalid_state
 when native work still owns storage. Repeated checked stop retains that ownership
 until actual completion permits unregister/shutdown. An immediate-timeout-only
 assertion cannot prove native cleanup finishes before the host is scheduled again.
+
+
+### Experimental SimCore dispatch lifetime
+
+The opt-in experimental scheduler waits for each worker to initialize its arena
+and capture the initial dispatch generation before frame processing starts.
+Chunk completion and worker completion are distinct: the coordinator retains
+range metadata, counters and reduction scratch until every worker has returned
+from that dispatch, including workers that found no chunk. This prevents an old
+worker from consuming a newly reset counter before the next dispatch publishes.
+
+The experimental watchdog publishes only atomic trip/limp notifications. After
+disarming it, the coordinator waits for already-scheduled callbacks to publish,
+then logs each pending trip and applies the existing degradation ladder at the
+quiescent frame boundary. The final frame follows the same rule. Destruction
+joins the watchdog before destroying its dependent state. Thresholds and the
+supported Runtime watchdog are unchanged.
+
+Experimental construction still calibrates a process-global clock and binds an
+arena to the caller thread. The M27-03 concurrent-owner probe constructs owners
+serially on their execution threads before simultaneous execution. Concurrent
+clock initialization is not repaired or qualified by this batch. See the
+[M27-03 evidence](evidence/M27-03-2026-10-01.md) for retained failures, controlled
+baseline schedules and the separate benchmark submission classification.
+
+
+The experimental clock validates each counter sample before publishing a
+monotonic floor. Backward, nonfinite, unrepresentable or greater-than1ms-drift
+samples select steady-clock fallback; calibration and default TSC selection are
+unchanged. A compare/exchange loop prevents stale concurrent callers from
+lowering the floor. This does not make process-global initialization concurrent.
+The experimental watchdog publishes its stop predicate under the same mutex
+used by its condition-variable wait, preventing a shutdown notification from
+being lost before the worker sleeps. Neither header is part of the default SDK
+or the supported Runtime implementation.

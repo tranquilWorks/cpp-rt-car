@@ -25,7 +25,10 @@ public:
     }
 
     ~Watchdog() {
-        stop_ = true;
+        {
+            std::lock_guard<std::mutex> lock(m_);
+            stop_ = true;
+        }
         cv_.notify_all();
         if (worker_.joinable()) {
             worker_.join();

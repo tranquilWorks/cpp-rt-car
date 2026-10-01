@@ -294,16 +294,18 @@ public:
     applySettings(s);
     watchdog_ = std::make_unique<rt::Watchdog>(
         std::chrono::hours(24), std::chrono::hours(24), [this] {
-          watchdogTrips_.fetch_add(1, std::memory_order_acq_rel);
+          // The watchdog cannot access coordinator-owned frame/settings/trace.
           watchdogLimp_.store(true, std::memory_order_release);
           watchdogTripPending_.fetch_add(1, std::memory_order_acq_rel);
-          if (logger_)
-            LOG_TRACE(logger_, "[WD] trip frame={} ", frame_);
-          applyDegradeRung(4);
+          // Publish last: a matching trip count means this callback's accesses
+          // have finished, even if rt::Watchdog has not yet returned from it.
+          watchdogTrips_.fetch_add(1, std::memory_order_acq_rel);
         });
     initThreads();
   }
   ~SimCore() {
+    // Join callbacks before their atomic state and trace storage are destroyed.
+    watchdog_.reset();
     saveChunkCache();
     stopThreads();
   }
@@ -711,6 +713,7 @@ private:
   void initThreads() {
     stopThreads();
     workerCount_ = settings_.threads;
+    readyWorkers_.store(0, std::memory_order_relaxed);
     std::vector<int> threadNodes(workerCount_ + 1, -1);
 
     workerPoolTraceAttached_ = false;
@@ -814,6 +817,7 @@ private:
         workerLoop();
       });
     }
+    waitForWorkersReady();
     tls_arena_bound = false;
     frameArenas_->bindCurrentThread(workerCount_); // main
     tls_arena_bound = true;
@@ -867,6 +871,8 @@ private:
 
   void workerLoop() {
     std::uint64_t localToken = dispatchToken_.load(std::memory_order_acquire);
+    // Publish both arena binding and the initial generation before run() starts.
+    readyWorkers_.fetch_add(1, std::memory_order_acq_rel);
     for (;;) {
       while (localToken == dispatchToken_.load(std::memory_order_acquire) &&
              !shutdown_.load(std::memory_order_acquire)) {
@@ -876,7 +882,20 @@ private:
         break;
       localToken = dispatchToken_.load(std::memory_order_acquire);
       processActiveRange();
+      // No active metadata or temporary reduction storage may be reused until
+      // every worker has returned, including workers that found no chunks.
+      rangeWorkers_.fetch_sub(1, std::memory_order_acq_rel);
     }
+  }
+
+  void waitForWorkersReady() {
+    while (readyWorkers_.load(std::memory_order_acquire) != workerCount_)
+      std::this_thread::yield();
+  }
+
+  void waitForRangeWorkers() {
+    while (rangeWorkers_.load(std::memory_order_acquire) != 0)
+      std::this_thread::yield();
   }
 
   void processActiveRange() {
@@ -1345,6 +1364,7 @@ private:
 
         nextChunk_.store(0, std::memory_order_relaxed);
         remaining_.store(totalChunks, std::memory_order_release);
+        rangeWorkers_.store(workerCount_, std::memory_order_relaxed);
         dispatchToken_.fetch_add(1, std::memory_order_acq_rel);
 
         while (remaining_.load(std::memory_order_acquire) > 0) {
@@ -1359,6 +1379,7 @@ private:
           if (remaining_.fetch_sub(1, std::memory_order_acq_rel) == 1)
             break;
         }
+        waitForRangeWorkers();
       }
     } else {
       for (auto &rt : ph.ranges)
@@ -1437,6 +1458,7 @@ private:
 
         nextChunk_.store(0, std::memory_order_relaxed);
         remaining_.store(totalChunks, std::memory_order_release);
+        rangeWorkers_.store(workerCount_, std::memory_order_relaxed);
         dispatchToken_.fetch_add(1, std::memory_order_acq_rel);
 
         while (remaining_.load(std::memory_order_acquire) > 0) {
@@ -1451,6 +1473,7 @@ private:
           if (remaining_.fetch_sub(1, std::memory_order_acq_rel) == 1)
             break;
         }
+        waitForRangeWorkers();
       } else {
         for (std::size_t idx = 0; idx < totalChunks; ++idx) {
           const std::size_t b = idx * chunk;
@@ -1478,14 +1501,21 @@ private:
     }
   }
 
-  void executeFrame() {
+  void consumeWatchdogTrips() {
     int pendingTrips = watchdogTripPending_.exchange(0, std::memory_order_acq_rel);
     while (pendingTrips-- > 0) {
       bintrace_.log(bintrace::EV_WatchdogTrip,
                     static_cast<std::uint32_t>(frame_),
                     static_cast<std::uint64_t>(
                         watchdogTrips_.load(std::memory_order_acquire)));
+      if (logger_)
+        LOG_TRACE(logger_, "[WD] trip frame={} ", frame_);
+      applyDegradeRung(4);
     }
+  }
+
+  void executeFrame() {
+    consumeWatchdogTrips();
     if (watchdog_) {
       auto budget =
           std::chrono::duration_cast<std::chrono::milliseconds>(outerDt_ * 1.25);
@@ -1516,8 +1546,15 @@ private:
           rt::cpu_relax();
       }
     }
-    if (watchdog_)
+    if (watchdog_) {
       watchdog_->disarm();
+      // disarm holds the watchdog's mutex and prevents further scheduling.
+      // Its trip count includes callbacks already scheduled but not yet run.
+      const auto scheduled = watchdog_->trips();
+      while (watchdogTrips_.load(std::memory_order_acquire) != scheduled)
+        std::this_thread::yield();
+    }
+    consumeWatchdogTrips();
     ++frame_;
   }
 
@@ -1716,6 +1753,8 @@ private:
   std::atomic<std::size_t> nextChunk_{0};
   std::atomic<std::size_t> remaining_{0};
   std::atomic<std::uint64_t> dispatchToken_{0};
+  std::atomic<std::size_t> readyWorkers_{0};
+  std::atomic<std::size_t> rangeWorkers_{0};
 
   std::vector<double> costWindow_;
   std::size_t costHead_ = 0;

@@ -1,3 +1,32 @@
+# M27-03 implementation and focused verification complete
+
+Only M27-03 is selected. Canonical plans590/591/592/593 are integrated.
+Experimental SimCore now waits for initialized workers and completed dispatches,
+consumes atomic watchdog trips at frame completion, joins callbacks before teardown,
+and synchronizes watchdog stop with its wait predicate. Clock samples are validated
+before publication with the existing1ms drift threshold; atomic publication prevents
+stale callers from lowering the monotonic floor. Calibration/default selection,
+original workloads/deadlines, supported Runtime, native implementations and ABIs
+remain unchanged. Actual baseline negative controls establish each claimed cause.
+
+Fresh53 focused tests, unchanged ten-repeat matrix/lifecycle workload, all causal
+controls, ASan/UBSan/leaks, TSan, Clang14 analysis, contract and actual relocated
+CPack/default/optional71 SDK consumers pass. Prior failures, sanitizer startup
+failures and silent crashes with unknown cause remain retained. Fresh exact-head
+full portable152/strict157, all32 hosted records and guarded integration/canonical
+closure remain required and are recorded in the associated final PR/closure.
+See [M27-03 evidence](evidence/M27-03-2026-10-01.md).
+
+The unchanged M23 benchmark can violate its exact-one-submission assumption when
+the original1ms deadline expires before backend submission; its historical precise
+cause remains unresolved. Concurrent process-global experimental clock initialization
+remains a limitation. M27-04 exporters,05 fuzz/security,06 provenance tooling,
+07 XDMA host preparation and08 migration/soak remain inactive. Physical/HIL/RT,
+licensed Unreal, controlled performance, unfamiliar-consumer acceptance and
+production signing/release/deployment remain separate obligations.
+
+## Historical checkpoints
+
 # M27-02 corrected implementation and focused verification complete
 
 Keep command polling for late native completion reaping, and retain unclaimed
