@@ -166,3 +166,7 @@ Specifications: [Perfetto native generation](https://perfetto.dev/docs/reference
 [OTLP](https://opentelemetry.io/docs/specs/otlp/),
 [TraceLogging](https://learn.microsoft.com/en-us/windows/win32/api/traceloggingprovider/nf-traceloggingprovider-traceloggingwrite),
 [private ETW sessions](https://learn.microsoft.com/en-us/windows/win32/etw/configuring-and-starting-a-private-logger-session).
+
+The Windows relocated-package job also compiles this installed source kit and
+runs the same actual ETL/TDH collection test. This is an explicit optional consumer
+target, not a new default SDK export.

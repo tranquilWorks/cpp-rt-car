@@ -137,7 +137,8 @@ service:
     cases = [(200, 'application/x-protobuf', response.SerializeToString()),
              (200, 'application/x-protobuf', b'\xff'), (200, 'text/plain', b''),
              (503, 'application/x-protobuf', b''), (302, 'application/x-protobuf', b''),
-             (200, 'application/x-protobuf', b'x' * 65537)]
+             (200, 'application/x-protobuf', b'x' * 65537),
+             (-1, 'application/x-protobuf', b''), (-2, 'application/x-protobuf', b'')]
     calls = []
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_): pass
@@ -145,19 +146,32 @@ service:
             body = self.rfile.read(int(self.headers['Content-Length']))
             calls.append((self.path, body))
             status, content, data = self.server.reply
+            if status == -1:
+                self.connection.close(); return
+            if status == -2:
+                time.sleep(.2); status = 200
             self.send_response(status); self.send_header('Content-Type', content)
-            self.send_header('Location', '/redirect'); self.end_headers(); self.wfile.write(data)
+            self.send_header('Location', '/redirect'); self.end_headers()
+            try: self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError): pass
     server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     thread = threading.Thread(target=server.serve_forever); thread.start()
     try:
         for reply in cases:
             server.reply = reply
-            try: e.send('http://127.0.0.1:' + str(server.server_port), 'logs', payload['logs'])
+            try: e.send('http://127.0.0.1:' + str(server.server_port), 'logs', payload['logs'], timeout=.05 if reply[0] == -2 else 10)
             except e.TransportError: pass
             else: raise RuntimeError('transport failure incorrectly acknowledged')
         require(len(calls) == len(cases) and all(path == '/v1/logs' for path, _ in calls), 'no retry/redirect')
     finally:
         server.shutdown(); thread.join(); server.server_close()
+    # The old JSON/spool is not native protobuf; independent official decoders
+    # must reject it rather than allowing a relabelled export to pass.
+    from google.protobuf.message import DecodeError
+    for message in (perfetto_trace_pb2.Trace, ExportLogsServiceRequest, ExportMetricsServiceRequest):
+        try: message.FromString(raw)
+        except DecodeError: pass
+        else: raise RuntimeError('JSON accepted as native protobuf')
     result = dict(perfetto_events=events + len(rows), perfetto_metrics=len(points), native_clock_errors=0,
                   collector_logs=len(received_logs), collector_metrics=len(received_metrics),
                   transport_negatives=len(cases), windows_etw='separate real Windows gate')

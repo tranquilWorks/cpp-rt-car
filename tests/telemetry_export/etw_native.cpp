@@ -9,6 +9,7 @@
 #include <cwchar>
 #include <cstring>
 #include <filesystem>
+#include <atomic>
 #include <iostream>
 #include <map>
 #include <stdexcept>
@@ -21,10 +22,11 @@ void win(ULONG status, const char* what) {
     if (status != ERROR_SUCCESS) throw std::runtime_error(std::string(what) + ": " + std::to_string(status));
 }
 class Clock final : public rt::RuntimeClock {
-    std::uint64_t time_ = 1000;
+    std::atomic<std::uint64_t> time_{1000};
 public:
-    std::uint64_t now_ns() noexcept override { return time_++; }
+    std::uint64_t now_ns() noexcept override { return time_.fetch_add(1, std::memory_order_relaxed); }
 };
+rt::CallbackResult callback(void*, const rt::CallbackContext&) { return rt::CallbackResult::ok; }
 void ok(rt::Status s) { need(s == rt::Status::ok, rt::status_message(s)); }
 std::vector<std::byte> property(EVENT_RECORD* event, const wchar_t* name) {
     PROPERTY_DATA_DESCRIPTOR d{};
@@ -46,7 +48,8 @@ std::string text(EVENT_RECORD* e, const wchar_t* name) {
     return {reinterpret_cast<const char*>(v.data()), v.size() - 1};
 }
 struct Decode {
-    std::map<std::string, std::uint64_t> owners;
+    std::map<std::string, rtfw_telemetry::Snapshot> owners;
+    std::map<std::string, std::vector<std::uint64_t>> sequences;
     unsigned snapshots = 0, events = 0, metrics = 0;
     std::string failure;
 };
@@ -65,7 +68,7 @@ void WINAPI consume(EVENT_RECORD* event) {
         const auto* name = reinterpret_cast<const wchar_t*>(bytes.data() + info->EventNameOffset);
         const auto session = text(event, L"Session");
         const auto it = state.owners.find(session);
-        need(it != state.owners.end() && u64(event, L"RuntimeId") == it->second, "collected owner identity");
+        need(it != state.owners.end() && u64(event, L"RuntimeId") == it->second.metrics.metadata.runtime_id, "collected owner identity");
         need(u64(event, L"BatchSequence") == 1, "collected batch identity");
         if (std::wcscmp(name, L"Snapshot") == 0) {
             ++state.snapshots;
@@ -77,11 +80,27 @@ void WINAPI consume(EVENT_RECORD* event) {
             const auto timestamp = u64(event, L"RuntimeTimestampNs");
             need(u64(event, L"UnixTimestampNs") == 1700000000000000000ULL + timestamp - 1000,
                  "collected exact timestamp");
-            need(!text(event, L"Name").empty(), "collected event name");
+            const auto sequence = u64(event, L"Sequence");
+            const auto& expected = it->second;
+            const auto found = std::find_if(expected.events.begin(), expected.events.begin() + expected.trace.events_read,
+                [&](const auto& e) { return e.sequence == sequence; });
+            need(found != expected.events.begin() + expected.trace.events_read, "collected sequence belongs to owner");
+            need(found->timestamp_ns == timestamp && found->frame_index == u64(event, L"Frame") &&
+                 found->value == u64(event, L"Value") && text(event, L"Name") == rt::runtime_trace_event_name(found->type),
+                 "exact collected Runtime event fields");
+            state.sequences[session].push_back(sequence);
         } else if (std::wcscmp(name, L"RuntimeMetric") == 0) {
             ++state.metrics;
             need(!text(event, L"Name").empty(), "collected metric name");
-            (void)u64(event, L"Value");
+            const auto name = text(event, L"Name");
+            bool found = false;
+            for (std::size_t i = 0; i < rt::runtime_metric_count; ++i) {
+                rt::RuntimeMetricDefinition d;
+                need(rt::runtime_metric_definition(i, d), "metric definition");
+                if (name == d.name) { found = true; need(u64(event, L"Value") == it->second.metrics.samples[i].value,
+                    "exact collected metric value"); }
+            }
+            need(found, "native metric identity");
         } else throw std::runtime_error("unexpected native event");
     } catch (const std::exception& e) { state.failure = e.what(); }
 }
@@ -121,7 +140,14 @@ int main() {
         Clock clock_a, clock_b;
         rt::Runtime a(clock_a), b(clock_b);
         rt::RuntimeConfig config; config.trace_capacity = 64;
-        for (auto* runtime : {&a, &b}) { ok(runtime->configure(config)); ok(runtime->finalize()); }
+        for (auto* runtime : {&a, &b}) {
+            ok(runtime->configure(config));
+            ok(runtime->register_callback({"etw.example", callback, nullptr}));
+            ok(runtime->finalize()); ok(runtime->start());
+            for (std::uint64_t frame = 0; frame < 3; ++frame)
+                ok(runtime->step({frame, std::chrono::milliseconds(1), {}}));
+            ok(runtime->stop());
+        }
         rtfw_telemetry::Queue qa({"etw-owner-a", "synthetic", 1000, 1700000000000000000ULL, 7});
         rtfw_telemetry::Queue qb({"etw-owner-b", "synthetic", 1000, 1700000000000000000ULL, 7});
         ok(qa.capture(a)); ok(qb.capture(b));
@@ -134,13 +160,13 @@ int main() {
         {
             rtfw_telemetry::Etw second;
             need(qa.drain_one([&](const auto& s) {
-                state.owners.emplace(s.context.session, s.metrics.metadata.runtime_id);
+                state.owners.emplace(s.context.session, s);
                 return second.write(s);
             }), "ETW first emission");
         }
         // Unregistering one instance must leave the other usable.
         need(qb.drain_one([&](const auto& s) {
-            state.owners.emplace(s.context.session, s.metrics.metadata.runtime_id);
+            state.owners.emplace(s.context.session, s);
             return survivor.write(s);
         }), "ETW surviving instance emission");
         session.enable(false); session.stop();
@@ -154,8 +180,15 @@ int main() {
         const auto closed = CloseTrace(reader);
         win(processed, "ProcessTrace actual ETL"); win(closed, "CloseTrace");
         need(state.failure.empty(), state.failure.c_str());
-        need(state.snapshots == 2 && state.events == 2 && state.metrics == 64, "exact native decoded event counts");
-        std::cout << "PASS native Windows ETL/TDH: 2 owners, 2 snapshots, 2 Runtime events, 64 metrics, zero collector losses; "
+        need(state.snapshots == 2 && state.events == 30 && state.metrics == 64, "exact native decoded event counts");
+        for (auto& [owner, sequences] : state.sequences) {
+            const auto& expected = state.owners.at(owner);
+            std::sort(sequences.begin(), sequences.end());
+            need(sequences.size() == expected.trace.events_read, "all owner events collected");
+            for (std::size_t i = 0; i < sequences.size(); ++i)
+                need(sequences[i] == expected.events[i].sequence, "no collected duplicate/gap");
+        }
+        std::cout << "PASS native Windows ETL/TDH: 2 owners, 2 snapshots, 30 Runtime events, 64 metrics, zero collector losses; "
                   << path.string() << '\n';
         return 0;
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }

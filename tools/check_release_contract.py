@@ -50,6 +50,8 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'tests/package_consumer/telemetry_contract.cmake',
+    'tests/telemetry_export/verify_package.py',
     'integrations/telemetry/CMakeLists.txt',
     'integrations/telemetry/README.md',
     'integrations/telemetry/etw.cpp',

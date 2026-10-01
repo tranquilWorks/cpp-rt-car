@@ -11,9 +11,9 @@ void need(bool ok, const char* message) { if (!ok) throw std::runtime_error(mess
 void ok(rt::Status s) { need(s == rt::Status::ok, rt::status_message(s)); }
 class Clock final : public rt::RuntimeClock {
 public:
-    std::uint64_t now_ns() noexcept override { return now_++; }
+    std::uint64_t now_ns() noexcept override { return now_.fetch_add(1, std::memory_order_relaxed); }
 private:
-    std::uint64_t now_ = 1000;
+    std::atomic<std::uint64_t> now_{1000};
 };
 rt::CallbackResult callback(void*, const rt::CallbackContext&) { return rt::CallbackResult::ok; }
 struct Owner {

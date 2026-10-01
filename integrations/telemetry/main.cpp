@@ -1,13 +1,14 @@
 #include "telemetry.hpp"
+#include <atomic>
 #include <iostream>
 #include <stdexcept>
 
 namespace {
 class Clock final : public rt::RuntimeClock {
 public:
-    std::uint64_t now_ns() noexcept override { return now_++; }
+    std::uint64_t now_ns() noexcept override { return now_.fetch_add(1, std::memory_order_relaxed); }
 private:
-    std::uint64_t now_ = 1000;
+    std::atomic<std::uint64_t> now_{1000};
 };
 void check(rt::Status status) {
     if (status != rt::Status::ok) throw std::runtime_error(rt::status_message(status));
