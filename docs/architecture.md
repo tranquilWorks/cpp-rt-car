@@ -684,3 +684,13 @@ The experimental watchdog publishes its stop predicate under the same mutex
 used by its condition-variable wait, preventing a shutdown notification from
 being lost before the worker sleeps. Neither header is part of the default SDK
 or the supported Runtime implementation.
+
+## Optional host telemetry integrations (M27-04)
+
+`integrations/telemetry` is an installed source kit above the unchanged global
+observability schema2 inspectors. The Runtime owner captures at a quiescent host
+boundary into a bounded copied queue; consumer threads never inspect Runtime.
+Native Perfetto/OTLP encoding and Windows TraceLogging run outside Runtime lanes.
+Session identity, explicit clock anchors, cursor conservation and separate queue,
+Runtime and collector loss semantics are documented in the kit README. No SDK
+ABI, exported target, installed header or execution policy changes.

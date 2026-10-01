@@ -1,0 +1,132 @@
+# M27-04 optional non-RT telemetry — implementation candidate
+
+This is the source-bound, pre-commit verification checkpoint for
+[PR289](https://github.com/tranquilWorks/cpp-rt-car/pull/289). The exact final-head
+full profiles, all32 hosted records, guarded merge and canonical closure are
+recorded in that PR and the control-plane M27-04 closure. They remain mandatory;
+this checked-in checkpoint does not substitute for those final-head gates.
+
+Baseline M27-03 target288: `5f9a8a4c554cb065cb2ace33f10444d07466c313`.
+Canonical activation595: `9035589abc4826167e2850733defc67051de8369`, full local
+and actual hosted control PASS. Only M27-04 is selected; M27-05..08 stay inactive.
+
+## Delivered behavior
+
+The optional installed source kit captures copied global schema2 snapshots in a
+1–64-slot host queue, at most256 events and32 metrics per slot. Candidate cursors
+commit only after admission; full, disabled and failed capture preserve them.
+Sinks acknowledge entire snapshots; failure retains the front, and a partial
+external write may duplicate records. Close retains pending data for drain or
+explicitly counts discarded batches/events. Runtime inspection remains a
+caller-owned quiescent host operation, serialized with Runtime control/execution.
+
+Official optional protobuf modules produce native Perfetto TrackEvent files and
+OTLP/HTTP logs/metrics; Windows uses native TraceLogging. The intermediate NDJSON
+spool is explicitly a separate kit format. Exact session/Runtime/config identity,
+caller-supplied clock anchors, original timestamps, interval metric semantics,
+Runtime loss and exporter backpressure are retained. Strict spool validation
+reconciles sequence spans, record counts and reported losses across batches.
+
+Runtime, all native/experimental/benchmark implementations, original tests,
+public ABI/schema/defaults and SDK header/target inventories remain unchanged.
+The kit is installed as data/source and compiled only by selected consumers.
+CAP-M20/scenario/3 is mapped to its implementation and native tests; every other
+M20 engineering/manual release requirement retains its prior disposition.
+
+## Actual local and native evidence
+
+- Three telemetry CTests pass, including six parser groups: queue/cursor/loss,
+  malformed records, partial256-event reads, failed writes, full/disabled export,
+  concurrent consumers/owners, close/drain/discard, clock bounds and spool history.
+- A source-bound negative against candidate02 accepts an interior event deletion
+  with reported loss0 (exit42); the repaired decoder rejects the identical bytes
+  (exit0). A correctly reported hole is still accepted. The predecessor's actual
+  archived CPack also fails the newly required source-kit entrypoint, which it
+  does not contain. These are distinct retained negatives, not passing tests.
+- Actual Perfetto v58.2 Trace Processor imports34 event/snapshot instants and128
+  metric points, with zero clock/import errors, exact mapped event timestamps and
+  exact owner/config identity (including a config ID above INT64_MAX).
+- Actual OpenTelemetry Collector0.162.0 receives34 logs and128 metric points over
+  HTTP/protobuf; its file exporter is independently decoded and compared exactly.
+  Eight transport negatives cover partial rejection, malformed/wrong-content-type
+  response, non-200, redirect, oversized response, disconnect and timeout. No
+  automatic retry occurs. Official decoders reject the raw JSON spool as native.
+- Actual Windows installed/relocated ETW collection passed at candidate02
+  `d948317e729e7e6e57bd957de940b6d0a49dc806`, run36820118722/job110233677275,
+  `telemetry_installed_etw_collection` in0.33s. The test starts a real private ETL
+  session and uses TDH to validate2 owners,2 snapshots,30 original Runtime events,
+  64 metric records, exact values/timestamps and zero collector loss. The overall
+  job failed its unchanged sampled_simulation_package_consumer before the ETW
+  test (stop case1, status-18,2.13s); that job is NOT a full-gate pass. Fresh final-
+  head Windows and all32 checks remain required. The ETL itself stays in the
+  runner build directory; the actual job log and source-bound decoder test are
+  retained as execution evidence, not a locally generated Windows substitute.
+- Queue and shipped example pass fresh ASan/UBSan/leak checks and initialized
+  TSan after both the atomic sample-clock correction and loss-validation repair.
+  Clang14 analysis reports no warnings. New kit/test/sample translation units are
+  instrumented; the unchanged Runtime archive is not reinstrumented in these
+  focused checks. All25 preserved Observability/TraceNoAlloc tests also pass.
+- Default and optional actual CPack archives were extracted to new prefixes with
+  spaces after removing original install prefixes. Both relocated clients and
+  real native consumers pass, together with all71 existing optional SDK consumers
+  and missing-SDK/missing-kit negatives. Final source-bound package records are
+  retained with this checkpoint; Windows separately compiles the installed ETW
+  kit through its existing package job. Default SDK headers/targets remain exact.
+- Repository contract, frozen C ABI v8 (70 symbols;0xd0e7a5a14bf35f97), generated
+  audit and25 audit unit tests pass. Final complete profiles must include all155
+  portable and160 experimental CTests; no prior deadline/assertion is weakened.
+
+Reproduction entrypoints: `ctest --test-dir build/agent-quick -R '^telemetry_'
+--output-on-failure`, `tests/telemetry_export/verify_native.py --help`, and
+`tests/telemetry_export/verify_package.py --help`. The latter is the local Linux
+CPack harness; native Windows collection is wired into the unchanged Windows
+build/package workflows. Exact commands, source hashes, tool/download hashes,
+logs, native artifacts and failure records are retained in
+`M27-04-final-checkpoint/`. Optional Python pins are Perfetto0.58.2,
+OpenTelemetry proto1.45.0 and protobuf7.36.2. Tools were obtained from their
+official release sources; no production-signing or authenticated-release claim
+is made by recording download hashes.
+
+## Retained findings and corrections
+
+Initial native SQL used dotted annotation names; Trace Processor normalizes them
+to underscores. Initial collector configuration omitted the required disabled
+metrics level. Those failed native attempts are retained. The first package
+harness expected different wording for a correctly rejected absent kit; the
+assertion was corrected and independently rerun, then a fresh complete package
+run passed. No original test or product assertion was relaxed.
+
+Initialized TSan proved the new synthetic clock's plain increment raced Runtime
+workers. All new sample/test clocks now use atomic fetch_add; fresh initialized
+runs pass. A separate GDB trace captures intermittent TSan allocator mmap crashes
+before main. Only those documented startup failures/mapping errors are retried;
+actual sanitizer warnings stop the gate. Earlier missing-include compiler
+attempts, an incorrectly applied diagnostic file-size limit, and a PIE ASan
+fatal-signal loop remain recorded. The latter raw log is losslessly compressed
+with a verified SHA256 after terminating the owned runaway diagnostic process.
+Non-PIE builds retain full sanitizer instrumentation and no suppressions.
+
+Windows candidate01 failed to compile a string_view passed to TraceLoggingString;
+a terminated local copy now lives through the emission call. Candidate02's
+installed native ETW consumer compiled and actually collected/decoded records.
+The final loss-validation repair closes a separately reproduced gap where an
+interior event could disappear without increasing reported loss. All earlier
+failed attempts remain separate from subsequent successful evidence.
+
+## Limits and risk disposition
+
+The clock mapping is offset-only and caller-certified, with caller-supplied
+uncertainty; no clock synchronization/drift or RT timing guarantee is inferred.
+Fresh trace cursors cannot recover prehistory. Cross-file continuity/deduplication
+belongs to the caller. Receiver acceptance and ETW emission attempts do not prove
+downstream or exactly-once delivery; ETW enablement may change during a batch.
+Native Python encoders reject signed-int64 metric/timestamp overflow. Spool and
+ETW keep uint64 values; Perfetto charts may use floating point, with exact decimal
+metric annotations retained. Separate rate/live-control/sampled-I/O formats are
+not silently exported as global schema2. See `M27-04-risk-review.md`.
+
+No hardware/HIL/RT/human/Unreal/controlled-performance/production-signing/release/
+deployment evidence is asserted. Historical M23 precise-cause and experimental
+clock-initialization limitations remain independent. The old Windows sampled-
+simulation timing failure is retained without changing its2s/8ms bounds. There
+is no target/local gate waiver; integration requires actual exact-head success.

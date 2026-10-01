@@ -1489,3 +1489,11 @@ if(RTFW_BUILD_BENCHMARKS)
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/golden-audit-provenance.json"
         DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_audit RENAME provenance.json)
 endif()
+
+# Optional non-RT telemetry source kit, never default SDK headers/targets.
+install(FILES integrations/telemetry/CMakeLists.txt integrations/telemetry/README.md
+    integrations/telemetry/telemetry.hpp integrations/telemetry/telemetry.cpp
+    integrations/telemetry/etw.hpp integrations/telemetry/etw.cpp
+    integrations/telemetry/main.cpp integrations/telemetry/export.py
+    integrations/telemetry/requirements.txt
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/integrations/telemetry)

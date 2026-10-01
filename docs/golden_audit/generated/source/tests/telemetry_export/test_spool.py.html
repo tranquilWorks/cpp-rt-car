@@ -1,0 +1,98 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/telemetry_export/test_spool.py</title><h1>tests/telemetry_export/test_spool.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#!/usr/bin/env python3</span>
+<span id="L2">&quot;&quot;&quot;Always-on parser/identity/clock negatives; no optional Python dependencies.&quot;&quot;&quot;</span>
+<span id="L3">import copy</span>
+<span id="L4">import importlib.util</span>
+<span id="L5">import io</span>
+<span id="L6">import json</span>
+<span id="L7">from pathlib import Path</span>
+<span id="L8">import subprocess</span>
+<span id="L9">import sys</span>
+<span id="L10">import unittest</span>
+<span id="L11"></span>
+<span id="L12">MODULE, EXAMPLE = sys.argv[1:3]</span>
+<span id="L13">sys.argv = sys.argv[:1]</span>
+<span id="L14">spec = importlib.util.spec_from_file_location(&#x27;telemetry_export&#x27;, MODULE)</span>
+<span id="L15">e = importlib.util.module_from_spec(spec); spec.loader.exec_module(e)</span>
+<span id="L16">RAW = subprocess.check_output([EXAMPLE], timeout=30)</span>
+<span id="L17">ROWS = [json.loads(line) for line in RAW.splitlines()]</span>
+<span id="L18"></span>
+<span id="L19"></span>
+<span id="L20">def encode(rows):</span>
+<span id="L21">    return (&#x27;\n&#x27;.join(json.dumps(s) for s in rows) + &#x27;\n&#x27;).encode()</span>
+<span id="L22"></span>
+<span id="L23"></span>
+<span id="L24">class SpoolTests(unittest.TestCase):</span>
+<span id="L25">    def reject(self, data):</span>
+<span id="L26">        with self.assertRaises((ValueError, RecursionError)):</span>
+<span id="L27">            e.load_spool(io.BytesIO(data))</span>
+<span id="L28"></span>
+<span id="L29">    def test_real_entrypoint(self):</span>
+<span id="L30">        rows = e.load_spool(io.BytesIO(RAW))</span>
+<span id="L31">        self.assertEqual(len(rows), 4)</span>
+<span id="L32">        self.assertEqual(len({s[&#x27;runtime_id&#x27;] for s in rows}), 2)</span>
+<span id="L33">        self.assertEqual(sum(s[&#x27;metrics&#x27;][&#x27;samples&#x27;][0][&#x27;value&#x27;] for s in rows), 6)</span>
+<span id="L34">        self.assertEqual(sum(len(s[&#x27;trace&#x27;][&#x27;events&#x27;]) for s in rows), 30)</span>
+<span id="L35"></span>
+<span id="L36">    def test_syntax_bounds(self):</span>
+<span id="L37">        for data in (b&#x27;&#x27;, RAW[:-1], RAW.replace(b&#x27;&quot;spool_schema&quot;:1&#x27;, b&#x27;&quot;spool_schema&quot;:1,&quot;spool_schema&quot;:1&#x27;, 1),</span>
+<span id="L38">                     b&#x27;[&#x27; * 1100 + b&#x27;]&#x27; * 1100 + b&#x27;\n&#x27;, b&#x27; &#x27; * (e.MAX_INPUT + 1),</span>
+<span id="L39">                     RAW.replace(b&#x27;&quot;uncertainty_ns&quot;:0&#x27;, b&#x27;&quot;uncertainty_ns&quot;:NaN&#x27;, 1)):</span>
+<span id="L40">            with self.subTest(size=len(data)):</span>
+<span id="L41">                self.reject(data)</span>
+<span id="L42">        self.reject(encode([ROWS[0]] * 65))</span>
+<span id="L43"></span>
+<span id="L44">    def test_record_mutations(self):</span>
+<span id="L45">        mutations = [lambda s: s.update(schema_version=3), lambda s: s.update(runtime_id=True),</span>
+<span id="L46">                     lambda s: s.update(session=&#x27;bad identity&#x27;), lambda s: s.update(extra=1),</span>
+<span id="L47">                     lambda s: s.update(unix_anchor_ns=e.U64),</span>
+<span id="L48">                     lambda s: s[&#x27;metrics&#x27;].update(window=&#x27;cumulative&#x27;),</span>
+<span id="L49">                     lambda s: s[&#x27;metrics&#x27;][&#x27;samples&#x27;][0].update(value=-1),</span>
+<span id="L50">                     lambda s: s[&#x27;metrics&#x27;][&#x27;samples&#x27;][0].update(name=&#x27;forged&#x27;),</span>
+<span id="L51">                     lambda s: s[&#x27;metrics&#x27;][&#x27;samples&#x27;][0].update(kind=1),</span>
+<span id="L52">                     lambda s: s[&#x27;trace&#x27;][&#x27;events&#x27;][0].update(type=15),</span>
+<span id="L53">                     lambda s: s[&#x27;trace&#x27;][&#x27;events&#x27;][0].update(status=1),</span>
+<span id="L54">                     lambda s: s[&#x27;trace&#x27;][&#x27;events&#x27;][0].update(callback=1 &lt;&lt; 32),</span>
+<span id="L55">                     lambda s: s[&#x27;trace&#x27;][&#x27;events&#x27;].append(s[&#x27;trace&#x27;][&#x27;events&#x27;][0]),</span>
+<span id="L56">                     lambda s: s[&#x27;trace&#x27;].update(events=s[&#x27;trace&#x27;][&#x27;events&#x27;] * 257)]</span>
+<span id="L57">        for mutation in mutations:</span>
+<span id="L58">            rows = copy.deepcopy(ROWS); mutation(rows[0])</span>
+<span id="L59">            with self.subTest(mutation=mutation): self.reject(encode(rows))</span>
+<span id="L60"></span>
+<span id="L61">    def test_identity_and_replay(self):</span>
+<span id="L62">        for key, value in [(&#x27;batch_sequence&#x27;, 1), (&#x27;batch_sequence&#x27;, 3), (&#x27;config_id&#x27;, 42),</span>
+<span id="L63">                           (&#x27;runtime_anchor_ns&#x27;, 500), (&#x27;queue_full&#x27;, -1)]:</span>
+<span id="L64">            rows = copy.deepcopy(ROWS); rows[1][key] = value</span>
+<span id="L65">            with self.subTest(key=key): self.reject(encode(rows))</span>
+<span id="L66">        rows = copy.deepcopy(ROWS); rows[1][&#x27;metrics&#x27;][&#x27;start_ns&#x27;] += 1</span>
+<span id="L67">        self.reject(encode(rows))</span>
+<span id="L68">        self.reject(encode([ROWS[0], ROWS[0]]))</span>
+<span id="L69"></span>
+<span id="L70">    def test_native_integer_limits(self):</span>
+<span id="L71">        rows = copy.deepcopy(ROWS); rows[0][&#x27;metrics&#x27;][&#x27;samples&#x27;][0][&#x27;value&#x27;] = e.U64</span>
+<span id="L72">        self.assertEqual(e.load_spool(io.BytesIO(encode(rows)))[0][&#x27;metrics&#x27;][&#x27;samples&#x27;][0][&#x27;value&#x27;], e.U64)</span>
+<span id="L73">        with self.assertRaises(ValueError): e.native_bounds(rows)</span>
+<span id="L74">        c = dict(runtime_anchor_ns=100, unix_anchor_ns=1)</span>
+<span id="L75">        with self.assertRaises(ValueError): e.timestamp(c, 0)</span>
+<span id="L76">        c = dict(runtime_anchor_ns=1, unix_anchor_ns=e.U64)</span>
+<span id="L77">        with self.assertRaises(ValueError): e.timestamp(c, 2)</span>
+<span id="L78"></span>
+<span id="L79">    def test_loss_conservation(self):</span>
+<span id="L80">        rows = copy.deepcopy(ROWS)</span>
+<span id="L81">        rows[1][&#x27;trace&#x27;][&#x27;events&#x27;].pop(0)</span>
+<span id="L82">        self.reject(encode(rows))</span>
+<span id="L83">        rows[1][&#x27;trace&#x27;][&#x27;lost_events&#x27;] += 1</span>
+<span id="L84">        self.assertEqual(len(e.load_spool(io.BytesIO(encode(rows)))), 4)</span>
+<span id="L85">        rows[1][&#x27;trace&#x27;][&#x27;lost_events&#x27;] += 1</span>
+<span id="L86">        self.reject(encode(rows))</span>
+<span id="L87">        rows = copy.deepcopy(ROWS)</span>
+<span id="L88">        rows[0][&#x27;trace&#x27;][&#x27;lost_events&#x27;] = 1</span>
+<span id="L89">        self.reject(encode(rows))</span>
+<span id="L90">        rows = copy.deepcopy(ROWS)</span>
+<span id="L91">        rows[1][&#x27;trace_capacity&#x27;] += 1</span>
+<span id="L92">        self.reject(encode(rows))</span>
+<span id="L93">        rows = copy.deepcopy(ROWS)</span>
+<span id="L94">        rows[0][&#x27;trace_capacity&#x27;] = 0</span>
+<span id="L95">        self.reject(encode(rows))</span>
+<span id="L96"></span>
+<span id="L97"></span>
+<span id="L98">if __name__ == &#x27;__main__&#x27;: unittest.main()</span></pre></html>

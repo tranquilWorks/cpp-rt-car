@@ -1,3 +1,23 @@
+# M27-04 implementation and verification checkpoint
+
+The optional installed host telemetry source kit implements bounded schema2
+capture and native Perfetto, OTLP/HTTP and Windows ETW output, with explicit
+clock/owner/loss and shutdown semantics. Real Trace Processor/Collector and
+installed Windows ETL/TDH consumers have passed scoped format checks. Local
+queue/parser, sanitizer/static, relocated-package/71 SDK and preserved25
+observability/no-allocation evidence is retained under M27-04. The sample clock
+race and unreported spool-loss gap were reproduced and corrected.
+
+The exact final-head complete155/160 profiles, all32 hosted records and guarded
+merge disposition are recorded in target PR289 and the canonical M27-04 closure;
+this pre-commit checkpoint does not waive those gates. Earlier failures remain
+retained, including the unrelated unchanged Windows sampled-simulation timeout.
+Runtime/default SDK/ABI/schema, native/experimental code and prior tests remain
+unchanged. M27-05..08 stay inactive. Broader security/provenance/platform and
+hardware/RT/Unreal/human/signing/release obligations remain separate.
+
+## Previous checkpoints
+
 # M27-03 implementation and focused verification complete
 
 Only M27-03 is selected. Canonical plans590/591/592/593 are integrated.

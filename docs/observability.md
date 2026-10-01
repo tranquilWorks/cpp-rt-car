@@ -284,3 +284,21 @@ cursor, schema field, or ID is added, and no simulated timestamp is a latency
 claim. The executable's stable line explicitly reports
 `evidence=simulated_protocol`, `physical_hardware=false`, and
 `direct_peer_dma=false`.
+
+## M27-04 optional native telemetry source kit
+
+The optional [telemetry source kit](../integrations/telemetry/README.md) adds a
+bounded non-RT host snapshot queue and native Perfetto TrackEvent protobuf,
+OTLP/HTTP protobuf logs/metrics and Windows TraceLogging adapters. The existing
+Runtime inspectors, JSON API, schema2 record bytes and default SDK headers and
+targets remain unchanged. The installed kit lives under
+`${RTFW_DATA_DIR}/integrations/telemetry`; its README gives build, clock mapping,
+identity, loss, retry, shutdown and native collection instructions.
+
+Capture must be serialized with Runtime control/execution at a quiescent host
+boundary. A consumer may drain copied snapshots on another host thread. No new
+Runtime thread, queue, allocation, mutex or I/O is introduced into RT lanes.
+Native output carries explicit session/Runtime identity, caller-supplied clock
+anchors and separate Runtime loss versus exporter backpressure accounting.
+Receiver acceptance and ETW emission attempts are not downstream delivery ACKs.
+See [M27-04 evidence](evidence/M27-04-2026-10-01.md) for tested consumers and limits.

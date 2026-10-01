@@ -36,10 +36,14 @@
         {
           "anchor": "#pragma once",
           "path": "rt/include/rt/observability_export.hpp"
+        },
+        {
+          "anchor": "# M27-04 optional non-RT telemetry \u2014 implementation candidate",
+          "path": "docs/evidence/M27-04-2026-10-01.md"
         }
       ],
       "id": "M20-release-engineering",
-      "next_action": "Complete controlled performance gates, continuous fuzz/static/security campaigns, target signing and reproducible provenance, native non-RT Perfetto/OpenTelemetry/ETW exporters, platform/migration/soak review, release approval and deployment. Existing JSON export and unsigned candidate assurance do not complete CAP-M20.",
+      "next_action": "Complete controlled performance gates, continuous fuzz/static/security campaigns, target signing and reproducible provenance, platform/migration/soak review, release approval and deployment. M27-04 supplies optional native non-RT Perfetto/OTLP/ETW integration; its format evidence and exact-head gate/closure records do not complete broader CAP-M20 release acceptance.",
       "status": "open"
     },
     {
@@ -1725,7 +1729,7 @@
       ]
     },
     {
-      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Portable fuzz/static/dependency/SBOM and unsigned candidate provenance checks exist. Controlled performance, continuous security campaigns, signed reproducible target provenance, supported migration/soak promotion and release approval remain open. The supported export is JSON; native Perfetto/OpenTelemetry/ETW integrations remain engineering work.",
+      "assessment": "M27-04 implements optional non-RT native Perfetto protobuf, OTLP/HTTP logs/metrics and Windows TraceLogging over unchanged global schema2. Actual Trace Processor, OpenTelemetry Collector and installed Windows ETL/TDH consumers have passed scoped format checks; PR289 retains required exact-head full/hosted acceptance and integration. Controlled performance, continuous security campaigns, signed reproducible provenance, platform/migration/soak review and release approval remain separate and open.",
       "evidence": [
         {
           "anchor": "# M20-PRE-01 retained implementation evidence",
@@ -1765,7 +1769,7 @@
       ]
     },
     {
-      "assessment": "Portable fuzz/static/dependency/SBOM and unsigned candidate provenance checks exist. Controlled performance, continuous security campaigns, signed reproducible target provenance, supported migration/soak promotion and release approval remain open. The supported export is JSON; native Perfetto/OpenTelemetry/ETW integrations remain engineering work.",
+      "assessment": "M27-04 implements optional non-RT native Perfetto protobuf, OTLP/HTTP logs/metrics and Windows TraceLogging over unchanged global schema2. Actual Trace Processor, OpenTelemetry Collector and installed Windows ETL/TDH consumers have passed scoped format checks; PR289 retains required exact-head full/hosted acceptance and integration. Controlled performance, continuous security campaigns, signed reproducible provenance, platform/migration/soak review and release approval remain separate and open.",
       "evidence": [
         {
           "anchor": "# M20-PRE-01 retained implementation evidence",
@@ -1805,7 +1809,7 @@
       ]
     },
     {
-      "assessment": "Portable fuzz/static/dependency/SBOM and unsigned candidate provenance checks exist. Controlled performance, continuous security campaigns, signed reproducible target provenance, supported migration/soak promotion and release approval remain open. The supported export is JSON; native Perfetto/OpenTelemetry/ETW integrations remain engineering work.",
+      "assessment": "M27-04 implements optional non-RT native Perfetto protobuf, OTLP/HTTP logs/metrics and Windows TraceLogging over unchanged global schema2. Actual Trace Processor, OpenTelemetry Collector and installed Windows ETL/TDH consumers have passed scoped format checks; PR289 retains required exact-head full/hosted acceptance and integration. Controlled performance, continuous security campaigns, signed reproducible provenance, platform/migration/soak review and release approval remain separate and open.",
       "evidence": [
         {
           "anchor": "# M20-PRE-01 retained implementation evidence",
@@ -1845,47 +1849,59 @@
       ]
     },
     {
-      "assessment": "Portable fuzz/static/dependency/SBOM and unsigned candidate provenance checks exist. Controlled performance, continuous security campaigns, signed reproducible target provenance, supported migration/soak promotion and release approval remain open. The supported export is JSON; native Perfetto/OpenTelemetry/ETW integrations remain engineering work.",
+      "assessment": "M27-04 implements optional non-RT native Perfetto protobuf, OTLP/HTTP logs/metrics and Windows TraceLogging over unchanged global schema2. Actual Trace Processor, OpenTelemetry Collector and installed Windows ETL/TDH consumers have passed scoped format checks; PR289 retains required exact-head full/hosted acceptance and integration. Controlled performance, continuous security campaigns, signed reproducible provenance, platform/migration/soak review and release approval remain separate and open.",
       "evidence": [
         {
-          "anchor": "# M20-PRE-01 retained implementation evidence",
-          "path": "docs/evidence/M20-PRE-01-2026-08-26.md"
+          "anchor": "# M27-04 optional non-RT telemetry \u2014 implementation candidate",
+          "path": "docs/evidence/M27-04-2026-10-01.md"
         }
       ],
       "id": "CAP-M20/scenario/3",
       "requirement": "non-RT Perfetto, OpenTelemetry, and ETW export",
       "sources": [
         {
-          "anchor": "#pragma once",
-          "path": "rt/include/rt/observability_export.hpp"
+          "anchor": "class Queue final {",
+          "path": "integrations/telemetry/telemetry.hpp"
         },
         {
-          "anchor": "#!/usr/bin/env python3",
-          "path": "tools/provenance.py"
+          "anchor": "def perfetto(snapshots):",
+          "path": "integrations/telemetry/export.py"
         },
         {
-          "anchor": "#!/usr/bin/env python3",
-          "path": "tools/sbom.py"
+          "anchor": "def otlp(snapshots):",
+          "path": "integrations/telemetry/export.py"
         },
         {
-          "anchor": "#!/usr/bin/env bash",
-          "path": "scripts/verify-portable-assurance.sh"
+          "anchor": "bool Etw::write(const Snapshot& s) {",
+          "path": "integrations/telemetry/etw.cpp"
         }
       ],
-      "status": "remaining_engineering",
+      "status": "portable_implemented",
       "tests": [
         {
-          "anchor": "#!/usr/bin/env python3",
-          "path": "tests/test_release_tools.py"
+          "anchor": "void lifecycle() {",
+          "path": "tests/telemetry_export/main.cpp"
         },
         {
-          "anchor": "#include <gtest/gtest.h>",
-          "path": "tests/test_observability.cpp"
+          "anchor": "    def test_loss_conservation(self):",
+          "path": "tests/telemetry_export/test_spool.py"
+        },
+        {
+          "anchor": "def main():",
+          "path": "tests/telemetry_export/verify_native.py"
+        },
+        {
+          "anchor": "int main() {",
+          "path": "tests/telemetry_export/etw_native.cpp"
+        },
+        {
+          "anchor": "def main():",
+          "path": "tests/telemetry_export/verify_package.py"
         }
       ]
     },
     {
-      "assessment": "Portable fuzz/static/dependency/SBOM and unsigned candidate provenance checks exist. Controlled performance, continuous security campaigns, signed reproducible target provenance, supported migration/soak promotion and release approval remain open. The supported export is JSON; native Perfetto/OpenTelemetry/ETW integrations remain engineering work.",
+      "assessment": "M27-04 implements optional non-RT native Perfetto protobuf, OTLP/HTTP logs/metrics and Windows TraceLogging over unchanged global schema2. Actual Trace Processor, OpenTelemetry Collector and installed Windows ETL/TDH consumers have passed scoped format checks; PR289 retains required exact-head full/hosted acceptance and integration. Controlled performance, continuous security campaigns, signed reproducible provenance, platform/migration/soak review and release approval remain separate and open.",
       "evidence": [
         {
           "anchor": "# M20-PRE-01 retained implementation evidence",
@@ -1925,7 +1941,7 @@
       ]
     },
     {
-      "assessment": "Portable fuzz/static/dependency/SBOM and unsigned candidate provenance checks exist. Controlled performance, continuous security campaigns, signed reproducible target provenance, supported migration/soak promotion and release approval remain open. The supported export is JSON; native Perfetto/OpenTelemetry/ETW integrations remain engineering work.",
+      "assessment": "M27-04 implements optional non-RT native Perfetto protobuf, OTLP/HTTP logs/metrics and Windows TraceLogging over unchanged global schema2. Actual Trace Processor, OpenTelemetry Collector and installed Windows ETL/TDH consumers have passed scoped format checks; PR289 retains required exact-head full/hosted acceptance and integration. Controlled performance, continuous security campaigns, signed reproducible provenance, platform/migration/soak review and release approval remain separate and open.",
       "evidence": [
         {
           "anchor": "# M20-PRE-01 retained implementation evidence",

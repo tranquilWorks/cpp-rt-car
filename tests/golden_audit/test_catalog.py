@@ -60,11 +60,19 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'traceability'): self.validate(audit=data)
 
     def test_manual_and_engineering_cannot_be_promoted(self):
-        for key in ('CAP-M18/scenario/1', 'CAP-M19/scenario/1', 'CAP-M20/scenario/3', 'CAP-M25/manual/1'):
+        for key in ('CAP-M18/scenario/1', 'CAP-M19/scenario/1', 'CAP-M20/scenario/1', 'CAP-M25/manual/1'):
             with self.subTest(key=key):
                 data = copy.deepcopy(self.audit)
                 next(r for r in data['requirements'] if r['id'] == key)['status'] = 'portable_implemented'
                 with self.assertRaisesRegex(ValueError, 'disposition'): self.validate(audit=data)
+
+    def test_native_exporters_do_not_promote_release_acceptance(self):
+        rows = {r['id']: r for r in self.audit['requirements']}
+        self.assertEqual(rows['CAP-M20/scenario/3']['status'], 'portable_implemented')
+        for key in ('CAP-M20/outcome/1', 'CAP-M20/scenario/1', 'CAP-M20/scenario/2',
+                    'CAP-M20/scenario/4', 'CAP-M20/automated/1'):
+            self.assertEqual(rows[key]['status'], 'remaining_engineering')
+        self.assertEqual(rows['CAP-M20/manual/1']['status'], 'gated_unperformed')
 
     def test_missing_phase_and_lever_are_rejected(self):
         for key in ('phases/physics', 'levers/staging_slots', 'contracts/external_cil'):

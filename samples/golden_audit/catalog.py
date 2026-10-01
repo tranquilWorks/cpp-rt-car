@@ -83,7 +83,7 @@ def disposition(key):
     if cap == 'CAP-M19' and ((kind == 'scenario' and n in (1, 3)) or kind in ('automated', 'outcome')):
         return 'remaining_engineering'
     if cap == 'CAP-M20':
-        return 'remaining_engineering'
+        return 'portable_implemented' if kind == 'scenario' and n == 3 else 'remaining_engineering'
     if cap == 'CAP-M26' and kind == 'scenario' and n == 2:
         return 'gated_unperformed'
     return 'portable_implemented'

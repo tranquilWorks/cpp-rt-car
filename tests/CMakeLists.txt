@@ -617,3 +617,6 @@ add_subdirectory(replay_rejection)
 
 # M27-02 deterministic public callback ordering and checked failure ownership.
 add_subdirectory(startup_poll_reliability)
+
+# M27-04: isolated optional host-side source kit; no Runtime lane changes.
+add_subdirectory(telemetry_export)

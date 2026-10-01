@@ -27,6 +27,7 @@ find_package(
     COMPONENTS ${rtfw_requested_components})
 
 include("${CMAKE_CURRENT_LIST_DIR}/package_contract.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/telemetry_contract.cmake")
 
 if (NOT RTFW_C_ABI_VERSION EQUAL 8)
     message(FATAL_ERROR "Expected installed RTFW C ABI version 8")
@@ -251,3 +252,13 @@ target_link_libraries(rtfw_sampled_simulation_consumer PRIVATE rtfw::runtime rtf
 add_test(NAME sampled_simulation_package_consumer COMMAND rtfw_sampled_simulation_consumer)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/../golden_showcase/package_contract.cmake")
+
+# Compile and collect the actual relocated Windows telemetry source kit.
+# Explicitly selected consumer targets, never default SDK exports.
+if(WIN32)
+    add_subdirectory("${RTFW_DATA_DIR}/integrations/telemetry" telemetry-installed-kit)
+    add_executable(rtfw_consumer_telemetry_etw ../telemetry_export/etw_native.cpp)
+    target_link_libraries(rtfw_consumer_telemetry_etw PRIVATE rtfw_telemetry_kit tdh)
+    add_test(NAME telemetry_installed_etw_collection COMMAND rtfw_consumer_telemetry_etw)
+    set_tests_properties(telemetry_installed_etw_collection PROPERTIES TIMEOUT 60)
+endif()

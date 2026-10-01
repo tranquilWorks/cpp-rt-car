@@ -1,43 +1,35 @@
 schema_version: 1
 batch:
-  id: M27-03
-  title: Submission and experimental timeout investigation
-  goal: Resolve the retained M23 submission fixture and experimental SimCore determinism timeout findings
-    through reproducible causal analysis.
+  id: M27-04
+  title: Non-RT telemetry exporters
+  goal: Deliver optional Perfetto, OpenTelemetry and ETW integrations over existing telemetry with explicit
+    loss, timestamp and identity semantics.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
-  - products/cpp-rt-car/acceptance.yaml#CAP-M23
+  - products/cpp-rt-car/acceptance.yaml#CAP-M20
   - products/cpp-rt-car/evidence/M26-06-closure-2026-09-30/closure.md
-  milestone: products/cpp-rt-car/milestones/M27.md#m27-03
-  baseline_commit: b60a73b1e9bacd6ace250dfa1d5d51fab862eaa7
+  milestone: products/cpp-rt-car/milestones/M27.md#m27-04
+  baseline_commit: 5f9a8a4c554cb065cb2ace33f10444d07466c313
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M27-03.yaml
-  owner_scope: Owner selected M27-03 after completed target287/control589. Current unchanged Linux baseline
-    reproduces the experimental 8-thread FMA-off hang; TSan identifies missing worker startup synchronization.
-    Narrow repairs to experimental SimCore worker readiness and dispatch lifetime after causal controls.
-    Investigate the retained M23 benchmark submission assumption separately without changing protected
-    fixtures or supported Runtime. Standing scoped publication/guarded merge and completed zero-step control-only
-    exception persist; no target/local functional waiver. M27-04..08 remain inactive. Required TSan of
-    the unchanged determinism workload exposed experimental watchdog callbacks reading frame metadata
-    and mutating degradation settings concurrently. Include only its coordinator handoff and quiescent
-    teardown within the same SimCore header; retain baseline negatives and deadlines. A fresh repeated
-    original workload still timed out after the first candidate; a controlled scheduling negative independently
-    proves the experimental rt/include/rt/watchdog.hpp destructor can lose its stop wake before condition-variable
-    wait. Allow only that non-SDK helper to publish stop under its existing mutex; preserve all supported
-    Runtime and other rt/include sources. A debugger-owned child captured the unchanged workload sleeping
-    against an erroneous experimental clock calibration; a mocked counter proves a bad timestamp poisons
-    the monotonic floor even after fallback. Also allow only experimental highres_clock.hpp sample validation
-    before publication, with the existing one-millisecond drift threshold and lock-free monotonic publication.
-    Preserve existing calibration/default selection and leave concurrent initialization as an explicit
-    separate limitation.
+  control_plane_path: products/cpp-rt-car/batches/M27-04.yaml
+  owner_scope: Owner selected04 after completed M27-03 target288/control594. Implement only M27-04 optional
+    non-RT telemetry source kit, bounded host snapshot queue and native Perfetto protobuf, OTLP HTTP/protobuf
+    and Windows ETW adapters. Use public global observability schema2 inspectors at caller-owned quiescent
+    boundaries. Explicit session identity and caller-supplied clock anchors preserve owner/timestamp meaning.
+    Native consumer validation is mandatory; Windows ETW collection runs on the existing real Windows
+    CI. Preserve Runtime, experimental/native implementations, old tests and all ABI/default/support claims.
+    Standing scoped publication/guarded merge and actual completed zero-step control-only exception persist;
+    no target/local functional waiver. M27-05..08 remain inactive.
   activation: selected_after_canonical_plan_merge
-  predecessor_control_revision: 498df85fd4d2194e5cb752a6d5f90a53f5026e89
-  control_plane_revision: 9418f441013d9341a6fbeac00fb898d20a3a7154
-  canonical_revision: 9418f441013d9341a6fbeac00fb898d20a3a7154
-  canonical_blob_sha: 46a5f846e21fd819dbafd164dedbba8e2b30e960
+  predecessor_control_revision: 6186354bf7a585c25b7b13fa6aa75d33021d1660
+  control_plane_revision: 9035589abc4826167e2850733defc67051de8369
+  canonical_revision: 9035589abc4826167e2850733defc67051de8369
+  canonical_blob_sha: c7aac2d05ca409e1808b848b979afe7c6f214416
 dependencies:
+- M27-01
 - M27-02
+- M27-03
 scope:
   allowed_paths:
   - AGENTS.md
@@ -52,15 +44,13 @@ scope:
   - tests/golden_audit/test_catalog.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - tests/timing_reliability/**
-  - tests/test_timing_reliability.cpp
+  - integrations/telemetry/**
+  - tests/telemetry_export/**
+  - tests/package_consumer/**
+  - CMakeLists.txt
   - tests/CMakeLists.txt
-  - docs/evidence/M27-03-*
-  - include/simcore/SimCore.hpp
-  - include/simcore/detail/range_dispatch.hpp
-  - rt/include/rt/watchdog.hpp
-  - include/simcore/highres_clock.hpp
-  - docs/cuda_capabilities.json
+  - docs/observability.md
+  - docs/evidence/M27-04-*
   forbidden_paths:
   - abi/
   - VERSION.txt
@@ -86,87 +76,44 @@ scope:
   - docs/evidence/M24-*
   - docs/evidence/M25-*
   - docs/evidence/M26-*
+  - rt/
+  - include/
   - bench/
-  - tests/test_simcore_determinism.cpp
-  - tests/test_command_batch.cpp
-  - tests/test_benchmark_runtime.cpp
-  - tests/test_sampled_io_simulation.cpp
-  - samples/golden_system/
-  - samples/golden_cuda/
-  - samples/golden_xdma/
-  - samples/golden_showcase/
+  - hal/
+  - gpu/
+  - samples/backend_authoring/
+  - samples/host_adapter/
+  - tests/test_observability.cpp
+  - tests/test_timing_reliability.cpp
+  - tests/timing_reliability/
   - docs/evidence/M27-01-*
   - docs/evidence/M27-02-*
-  - docs/golden_audit/requirements.yaml
-  - docs/golden_audit/requirements.json
-  - docs/golden_audit/requirements-binding.json
-  - rt/src/
-  - rt/include/rt/arch.hpp
-  - rt/include/rt/canonical_bytes.hpp
-  - rt/include/rt/config.hpp
-  - rt/include/rt/crashdump.hpp
-  - rt/include/rt/cuda_backend.hpp
-  - rt/include/rt/cuda_driver.hpp
-  - rt/include/rt/device.hpp
-  - rt/include/rt/extension_abi.h
-  - rt/include/rt/fiber_pool.hpp
-  - rt/include/rt/fixed_point.hpp
-  - rt/include/rt/graph.hpp
-  - rt/include/rt/live_control.hpp
-  - rt/include/rt/loopback_backend.hpp
-  - rt/include/rt/mock_device.hpp
-  - rt/include/rt/numa.hpp
-  - rt/include/rt/numerics.hpp
-  - rt/include/rt/observability_export.hpp
-  - rt/include/rt/plugin_api.h
-  - rt/include/rt/plugin_manager.hpp
-  - rt/include/rt/prng.hpp
-  - rt/include/rt/profile.hpp
-  - rt/include/rt/runtime.hpp
-  - rt/include/rt/scheduler.hpp
-  - rt/include/rt/sdk.hpp
-  - rt/include/rt/snapshot.hpp
-  - rt/include/rt/status.hpp
-  - rt/include/rt/version.hpp
-  - rt/include/rt/xdma_backend.hpp
-  - rt/include/rt/xdma_linux.hpp
-  - tests/test_highres_clock.cpp
-  - tests/test_highres_clock_integration.cpp
+  - docs/evidence/M27-03-*
 acceptance:
-- Retain original Linux/Windows experimental 2/4/8-thread FMA-off failures and the M23 benchmark submission
-  finding. Reproduce unchanged 1500-frame/5000-element work with exact compiler, seed, FMA and thread
-  policy; distinguish fresh local reproduction, controlled causal evidence and hosted platform coverage.
-  Report unreproduced or environmental causes as unresolved.
-- Keep supported Runtime and experimental SimCore ownership separate. Require a deterministic baseline
-  negative for each claimed repair; compare exact output/determinism and progress rather than increasing
-  timeout thresholds or removing workload.
-- At activation narrow implementation paths to the reproduced cause and preserve all historical tests/evidence.
-  If only environmental behavior is established, retain the finding as unresolved rather than claiming
-  a repair.
-- Require worker initialization to finish before frame-arena reset and a dispatch to become quiescent
-  before shared range metadata, chunk counters or temporary reduction storage are reused. Preserve experimental
-  settings, existing tests and workload bounds. No production test hooks, Runtime changes, benchmark assertion
-  weakening or fabricated attribution of every historical timeout.
-- Conserve asynchronous watchdog trips through the existing atomic pending channel. Apply frame-metadata
-  logging and the unchanged degradation ladder on the coordinator at a quiescent boundary, including the
-  final frame; join the watchdog before dependent state is destroyed. Establish a causal baseline negative,
-  preserve thresholds and existing tests, and retain unrelated process-global clock/construction limitations.
-- Repair the independently reproduced experimental watchdog destructor lost wake by serializing stop-predicate
-  publication with condition-variable wait through its existing mutex. Retain an actual baseline negative,
-  current positive and unchanged workload repeats. This is not a supported Runtime watchdog change, a
-  new phase mutex, or a claim that every historical timeout has one cause.
-- Validate experimental TSC samples before exposing them to scheduling or the monotonic floor, rejecting
-  backward, nonfinite, out-of-range or over-threshold values and falling back to steady time. Retain the
-  existing one-millisecond drift threshold and TSC calibration/default selection. Require independently
-  failing actual baseline controls for drift/poisoning and monotonic publication, plus fresh unchanged
-  workload repeats; no timeout, workload or original-test weakening and no physical timing claim.
+- Implement each named format through documented native consumers and real decoding/collection tests on
+  its supported OS; do not relabel the existing JSON exporter as native integration.
+- Deliver an optional installed source kit, not a new default SDK target/header or Runtime ABI. A bounded
+  host queue captures copied global schema2 snapshots only at quiescent boundaries, preserves cursors
+  on disabled/full/failing capture, and exposes shutdown/backpressure/loss semantics. An explicit versioned
+  intermediate spool may feed optional native encoders; it is not itself a native format. Use official
+  Perfetto and OpenTelemetry protobuf modules and real Trace Processor/Collector; Windows TraceLogging
+  events require ETL/TDH decoding on a real Windows runner. Preserve exact integers and timestamp/identity
+  provenance; distinguish transport acceptance, partial rejection and ambiguous failures without silent
+  retries.
+- Test installed and relocated source-kit clients, real native consumers, malformed/truncated/oversize
+  input, clock mapping bounds, separate/concurrent owners, queue overflow, failed writes, disabled export
+  and drain/discard shutdown. Retain exact dependency/tool versions and hashes. Refresh only related installed
+  documentation/release inventory/hash bindings and audit mappings; no predecessor evidence or broader
+  qualification promotion.
+- Keep collection and encoding off Runtime lanes, bounded input queues with explicit losses and exact
+  clock/owner correlation. Preserve default SDK isolation and existing public ABI/schema bytes.
+- Validate actual optional installed/relocated clients, malformed records, backpressure, disabled exporters,
+  concurrent instances and shutdown. ETW requires a working Windows toolchain/test runner; missing collector/OS
+  remains unperformed.
 - Preserve prior completed batches/evidence and protected ABI/default/support claims. Run complete repository
   contract/quick/full plus all32 exact final-head hosted records with exact baseline names/multiplicity;
   retain failed attempts and risk review. Guard clean/head/base/review/merge-tree equality before scoped
   integration and canonical closure.
-- Refresh only the existing docs/cuda_capabilities.json product_sources digest for rt/include/rt/watchdog.hpp
-  after this approved experimental repair. Preserve all inventories, coverage statuses, evidence, support
-  claims and every other binding. Mandatory release/source contract validation must pass.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
@@ -176,20 +123,13 @@ validation:
     and actual installed package validation.
   - git diff --check
   focused_tests_to_add:
-  - Retain original Linux/Windows experimental 2/4/8-thread FMA-off failures and the M23 benchmark submission
-    finding. Reproduce unchanged 1500-frame/5000-element work with exact compiler, seed, FMA and thread
-    policy; distinguish fresh local reproduction, controlled causal evidence and hosted platform coverage.
-    Report unreproduced or environmental causes as unresolved.
-  - Keep supported Runtime and experimental SimCore ownership separate. Require a deterministic baseline
-    negative for each claimed repair; compare exact output/determinism and progress rather than increasing
-    timeout thresholds or removing workload.
-  - At activation narrow implementation paths to the reproduced cause and preserve all historical tests/evidence.
-    If only environmental behavior is established, retain the finding as unresolved rather than claiming
-    a repair.
-  - Require worker initialization to finish before frame-arena reset and a dispatch to become quiescent
-    before shared range metadata, chunk counters or temporary reduction storage are reused. Preserve experimental
-    settings, existing tests and workload bounds. No production test hooks, Runtime changes, benchmark
-    assertion weakening or fabricated attribution of every historical timeout.
+  - Implement each named format through documented native consumers and real decoding/collection tests
+    on its supported OS; do not relabel the existing JSON exporter as native integration.
+  - Keep collection and encoding off Runtime lanes, bounded input queues with explicit losses and exact
+    clock/owner correlation. Preserve default SDK isolation and existing public ABI/schema bytes.
+  - Validate actual optional installed/relocated clients, malformed records, backpressure, disabled exporters,
+    concurrent instances and shutdown. ETW requires a working Windows toolchain/test runner; missing collector/OS
+    remains unperformed.
   required_ci:
   - All32 exact final-head target checks successful with exact M26-06 names/multiplicity. No target/local
     gate waived.
@@ -210,7 +150,7 @@ rollback:
     and other planned batches.
 evidence:
   output:
-  - docs/evidence/M27-03-<date>.md
+  - docs/evidence/M27-04-<date>.md
   - Exact baseline/positive/negative commands, hashes, raw logs, risk review and final-head local/CI/merge/closure
     records.
   claim_boundary: Portable software implementation and tested compatibility only. Original M18/M19/M20/M25/M26

@@ -1,0 +1,104 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>tests/telemetry_export/verify_package.py</title><h1>tests/telemetry_export/verify_package.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#!/usr/bin/env python3</span>
+<span id="L2">&quot;&quot;&quot;Run optional native telemetry clients against real default and optional relocated CPack archives.&quot;&quot;&quot;</span>
+<span id="L3">import argparse</span>
+<span id="L4">import hashlib</span>
+<span id="L5">import importlib.util</span>
+<span id="L6">import json</span>
+<span id="L7">from pathlib import Path</span>
+<span id="L8">import shutil</span>
+<span id="L9">import sys</span>
+<span id="L10">import tempfile</span>
+<span id="L11"></span>
+<span id="L12">ROOT = Path(__file__).resolve().parents[2]</span>
+<span id="L13">spec = importlib.util.spec_from_file_location(&#x27;package_helpers&#x27;, ROOT / &#x27;tests/installed_docs/verify_package.py&#x27;)</span>
+<span id="L14">h = importlib.util.module_from_spec(spec)</span>
+<span id="L15">spec.loader.exec_module(h)</span>
+<span id="L16">run = h.run</span>
+<span id="L17"></span>
+<span id="L18"></span>
+<span id="L19">def main():</span>
+<span id="L20">    parser = argparse.ArgumentParser(description=__doc__)</span>
+<span id="L21">    parser.add_argument(&#x27;--work-directory&#x27;, type=Path, required=True)</span>
+<span id="L22">    parser.add_argument(&#x27;--native-python&#x27;, type=Path)</span>
+<span id="L23">    parser.add_argument(&#x27;--trace-processor&#x27;, type=Path)</span>
+<span id="L24">    parser.add_argument(&#x27;--collector&#x27;, type=Path)</span>
+<span id="L25">    args = parser.parse_args()</span>
+<span id="L26">    if args.native_python and not (args.trace_processor and args.collector):</span>
+<span id="L27">        parser.error(&#x27;native validation requires both real tools&#x27;)</span>
+<span id="L28">    record = args.work_directory.resolve()</span>
+<span id="L29">    if record.exists():</span>
+<span id="L30">        raise RuntimeError(&#x27;record directory must be new&#x27;)</span>
+<span id="L31">    record.mkdir(parents=True)</span>
+<span id="L32">    work = Path(tempfile.mkdtemp(prefix=&#x27;telemetry relocated &#x27;)).resolve()</span>
+<span id="L33">    if work == ROOT or ROOT in work.parents:</span>
+<span id="L34">        raise RuntimeError(&#x27;consumer must be outside checkout&#x27;)</span>
+<span id="L35">    (record / &#x27;relocation-directory.txt&#x27;).write_text(str(work) + &#x27;\n&#x27;)</span>
+<span id="L36">    sdk = work / &#x27;SDK build&#x27;</span>
+<span id="L37">    source = work / &#x27;independent tests&#x27;</span>
+<span id="L38">    inputs = [ROOT / &#x27;tests/telemetry_export&#x27; / n for n in</span>
+<span id="L39">              (&#x27;CMakeLists.txt&#x27;, &#x27;main.cpp&#x27;, &#x27;etw_native.cpp&#x27;, &#x27;test_spool.py&#x27;)]</span>
+<span id="L40">    bindings = {}</span>
+<span id="L41">    for path in inputs:</span>
+<span id="L42">        relative = path.relative_to(ROOT / &#x27;tests&#x27;)</span>
+<span id="L43">        target = source / relative</span>
+<span id="L44">        target.parent.mkdir(parents=True, exist_ok=True)</span>
+<span id="L45">        shutil.copy2(path, target)</span>
+<span id="L46">        bindings[relative.as_posix()] = hashlib.sha256(target.read_bytes()).hexdigest()</span>
+<span id="L47">    (record / &#x27;consumer-sources.json&#x27;).write_text(json.dumps(bindings, indent=2) + &#x27;\n&#x27;)</span>
+<span id="L48">    for optional in (False, True):</span>
+<span id="L49">        label = &#x27;optional&#x27; if optional else &#x27;default&#x27;</span>
+<span id="L50">        original = work / (label + &#x27; original prefix&#x27;)</span>
+<span id="L51">        prefix = work / (label + &#x27; relocated SDK with spaces&#x27;)</span>
+<span id="L52">        archives = work / (label + &#x27; archives&#x27;)</span>
+<span id="L53">        run(&#x27;cmake&#x27;, &#x27;-S&#x27;, ROOT, &#x27;-B&#x27;, sdk, &#x27;-DCMAKE_BUILD_TYPE=Release&#x27;, &#x27;-DENABLE_TESTS=OFF&#x27;,</span>
+<span id="L54">            &#x27;-DRTFW_BUILD_EXAMPLES=OFF&#x27;, &#x27;-DRTFW_BUILD_RUNTIME_DEMO=OFF&#x27;, &#x27;-DRTFW_BUILD_EXPERIMENTAL=OFF&#x27;,</span>
+<span id="L55">            &#x27;-DRTFW_BUILD_BENCHMARKS=&#x27; + (&#x27;ON&#x27; if optional else &#x27;OFF&#x27;), &#x27;-DRTFW_ENABLE_CUDA=OFF&#x27;,</span>
+<span id="L56">            &#x27;-DSIM_SANITIZERS=&#x27;, &#x27;-DSIM_WERROR=ON&#x27;, &#x27;-DCMAKE_INSTALL_INCLUDEDIR=sdk include&#x27;,</span>
+<span id="L57">            &#x27;-DCMAKE_INSTALL_DATADIR=custom data&#x27;, &#x27;-DCMAKE_INSTALL_PREFIX=&#x27; + str(original))</span>
+<span id="L58">        run(&#x27;cmake&#x27;, &#x27;--build&#x27;, sdk, &#x27;--config&#x27;, &#x27;Release&#x27;, &#x27;--parallel&#x27;, &#x27;2&#x27;)</span>
+<span id="L59">        run(&#x27;cmake&#x27;, &#x27;--install&#x27;, sdk, &#x27;--config&#x27;, &#x27;Release&#x27;, &#x27;--prefix&#x27;, original)</span>
+<span id="L60">        run(&#x27;cpack&#x27;, &#x27;--config&#x27;, sdk / &#x27;CPackConfig.cmake&#x27;, &#x27;-C&#x27;, &#x27;Release&#x27;, &#x27;-B&#x27;, archives,</span>
+<span id="L61">            &#x27;-D&#x27;, &#x27;CPACK_PACKAGING_INSTALL_PREFIX=/&#x27;, &#x27;-D&#x27;, &#x27;CPACK_PACKAGE_FILE_NAME=rtfw-telemetry-&#x27; + label)</span>
+<span id="L62">        shutil.rmtree(original)</span>
+<span id="L63">        run(sys.executable, ROOT / &#x27;tools/extract_release_archive.py&#x27;, &#x27;--artifact-dir&#x27;, archives,</span>
+<span id="L64">            &#x27;--destination&#x27;, prefix)</span>
+<span id="L65">        data = prefix / &#x27;custom data/rtfw&#x27;</span>
+<span id="L66">        h.docs.verify(data_root=data)</span>
+<span id="L67">        build = work / (label + &#x27; independent consumer&#x27;)</span>
+<span id="L68">        flags = [&#x27;-DCMAKE_PREFIX_PATH=&#x27; + str(prefix), &#x27;-DCMAKE_EXPORT_COMPILE_COMMANDS=ON&#x27;,</span>
+<span id="L69">                 &#x27;-DTELEMETRY_KIT=&#x27; + str(data / &#x27;integrations/telemetry&#x27;)]</span>
+<span id="L70">        h.build_test(source / &#x27;telemetry_export&#x27;, build, *flags)</span>
+<span id="L71">        if not (build / &#x27;compile_commands.json&#x27;).is_file():</span>
+<span id="L72">            raise RuntimeError(&#x27;compile commands are required&#x27;)</span>
+<span id="L73">        h.check_no_private_paths(build, [ROOT, sdk, original])</span>
+<span id="L74">        inventory = json.loads(run(&#x27;ctest&#x27;, &#x27;--test-dir&#x27;, build, &#x27;--show-only=json-v1&#x27;))</span>
+<span id="L75">        if len(inventory[&#x27;tests&#x27;]) != (4 if sys.platform == &#x27;win32&#x27; else 3):</span>
+<span id="L76">            raise RuntimeError(&#x27;independent consumer inventory differs&#x27;)</span>
+<span id="L77">        kit = data / &#x27;integrations/telemetry&#x27;</span>
+<span id="L78">        for name in (&#x27;telemetry.hpp&#x27;, &#x27;telemetry.cpp&#x27;, &#x27;etw.hpp&#x27;, &#x27;etw.cpp&#x27;, &#x27;export.py&#x27;, &#x27;requirements.txt&#x27;):</span>
+<span id="L79">            if (kit / name).read_bytes() != (ROOT / &#x27;integrations/telemetry&#x27; / name).read_bytes():</span>
+<span id="L80">                raise RuntimeError(&#x27;installed source differs: &#x27; + name)</span>
+<span id="L81">        # Exercise the actual relocated encoder entrypoint and native decoders</span>
+<span id="L82">        # when an explicitly selected optional tool environment is supplied.</span>
+<span id="L83">        if args.native_python:</span>
+<span id="L84">            example = build / &#x27;telemetry-kit/rtfw_telemetry_example&#x27;</span>
+<span id="L85">            run(args.native_python, ROOT / &#x27;tests/telemetry_export/verify_native.py&#x27;,</span>
+<span id="L86">                &#x27;--kit&#x27;, kit, &#x27;--example&#x27;, example, &#x27;--trace-processor&#x27;, args.trace_processor,</span>
+<span id="L87">                &#x27;--collector&#x27;, args.collector, &#x27;--output&#x27;, record / (label + &#x27;-native&#x27;))</span>
+<span id="L88">        if optional:</span>
+<span id="L89">            full = work / &#x27;all prior SDK consumers&#x27;</span>
+<span id="L90">            h.build_test(ROOT / &#x27;tests/package_consumer&#x27;, full,</span>
+<span id="L91">                         &#x27;-DCMAKE_PREFIX_PATH=&#x27; + str(prefix), &#x27;-DRTFW_TEST_BENCHMARK=ON&#x27;)</span>
+<span id="L92">            inventory = json.loads(run(&#x27;ctest&#x27;, &#x27;--test-dir&#x27;, full, &#x27;--show-only=json-v1&#x27;))</span>
+<span id="L93">            if len(inventory[&#x27;tests&#x27;]) != 71:</span>
+<span id="L94">                raise RuntimeError(&#x27;all 71 preserved optional consumers are required&#x27;)</span>
+<span id="L95">    run(&#x27;cmake&#x27;, &#x27;-S&#x27;, source / &#x27;telemetry_export&#x27;, &#x27;-B&#x27;, work / &#x27;missing SDK&#x27;,</span>
+<span id="L96">        &#x27;-DCMAKE_DISABLE_FIND_PACKAGE_rtfw=ON&#x27;, failure=&#x27;REQUIRED&#x27;)</span>
+<span id="L97">    run(&#x27;cmake&#x27;, &#x27;-S&#x27;, source / &#x27;telemetry_export&#x27;, &#x27;-B&#x27;, work / &#x27;missing kit&#x27;,</span>
+<span id="L98">        &#x27;-DCMAKE_PREFIX_PATH=&#x27; + str(prefix), &#x27;-DTELEMETRY_KIT=&#x27; + str(work / &#x27;absent-kit&#x27;),</span>
+<span id="L99">        failure=&#x27;not an existing directory&#x27;)</span>
+<span id="L100">    print(&#x27;PASS default/optional actual CPack, removed prefixes, independent telemetry clients plus real native consumers, all 71 preserved SDK consumers and missing-input negatives&#x27;)</span>
+<span id="L101"></span>
+<span id="L102"></span>
+<span id="L103">if __name__ == &#x27;__main__&#x27;:</span>
+<span id="L104">    main()</span></pre></html>

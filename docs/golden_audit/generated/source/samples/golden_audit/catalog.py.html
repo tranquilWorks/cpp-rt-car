@@ -83,7 +83,7 @@
 <span id="L83">    if cap == &#x27;CAP-M19&#x27; and ((kind == &#x27;scenario&#x27; and n in (1, 3)) or kind in (&#x27;automated&#x27;, &#x27;outcome&#x27;)):</span>
 <span id="L84">        return &#x27;remaining_engineering&#x27;</span>
 <span id="L85">    if cap == &#x27;CAP-M20&#x27;:</span>
-<span id="L86">        return &#x27;remaining_engineering&#x27;</span>
+<span id="L86">        return &#x27;portable_implemented&#x27; if kind == &#x27;scenario&#x27; and n == 3 else &#x27;remaining_engineering&#x27;</span>
 <span id="L87">    if cap == &#x27;CAP-M26&#x27; and kind == &#x27;scenario&#x27; and n == 2:</span>
 <span id="L88">        return &#x27;gated_unperformed&#x27;</span>
 <span id="L89">    return &#x27;portable_implemented&#x27;</span>

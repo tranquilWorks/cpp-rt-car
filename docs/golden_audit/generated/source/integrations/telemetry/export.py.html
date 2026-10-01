@@ -1,0 +1,338 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>integrations/telemetry/export.py</title><h1>integrations/telemetry/export.py</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1">#!/usr/bin/env python3</span>
+<span id="L2">&quot;&quot;&quot;Bounded non-RT schema2 spool -&gt; native Perfetto and OTLP/HTTP protobuf.</span>
+<span id="L3"></span>
+<span id="L4">No implicit clock inference, background thread, redirect or automatic retry.</span>
+<span id="L5">Optional protobuf imports occur only when a native encoder is selected.</span>
+<span id="L6">&quot;&quot;&quot;</span>
+<span id="L7">import argparse</span>
+<span id="L8">import json</span>
+<span id="L9">from pathlib import Path</span>
+<span id="L10">import re</span>
+<span id="L11">import urllib.error</span>
+<span id="L12">import urllib.parse</span>
+<span id="L13">import urllib.request</span>
+<span id="L14"></span>
+<span id="L15">U64 = (1 &lt;&lt; 64) - 1</span>
+<span id="L16">I64 = (1 &lt;&lt; 63) - 1</span>
+<span id="L17">MAX_INPUT = 8 * 1024 * 1024</span>
+<span id="L18">MAX_LINE = 128 * 1024</span>
+<span id="L19">TOKEN = re.compile(r&#x27;[A-Za-z0-9._:/@-]{1,63}\Z&#x27;)</span>
+<span id="L20">EVENTS = (&#x27;runtime.finalized&#x27;, &#x27;runtime.started&#x27;, &#x27;periodic.release&#x27;, &#x27;periodic.wake&#x27;,</span>
+<span id="L21">          &#x27;frame.begin&#x27;, &#x27;callback.begin&#x27;, &#x27;callback.end&#x27;, &#x27;watchdog.fired&#x27;,</span>
+<span id="L22">          &#x27;degradation.applied&#x27;, &#x27;frame.end&#x27;, &#x27;runtime.stopped&#x27;, &#x27;device.submitted&#x27;,</span>
+<span id="L23">          &#x27;device.completed&#x27;, &#x27;device.reset&#x27;)</span>
+<span id="L24">METRICS = (&#x27;runtime.frames_started&#x27;, &#x27;runtime.frames_completed&#x27;, &#x27;runtime.frames_failed&#x27;,</span>
+<span id="L25">           &#x27;runtime.callbacks_started&#x27;, &#x27;runtime.callbacks_completed&#x27;, &#x27;runtime.callback_failures&#x27;,</span>
+<span id="L26">           &#x27;runtime.deadline_misses&#x27;, &#x27;runtime.watchdog_events&#x27;, &#x27;runtime.degradation_events&#x27;,</span>
+<span id="L27">           &#x27;runtime.periodic_releases&#x27;, &#x27;runtime.periodic_wakes&#x27;, &#x27;trace.events_emitted&#x27;,</span>
+<span id="L28">           &#x27;trace.events_overwritten&#x27;, &#x27;trace.events_dropped&#x27;, &#x27;executor.submitted_tasks&#x27;,</span>
+<span id="L29">           &#x27;executor.local_executions&#x27;, &#x27;executor.steal_attempts&#x27;, &#x27;executor.successful_steals&#x27;,</span>
+<span id="L30">           &#x27;executor.queue_rejections&#x27;, &#x27;executor.scratch_exhaustions&#x27;, &#x27;executor.worker_starts&#x27;,</span>
+<span id="L31">           &#x27;runtime.degradation_level&#x27;, &#x27;device.submissions&#x27;, &#x27;device.completions&#x27;, &#x27;device.failures&#x27;,</span>
+<span id="L32">           &#x27;device.queue_rejections&#x27;, &#x27;device.timeouts&#x27;, &#x27;device.losses&#x27;, &#x27;device.resets&#x27;,</span>
+<span id="L33">           &#x27;device.service_polls&#x27;, &#x27;device.outstanding&#x27;, &#x27;device.service_starts&#x27;)</span>
+<span id="L34"></span>
+<span id="L35"></span>
+<span id="L36">def require(condition, message):</span>
+<span id="L37">    if not condition:</span>
+<span id="L38">        raise ValueError(message)</span>
+<span id="L39"></span>
+<span id="L40"></span>
+<span id="L41">def keys(value, names):</span>
+<span id="L42">    require(type(value) is dict and set(value) == set(names.split()), &#x27;unexpected/missing fields&#x27;)</span>
+<span id="L43"></span>
+<span id="L44"></span>
+<span id="L45">def integer(value, lower=0, upper=U64):</span>
+<span id="L46">    require(type(value) is int and lower &lt;= value &lt;= upper, &#x27;integer out of range&#x27;)</span>
+<span id="L47">    return value</span>
+<span id="L48"></span>
+<span id="L49"></span>
+<span id="L50">def token(value):</span>
+<span id="L51">    require(type(value) is str and TOKEN.fullmatch(value), &#x27;invalid identity&#x27;)</span>
+<span id="L52"></span>
+<span id="L53"></span>
+<span id="L54">def timestamp(s, value):</span>
+<span id="L55">    integer(value)</span>
+<span id="L56">    return integer(s[&#x27;unix_anchor_ns&#x27;] + value - s[&#x27;runtime_anchor_ns&#x27;], 1)</span>
+<span id="L57"></span>
+<span id="L58"></span>
+<span id="L59">def validate(s):</span>
+<span id="L60">    keys(s, &#x27;spool_schema session clock_domain runtime_anchor_ns unix_anchor_ns uncertainty_ns &#x27;</span>
+<span id="L61">         &#x27;batch_sequence queue_full schema_version runtime_id config_id build_id workload_id &#x27;</span>
+<span id="L62">         &#x27;runtime_version trace_capacity metrics trace&#x27;)</span>
+<span id="L63">    require(type(s[&#x27;spool_schema&#x27;]) is int and s[&#x27;spool_schema&#x27;] == 1, &#x27;spool schema&#x27;)</span>
+<span id="L64">    require(type(s[&#x27;schema_version&#x27;]) is int and s[&#x27;schema_version&#x27;] == 2, &#x27;Runtime schema&#x27;)</span>
+<span id="L65">    for name in (&#x27;session&#x27;, &#x27;clock_domain&#x27;, &#x27;build_id&#x27;, &#x27;workload_id&#x27;):</span>
+<span id="L66">        token(s[name])</span>
+<span id="L67">    for name in (&#x27;runtime_anchor_ns&#x27;, &#x27;uncertainty_ns&#x27;, &#x27;queue_full&#x27;, &#x27;config_id&#x27;, &#x27;trace_capacity&#x27;):</span>
+<span id="L68">        integer(s[name])</span>
+<span id="L69">    for name in (&#x27;unix_anchor_ns&#x27;, &#x27;runtime_id&#x27;, &#x27;batch_sequence&#x27;):</span>
+<span id="L70">        integer(s[name], 1)</span>
+<span id="L71">    version = s[&#x27;runtime_version&#x27;]</span>
+<span id="L72">    require(type(version) is list and len(version) == 3, &#x27;runtime version&#x27;)</span>
+<span id="L73">    for v in version:</span>
+<span id="L74">        integer(v, 0, (1 &lt;&lt; 32) - 1)</span>
+<span id="L75">    m = s[&#x27;metrics&#x27;]</span>
+<span id="L76">    keys(m, &#x27;sequence start_ns end_ns window samples&#x27;)</span>
+<span id="L77">    integer(m[&#x27;sequence&#x27;], 1)</span>
+<span id="L78">    integer(m[&#x27;start_ns&#x27;]); integer(m[&#x27;end_ns&#x27;])</span>
+<span id="L79">    require(m[&#x27;start_ns&#x27;] &lt;= m[&#x27;end_ns&#x27;] and m[&#x27;window&#x27;] == &#x27;interval&#x27;, &#x27;metric window&#x27;)</span>
+<span id="L80">    timestamp(s, m[&#x27;start_ns&#x27;]); timestamp(s, m[&#x27;end_ns&#x27;])</span>
+<span id="L81">    require(type(m[&#x27;samples&#x27;]) is list and len(m[&#x27;samples&#x27;]) == 32, &#x27;metric count&#x27;)</span>
+<span id="L82">    for i, v in enumerate(m[&#x27;samples&#x27;]):</span>
+<span id="L83">        keys(v, &#x27;id name kind value&#x27;)</span>
+<span id="L84">        integer(v[&#x27;id&#x27;], 0, 31); integer(v[&#x27;kind&#x27;], 0, 1); integer(v[&#x27;value&#x27;])</span>
+<span id="L85">        require(v[&#x27;id&#x27;] == i and v[&#x27;name&#x27;] == METRICS[i] and v[&#x27;kind&#x27;] == int(i in (21, 30)),</span>
+<span id="L86">                &#x27;metric identity/kind/order&#x27;)</span>
+<span id="L87">    t = s[&#x27;trace&#x27;]</span>
+<span id="L88">    keys(t, &#x27;first_sequence next_sequence lost_events remaining_sequence_count events&#x27;)</span>
+<span id="L89">    for k in (&#x27;first_sequence&#x27;, &#x27;next_sequence&#x27;, &#x27;lost_events&#x27;, &#x27;remaining_sequence_count&#x27;):</span>
+<span id="L90">        integer(t[k])</span>
+<span id="L91">    require(t[&#x27;first_sequence&#x27;] &lt;= t[&#x27;next_sequence&#x27;], &#x27;trace range&#x27;)</span>
+<span id="L92">    require(type(t[&#x27;events&#x27;]) is list and len(t[&#x27;events&#x27;]) &lt;= min(256, s[&#x27;trace_capacity&#x27;]), &#x27;trace count&#x27;)</span>
+<span id="L93">    holes = t[&#x27;next_sequence&#x27;] - t[&#x27;first_sequence&#x27;] - len(t[&#x27;events&#x27;])</span>
+<span id="L94">    require(holes &gt;= 0 and t[&#x27;lost_events&#x27;] &gt;= holes, &#x27;unreported trace loss&#x27;)</span>
+<span id="L95">    if s[&#x27;batch_sequence&#x27;] == 1:</span>
+<span id="L96">        require(t[&#x27;lost_events&#x27;] == holes, &#x27;fresh cursor cannot report prehistory loss&#x27;)</span>
+<span id="L97">    previous = -1</span>
+<span id="L98">    for e in t[&#x27;events&#x27;]:</span>
+<span id="L99">        keys(e, &#x27;type name status producer sequence timestamp_ns frame callback worker value&#x27;)</span>
+<span id="L100">        integer(e[&#x27;type&#x27;], 1, 14); integer(e[&#x27;status&#x27;], -23, 0); integer(e[&#x27;producer&#x27;], 0, 2)</span>
+<span id="L101">        for k in (&#x27;sequence&#x27;, &#x27;timestamp_ns&#x27;, &#x27;frame&#x27;, &#x27;value&#x27;):</span>
+<span id="L102">            integer(e[k])</span>
+<span id="L103">        for k in (&#x27;callback&#x27;, &#x27;worker&#x27;):</span>
+<span id="L104">            integer(e[k], 0, (1 &lt;&lt; 32) - 1)</span>
+<span id="L105">        require(e[&#x27;name&#x27;] == EVENTS[e[&#x27;type&#x27;] - 1] and previous &lt; e[&#x27;sequence&#x27;] and</span>
+<span id="L106">                t[&#x27;first_sequence&#x27;] &lt;= e[&#x27;sequence&#x27;] &lt; t[&#x27;next_sequence&#x27;], &#x27;trace identity/order&#x27;)</span>
+<span id="L107">        previous = e[&#x27;sequence&#x27;]</span>
+<span id="L108">        timestamp(s, e[&#x27;timestamp_ns&#x27;])</span>
+<span id="L109">    return s</span>
+<span id="L110"></span>
+<span id="L111"></span>
+<span id="L112">def pairs(items):</span>
+<span id="L113">    result = {}</span>
+<span id="L114">    for k, v in items:</span>
+<span id="L115">        require(k not in result, &#x27;duplicate JSON key&#x27;)</span>
+<span id="L116">        result[k] = v</span>
+<span id="L117">    return result</span>
+<span id="L118"></span>
+<span id="L119"></span>
+<span id="L120">def load_spool(stream):</span>
+<span id="L121">    raw = stream.read(MAX_INPUT + 1)</span>
+<span id="L122">    require(type(raw) is bytes and 0 &lt; len(raw) &lt;= MAX_INPUT and raw.endswith(b&#x27;\n&#x27;),</span>
+<span id="L123">            &#x27;empty/oversize/truncated spool&#x27;)</span>
+<span id="L124">    lines = raw.splitlines()</span>
+<span id="L125">    require(0 &lt; len(lines) &lt;= 64, &#x27;batch count&#x27;)</span>
+<span id="L126">    snapshots, owners = [], {}</span>
+<span id="L127">    for line in lines:</span>
+<span id="L128">        require(0 &lt; len(line) &lt;= MAX_LINE, &#x27;line size&#x27;)</span>
+<span id="L129">        s = validate(json.loads(line, object_pairs_hook=pairs,</span>
+<span id="L130">                     parse_constant=lambda v: require(False, &#x27;nonfinite JSON&#x27;)))</span>
+<span id="L131">        owner = (s[&#x27;session&#x27;], s[&#x27;runtime_id&#x27;])</span>
+<span id="L132">        identity = tuple(str(s[k]) for k in (&#x27;clock_domain&#x27;, &#x27;runtime_anchor_ns&#x27;, &#x27;unix_anchor_ns&#x27;,</span>
+<span id="L133">                         &#x27;uncertainty_ns&#x27;, &#x27;config_id&#x27;, &#x27;build_id&#x27;, &#x27;workload_id&#x27;, &#x27;runtime_version&#x27;, &#x27;trace_capacity&#x27;))</span>
+<span id="L134">        if owner in owners:</span>
+<span id="L135">            old, old_identity = owners[owner]</span>
+<span id="L136">            require(identity == old_identity, &#x27;owner provenance changed&#x27;)</span>
+<span id="L137">            require(s[&#x27;batch_sequence&#x27;] == old[&#x27;batch_sequence&#x27;] + 1, &#x27;duplicate/missing batch&#x27;)</span>
+<span id="L138">            require(s[&#x27;metrics&#x27;][&#x27;sequence&#x27;] &gt; old[&#x27;metrics&#x27;][&#x27;sequence&#x27;] and</span>
+<span id="L139">                    s[&#x27;metrics&#x27;][&#x27;start_ns&#x27;] == old[&#x27;metrics&#x27;][&#x27;end_ns&#x27;], &#x27;metric discontinuity&#x27;)</span>
+<span id="L140">            require(s[&#x27;trace&#x27;][&#x27;next_sequence&#x27;] &gt;= old[&#x27;trace&#x27;][&#x27;next_sequence&#x27;], &#x27;trace regression&#x27;)</span>
+<span id="L141">            require(s[&#x27;trace&#x27;][&#x27;first_sequence&#x27;] &gt;= old[&#x27;trace&#x27;][&#x27;next_sequence&#x27;], &#x27;trace range overlap&#x27;)</span>
+<span id="L142">            consumed = s[&#x27;trace&#x27;][&#x27;next_sequence&#x27;] - old[&#x27;trace&#x27;][&#x27;next_sequence&#x27;]</span>
+<span id="L143">            require(s[&#x27;trace&#x27;][&#x27;lost_events&#x27;] == consumed - len(s[&#x27;trace&#x27;][&#x27;events&#x27;]),</span>
+<span id="L144">                    &#x27;trace records and reported losses do not conserve consumed sequences&#x27;)</span>
+<span id="L145">            require(not s[&#x27;trace&#x27;][&#x27;events&#x27;] or s[&#x27;trace&#x27;][&#x27;events&#x27;][0][&#x27;sequence&#x27;] &gt;= old[&#x27;trace&#x27;][&#x27;next_sequence&#x27;],</span>
+<span id="L146">                    &#x27;duplicate trace event&#x27;)</span>
+<span id="L147">            require(s[&#x27;queue_full&#x27;] &gt;= old[&#x27;queue_full&#x27;], &#x27;queue accounting regression&#x27;)</span>
+<span id="L148">        owners[owner] = (s, identity)</span>
+<span id="L149">        snapshots.append(s)</span>
+<span id="L150">    return snapshots</span>
+<span id="L151"></span>
+<span id="L152"></span>
+<span id="L153">def attributes(s):</span>
+<span id="L154">    # Exact decimal strings preserve unsigned schema values in signed OTLP /</span>
+<span id="L155">    # Perfetto SQL stores, including config hashes above INT64_MAX.</span>
+<span id="L156">    names = (&#x27;session&#x27;, &#x27;runtime_id&#x27;, &#x27;config_id&#x27;, &#x27;build_id&#x27;, &#x27;workload_id&#x27;, &#x27;clock_domain&#x27;,</span>
+<span id="L157">             &#x27;runtime_anchor_ns&#x27;, &#x27;unix_anchor_ns&#x27;, &#x27;uncertainty_ns&#x27;, &#x27;batch_sequence&#x27;, &#x27;queue_full&#x27;)</span>
+<span id="L158">    result = {&#x27;rtfw.&#x27; + k: str(s[k]) for k in names}</span>
+<span id="L159">    result[&#x27;rtfw.runtime_version&#x27;] = &#x27;.&#x27;.join(map(str, s[&#x27;runtime_version&#x27;]))</span>
+<span id="L160">    result[&#x27;rtfw.trace.lost_events&#x27;] = str(s[&#x27;trace&#x27;][&#x27;lost_events&#x27;])</span>
+<span id="L161">    result[&#x27;rtfw.trace.remaining_sequence_count&#x27;] = str(s[&#x27;trace&#x27;][&#x27;remaining_sequence_count&#x27;])</span>
+<span id="L162">    result[&#x27;rtfw.metrics.sequence&#x27;] = str(s[&#x27;metrics&#x27;][&#x27;sequence&#x27;])</span>
+<span id="L163">    return result</span>
+<span id="L164"></span>
+<span id="L165"></span>
+<span id="L166">def native_bounds(snapshots):</span>
+<span id="L167">    # Native signed integer metrics and Trace Processor timestamps must be exact.</span>
+<span id="L168">    for s in snapshots:</span>
+<span id="L169">        validate(s)</span>
+<span id="L170">        integer(timestamp(s, s[&#x27;metrics&#x27;][&#x27;start_ns&#x27;]), 1, I64)</span>
+<span id="L171">        integer(timestamp(s, s[&#x27;metrics&#x27;][&#x27;end_ns&#x27;]), 1, I64)</span>
+<span id="L172">        for e in s[&#x27;trace&#x27;][&#x27;events&#x27;]:</span>
+<span id="L173">            integer(timestamp(s, e[&#x27;timestamp_ns&#x27;]), 1, I64)</span>
+<span id="L174">        for m in s[&#x27;metrics&#x27;][&#x27;samples&#x27;]:</span>
+<span id="L175">            integer(m[&#x27;value&#x27;], 0, I64)</span>
+<span id="L176"></span>
+<span id="L177"></span>
+<span id="L178">def perfetto(snapshots):</span>
+<span id="L179">    from perfetto.protos.perfetto.trace import perfetto_trace_pb2 as pb</span>
+<span id="L180">    native_bounds(snapshots)</span>
+<span id="L181">    trace = pb.Trace()</span>
+<span id="L182">    tracks = {}</span>
+<span id="L183">    def packet(t):</span>
+<span id="L184">        return trace.packet.add(timestamp=t, timestamp_clock_id=11, trusted_packet_sequence_id=1)</span>
+<span id="L185">    anchor = timestamp(snapshots[0], snapshots[0][&#x27;metrics&#x27;][&#x27;start_ns&#x27;])</span>
+<span id="L186">    clock = packet(anchor).clock_snapshot</span>
+<span id="L187">    clock.primary_trace_clock = 11  # explicit file timeline; no fabricated boot clock</span>
+<span id="L188">    clock.clocks.add(clock_id=11, timestamp=anchor)</span>
+<span id="L189">    clock.clocks.add(clock_id=1, timestamp=anchor)</span>
+<span id="L190">    def track(s, metric=None):</span>
+<span id="L191">        key = (s[&#x27;session&#x27;], s[&#x27;runtime_id&#x27;], metric)</span>
+<span id="L192">        if key not in tracks:</span>
+<span id="L193">            uid = len(tracks) + 1  # collision-free within this bounded trace file</span>
+<span id="L194">            tracks[key] = uid</span>
+<span id="L195">            d = packet(anchor).track_descriptor</span>
+<span id="L196">            d.uuid = uid</span>
+<span id="L197">            d.name = s[&#x27;session&#x27;] + &#x27;/&#x27; + str(s[&#x27;runtime_id&#x27;]) + (&#x27;/&#x27; + metric if metric else &#x27;/events&#x27;)</span>
+<span id="L198">            if metric:</span>
+<span id="L199">                d.counter.unit_name = &#x27;count&#x27;</span>
+<span id="L200">        return tracks[key]</span>
+<span id="L201">    def annotate(event, values):</span>
+<span id="L202">        for k, v in values.items():</span>
+<span id="L203">            event.debug_annotations.add(name=k, string_value=str(v))</span>
+<span id="L204">    for s in snapshots:</span>
+<span id="L205">        common = attributes(s)</span>
+<span id="L206">        uid = track(s)</span>
+<span id="L207">        summary = packet(timestamp(s, s[&#x27;metrics&#x27;][&#x27;end_ns&#x27;])).track_event</span>
+<span id="L208">        summary.type = 3; summary.track_uuid = uid; summary.name = &#x27;rtfw.snapshot&#x27;</span>
+<span id="L209">        annotate(summary, common)</span>
+<span id="L210">        for e in s[&#x27;trace&#x27;][&#x27;events&#x27;]:</span>
+<span id="L211">            event = packet(timestamp(s, e[&#x27;timestamp_ns&#x27;])).track_event</span>
+<span id="L212">            event.type = 3; event.track_uuid = uid; event.name = e[&#x27;name&#x27;]</span>
+<span id="L213">            annotate(event, common)</span>
+<span id="L214">            annotate(event, {&#x27;rtfw.event.&#x27; + k: v for k, v in e.items()})</span>
+<span id="L215">        for m in s[&#x27;metrics&#x27;][&#x27;samples&#x27;]:</span>
+<span id="L216">            uid = track(s, m[&#x27;name&#x27;])</span>
+<span id="L217">            event = packet(timestamp(s, s[&#x27;metrics&#x27;][&#x27;end_ns&#x27;])).track_event</span>
+<span id="L218">            event.type = 4; event.track_uuid = uid; event.counter_value = m[&#x27;value&#x27;]</span>
+<span id="L219">            annotate(event, common)</span>
+<span id="L220">            annotate(event, {&#x27;rtfw.metric.kind&#x27;: m[&#x27;kind&#x27;], &#x27;rtfw.metric.window&#x27;: &#x27;interval&#x27;,</span>
+<span id="L221">                            &#x27;rtfw.metric.value&#x27;: m[&#x27;value&#x27;]})</span>
+<span id="L222">    return trace.SerializeToString()</span>
+<span id="L223"></span>
+<span id="L224"></span>
+<span id="L225">def otlp(snapshots):</span>
+<span id="L226">    from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsServiceRequest</span>
+<span id="L227">    from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportMetricsServiceRequest</span>
+<span id="L228">    native_bounds(snapshots)</span>
+<span id="L229">    logs, metrics = ExportLogsServiceRequest(), ExportMetricsServiceRequest()</span>
+<span id="L230">    def attrs(target, values):</span>
+<span id="L231">        for k, v in values.items():</span>
+<span id="L232">            target.add(key=k).value.string_value = str(v)</span>
+<span id="L233">    for s in snapshots:</span>
+<span id="L234">        common = attributes(s)</span>
+<span id="L235">        lr, mr = logs.resource_logs.add(), metrics.resource_metrics.add()</span>
+<span id="L236">        resource = {&#x27;service.name&#x27;: &#x27;rtfw&#x27;, &#x27;service.instance.id&#x27;: s[&#x27;session&#x27;] + &#x27;/&#x27; + str(s[&#x27;runtime_id&#x27;])}</span>
+<span id="L237">        # Batch-specific metadata belongs on records, not on metric resource identity.</span>
+<span id="L238">        for target in (lr, mr):</span>
+<span id="L239">            attrs(target.resource.attributes, resource)</span>
+<span id="L240">        sl, sm = lr.scope_logs.add(), mr.scope_metrics.add()</span>
+<span id="L241">        sl.scope.name = sm.scope.name = &#x27;rtfw.telemetry.schema2&#x27;</span>
+<span id="L242">        for e in [None, *s[&#x27;trace&#x27;][&#x27;events&#x27;]]:</span>
+<span id="L243">            t = s[&#x27;metrics&#x27;][&#x27;end_ns&#x27;] if e is None else e[&#x27;timestamp_ns&#x27;]</span>
+<span id="L244">            record = sl.log_records.add(time_unix_nano=timestamp(s, t), severity_number=9,</span>
+<span id="L245">                                       severity_text=&#x27;INFO&#x27;)</span>
+<span id="L246">            record.body.string_value = &#x27;rtfw.snapshot&#x27; if e is None else e[&#x27;name&#x27;]</span>
+<span id="L247">            attrs(record.attributes, common)</span>
+<span id="L248">            if e is not None:</span>
+<span id="L249">                attrs(record.attributes, {&#x27;rtfw.event.&#x27; + k: v for k, v in e.items()})</span>
+<span id="L250">        for m in s[&#x27;metrics&#x27;][&#x27;samples&#x27;]:</span>
+<span id="L251">            metric = sm.metrics.add(name=m[&#x27;name&#x27;], unit=&#x27;1&#x27;)</span>
+<span id="L252">            if m[&#x27;kind&#x27;] == 0:</span>
+<span id="L253">                metric.sum.aggregation_temporality = 1  # DELTA, matching Runtime interval cursor</span>
+<span id="L254">                metric.sum.is_monotonic = True</span>
+<span id="L255">                point = metric.sum.data_points.add()</span>
+<span id="L256">            else:</span>
+<span id="L257">                point = metric.gauge.data_points.add()</span>
+<span id="L258">            point.start_time_unix_nano = timestamp(s, s[&#x27;metrics&#x27;][&#x27;start_ns&#x27;])</span>
+<span id="L259">            point.time_unix_nano = timestamp(s, s[&#x27;metrics&#x27;][&#x27;end_ns&#x27;])</span>
+<span id="L260">            point.as_int = m[&#x27;value&#x27;]</span>
+<span id="L261">            # Stable attributes prevent a new time series for every snapshot.</span>
+<span id="L262">            attrs(point.attributes, {&#x27;rtfw.clock_domain&#x27;: s[&#x27;clock_domain&#x27;],</span>
+<span id="L263">                                    &#x27;rtfw.config_id&#x27;: s[&#x27;config_id&#x27;], &#x27;rtfw.build_id&#x27;: s[&#x27;build_id&#x27;],</span>
+<span id="L264">                                    &#x27;rtfw.workload_id&#x27;: s[&#x27;workload_id&#x27;]})</span>
+<span id="L265">    return {&#x27;logs&#x27;: logs.SerializeToString(), &#x27;metrics&#x27;: metrics.SerializeToString()}</span>
+<span id="L266"></span>
+<span id="L267"></span>
+<span id="L268">class TransportError(RuntimeError):</span>
+<span id="L269">    &quot;&quot;&quot;Retain the spool. An ambiguous failure may already have been ingested.&quot;&quot;&quot;</span>
+<span id="L270"></span>
+<span id="L271"></span>
+<span id="L272">class NoRedirect(urllib.request.HTTPRedirectHandler):</span>
+<span id="L273">    def redirect_request(self, req, fp, code, msg, headers, newurl):</span>
+<span id="L274">        return None</span>
+<span id="L275"></span>
+<span id="L276"></span>
+<span id="L277">def send(endpoint, signal, payload, timeout=10):</span>
+<span id="L278">    require(signal in (&#x27;logs&#x27;, &#x27;metrics&#x27;) and type(payload) is bytes and len(payload) &lt;= 16 * 1024 * 1024,</span>
+<span id="L279">            &#x27;signal/payload limit&#x27;)</span>
+<span id="L280">    require(type(timeout) in (int, float) and 0 &lt; timeout &lt;= 60, &#x27;timeout range&#x27;)</span>
+<span id="L281">    url = urllib.parse.urlsplit(endpoint)</span>
+<span id="L282">    require(url.scheme in (&#x27;http&#x27;, &#x27;https&#x27;) and url.hostname and not url.username and not url.password</span>
+<span id="L283">            and not url.query and not url.fragment, &#x27;endpoint must be an HTTP(S) base URL&#x27;)</span>
+<span id="L284">    request = urllib.request.Request(endpoint.rstrip(&#x27;/&#x27;) + &#x27;/v1/&#x27; + signal, payload,</span>
+<span id="L285">                                    {&#x27;Content-Type&#x27;: &#x27;application/x-protobuf&#x27;, &#x27;Accept-Encoding&#x27;: &#x27;identity&#x27;})</span>
+<span id="L286">    try:</span>
+<span id="L287">        with urllib.request.build_opener(NoRedirect()).open(request, timeout=timeout) as response:</span>
+<span id="L288">            body = response.read(65537)</span>
+<span id="L289">            if response.status != 200 or len(body) &gt; 65536 or response.headers.get_content_type() != &#x27;application/x-protobuf&#x27;:</span>
+<span id="L290">                raise TransportError(&#x27;invalid OTLP response; ingestion may be ambiguous&#x27;)</span>
+<span id="L291">            if response.headers.get(&#x27;Content-Encoding&#x27;, &#x27;identity&#x27;) != &#x27;identity&#x27;:</span>
+<span id="L292">                raise TransportError(&#x27;unsupported response encoding; ingestion may be ambiguous&#x27;)</span>
+<span id="L293">    except (OSError, urllib.error.URLError) as e:</span>
+<span id="L294">        raise TransportError(&#x27;OTLP transport failure; ingestion may be ambiguous; no retry&#x27;) from e</span>
+<span id="L295">    if signal == &#x27;logs&#x27;:</span>
+<span id="L296">        from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsServiceResponse as Response</span>
+<span id="L297">        field = &#x27;rejected_log_records&#x27;</span>
+<span id="L298">    else:</span>
+<span id="L299">        from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportMetricsServiceResponse as Response</span>
+<span id="L300">        field = &#x27;rejected_data_points&#x27;</span>
+<span id="L301">    try:</span>
+<span id="L302">        result = Response.FromString(body)</span>
+<span id="L303">    except Exception as e:</span>
+<span id="L304">        raise TransportError(&#x27;malformed OTLP response; ingestion may be ambiguous&#x27;) from e</span>
+<span id="L305">    partial = result.partial_success</span>
+<span id="L306">    rejected = getattr(partial, field)</span>
+<span id="L307">    if rejected or partial.error_message:</span>
+<span id="L308">        raise TransportError(f&#x27;OTLP partial success: rejected={rejected}; {partial.error_message}; no retry&#x27;)</span>
+<span id="L309">    return {&#x27;signal&#x27;: signal, &#x27;receiver_accepted&#x27;: True, &#x27;downstream_delivery&#x27;: &#x27;unacknowledged&#x27;}</span>
+<span id="L310"></span>
+<span id="L311"></span>
+<span id="L312">def main():</span>
+<span id="L313">    p = argparse.ArgumentParser(description=__doc__)</span>
+<span id="L314">    p.add_argument(&#x27;spool&#x27;, type=Path)</span>
+<span id="L315">    p.add_argument(&#x27;--perfetto&#x27;, type=Path)</span>
+<span id="L316">    p.add_argument(&#x27;--otlp-directory&#x27;, type=Path)</span>
+<span id="L317">    p.add_argument(&#x27;--endpoint&#x27;, help=&#x27;explicit HTTP(S) base URL; sends logs then metrics once&#x27;)</span>
+<span id="L318">    p.add_argument(&#x27;--timeout&#x27;, type=float, default=10)</span>
+<span id="L319">    a = p.parse_args()</span>
+<span id="L320">    require(a.perfetto or a.otlp_directory or a.endpoint, &#x27;select at least one native exporter&#x27;)</span>
+<span id="L321">    with a.spool.open(&#x27;rb&#x27;) as f:</span>
+<span id="L322">        snapshots = load_spool(f)</span>
+<span id="L323">    # Complete validation/encoding before the first external side effect.</span>
+<span id="L324">    trace = perfetto(snapshots) if a.perfetto else None</span>
+<span id="L325">    payloads = otlp(snapshots) if a.otlp_directory or a.endpoint else None</span>
+<span id="L326">    if trace is not None:</span>
+<span id="L327">        a.perfetto.write_bytes(trace)</span>
+<span id="L328">    if a.otlp_directory:</span>
+<span id="L329">        a.otlp_directory.mkdir(parents=True, exist_ok=True)</span>
+<span id="L330">        for signal, data in payloads.items():</span>
+<span id="L331">            (a.otlp_directory / (signal + &#x27;.pb&#x27;)).write_bytes(data)</span>
+<span id="L332">    if a.endpoint:</span>
+<span id="L333">        for signal, data in payloads.items():</span>
+<span id="L334">            print(json.dumps(send(a.endpoint, signal, data, a.timeout)), flush=True)</span>
+<span id="L335"></span>
+<span id="L336"></span>
+<span id="L337">if __name__ == &#x27;__main__&#x27;:</span>
+<span id="L338">    main()</span></pre></html>
