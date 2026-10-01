@@ -6,6 +6,7 @@ if (SIM_GTEST_AVAILABLE)
     set(TEST_SOURCES
         test_simcore_basic.cpp
         test_simcore_determinism.cpp
+        test_timing_reliability.cpp
         test_logging.cpp
         test_async_logger.cpp
         test_logger_backpressure.cpp
@@ -233,6 +234,11 @@ if (SIM_GTEST_AVAILABLE)
     rtfw_enable_project_warnings(simcore_tests)
 
     add_test(NAME simcore_all COMMAND simcore_tests)
+    if (RTFW_BUILD_EXPERIMENTAL)
+        add_test(NAME m27_simcore_timing_reliability COMMAND simcore_tests
+            --gtest_filter=SimCoreTimingReliability.*)
+        set_tests_properties(m27_simcore_timing_reliability PROPERTIES TIMEOUT 60)
+    endif()
     # This aggregate executes the complete suite, including the bounded
     # timing/concurrency cases that are also exposed as focused CTest targets.
     # Keep a finite guard while allowing slower Debug and contended CI hosts to

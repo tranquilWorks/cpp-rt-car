@@ -1,6 +1,8 @@
 #pragma once
 #include <atomic>
 #include <cstdint>
+#include <cmath>
+#include <limits>
 #include <chrono>
 #include <thread>
 #include <functional>
@@ -46,16 +48,29 @@ public:
         uint64_t ns_ref = to_ns(ref_now);
 
         if (tsc_ok_.load(std::memory_order_relaxed)) {
-            uint64_t t = tsc_reader_();
-            uint64_t ns = ref_start_ns_ +
-                static_cast<uint64_t>((static_cast<double>(t - tsc_start_) * 1e9) / tsc_freq_);
-            // Drift check every ~4096 calls.
-            if ((++calls_ & 0xfff) == 0) {
-                int64_t diff = static_cast<int64_t>(ns) - static_cast<int64_t>(ns_ref);
-                if (diff > 1000000 || diff < -1000000) { // 1ms threshold
-                    tsc_ok_.store(false);
-                    return ensure_monotonic(ns_ref);
-                }
+            // Never publish an unchecked counter sample into the monotonic floor.
+            // An outlier would otherwise keep fallback time artificially ahead.
+            if (!tsc_reader_ || !std::isfinite(tsc_freq_) || tsc_freq_ <= 0.0) {
+                tsc_ok_.store(false);
+                return ensure_monotonic(ns_ref);
+            }
+            const uint64_t t = tsc_reader_();
+            if (t < tsc_start_) {
+                tsc_ok_.store(false);
+                return ensure_monotonic(ns_ref);
+            }
+            const double elapsed = static_cast<double>(t - tsc_start_) * 1e9 / tsc_freq_;
+            if (!std::isfinite(elapsed) || elapsed >= static_cast<double>(
+                    std::numeric_limits<uint64_t>::max() - ref_start_ns_)) {
+                tsc_ok_.store(false);
+                return ensure_monotonic(ns_ref);
+            }
+            const uint64_t ns = ref_start_ns_ + static_cast<uint64_t>(elapsed);
+            // Preserve the existing 1ms bound, checking before every publication.
+            const uint64_t difference = ns > ns_ref ? ns - ns_ref : ns_ref - ns;
+            if (difference > 1000000) {
+                tsc_ok_.store(false);
+                return ensure_monotonic(ns_ref);
             }
             return ensure_monotonic(ns);
         }
@@ -77,11 +92,11 @@ private:
     }
     static uint64_t ensure_monotonic(uint64_t ns) {
         uint64_t last = last_ns_.load();
-        while (ns <= last && !last_ns_.compare_exchange_weak(last, last + 1)) {
+        for (;;) {
+            const uint64_t next = ns > last ? ns : last + 1;
+            if (last_ns_.compare_exchange_weak(last, next))
+                return next;
         }
-        if (ns <= last) ns = last + 1;
-        last_ns_.store(ns);
-        return ns;
     }
 
     // Default TSC reader (x86); returns 0 on unsupported platforms.
@@ -103,6 +118,5 @@ private:
     static inline uint64_t tsc_start_ = 0;
     static inline uint64_t ref_start_ns_ = 0;
     static inline std::atomic<uint64_t> last_ns_{0};
-    static inline std::atomic<uint64_t> calls_{0};
 };
 

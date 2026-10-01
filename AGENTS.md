@@ -669,3 +669,39 @@ Unreal/signing/release/deployment work remain inactive.
 
 Canonical hash-binding amendment587 merged at 4bae99f263db49f865817b4f3d9226d085d217b7, blob 64f7a153aa082d960f160fccd19c02f6454477f5;
 refresh only existing CUDA capability source hashes for this private repair.
+
+## M27-03 activation
+
+Canonical plan590 merged at 6458593508e4ffc4e64a16664f6fa2047bf4ca38, blob fe4c574dd1a24e98140b0758dbb54b141e6286e1.
+The owner selected03 after completed target287/control589. The unchanged
+experimental 8-thread FMA-off workload hangs locally; TSan and controlled
+scheduling establish worker-startup and dispatch-lifetime races. Repair only
+experimental readiness/quiescence and retain exact baseline negatives, original
+workload/tests and failure evidence. Investigate the separate M23 timeout
+submission assumption without altering protected benchmarks or Runtime.
+Require full local, sanitizer/static/package and all32 exact-head checks plus
+guarded target/canonical closure under standing publication/merge authority.
+M27-04..08 remain inactive. No external qualification or release claims.
+
+Canonical watchdog amendment591 merged at 5cfbe76e5facafdcb892b7e91599e9694d532067, blob 12270b794bc7eec1b339357cba35bf03a01c0d52.
+The unchanged8-thread TSan workload proves the asynchronous watchdog race.
+Use the existing atomic pending channel and coordinator quiescent boundaries,
+including final-frame conservation and joined teardown. Preserve thresholds,
+old tests, supported Runtime and unrelated clock/construction limitations.
+
+
+## M27-03 clock and watchdog stop amendment
+
+Canonical control #592 merged at 80bb2a957bac2ed80dd63cd06a218e68b0879f74, blob 4e37a41f4527045f2cbf3b1db50745cbcd247ee5.
+The repeated original workload exposed bad experimental clock calibration;
+causal controls prove timestamp poisoning, lost monotonic publication and
+a lost watchdog shutdown notification. Repair only the three allowed
+experimental headers, preserving calibration/default selection, the 1ms drift
+threshold, original tests and deadlines. Supported Runtime remains unchanged;
+concurrent clock initialization and the historical benchmark cause remain
+explicit limitations. Require fresh combined gates before integration.
+
+Canonical binding amendment #593 merged at 9418f441013d9341a6fbeac00fb898d20a3a7154, blob 46a5f846e21fd819dbafd164dedbba8e2b30e960.
+Refresh only the existing capability product-source digest for the approved
+experimental watchdog header; all coverage inventory/status/support claims remain
+unchanged. Final local/hosted/integration gates remain mandatory.
