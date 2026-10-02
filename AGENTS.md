@@ -717,3 +717,16 @@ prior evidence. Full local/all32 exact-head/native/sanitizer/static/relocated
 gates and guarded target/canonical closure remain required under standing
 scoped publication/merge authority. M27-05..08 and external qualification/
 Unreal/human/signing/release/deployment remain inactive.
+
+## M27-05 owner scope amendment
+
+Canonical control #600 merged at 4a5ba911553c0a541b406ddd3039785d2c8eae68, blob 9c92cd06fdc9de957c2f99655b08b04c0cfa4026.
+The owner narrowed05 to ordinary deterministic C++ public-API regression tests
+and selected06 build/provenance verification next. This supersedes the previous
+05 campaign activation above. Preserve the withdrawn unpublished draft and its
+setup failure as unperformed evidence. No generated-input campaign, deliberate
+crash fixture, scanner or additional workflow is included. Require full local,
+normal sanitizer/static/package/ABI and all32 original exact-head hosted gates
+with guarded integration and canonical closure. Original campaign/continuous
+acceptance remains deferred. Production/defaults/ABI/prior tests stay protected;
+standing scoped publication/merge authorization continues.

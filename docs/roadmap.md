@@ -1296,3 +1296,12 @@ Control586 activates startup/device-poll conservation on target286/control585.
 The private polling repair and controlled startup ownership classification require
 fresh full local/all32 hosted and guarded integration. Only02 is selected;03..08
 and external qualification/Unreal/signing/release remain separate.
+
+## M27-05 owner-scoped continuation
+
+M27-01..04 are merged. Control600 replaces the original05 campaign plan with
+fixed C++ public-API regression coverage; excluded campaign/continuous acceptance
+remains unperformed. M27-06 build/provenance verification is selected next,
+followed by unactivated07 native XDMA host preparation and08 platform/migration/
+portable soak readiness. The new test does not promote CAP-M20 or physical/RT,
+Unreal, unfamiliar-consumer, controlled-performance or release acceptance.

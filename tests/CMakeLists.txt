@@ -620,3 +620,6 @@ add_subdirectory(startup_poll_reliability)
 
 # M27-04: isolated optional host-side source kit; no Runtime lane changes.
 add_subdirectory(telemetry_export)
+
+# Fixed public-API lifecycle and serialization regressions.
+add_subdirectory(runtime_robustness)
