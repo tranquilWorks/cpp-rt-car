@@ -1,3 +1,16 @@
+# M27-06 independent build comparison checkpoint
+
+Owner-scoped M27-05 is merged as target290 at
+b8d54b3aced4083dfd91d34c65e871eab7e2e3c0 after full156/161 and all32 checks.
+Control601 activates06: ordinary independent C++ package rebuilds and unsigned
+source/tool/dependency/archive observations. See the [runbook](release_policy.md#local-independent-package-comparison).
+Implementation and verification status is retained in [M27-06 evidence](evidence/M27-06-2026-10-02.md).
+Production/defaults/ABI, prior fixtures/tools and workflows remain unchanged.
+Original06 signature expansion is unperformed;07/08 and external qualification
+remain separate. Exact final-head full/all32 and guarded integration still apply.
+
+## Previous checkpoints
+
 # M27-05 ordinary regression verification checkpoint
 
 Canonical control PR600 narrows M27-05 to fixed public C++ Runtime regression

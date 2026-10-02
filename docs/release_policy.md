@@ -147,3 +147,42 @@ inventory, support matrices, or qualification state. Extension ABI v1 may be
 removed only as one coherent rollback before a release depends on it, or
 evolved compatibly by appending size-guarded fields. An incompatible change
 requires a new ABI version and symbol.
+
+## Local independent package comparison
+
+The owner-scoped M27-06 command builds the ordinary default C++ SDK twice in
+fresh directories and tests a copied public consumer against each extracted
+package. It requires a clean checkout at an explicitly expected full commit.
+On Linux, with CMake, CPack, Make and GCC installed:
+
+```sh
+python3 tools/release_rebuild.py build --expected-commit "$(git rev-parse HEAD)" --work-directory /tmp/rtfw-local-rebuild --cc gcc --cxx g++
+```
+
+The work directory must be new and outside the source checkout. The command
+retains both complete builds, packages, installed consumers, command logs and
+`report.json`. It records observed source/tree, declared dependency verification,
+tool paths/versions/digests, exact command arguments, CMake cache/compile-command/
+CPack-config digests and package member inventories. `SOURCE_DATE_EPOCH` comes
+from the source commit. Each command has a default 900-second limit; log size
+is monitored at 100-ms intervals and stopped after exceeding 16 MiB, so the
+retained failure log may exceed that threshold. Failed commands produce nonzero
+exit and a failed report; existing output is never reused.
+
+A successful result requires both installed consumer runs, unchanged observed
+source/dependency/tool inputs, and matching complete archive hashes and member
+inventories. File content, permissions, timestamps, ownership and link targets
+are compared. A container-only difference is still a mismatch. Existing TGZ
+archives can also be compared without executing builds:
+
+```sh
+python3 tools/release_rebuild.py compare first.tar.gz second.tar.gz
+```
+
+This is an unsigned observation of two local builds with recorded inputs. It is
+not a hermetic build or an authenticated builder identity; host libraries and
+unrecorded environment inputs remain outside its closure. Archive comparison
+alone does not establish source provenance. Existing candidate provenance and
+external signature fixtures remain unchanged. Original M27-06 signature-fixture
+expansion is unperformed under the owner amendment; production identity, signing,
+release approval and publication remain separate. No CAP-M20 completion follows.
