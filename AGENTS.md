@@ -730,3 +730,16 @@ normal sanitizer/static/package/ABI and all32 original exact-head hosted gates
 with guarded integration and canonical closure. Original campaign/continuous
 acceptance remains deferred. Production/defaults/ABI/prior tests stay protected;
 standing scoped publication/merge authorization continues.
+
+## M27-06 owner-scoped build verification activation
+
+Control601 merged at 18dfecc0c890245689ea399824121e6e8d77262c, blob 664beef15566acb64bb5026816e72dd57f18aeb7, after owner-scoped05 target290
+merged at b8d54b3aced4083dfd91d34c65e871eab7e2e3c0 with full156/161 and all32 exact-head gates.
+The owner already selected06. Add ordinary independent package rebuild and
+unsigned provenance observations only: actual clean source/tool/dependency
+bindings, fresh build directories, exact archive/member comparison and installed
+consumer validation. Preserve production, existing tools/workflows/fixtures,
+ABI/defaults and previous evidence. Original06 signature expansion remains
+unperformed; no additional campaign, scanner, signing fixture or workflow.
+Full local/all32, risk review and guarded integration/closure remain mandatory
+under standing scoped publication/merge authorization.07/08 remain inactive.

@@ -75,6 +75,12 @@ portable_fuzz = load_module(
 )
 
 
+# Independent package rebuild comparison joins the preserved release-tool suite.
+BuildComparisonTests = load_module(
+    'rtfw_rebuild_tests', 'tests/release_verification/test_rebuild.py'
+).BuildComparisonTests
+
+
 class ReleaseManifestTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()

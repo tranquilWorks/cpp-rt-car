@@ -1305,3 +1305,12 @@ remains unperformed. M27-06 build/provenance verification is selected next,
 followed by unactivated07 native XDMA host preparation and08 platform/migration/
 portable soak readiness. The new test does not promote CAP-M20 or physical/RT,
 Unreal, unfamiliar-consumer, controlled-performance or release acceptance.
+
+## M27-06 independent build verification
+
+Control601 closes owner-scoped05 and selects ordinary build/provenance06.
+Two independent fresh package builds, recorded source/dependency/toolchain
+inputs, exact archive/member comparisons and installed consumer checks provide
+local unsigned observations. Original06 signature expansion remains unperformed.
+M27-07 native XDMA host preparation and08 platform/migration/portable soak remain
+unactivated, alongside excluded original05 work and external qualification.

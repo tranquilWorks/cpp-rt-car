@@ -668,6 +668,8 @@ HASHED_CONTRACT_PATHS = {
     "tools/portable_assurance_toolchain.json",
     "tools/provenance.py",
     "tools/release_manifest.py",
+    "tools/release_rebuild.py",
+    "tests/release_verification/test_rebuild.py",
     "tools/run_fuzz_smoke.py",
     "tools/sbom.py",
     "tools/sbom_expected.json",

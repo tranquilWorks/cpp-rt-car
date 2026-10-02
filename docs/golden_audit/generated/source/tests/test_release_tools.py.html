@@ -75,1380 +75,1386 @@
 <span id="L75">)</span>
 <span id="L76"></span>
 <span id="L77"></span>
-<span id="L78">class ReleaseManifestTests(unittest.TestCase):</span>
-<span id="L79">    def setUp(self) -&gt; None:</span>
-<span id="L80">        self.temporary = tempfile.TemporaryDirectory()</span>
-<span id="L81">        self.root = pathlib.Path(self.temporary.name)</span>
-<span id="L82">        self.artifacts = self.root / &quot;artifacts&quot;</span>
-<span id="L83">        self.artifacts.mkdir()</span>
-<span id="L84">        (self.artifacts / &quot;rtfw-linux.tar.gz&quot;).write_bytes(b&quot;linux&quot;)</span>
-<span id="L85">        nested = self.artifacts / &quot;windows&quot;</span>
-<span id="L86">        nested.mkdir()</span>
-<span id="L87">        (nested / &quot;rtfw-windows.zip&quot;).write_bytes(b&quot;windows&quot;)</span>
-<span id="L88">        self.version = self.root / &quot;VERSION.txt&quot;</span>
-<span id="L89">        self.version.write_text(&quot;1.0.0\n&quot;, encoding=&quot;utf-8&quot;)</span>
-<span id="L90">        self.manifest = self.artifacts / &quot;rtfw-release-manifest.json&quot;</span>
-<span id="L91">        self.commit = &quot;0123456789abcdef0123456789abcdef01234567&quot;</span>
-<span id="L92"></span>
-<span id="L93">    def tearDown(self) -&gt; None:</span>
-<span id="L94">        self.temporary.cleanup()</span>
-<span id="L95"></span>
-<span id="L96">    def create(self) -&gt; None:</span>
-<span id="L97">        value = release_manifest.create_manifest(</span>
-<span id="L98">            self.artifacts,</span>
-<span id="L99">            self.manifest,</span>
-<span id="L100">            self.version,</span>
-<span id="L101">            self.commit,</span>
-<span id="L102">        )</span>
-<span id="L103">        release_manifest.write_manifest(self.manifest, value)</span>
-<span id="L104"></span>
-<span id="L105">    def test_round_trip_and_corruption_rejection(self) -&gt; None:</span>
-<span id="L106">        self.create()</span>
-<span id="L107">        self.assertEqual(</span>
-<span id="L108">            release_manifest.verify_manifest(</span>
-<span id="L109">                self.manifest,</span>
-<span id="L110">                self.artifacts,</span>
-<span id="L111">                self.version,</span>
-<span id="L112">                self.commit,</span>
-<span id="L113">            ),</span>
-<span id="L114">            [],</span>
-<span id="L115">        )</span>
-<span id="L116">        (self.artifacts / &quot;rtfw-linux.tar.gz&quot;).write_bytes(b&quot;corrupt&quot;)</span>
-<span id="L117">        errors = release_manifest.verify_manifest(</span>
-<span id="L118">            self.manifest,</span>
-<span id="L119">            self.artifacts,</span>
-<span id="L120">            self.version,</span>
-<span id="L121">            self.commit,</span>
-<span id="L122">        )</span>
-<span id="L123">        self.assertTrue(any(&quot;digest mismatch&quot; in error for error in errors))</span>
-<span id="L124"></span>
-<span id="L125">    def test_unlisted_and_unsafe_artifacts_are_rejected(self) -&gt; None:</span>
-<span id="L126">        self.create()</span>
-<span id="L127">        (self.artifacts / &quot;unexpected.bin&quot;).write_bytes(b&quot;unexpected&quot;)</span>
-<span id="L128">        errors = release_manifest.verify_manifest(</span>
-<span id="L129">            self.manifest,</span>
-<span id="L130">            self.artifacts,</span>
-<span id="L131">            self.version,</span>
-<span id="L132">            self.commit,</span>
-<span id="L133">        )</span>
-<span id="L134">        self.assertTrue(any(&quot;unlisted&quot; in error for error in errors))</span>
-<span id="L135"></span>
-<span id="L136">        data = json.loads(self.manifest.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L137">        data[&quot;artifacts&quot;][0][&quot;path&quot;] = &quot;../escape&quot;</span>
-<span id="L138">        self.manifest.write_text(</span>
-<span id="L139">            json.dumps(data),</span>
-<span id="L140">            encoding=&quot;utf-8&quot;,</span>
-<span id="L141">        )</span>
-<span id="L142">        errors = release_manifest.verify_manifest(</span>
-<span id="L143">            self.manifest,</span>
-<span id="L144">            self.artifacts,</span>
-<span id="L145">            self.version,</span>
-<span id="L146">            self.commit,</span>
+<span id="L78"># Independent package rebuild comparison joins the preserved release-tool suite.</span>
+<span id="L79">BuildComparisonTests = load_module(</span>
+<span id="L80">    &#x27;rtfw_rebuild_tests&#x27;, &#x27;tests/release_verification/test_rebuild.py&#x27;</span>
+<span id="L81">).BuildComparisonTests</span>
+<span id="L82"></span>
+<span id="L83"></span>
+<span id="L84">class ReleaseManifestTests(unittest.TestCase):</span>
+<span id="L85">    def setUp(self) -&gt; None:</span>
+<span id="L86">        self.temporary = tempfile.TemporaryDirectory()</span>
+<span id="L87">        self.root = pathlib.Path(self.temporary.name)</span>
+<span id="L88">        self.artifacts = self.root / &quot;artifacts&quot;</span>
+<span id="L89">        self.artifacts.mkdir()</span>
+<span id="L90">        (self.artifacts / &quot;rtfw-linux.tar.gz&quot;).write_bytes(b&quot;linux&quot;)</span>
+<span id="L91">        nested = self.artifacts / &quot;windows&quot;</span>
+<span id="L92">        nested.mkdir()</span>
+<span id="L93">        (nested / &quot;rtfw-windows.zip&quot;).write_bytes(b&quot;windows&quot;)</span>
+<span id="L94">        self.version = self.root / &quot;VERSION.txt&quot;</span>
+<span id="L95">        self.version.write_text(&quot;1.0.0\n&quot;, encoding=&quot;utf-8&quot;)</span>
+<span id="L96">        self.manifest = self.artifacts / &quot;rtfw-release-manifest.json&quot;</span>
+<span id="L97">        self.commit = &quot;0123456789abcdef0123456789abcdef01234567&quot;</span>
+<span id="L98"></span>
+<span id="L99">    def tearDown(self) -&gt; None:</span>
+<span id="L100">        self.temporary.cleanup()</span>
+<span id="L101"></span>
+<span id="L102">    def create(self) -&gt; None:</span>
+<span id="L103">        value = release_manifest.create_manifest(</span>
+<span id="L104">            self.artifacts,</span>
+<span id="L105">            self.manifest,</span>
+<span id="L106">            self.version,</span>
+<span id="L107">            self.commit,</span>
+<span id="L108">        )</span>
+<span id="L109">        release_manifest.write_manifest(self.manifest, value)</span>
+<span id="L110"></span>
+<span id="L111">    def test_round_trip_and_corruption_rejection(self) -&gt; None:</span>
+<span id="L112">        self.create()</span>
+<span id="L113">        self.assertEqual(</span>
+<span id="L114">            release_manifest.verify_manifest(</span>
+<span id="L115">                self.manifest,</span>
+<span id="L116">                self.artifacts,</span>
+<span id="L117">                self.version,</span>
+<span id="L118">                self.commit,</span>
+<span id="L119">            ),</span>
+<span id="L120">            [],</span>
+<span id="L121">        )</span>
+<span id="L122">        (self.artifacts / &quot;rtfw-linux.tar.gz&quot;).write_bytes(b&quot;corrupt&quot;)</span>
+<span id="L123">        errors = release_manifest.verify_manifest(</span>
+<span id="L124">            self.manifest,</span>
+<span id="L125">            self.artifacts,</span>
+<span id="L126">            self.version,</span>
+<span id="L127">            self.commit,</span>
+<span id="L128">        )</span>
+<span id="L129">        self.assertTrue(any(&quot;digest mismatch&quot; in error for error in errors))</span>
+<span id="L130"></span>
+<span id="L131">    def test_unlisted_and_unsafe_artifacts_are_rejected(self) -&gt; None:</span>
+<span id="L132">        self.create()</span>
+<span id="L133">        (self.artifacts / &quot;unexpected.bin&quot;).write_bytes(b&quot;unexpected&quot;)</span>
+<span id="L134">        errors = release_manifest.verify_manifest(</span>
+<span id="L135">            self.manifest,</span>
+<span id="L136">            self.artifacts,</span>
+<span id="L137">            self.version,</span>
+<span id="L138">            self.commit,</span>
+<span id="L139">        )</span>
+<span id="L140">        self.assertTrue(any(&quot;unlisted&quot; in error for error in errors))</span>
+<span id="L141"></span>
+<span id="L142">        data = json.loads(self.manifest.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L143">        data[&quot;artifacts&quot;][0][&quot;path&quot;] = &quot;../escape&quot;</span>
+<span id="L144">        self.manifest.write_text(</span>
+<span id="L145">            json.dumps(data),</span>
+<span id="L146">            encoding=&quot;utf-8&quot;,</span>
 <span id="L147">        )</span>
-<span id="L148">        self.assertTrue(any(&quot;unsafe path&quot; in error for error in errors))</span>
-<span id="L149"></span>
-<span id="L150">    def test_partial_commit_and_empty_directory_are_rejected(self) -&gt; None:</span>
-<span id="L151">        with self.assertRaisesRegex(ValueError, &quot;40-character&quot;):</span>
-<span id="L152">            release_manifest.create_manifest(</span>
-<span id="L153">                self.artifacts,</span>
-<span id="L154">                self.manifest,</span>
-<span id="L155">                self.version,</span>
-<span id="L156">                &quot;deadbeef&quot;,</span>
-<span id="L157">            )</span>
-<span id="L158">        for path in sorted(self.artifacts.rglob(&quot;*&quot;), reverse=True):</span>
-<span id="L159">            if path.is_file():</span>
-<span id="L160">                path.unlink()</span>
-<span id="L161">            else:</span>
-<span id="L162">                path.rmdir()</span>
-<span id="L163">        with self.assertRaisesRegex(ValueError, &quot;no release artifacts&quot;):</span>
-<span id="L164">            release_manifest.create_manifest(</span>
-<span id="L165">                self.artifacts,</span>
-<span id="L166">                self.manifest,</span>
-<span id="L167">                self.version,</span>
-<span id="L168">                self.commit,</span>
-<span id="L169">            )</span>
-<span id="L170"></span>
-<span id="L171">    def test_missing_duplicate_order_and_nonportable_paths_are_rejected(</span>
-<span id="L172">        self,</span>
-<span id="L173">    ) -&gt; None:</span>
-<span id="L174">        self.create()</span>
-<span id="L175">        data = json.loads(self.manifest.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L148">        errors = release_manifest.verify_manifest(</span>
+<span id="L149">            self.manifest,</span>
+<span id="L150">            self.artifacts,</span>
+<span id="L151">            self.version,</span>
+<span id="L152">            self.commit,</span>
+<span id="L153">        )</span>
+<span id="L154">        self.assertTrue(any(&quot;unsafe path&quot; in error for error in errors))</span>
+<span id="L155"></span>
+<span id="L156">    def test_partial_commit_and_empty_directory_are_rejected(self) -&gt; None:</span>
+<span id="L157">        with self.assertRaisesRegex(ValueError, &quot;40-character&quot;):</span>
+<span id="L158">            release_manifest.create_manifest(</span>
+<span id="L159">                self.artifacts,</span>
+<span id="L160">                self.manifest,</span>
+<span id="L161">                self.version,</span>
+<span id="L162">                &quot;deadbeef&quot;,</span>
+<span id="L163">            )</span>
+<span id="L164">        for path in sorted(self.artifacts.rglob(&quot;*&quot;), reverse=True):</span>
+<span id="L165">            if path.is_file():</span>
+<span id="L166">                path.unlink()</span>
+<span id="L167">            else:</span>
+<span id="L168">                path.rmdir()</span>
+<span id="L169">        with self.assertRaisesRegex(ValueError, &quot;no release artifacts&quot;):</span>
+<span id="L170">            release_manifest.create_manifest(</span>
+<span id="L171">                self.artifacts,</span>
+<span id="L172">                self.manifest,</span>
+<span id="L173">                self.version,</span>
+<span id="L174">                self.commit,</span>
+<span id="L175">            )</span>
 <span id="L176"></span>
-<span id="L177">        missing_path = self.artifacts / data[&quot;artifacts&quot;][0][&quot;path&quot;]</span>
-<span id="L178">        missing_path.unlink()</span>
-<span id="L179">        errors = release_manifest.verify_manifest(</span>
-<span id="L180">            self.manifest,</span>
-<span id="L181">            self.artifacts,</span>
-<span id="L182">            self.version,</span>
-<span id="L183">            self.commit,</span>
-<span id="L184">        )</span>
-<span id="L185">        self.assertTrue(any(&quot;missing&quot; in error for error in errors))</span>
-<span id="L186"></span>
-<span id="L187">        missing_path.write_bytes(b&quot;linux&quot;)</span>
-<span id="L188">        duplicate = copy.deepcopy(data)</span>
-<span id="L189">        duplicate[&quot;artifacts&quot;].append(</span>
-<span id="L190">            copy.deepcopy(duplicate[&quot;artifacts&quot;][0])</span>
-<span id="L191">        )</span>
-<span id="L192">        self.manifest.write_text(</span>
-<span id="L193">            json.dumps(duplicate),</span>
-<span id="L194">            encoding=&quot;utf-8&quot;,</span>
-<span id="L195">        )</span>
-<span id="L196">        errors = release_manifest.verify_manifest(</span>
-<span id="L197">            self.manifest,</span>
-<span id="L198">            self.artifacts,</span>
-<span id="L199">            self.version,</span>
-<span id="L200">            self.commit,</span>
+<span id="L177">    def test_missing_duplicate_order_and_nonportable_paths_are_rejected(</span>
+<span id="L178">        self,</span>
+<span id="L179">    ) -&gt; None:</span>
+<span id="L180">        self.create()</span>
+<span id="L181">        data = json.loads(self.manifest.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L182"></span>
+<span id="L183">        missing_path = self.artifacts / data[&quot;artifacts&quot;][0][&quot;path&quot;]</span>
+<span id="L184">        missing_path.unlink()</span>
+<span id="L185">        errors = release_manifest.verify_manifest(</span>
+<span id="L186">            self.manifest,</span>
+<span id="L187">            self.artifacts,</span>
+<span id="L188">            self.version,</span>
+<span id="L189">            self.commit,</span>
+<span id="L190">        )</span>
+<span id="L191">        self.assertTrue(any(&quot;missing&quot; in error for error in errors))</span>
+<span id="L192"></span>
+<span id="L193">        missing_path.write_bytes(b&quot;linux&quot;)</span>
+<span id="L194">        duplicate = copy.deepcopy(data)</span>
+<span id="L195">        duplicate[&quot;artifacts&quot;].append(</span>
+<span id="L196">            copy.deepcopy(duplicate[&quot;artifacts&quot;][0])</span>
+<span id="L197">        )</span>
+<span id="L198">        self.manifest.write_text(</span>
+<span id="L199">            json.dumps(duplicate),</span>
+<span id="L200">            encoding=&quot;utf-8&quot;,</span>
 <span id="L201">        )</span>
-<span id="L202">        self.assertTrue(any(&quot;duplicate&quot; in error for error in errors))</span>
-<span id="L203"></span>
-<span id="L204">        reversed_entries = copy.deepcopy(data)</span>
-<span id="L205">        reversed_entries[&quot;artifacts&quot;].reverse()</span>
-<span id="L206">        self.manifest.write_text(</span>
-<span id="L207">            json.dumps(reversed_entries),</span>
-<span id="L208">            encoding=&quot;utf-8&quot;,</span>
-<span id="L209">        )</span>
-<span id="L210">        errors = release_manifest.verify_manifest(</span>
-<span id="L211">            self.manifest,</span>
-<span id="L212">            self.artifacts,</span>
-<span id="L213">            self.version,</span>
-<span id="L214">            self.commit,</span>
+<span id="L202">        errors = release_manifest.verify_manifest(</span>
+<span id="L203">            self.manifest,</span>
+<span id="L204">            self.artifacts,</span>
+<span id="L205">            self.version,</span>
+<span id="L206">            self.commit,</span>
+<span id="L207">        )</span>
+<span id="L208">        self.assertTrue(any(&quot;duplicate&quot; in error for error in errors))</span>
+<span id="L209"></span>
+<span id="L210">        reversed_entries = copy.deepcopy(data)</span>
+<span id="L211">        reversed_entries[&quot;artifacts&quot;].reverse()</span>
+<span id="L212">        self.manifest.write_text(</span>
+<span id="L213">            json.dumps(reversed_entries),</span>
+<span id="L214">            encoding=&quot;utf-8&quot;,</span>
 <span id="L215">        )</span>
-<span id="L216">        self.assertTrue(any(&quot;sorted&quot; in error for error in errors))</span>
-<span id="L217"></span>
-<span id="L218">        self.assertIsNone(</span>
-<span id="L219">            release_manifest.safe_relative_path(r&quot;..\escape&quot;)</span>
-<span id="L220">        )</span>
-<span id="L221">        self.assertIsNone(</span>
-<span id="L222">            release_manifest.safe_relative_path(&quot;control\u0001name&quot;)</span>
-<span id="L223">        )</span>
+<span id="L216">        errors = release_manifest.verify_manifest(</span>
+<span id="L217">            self.manifest,</span>
+<span id="L218">            self.artifacts,</span>
+<span id="L219">            self.version,</span>
+<span id="L220">            self.commit,</span>
+<span id="L221">        )</span>
+<span id="L222">        self.assertTrue(any(&quot;sorted&quot; in error for error in errors))</span>
+<span id="L223"></span>
 <span id="L224">        self.assertIsNone(</span>
-<span id="L225">            release_manifest.safe_relative_path(&quot;C:/escape&quot;)</span>
+<span id="L225">            release_manifest.safe_relative_path(r&quot;..\escape&quot;)</span>
 <span id="L226">        )</span>
-<span id="L227"></span>
-<span id="L228">    def test_noncanonical_duplicate_json_and_overwrite_are_rejected(self) -&gt; None:</span>
-<span id="L229">        self.create()</span>
-<span id="L230">        canonical = self.manifest.read_text(encoding=&quot;utf-8&quot;)</span>
-<span id="L231"></span>
-<span id="L232">        self.manifest.write_text(canonical + &quot;\n&quot;, encoding=&quot;utf-8&quot;)</span>
-<span id="L233">        errors = release_manifest.verify_manifest(</span>
-<span id="L234">            self.manifest,</span>
-<span id="L235">            self.artifacts,</span>
-<span id="L236">            self.version,</span>
-<span id="L237">            self.commit,</span>
-<span id="L238">        )</span>
-<span id="L239">        self.assertTrue(any(&quot;canonical&quot; in error for error in errors))</span>
-<span id="L240"></span>
-<span id="L241">        self.manifest.write_text(</span>
-<span id="L242">            canonical.replace(</span>
-<span id="L243">                &#x27;&quot;schema_version&quot;: 1,&#x27;,</span>
-<span id="L244">                &#x27;&quot;schema_version&quot;: 1,\n  &quot;schema_version&quot;: 1,&#x27;,</span>
-<span id="L245">                1,</span>
-<span id="L246">            ),</span>
-<span id="L247">            encoding=&quot;utf-8&quot;,</span>
-<span id="L248">        )</span>
-<span id="L249">        errors = release_manifest.verify_manifest(</span>
-<span id="L250">            self.manifest,</span>
-<span id="L251">            self.artifacts,</span>
-<span id="L252">            self.version,</span>
-<span id="L253">            self.commit,</span>
+<span id="L227">        self.assertIsNone(</span>
+<span id="L228">            release_manifest.safe_relative_path(&quot;control\u0001name&quot;)</span>
+<span id="L229">        )</span>
+<span id="L230">        self.assertIsNone(</span>
+<span id="L231">            release_manifest.safe_relative_path(&quot;C:/escape&quot;)</span>
+<span id="L232">        )</span>
+<span id="L233"></span>
+<span id="L234">    def test_noncanonical_duplicate_json_and_overwrite_are_rejected(self) -&gt; None:</span>
+<span id="L235">        self.create()</span>
+<span id="L236">        canonical = self.manifest.read_text(encoding=&quot;utf-8&quot;)</span>
+<span id="L237"></span>
+<span id="L238">        self.manifest.write_text(canonical + &quot;\n&quot;, encoding=&quot;utf-8&quot;)</span>
+<span id="L239">        errors = release_manifest.verify_manifest(</span>
+<span id="L240">            self.manifest,</span>
+<span id="L241">            self.artifacts,</span>
+<span id="L242">            self.version,</span>
+<span id="L243">            self.commit,</span>
+<span id="L244">        )</span>
+<span id="L245">        self.assertTrue(any(&quot;canonical&quot; in error for error in errors))</span>
+<span id="L246"></span>
+<span id="L247">        self.manifest.write_text(</span>
+<span id="L248">            canonical.replace(</span>
+<span id="L249">                &#x27;&quot;schema_version&quot;: 1,&#x27;,</span>
+<span id="L250">                &#x27;&quot;schema_version&quot;: 1,\n  &quot;schema_version&quot;: 1,&#x27;,</span>
+<span id="L251">                1,</span>
+<span id="L252">            ),</span>
+<span id="L253">            encoding=&quot;utf-8&quot;,</span>
 <span id="L254">        )</span>
-<span id="L255">        self.assertTrue(any(&quot;duplicate JSON key&quot; in error for error in errors))</span>
-<span id="L256"></span>
-<span id="L257">        self.manifest.write_text(canonical, encoding=&quot;utf-8&quot;)</span>
-<span id="L258">        with self.assertRaisesRegex(ValueError, &quot;already exists&quot;):</span>
-<span id="L259">            release_manifest.write_manifest(</span>
-<span id="L260">                self.manifest,</span>
-<span id="L261">                release_manifest.create_manifest(</span>
-<span id="L262">                    self.artifacts,</span>
-<span id="L263">                    self.manifest,</span>
-<span id="L264">                    self.version,</span>
-<span id="L265">                    self.commit,</span>
-<span id="L266">                ),</span>
-<span id="L267">            )</span>
-<span id="L268"></span>
-<span id="L269"></span>
-<span id="L270">class ReleaseStagingTests(unittest.TestCase):</span>
-<span id="L271">    def setUp(self) -&gt; None:</span>
-<span id="L272">        self.temporary = tempfile.TemporaryDirectory()</span>
-<span id="L273">        self.root = pathlib.Path(self.temporary.name)</span>
-<span id="L274">        self.cpack = self.root / &quot;cpack-output&quot;</span>
-<span id="L275">        self.cpack.mkdir()</span>
-<span id="L276">        (self.cpack / &quot;_CPack_Packages&quot;).mkdir()</span>
-<span id="L277">        self.archive = (</span>
-<span id="L278">            self.cpack /</span>
-<span id="L279">            &quot;rtfw-1.0.0-Linux-x86_64-GNU-11.4.0.tar.gz&quot;</span>
-<span id="L280">        )</span>
-<span id="L281">        self.archive.write_bytes(b&quot;archive&quot;)</span>
-<span id="L282">        self.sidecar = self.archive.with_name(</span>
-<span id="L283">            self.archive.name + &quot;.sha256&quot;</span>
-<span id="L284">        )</span>
-<span id="L285">        self.sidecar.write_text(</span>
-<span id="L286">            f&quot;{release_staging.sha256(self.archive)}  {self.archive.name}\n&quot;,</span>
-<span id="L287">            encoding=&quot;utf-8&quot;,</span>
-<span id="L288">        )</span>
-<span id="L289">        self.version = self.root / &quot;VERSION.txt&quot;</span>
-<span id="L290">        self.version.write_text(&quot;1.0.0\n&quot;, encoding=&quot;utf-8&quot;)</span>
-<span id="L291"></span>
-<span id="L292">    def tearDown(self) -&gt; None:</span>
-<span id="L293">        self.temporary.cleanup()</span>
-<span id="L294"></span>
-<span id="L295">    def test_stages_only_verified_archive_and_sidecar(self) -&gt; None:</span>
-<span id="L296">        destination = self.root / &quot;artifacts&quot;</span>
-<span id="L297">        staged = release_staging.stage(</span>
-<span id="L298">            self.cpack,</span>
-<span id="L299">            destination,</span>
-<span id="L300">            &quot;TGZ&quot;,</span>
-<span id="L301">            self.version,</span>
-<span id="L302">        )</span>
-<span id="L303">        self.assertEqual(</span>
-<span id="L304">            [path.name for path in staged],</span>
-<span id="L305">            [self.archive.name, self.sidecar.name],</span>
-<span id="L306">        )</span>
-<span id="L307">        self.assertEqual(</span>
-<span id="L308">            sorted(path.name for path in destination.iterdir()),</span>
-<span id="L309">            sorted((self.archive.name, self.sidecar.name)),</span>
-<span id="L310">        )</span>
-<span id="L311"></span>
-<span id="L312">    def test_rejects_corruption_stale_output_and_unexpected_files(self) -&gt; None:</span>
-<span id="L313">        self.sidecar.write_text(&quot;0&quot; * 64 + &quot;\n&quot;, encoding=&quot;utf-8&quot;)</span>
-<span id="L314">        with self.assertRaisesRegex(ValueError, &quot;does not match&quot;):</span>
-<span id="L315">            release_staging.stage(</span>
-<span id="L316">                self.cpack,</span>
-<span id="L317">                self.root / &quot;corrupt&quot;,</span>
-<span id="L318">                &quot;TGZ&quot;,</span>
-<span id="L319">                self.version,</span>
-<span id="L320">            )</span>
-<span id="L321"></span>
-<span id="L322">        self.sidecar.write_text(</span>
-<span id="L323">            f&quot;{release_staging.sha256(self.archive)}\n&quot;,</span>
-<span id="L324">            encoding=&quot;utf-8&quot;,</span>
-<span id="L325">        )</span>
-<span id="L326">        (self.cpack / &quot;unexpected.txt&quot;).write_text(</span>
-<span id="L327">            &quot;unexpected&quot;,</span>
-<span id="L328">            encoding=&quot;utf-8&quot;,</span>
-<span id="L329">        )</span>
-<span id="L330">        with self.assertRaisesRegex(ValueError, &quot;unexpected top-level&quot;):</span>
-<span id="L331">            release_staging.stage(</span>
-<span id="L332">                self.cpack,</span>
-<span id="L333">                self.root / &quot;unexpected&quot;,</span>
-<span id="L334">                &quot;TGZ&quot;,</span>
-<span id="L335">                self.version,</span>
-<span id="L336">            )</span>
-<span id="L337"></span>
-<span id="L338">        (self.cpack / &quot;unexpected.txt&quot;).unlink()</span>
-<span id="L339">        unexpected_directory = self.cpack / &quot;unexpected-directory&quot;</span>
-<span id="L340">        unexpected_directory.mkdir()</span>
-<span id="L341">        with self.assertRaisesRegex(ValueError, &quot;unexpected top-level&quot;):</span>
-<span id="L342">            release_staging.stage(</span>
-<span id="L343">                self.cpack,</span>
-<span id="L344">                self.root / &quot;unexpected-directory-output&quot;,</span>
-<span id="L345">                &quot;TGZ&quot;,</span>
-<span id="L346">                self.version,</span>
-<span id="L347">            )</span>
-<span id="L348">        unexpected_directory.rmdir()</span>
-<span id="L349"></span>
-<span id="L350">        stale = self.root / &quot;stale&quot;</span>
-<span id="L351">        stale.mkdir()</span>
-<span id="L352">        with self.assertRaisesRegex(ValueError, &quot;must not already exist&quot;):</span>
-<span id="L353">            release_staging.stage(</span>
-<span id="L354">                self.cpack,</span>
-<span id="L355">                stale,</span>
-<span id="L356">                &quot;TGZ&quot;,</span>
-<span id="L357">                self.version,</span>
-<span id="L358">            )</span>
-<span id="L359"></span>
-<span id="L360"></span>
-<span id="L361">class ReleaseExtractionTests(unittest.TestCase):</span>
-<span id="L362">    def setUp(self) -&gt; None:</span>
-<span id="L363">        self.temporary = tempfile.TemporaryDirectory()</span>
-<span id="L364">        self.root = pathlib.Path(self.temporary.name)</span>
+<span id="L255">        errors = release_manifest.verify_manifest(</span>
+<span id="L256">            self.manifest,</span>
+<span id="L257">            self.artifacts,</span>
+<span id="L258">            self.version,</span>
+<span id="L259">            self.commit,</span>
+<span id="L260">        )</span>
+<span id="L261">        self.assertTrue(any(&quot;duplicate JSON key&quot; in error for error in errors))</span>
+<span id="L262"></span>
+<span id="L263">        self.manifest.write_text(canonical, encoding=&quot;utf-8&quot;)</span>
+<span id="L264">        with self.assertRaisesRegex(ValueError, &quot;already exists&quot;):</span>
+<span id="L265">            release_manifest.write_manifest(</span>
+<span id="L266">                self.manifest,</span>
+<span id="L267">                release_manifest.create_manifest(</span>
+<span id="L268">                    self.artifacts,</span>
+<span id="L269">                    self.manifest,</span>
+<span id="L270">                    self.version,</span>
+<span id="L271">                    self.commit,</span>
+<span id="L272">                ),</span>
+<span id="L273">            )</span>
+<span id="L274"></span>
+<span id="L275"></span>
+<span id="L276">class ReleaseStagingTests(unittest.TestCase):</span>
+<span id="L277">    def setUp(self) -&gt; None:</span>
+<span id="L278">        self.temporary = tempfile.TemporaryDirectory()</span>
+<span id="L279">        self.root = pathlib.Path(self.temporary.name)</span>
+<span id="L280">        self.cpack = self.root / &quot;cpack-output&quot;</span>
+<span id="L281">        self.cpack.mkdir()</span>
+<span id="L282">        (self.cpack / &quot;_CPack_Packages&quot;).mkdir()</span>
+<span id="L283">        self.archive = (</span>
+<span id="L284">            self.cpack /</span>
+<span id="L285">            &quot;rtfw-1.0.0-Linux-x86_64-GNU-11.4.0.tar.gz&quot;</span>
+<span id="L286">        )</span>
+<span id="L287">        self.archive.write_bytes(b&quot;archive&quot;)</span>
+<span id="L288">        self.sidecar = self.archive.with_name(</span>
+<span id="L289">            self.archive.name + &quot;.sha256&quot;</span>
+<span id="L290">        )</span>
+<span id="L291">        self.sidecar.write_text(</span>
+<span id="L292">            f&quot;{release_staging.sha256(self.archive)}  {self.archive.name}\n&quot;,</span>
+<span id="L293">            encoding=&quot;utf-8&quot;,</span>
+<span id="L294">        )</span>
+<span id="L295">        self.version = self.root / &quot;VERSION.txt&quot;</span>
+<span id="L296">        self.version.write_text(&quot;1.0.0\n&quot;, encoding=&quot;utf-8&quot;)</span>
+<span id="L297"></span>
+<span id="L298">    def tearDown(self) -&gt; None:</span>
+<span id="L299">        self.temporary.cleanup()</span>
+<span id="L300"></span>
+<span id="L301">    def test_stages_only_verified_archive_and_sidecar(self) -&gt; None:</span>
+<span id="L302">        destination = self.root / &quot;artifacts&quot;</span>
+<span id="L303">        staged = release_staging.stage(</span>
+<span id="L304">            self.cpack,</span>
+<span id="L305">            destination,</span>
+<span id="L306">            &quot;TGZ&quot;,</span>
+<span id="L307">            self.version,</span>
+<span id="L308">        )</span>
+<span id="L309">        self.assertEqual(</span>
+<span id="L310">            [path.name for path in staged],</span>
+<span id="L311">            [self.archive.name, self.sidecar.name],</span>
+<span id="L312">        )</span>
+<span id="L313">        self.assertEqual(</span>
+<span id="L314">            sorted(path.name for path in destination.iterdir()),</span>
+<span id="L315">            sorted((self.archive.name, self.sidecar.name)),</span>
+<span id="L316">        )</span>
+<span id="L317"></span>
+<span id="L318">    def test_rejects_corruption_stale_output_and_unexpected_files(self) -&gt; None:</span>
+<span id="L319">        self.sidecar.write_text(&quot;0&quot; * 64 + &quot;\n&quot;, encoding=&quot;utf-8&quot;)</span>
+<span id="L320">        with self.assertRaisesRegex(ValueError, &quot;does not match&quot;):</span>
+<span id="L321">            release_staging.stage(</span>
+<span id="L322">                self.cpack,</span>
+<span id="L323">                self.root / &quot;corrupt&quot;,</span>
+<span id="L324">                &quot;TGZ&quot;,</span>
+<span id="L325">                self.version,</span>
+<span id="L326">            )</span>
+<span id="L327"></span>
+<span id="L328">        self.sidecar.write_text(</span>
+<span id="L329">            f&quot;{release_staging.sha256(self.archive)}\n&quot;,</span>
+<span id="L330">            encoding=&quot;utf-8&quot;,</span>
+<span id="L331">        )</span>
+<span id="L332">        (self.cpack / &quot;unexpected.txt&quot;).write_text(</span>
+<span id="L333">            &quot;unexpected&quot;,</span>
+<span id="L334">            encoding=&quot;utf-8&quot;,</span>
+<span id="L335">        )</span>
+<span id="L336">        with self.assertRaisesRegex(ValueError, &quot;unexpected top-level&quot;):</span>
+<span id="L337">            release_staging.stage(</span>
+<span id="L338">                self.cpack,</span>
+<span id="L339">                self.root / &quot;unexpected&quot;,</span>
+<span id="L340">                &quot;TGZ&quot;,</span>
+<span id="L341">                self.version,</span>
+<span id="L342">            )</span>
+<span id="L343"></span>
+<span id="L344">        (self.cpack / &quot;unexpected.txt&quot;).unlink()</span>
+<span id="L345">        unexpected_directory = self.cpack / &quot;unexpected-directory&quot;</span>
+<span id="L346">        unexpected_directory.mkdir()</span>
+<span id="L347">        with self.assertRaisesRegex(ValueError, &quot;unexpected top-level&quot;):</span>
+<span id="L348">            release_staging.stage(</span>
+<span id="L349">                self.cpack,</span>
+<span id="L350">                self.root / &quot;unexpected-directory-output&quot;,</span>
+<span id="L351">                &quot;TGZ&quot;,</span>
+<span id="L352">                self.version,</span>
+<span id="L353">            )</span>
+<span id="L354">        unexpected_directory.rmdir()</span>
+<span id="L355"></span>
+<span id="L356">        stale = self.root / &quot;stale&quot;</span>
+<span id="L357">        stale.mkdir()</span>
+<span id="L358">        with self.assertRaisesRegex(ValueError, &quot;must not already exist&quot;):</span>
+<span id="L359">            release_staging.stage(</span>
+<span id="L360">                self.cpack,</span>
+<span id="L361">                stale,</span>
+<span id="L362">                &quot;TGZ&quot;,</span>
+<span id="L363">                self.version,</span>
+<span id="L364">            )</span>
 <span id="L365"></span>
-<span id="L366">    def tearDown(self) -&gt; None:</span>
-<span id="L367">        self.temporary.cleanup()</span>
-<span id="L368"></span>
-<span id="L369">    @staticmethod</span>
-<span id="L370">    def add_tar_file(</span>
-<span id="L371">        archive: tarfile.TarFile,</span>
-<span id="L372">        name: str,</span>
-<span id="L373">        content: bytes,</span>
-<span id="L374">    ) -&gt; None:</span>
-<span id="L375">        member = tarfile.TarInfo(name)</span>
-<span id="L376">        member.size = len(content)</span>
-<span id="L377">        member.mode = 0o644</span>
-<span id="L378">        archive.addfile(member, io.BytesIO(content))</span>
-<span id="L379"></span>
-<span id="L380">    def test_extracts_flat_tgz_with_safe_library_symlink(self) -&gt; None:</span>
-<span id="L381">        artifacts = self.root / &quot;tgz-artifacts&quot;</span>
-<span id="L382">        artifacts.mkdir()</span>
-<span id="L383">        archive_path = artifacts / &quot;rtfw-1.0.0-test.tar.gz&quot;</span>
-<span id="L384">        with tarfile.open(archive_path, mode=&quot;w:gz&quot;) as archive:</span>
-<span id="L385">            self.add_tar_file(</span>
-<span id="L386">                archive,</span>
-<span id="L387">                &quot;include/rtfw/version.h&quot;,</span>
-<span id="L388">                b&quot;#define RTFW_VERSION_MAJOR 1\n&quot;,</span>
-<span id="L389">            )</span>
-<span id="L390">            self.add_tar_file(</span>
-<span id="L391">                archive,</span>
-<span id="L392">                &quot;lib/librtfw.so.8&quot;,</span>
-<span id="L393">                b&quot;library&quot;,</span>
-<span id="L394">            )</span>
-<span id="L395">            link = tarfile.TarInfo(&quot;lib/librtfw.so&quot;)</span>
-<span id="L396">            link.type = tarfile.SYMTYPE</span>
-<span id="L397">            link.linkname = &quot;librtfw.so.8&quot;</span>
-<span id="L398">            archive.addfile(link)</span>
-<span id="L399"></span>
-<span id="L400">        destination = self.root / &quot;tgz-prefix&quot;</span>
-<span id="L401">        release_extraction.extract(artifacts, destination)</span>
-<span id="L402">        self.assertEqual(</span>
-<span id="L403">            (destination / &quot;lib/librtfw.so.8&quot;).read_bytes(),</span>
-<span id="L404">            b&quot;library&quot;,</span>
-<span id="L405">        )</span>
-<span id="L406">        self.assertTrue((destination / &quot;lib/librtfw.so&quot;).is_symlink())</span>
-<span id="L407"></span>
-<span id="L408">    def test_extracts_flat_zip(self) -&gt; None:</span>
-<span id="L409">        artifacts = self.root / &quot;zip-artifacts&quot;</span>
-<span id="L410">        artifacts.mkdir()</span>
-<span id="L411">        archive_path = artifacts / &quot;rtfw-1.0.0-test.zip&quot;</span>
-<span id="L412">        with zipfile.ZipFile(archive_path, mode=&quot;w&quot;) as archive:</span>
-<span id="L413">            archive.writestr(</span>
-<span id="L414">                &quot;include/rtfw/version.h&quot;,</span>
-<span id="L415">                &quot;#define RTFW_VERSION_MAJOR 1\n&quot;,</span>
-<span id="L416">            )</span>
-<span id="L417">            archive.writestr(</span>
-<span id="L418">                &quot;lib/cmake/rtfw/rtfwConfig.cmake&quot;,</span>
-<span id="L419">                &quot;set(RTFW_VERSION 1.0.0)\n&quot;,</span>
-<span id="L420">            )</span>
-<span id="L421"></span>
-<span id="L422">        destination = self.root / &quot;zip-prefix&quot;</span>
-<span id="L423">        release_extraction.extract(artifacts, destination)</span>
-<span id="L424">        self.assertTrue(</span>
-<span id="L425">            (destination / &quot;lib/cmake/rtfw/rtfwConfig.cmake&quot;).is_file()</span>
-<span id="L426">        )</span>
+<span id="L366"></span>
+<span id="L367">class ReleaseExtractionTests(unittest.TestCase):</span>
+<span id="L368">    def setUp(self) -&gt; None:</span>
+<span id="L369">        self.temporary = tempfile.TemporaryDirectory()</span>
+<span id="L370">        self.root = pathlib.Path(self.temporary.name)</span>
+<span id="L371"></span>
+<span id="L372">    def tearDown(self) -&gt; None:</span>
+<span id="L373">        self.temporary.cleanup()</span>
+<span id="L374"></span>
+<span id="L375">    @staticmethod</span>
+<span id="L376">    def add_tar_file(</span>
+<span id="L377">        archive: tarfile.TarFile,</span>
+<span id="L378">        name: str,</span>
+<span id="L379">        content: bytes,</span>
+<span id="L380">    ) -&gt; None:</span>
+<span id="L381">        member = tarfile.TarInfo(name)</span>
+<span id="L382">        member.size = len(content)</span>
+<span id="L383">        member.mode = 0o644</span>
+<span id="L384">        archive.addfile(member, io.BytesIO(content))</span>
+<span id="L385"></span>
+<span id="L386">    def test_extracts_flat_tgz_with_safe_library_symlink(self) -&gt; None:</span>
+<span id="L387">        artifacts = self.root / &quot;tgz-artifacts&quot;</span>
+<span id="L388">        artifacts.mkdir()</span>
+<span id="L389">        archive_path = artifacts / &quot;rtfw-1.0.0-test.tar.gz&quot;</span>
+<span id="L390">        with tarfile.open(archive_path, mode=&quot;w:gz&quot;) as archive:</span>
+<span id="L391">            self.add_tar_file(</span>
+<span id="L392">                archive,</span>
+<span id="L393">                &quot;include/rtfw/version.h&quot;,</span>
+<span id="L394">                b&quot;#define RTFW_VERSION_MAJOR 1\n&quot;,</span>
+<span id="L395">            )</span>
+<span id="L396">            self.add_tar_file(</span>
+<span id="L397">                archive,</span>
+<span id="L398">                &quot;lib/librtfw.so.8&quot;,</span>
+<span id="L399">                b&quot;library&quot;,</span>
+<span id="L400">            )</span>
+<span id="L401">            link = tarfile.TarInfo(&quot;lib/librtfw.so&quot;)</span>
+<span id="L402">            link.type = tarfile.SYMTYPE</span>
+<span id="L403">            link.linkname = &quot;librtfw.so.8&quot;</span>
+<span id="L404">            archive.addfile(link)</span>
+<span id="L405"></span>
+<span id="L406">        destination = self.root / &quot;tgz-prefix&quot;</span>
+<span id="L407">        release_extraction.extract(artifacts, destination)</span>
+<span id="L408">        self.assertEqual(</span>
+<span id="L409">            (destination / &quot;lib/librtfw.so.8&quot;).read_bytes(),</span>
+<span id="L410">            b&quot;library&quot;,</span>
+<span id="L411">        )</span>
+<span id="L412">        self.assertTrue((destination / &quot;lib/librtfw.so&quot;).is_symlink())</span>
+<span id="L413"></span>
+<span id="L414">    def test_extracts_flat_zip(self) -&gt; None:</span>
+<span id="L415">        artifacts = self.root / &quot;zip-artifacts&quot;</span>
+<span id="L416">        artifacts.mkdir()</span>
+<span id="L417">        archive_path = artifacts / &quot;rtfw-1.0.0-test.zip&quot;</span>
+<span id="L418">        with zipfile.ZipFile(archive_path, mode=&quot;w&quot;) as archive:</span>
+<span id="L419">            archive.writestr(</span>
+<span id="L420">                &quot;include/rtfw/version.h&quot;,</span>
+<span id="L421">                &quot;#define RTFW_VERSION_MAJOR 1\n&quot;,</span>
+<span id="L422">            )</span>
+<span id="L423">            archive.writestr(</span>
+<span id="L424">                &quot;lib/cmake/rtfw/rtfwConfig.cmake&quot;,</span>
+<span id="L425">                &quot;set(RTFW_VERSION 1.0.0)\n&quot;,</span>
+<span id="L426">            )</span>
 <span id="L427"></span>
-<span id="L428">    def test_rejects_traversal_and_removes_partial_destination(self) -&gt; None:</span>
-<span id="L429">        artifacts = self.root / &quot;unsafe-artifacts&quot;</span>
-<span id="L430">        artifacts.mkdir()</span>
-<span id="L431">        archive_path = artifacts / &quot;rtfw-1.0.0-unsafe.tar.gz&quot;</span>
-<span id="L432">        with tarfile.open(archive_path, mode=&quot;w:gz&quot;) as archive:</span>
-<span id="L433">            self.add_tar_file(archive, &quot;../escape&quot;, b&quot;unsafe&quot;)</span>
-<span id="L434"></span>
-<span id="L435">        destination = self.root / &quot;unsafe-prefix&quot;</span>
-<span id="L436">        with self.assertRaisesRegex(ValueError, &quot;unsafe path&quot;):</span>
-<span id="L437">            release_extraction.extract(artifacts, destination)</span>
-<span id="L438">        self.assertFalse(destination.exists())</span>
-<span id="L439">        self.assertFalse((self.root / &quot;escape&quot;).exists())</span>
+<span id="L428">        destination = self.root / &quot;zip-prefix&quot;</span>
+<span id="L429">        release_extraction.extract(artifacts, destination)</span>
+<span id="L430">        self.assertTrue(</span>
+<span id="L431">            (destination / &quot;lib/cmake/rtfw/rtfwConfig.cmake&quot;).is_file()</span>
+<span id="L432">        )</span>
+<span id="L433"></span>
+<span id="L434">    def test_rejects_traversal_and_removes_partial_destination(self) -&gt; None:</span>
+<span id="L435">        artifacts = self.root / &quot;unsafe-artifacts&quot;</span>
+<span id="L436">        artifacts.mkdir()</span>
+<span id="L437">        archive_path = artifacts / &quot;rtfw-1.0.0-unsafe.tar.gz&quot;</span>
+<span id="L438">        with tarfile.open(archive_path, mode=&quot;w:gz&quot;) as archive:</span>
+<span id="L439">            self.add_tar_file(archive, &quot;../escape&quot;, b&quot;unsafe&quot;)</span>
 <span id="L440"></span>
-<span id="L441">    def test_rejects_escaping_and_cyclic_links(self) -&gt; None:</span>
-<span id="L442">        unsafe_artifacts = self.root / &quot;unsafe-link-artifacts&quot;</span>
-<span id="L443">        unsafe_artifacts.mkdir()</span>
-<span id="L444">        unsafe_archive = unsafe_artifacts / &quot;rtfw-1.0.0-unsafe-link.tar.gz&quot;</span>
-<span id="L445">        with tarfile.open(unsafe_archive, mode=&quot;w:gz&quot;) as archive:</span>
-<span id="L446">            self.add_tar_file(archive, &quot;lib/target&quot;, b&quot;target&quot;)</span>
-<span id="L447">            link = tarfile.TarInfo(&quot;lib/link&quot;)</span>
-<span id="L448">            link.type = tarfile.SYMTYPE</span>
-<span id="L449">            link.linkname = &quot;../../escape&quot;</span>
-<span id="L450">            archive.addfile(link)</span>
-<span id="L451">        with self.assertRaisesRegex(ValueError, &quot;unsafe link&quot;):</span>
-<span id="L452">            release_extraction.extract(</span>
-<span id="L453">                unsafe_artifacts,</span>
-<span id="L454">                self.root / &quot;unsafe-link-prefix&quot;,</span>
-<span id="L455">            )</span>
-<span id="L456"></span>
-<span id="L457">        cyclic_artifacts = self.root / &quot;cyclic-link-artifacts&quot;</span>
-<span id="L458">        cyclic_artifacts.mkdir()</span>
-<span id="L459">        cyclic_archive = cyclic_artifacts / &quot;rtfw-1.0.0-cycle.tar.gz&quot;</span>
-<span id="L460">        with tarfile.open(cyclic_archive, mode=&quot;w:gz&quot;) as archive:</span>
-<span id="L461">            first = tarfile.TarInfo(&quot;lib/first&quot;)</span>
-<span id="L462">            first.type = tarfile.SYMTYPE</span>
-<span id="L463">            first.linkname = &quot;second&quot;</span>
-<span id="L464">            archive.addfile(first)</span>
-<span id="L465">            second = tarfile.TarInfo(&quot;lib/second&quot;)</span>
-<span id="L466">            second.type = tarfile.SYMTYPE</span>
-<span id="L467">            second.linkname = &quot;first&quot;</span>
-<span id="L468">            archive.addfile(second)</span>
-<span id="L469">        with self.assertRaisesRegex(ValueError, &quot;cyclic link&quot;):</span>
-<span id="L470">            release_extraction.extract(</span>
-<span id="L471">                cyclic_artifacts,</span>
-<span id="L472">                self.root / &quot;cyclic-link-prefix&quot;,</span>
-<span id="L473">            )</span>
-<span id="L474"></span>
-<span id="L475"></span>
-<span id="L476">class ReleaseContractTests(unittest.TestCase):</span>
-<span id="L477">    def fixture(self) -&gt; pathlib.Path:</span>
-<span id="L478">        destination = pathlib.Path(self.temporary.name) / &quot;repo&quot;</span>
-<span id="L479">        required = {</span>
-<span id="L480">            &quot;VERSION.txt&quot;,</span>
-<span id="L481">            &quot;vcpkg.json&quot;,</span>
-<span id="L482">            &quot;CMakeLists.txt&quot;,</span>
-<span id="L483">            &quot;README.md&quot;,</span>
-<span id="L484">            &quot;CHANGELOG.md&quot;,</span>
-<span id="L485">            &quot;include/rtfw/version.h&quot;,</span>
-<span id="L486">            &quot;docs/portable_support_matrix.json&quot;,</span>
-<span id="L487">            &quot;docs/cuda_support_matrix.json&quot;,</span>
-<span id="L488">            &quot;docs/xdma_support_matrix.json&quot;,</span>
-<span id="L489">            &quot;docs/release_policy.md&quot;,</span>
-<span id="L490">            &quot;release/rtfw-release-contract.json&quot;,</span>
-<span id="L491">            &quot;.github/workflows/ci.yml&quot;,</span>
-<span id="L492">            &quot;.github/workflows/release.yml&quot;,</span>
-<span id="L493">            &quot;.github/workflows/cuda-qualification.yml&quot;,</span>
-<span id="L494">            &quot;.github/workflows/xdma-qualification.yml&quot;,</span>
-<span id="L495">            &quot;tools/extract_release_archive.py&quot;,</span>
-<span id="L496">            &quot;tools/stage_release_artifacts.py&quot;,</span>
-<span id="L497">            &quot;tests/package_consumer/CMakeLists.txt&quot;,</span>
-<span id="L498">            &quot;tests/test_device_runtime.cpp&quot;,</span>
-<span id="L499">        } | release_contract.HASHED_CONTRACT_PATHS</span>
-<span id="L500">        for relative in sorted(required):</span>
-<span id="L501">            source = ROOT / relative</span>
-<span id="L502">            target = destination / relative</span>
-<span id="L503">            target.parent.mkdir(parents=True, exist_ok=True)</span>
-<span id="L504">            shutil.copy2(source, target)</span>
-<span id="L505">        return destination</span>
-<span id="L506"></span>
-<span id="L507">    def setUp(self) -&gt; None:</span>
-<span id="L508">        self.temporary = tempfile.TemporaryDirectory()</span>
-<span id="L509"></span>
-<span id="L510">    def tearDown(self) -&gt; None:</span>
-<span id="L511">        self.temporary.cleanup()</span>
+<span id="L441">        destination = self.root / &quot;unsafe-prefix&quot;</span>
+<span id="L442">        with self.assertRaisesRegex(ValueError, &quot;unsafe path&quot;):</span>
+<span id="L443">            release_extraction.extract(artifacts, destination)</span>
+<span id="L444">        self.assertFalse(destination.exists())</span>
+<span id="L445">        self.assertFalse((self.root / &quot;escape&quot;).exists())</span>
+<span id="L446"></span>
+<span id="L447">    def test_rejects_escaping_and_cyclic_links(self) -&gt; None:</span>
+<span id="L448">        unsafe_artifacts = self.root / &quot;unsafe-link-artifacts&quot;</span>
+<span id="L449">        unsafe_artifacts.mkdir()</span>
+<span id="L450">        unsafe_archive = unsafe_artifacts / &quot;rtfw-1.0.0-unsafe-link.tar.gz&quot;</span>
+<span id="L451">        with tarfile.open(unsafe_archive, mode=&quot;w:gz&quot;) as archive:</span>
+<span id="L452">            self.add_tar_file(archive, &quot;lib/target&quot;, b&quot;target&quot;)</span>
+<span id="L453">            link = tarfile.TarInfo(&quot;lib/link&quot;)</span>
+<span id="L454">            link.type = tarfile.SYMTYPE</span>
+<span id="L455">            link.linkname = &quot;../../escape&quot;</span>
+<span id="L456">            archive.addfile(link)</span>
+<span id="L457">        with self.assertRaisesRegex(ValueError, &quot;unsafe link&quot;):</span>
+<span id="L458">            release_extraction.extract(</span>
+<span id="L459">                unsafe_artifacts,</span>
+<span id="L460">                self.root / &quot;unsafe-link-prefix&quot;,</span>
+<span id="L461">            )</span>
+<span id="L462"></span>
+<span id="L463">        cyclic_artifacts = self.root / &quot;cyclic-link-artifacts&quot;</span>
+<span id="L464">        cyclic_artifacts.mkdir()</span>
+<span id="L465">        cyclic_archive = cyclic_artifacts / &quot;rtfw-1.0.0-cycle.tar.gz&quot;</span>
+<span id="L466">        with tarfile.open(cyclic_archive, mode=&quot;w:gz&quot;) as archive:</span>
+<span id="L467">            first = tarfile.TarInfo(&quot;lib/first&quot;)</span>
+<span id="L468">            first.type = tarfile.SYMTYPE</span>
+<span id="L469">            first.linkname = &quot;second&quot;</span>
+<span id="L470">            archive.addfile(first)</span>
+<span id="L471">            second = tarfile.TarInfo(&quot;lib/second&quot;)</span>
+<span id="L472">            second.type = tarfile.SYMTYPE</span>
+<span id="L473">            second.linkname = &quot;first&quot;</span>
+<span id="L474">            archive.addfile(second)</span>
+<span id="L475">        with self.assertRaisesRegex(ValueError, &quot;cyclic link&quot;):</span>
+<span id="L476">            release_extraction.extract(</span>
+<span id="L477">                cyclic_artifacts,</span>
+<span id="L478">                self.root / &quot;cyclic-link-prefix&quot;,</span>
+<span id="L479">            )</span>
+<span id="L480"></span>
+<span id="L481"></span>
+<span id="L482">class ReleaseContractTests(unittest.TestCase):</span>
+<span id="L483">    def fixture(self) -&gt; pathlib.Path:</span>
+<span id="L484">        destination = pathlib.Path(self.temporary.name) / &quot;repo&quot;</span>
+<span id="L485">        required = {</span>
+<span id="L486">            &quot;VERSION.txt&quot;,</span>
+<span id="L487">            &quot;vcpkg.json&quot;,</span>
+<span id="L488">            &quot;CMakeLists.txt&quot;,</span>
+<span id="L489">            &quot;README.md&quot;,</span>
+<span id="L490">            &quot;CHANGELOG.md&quot;,</span>
+<span id="L491">            &quot;include/rtfw/version.h&quot;,</span>
+<span id="L492">            &quot;docs/portable_support_matrix.json&quot;,</span>
+<span id="L493">            &quot;docs/cuda_support_matrix.json&quot;,</span>
+<span id="L494">            &quot;docs/xdma_support_matrix.json&quot;,</span>
+<span id="L495">            &quot;docs/release_policy.md&quot;,</span>
+<span id="L496">            &quot;release/rtfw-release-contract.json&quot;,</span>
+<span id="L497">            &quot;.github/workflows/ci.yml&quot;,</span>
+<span id="L498">            &quot;.github/workflows/release.yml&quot;,</span>
+<span id="L499">            &quot;.github/workflows/cuda-qualification.yml&quot;,</span>
+<span id="L500">            &quot;.github/workflows/xdma-qualification.yml&quot;,</span>
+<span id="L501">            &quot;tools/extract_release_archive.py&quot;,</span>
+<span id="L502">            &quot;tools/stage_release_artifacts.py&quot;,</span>
+<span id="L503">            &quot;tests/package_consumer/CMakeLists.txt&quot;,</span>
+<span id="L504">            &quot;tests/test_device_runtime.cpp&quot;,</span>
+<span id="L505">        } | release_contract.HASHED_CONTRACT_PATHS</span>
+<span id="L506">        for relative in sorted(required):</span>
+<span id="L507">            source = ROOT / relative</span>
+<span id="L508">            target = destination / relative</span>
+<span id="L509">            target.parent.mkdir(parents=True, exist_ok=True)</span>
+<span id="L510">            shutil.copy2(source, target)</span>
+<span id="L511">        return destination</span>
 <span id="L512"></span>
-<span id="L513">    def test_repository_contract_and_negative_mutations(self) -&gt; None:</span>
-<span id="L514">        fixture = self.fixture()</span>
-<span id="L515">        self.assertEqual(release_contract.validate_repository(fixture), [])</span>
-<span id="L516"></span>
-<span id="L517">        (fixture / &quot;VERSION.txt&quot;).write_text(&quot;1.0\n&quot;, encoding=&quot;utf-8&quot;)</span>
-<span id="L518">        errors = release_contract.validate_repository(fixture)</span>
-<span id="L519">        self.assertTrue(any(&quot;MAJOR.MINOR.PATCH&quot; in error for error in errors))</span>
-<span id="L520"></span>
-<span id="L521">        shutil.copy2(ROOT / &quot;VERSION.txt&quot;, fixture / &quot;VERSION.txt&quot;)</span>
-<span id="L522">        matrix_path = fixture / &quot;docs/portable_support_matrix.json&quot;</span>
-<span id="L523">        matrix = json.loads(matrix_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L524">        matrix[&quot;supported_tuples&quot;][0][&quot;rt_tier&quot;] = &quot;RT2&quot;</span>
-<span id="L525">        matrix_path.write_text(json.dumps(matrix), encoding=&quot;utf-8&quot;)</span>
-<span id="L526">        errors = release_contract.validate_repository(fixture)</span>
-<span id="L527">        self.assertTrue(any(&quot;may claim only RT0&quot; in error for error in errors))</span>
-<span id="L528"></span>
-<span id="L529">        shutil.copy2(</span>
-<span id="L530">            ROOT / &quot;docs/portable_support_matrix.json&quot;,</span>
-<span id="L531">            matrix_path,</span>
-<span id="L532">        )</span>
-<span id="L533">        header = fixture / &quot;rt/include/rt/c_api.h&quot;</span>
-<span id="L534">        header.write_text(</span>
-<span id="L535">            header.read_text(encoding=&quot;utf-8&quot;) + &quot;\n/* mutation */\n&quot;,</span>
-<span id="L536">            encoding=&quot;utf-8&quot;,</span>
-<span id="L537">        )</span>
-<span id="L538">        errors = release_contract.validate_repository(fixture)</span>
-<span id="L539">        self.assertTrue(any(&quot;digest mismatch&quot; in error for error in errors))</span>
-<span id="L540"></span>
-<span id="L541">    def test_malformed_nested_contract_values_fail_closed(self) -&gt; None:</span>
-<span id="L542">        fixture = self.fixture()</span>
-<span id="L543"></span>
-<span id="L544">        portable_path = fixture / &quot;docs/portable_support_matrix.json&quot;</span>
-<span id="L545">        portable = json.loads(portable_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L546">        portable[&quot;supported_tuples&quot;][0][&quot;validated_surfaces&quot;] = [{}]</span>
-<span id="L547">        portable_path.write_text(json.dumps(portable), encoding=&quot;utf-8&quot;)</span>
-<span id="L548"></span>
-<span id="L549">        cuda_path = fixture / &quot;docs/cuda_support_matrix.json&quot;</span>
-<span id="L550">        cuda = json.loads(cuda_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L551">        cuda[&quot;required_tuple_fields&quot;] = [{}]</span>
-<span id="L552">        cuda_path.write_text(json.dumps(cuda), encoding=&quot;utf-8&quot;)</span>
-<span id="L553"></span>
-<span id="L554">        contract_path = fixture / &quot;release/rtfw-release-contract.json&quot;</span>
-<span id="L555">        contract = json.loads(contract_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L556">        contract[&quot;cmake_package&quot;][&quot;always_components&quot;] = [{}]</span>
-<span id="L557">        contract_path.write_text(json.dumps(contract), encoding=&quot;utf-8&quot;)</span>
-<span id="L558"></span>
-<span id="L559">        errors = release_contract.validate_repository(fixture)</span>
-<span id="L560">        self.assertTrue(any(&quot;lacks package surfaces&quot; in error for error in errors))</span>
-<span id="L561">        self.assertTrue(</span>
-<span id="L562">            any(&quot;required_tuple_fields is incomplete&quot; in error for error in errors)</span>
-<span id="L563">        )</span>
-<span id="L564">        self.assertTrue(</span>
-<span id="L565">            any(&quot;CMake component contract mismatch&quot; in error for error in errors)</span>
-<span id="L566">        )</span>
-<span id="L567"></span>
-<span id="L568">    def test_movable_or_uncontracted_workflow_is_rejected(self) -&gt; None:</span>
-<span id="L569">        fixture = self.fixture()</span>
-<span id="L570">        workflow_path = fixture / &quot;.github/workflows/ci.yml&quot;</span>
-<span id="L571">        workflow = workflow_path.read_text(encoding=&quot;utf-8&quot;)</span>
-<span id="L572">        workflow_path.write_text(</span>
-<span id="L573">            workflow.replace(</span>
-<span id="L574">                (</span>
-<span id="L575">                    &quot;actions/checkout@&quot;</span>
-<span id="L576">                    &quot;11d5960a326750d5838078e36cf38b85af677262&quot;</span>
-<span id="L577">                ),</span>
-<span id="L578">                &quot;actions/checkout@v4&quot;,</span>
-<span id="L579">                1,</span>
-<span id="L580">            ),</span>
-<span id="L581">            encoding=&quot;utf-8&quot;,</span>
-<span id="L582">        )</span>
-<span id="L583">        errors = release_contract.validate_repository(fixture)</span>
-<span id="L584">        self.assertTrue(</span>
-<span id="L585">            any(&quot;unreviewed action reference&quot; in error for error in errors)</span>
-<span id="L586">        )</span>
-<span id="L587"></span>
-<span id="L588">        shutil.copy2(ROOT / &quot;.github/workflows/ci.yml&quot;, workflow_path)</span>
-<span id="L589">        rogue = fixture / &quot;.github/workflows/uncontracted.yaml&quot;</span>
-<span id="L590">        rogue.write_text(</span>
-<span id="L591">            &quot;name: uncontracted\non: workflow_dispatch\njobs: {}\n&quot;,</span>
-<span id="L592">            encoding=&quot;utf-8&quot;,</span>
-<span id="L593">        )</span>
-<span id="L594">        errors = release_contract.validate_repository(fixture)</span>
-<span id="L595">        self.assertTrue(</span>
-<span id="L596">            any(&quot;workflow set differs&quot; in error for error in errors)</span>
-<span id="L597">        )</span>
-<span id="L598"></span>
-<span id="L599"></span>
-<span id="L600">class PortableAssuranceTests(unittest.TestCase):</span>
-<span id="L601">    commit = &quot;0123456789abcdef0123456789abcdef01234567&quot;</span>
-<span id="L602">    tree = &quot;89abcdef0123456789abcdef0123456789abcdef&quot;</span>
-<span id="L603"></span>
-<span id="L604">    def setUp(self) -&gt; None:</span>
-<span id="L605">        self.temporary = tempfile.TemporaryDirectory()</span>
-<span id="L606">        self.root = pathlib.Path(self.temporary.name)</span>
-<span id="L607">        self.policy_path = ROOT / &quot;release/portable-assurance-policy.json&quot;</span>
-<span id="L608">        self.dependency_path = ROOT / &quot;tools/sbom_expected.json&quot;</span>
-<span id="L609">        self.policy = portable_sbom.load_assurance_policy(self.policy_path)</span>
-<span id="L610">        self.dependencies = portable_sbom.load_dependency_policy(</span>
-<span id="L611">            self.dependency_path</span>
-<span id="L612">        )</span>
-<span id="L613"></span>
-<span id="L614">    def tearDown(self) -&gt; None:</span>
-<span id="L615">        self.temporary.cleanup()</span>
-<span id="L616"></span>
-<span id="L617">    def candidate(self, name: str) -&gt; pathlib.Path:</span>
-<span id="L618">        candidate = self.root / name</span>
-<span id="L619">        candidate.mkdir()</span>
-<span id="L620">        archive = candidate / &quot;rtfw-1.2.1-test.tar.gz&quot;</span>
-<span id="L621">        archive.write_bytes(b&quot;candidate archive&quot;)</span>
-<span id="L622">        sidecar = candidate / (archive.name + &quot;.sha256&quot;)</span>
-<span id="L623">        sidecar.write_text(</span>
-<span id="L624">            f&quot;{portable_sbom.sha256(archive)}  {archive.name}\n&quot;,</span>
-<span id="L625">            encoding=&quot;utf-8&quot;,</span>
-<span id="L626">        )</span>
-<span id="L627">        return candidate</span>
-<span id="L628"></span>
-<span id="L629">    def create_sbom(self, candidate: pathlib.Path) -&gt; pathlib.Path:</span>
-<span id="L630">        path = candidate / &quot;rtfw.spdx.json&quot;</span>
-<span id="L631">        value = portable_sbom.create_sbom(</span>
-<span id="L632">            candidate,</span>
-<span id="L633">            self.policy,</span>
-<span id="L634">            self.dependencies,</span>
-<span id="L635">            self.commit,</span>
-<span id="L636">        )</span>
-<span id="L637">        portable_sbom.validate_spdx_shape(value)</span>
-<span id="L638">        portable_sbom.write_new(path, value)</span>
-<span id="L639">        return path</span>
-<span id="L640"></span>
-<span id="L641">    def test_portable_assurance_sbom_is_deterministic_and_fail_closed(</span>
-<span id="L642">        self,</span>
-<span id="L643">    ) -&gt; None:</span>
-<span id="L644">        first = self.candidate(&quot;first&quot;)</span>
-<span id="L645">        second = self.candidate(&quot;second&quot;)</span>
-<span id="L646">        first_sbom = self.create_sbom(first)</span>
-<span id="L647">        second_sbom = self.create_sbom(second)</span>
-<span id="L648">        self.assertEqual(first_sbom.read_bytes(), second_sbom.read_bytes())</span>
-<span id="L649">        result = portable_sbom.verify_sbom(</span>
-<span id="L650">            ROOT,</span>
-<span id="L651">            first_sbom,</span>
-<span id="L652">            first,</span>
-<span id="L653">            self.policy,</span>
-<span id="L654">            self.dependencies,</span>
-<span id="L655">            self.commit,</span>
-<span id="L656">        )</span>
-<span id="L657">        self.assertEqual(result[&quot;spdx_version&quot;], &quot;SPDX-2.3&quot;)</span>
-<span id="L658">        self.assertFalse(result[&quot;test_dependencies_shipped&quot;])</span>
-<span id="L659"></span>
-<span id="L660">        data = json.loads(first_sbom.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L661">        data[&quot;files&quot;][0][&quot;fileName&quot;] = &quot;../escape&quot;</span>
-<span id="L662">        first_sbom.write_text(</span>
-<span id="L663">            json.dumps(data, sort_keys=True, separators=(&quot;,&quot;, &quot;:&quot;)) + &quot;\n&quot;,</span>
-<span id="L664">            encoding=&quot;utf-8&quot;,</span>
-<span id="L665">        )</span>
-<span id="L666">        with self.assertRaisesRegex(ValueError, &quot;unsafe file path&quot;):</span>
-<span id="L667">            portable_sbom.verify_sbom(</span>
-<span id="L668">                ROOT,</span>
-<span id="L669">                first_sbom,</span>
-<span id="L670">                first,</span>
-<span id="L671">                self.policy,</span>
-<span id="L672">                self.dependencies,</span>
-<span id="L673">                self.commit,</span>
-<span id="L674">            )</span>
-<span id="L675"></span>
-<span id="L676">        clean = self.candidate(&quot;source-mismatch&quot;)</span>
-<span id="L677">        clean_sbom = self.create_sbom(clean)</span>
-<span id="L678">        with self.assertRaisesRegex(ValueError, &quot;exact package/source&quot;):</span>
-<span id="L679">            portable_sbom.verify_sbom(</span>
-<span id="L680">                ROOT,</span>
-<span id="L681">                clean_sbom,</span>
-<span id="L682">                clean,</span>
-<span id="L683">                self.policy,</span>
-<span id="L684">                self.dependencies,</span>
-<span id="L685">                &quot;f&quot; * 40,</span>
-<span id="L686">            )</span>
-<span id="L687"></span>
-<span id="L688">        extra = self.candidate(&quot;extra&quot;)</span>
-<span id="L689">        (extra / &quot;unlisted.bin&quot;).write_bytes(b&quot;unlisted&quot;)</span>
-<span id="L690">        with self.assertRaisesRegex(ValueError, &quot;unlisted files&quot;):</span>
-<span id="L691">            portable_sbom.create_sbom(</span>
-<span id="L692">                extra,</span>
-<span id="L693">                self.policy,</span>
-<span id="L694">                self.dependencies,</span>
-<span id="L695">                self.commit,</span>
-<span id="L696">            )</span>
-<span id="L697"></span>
-<span id="L698">        duplicate_json = self.root / &quot;duplicate.json&quot;</span>
-<span id="L699">        duplicate_json.write_text(&#x27;{&quot;a&quot;:1,&quot;a&quot;:2}\n&#x27;, encoding=&quot;utf-8&quot;)</span>
-<span id="L700">        with self.assertRaisesRegex(ValueError, &quot;duplicate JSON key&quot;):</span>
-<span id="L701">            portable_sbom.strict_json(duplicate_json)</span>
-<span id="L702"></span>
-<span id="L703">    def test_portable_assurance_unsigned_statement_and_manifest_binding(</span>
-<span id="L704">        self,</span>
-<span id="L705">    ) -&gt; None:</span>
-<span id="L706">        candidate = self.candidate(&quot;candidate&quot;)</span>
-<span id="L707">        self.create_sbom(candidate)</span>
-<span id="L708">        statement_path = candidate / &quot;rtfw.provenance.json&quot;</span>
-<span id="L709">        statement = portable_provenance.create_statement(</span>
-<span id="L710">            candidate,</span>
-<span id="L711">            self.policy,</span>
-<span id="L712">            self.dependency_path,</span>
-<span id="L713">            self.commit,</span>
-<span id="L714">            self.tree,</span>
-<span id="L715">            &quot;clean&quot;,</span>
-<span id="L716">            &quot;Ubuntu clang version 14.0.0&quot;,</span>
-<span id="L717">            &quot;cmake version 3.22.1&quot;,</span>
-<span id="L718">        )</span>
-<span id="L719">        portable_provenance.write_new(statement_path, statement)</span>
-<span id="L720">        manifest_path = candidate / &quot;rtfw-release-manifest.json&quot;</span>
-<span id="L721">        version_path = self.root / &quot;VERSION.txt&quot;</span>
-<span id="L722">        version_path.write_text(&quot;1.2.1\n&quot;, encoding=&quot;utf-8&quot;)</span>
-<span id="L723">        manifest = release_manifest.create_manifest(</span>
-<span id="L724">            candidate,</span>
-<span id="L725">            manifest_path,</span>
-<span id="L726">            version_path,</span>
-<span id="L727">            self.commit,</span>
-<span id="L728">        )</span>
-<span id="L729">        release_manifest.write_manifest(manifest_path, manifest)</span>
-<span id="L730">        self.assertEqual(</span>
-<span id="L731">            release_manifest.verify_manifest(</span>
-<span id="L732">                manifest_path,</span>
-<span id="L733">                candidate,</span>
-<span id="L734">                version_path,</span>
-<span id="L735">                self.commit,</span>
-<span id="L736">            ),</span>
-<span id="L737">            [],</span>
-<span id="L738">        )</span>
-<span id="L739">        result = portable_provenance.verify_statement(</span>
-<span id="L740">            statement_path,</span>
-<span id="L741">            candidate,</span>
-<span id="L742">            manifest_path,</span>
-<span id="L743">            self.policy,</span>
-<span id="L744">            self.dependency_path,</span>
-<span id="L745">            self.commit,</span>
-<span id="L746">            self.tree,</span>
-<span id="L747">            &quot;clean&quot;,</span>
-<span id="L748">            &quot;Ubuntu clang version 14.0.0&quot;,</span>
-<span id="L749">            &quot;cmake version 3.22.1&quot;,</span>
-<span id="L750">        )</span>
-<span id="L751">        self.assertFalse(result[&quot;authentication&quot;])</span>
-<span id="L752">        self.assertFalse(result[&quot;signed_target&quot;])</span>
-<span id="L753">        errors = release_manifest.verify_manifest(</span>
-<span id="L754">            manifest_path,</span>
-<span id="L755">            candidate,</span>
-<span id="L756">            version_path,</span>
-<span id="L757">            &quot;f&quot; * 40,</span>
-<span id="L758">        )</span>
-<span id="L759">        self.assertTrue(any(&quot;expected source&quot; in error for error in errors))</span>
-<span id="L760"></span>
-<span id="L761">    def test_portable_assurance_public_fixture_and_identity_mutations(</span>
-<span id="L762">        self,</span>
-<span id="L763">    ) -&gt; None:</span>
-<span id="L764">        result = portable_provenance.verify_fixture(ROOT, self.policy)</span>
-<span id="L765">        self.assertTrue(result[&quot;cryptographic_fixture_verified&quot;])</span>
-<span id="L766">        self.assertFalse(result[&quot;target_authenticated&quot;])</span>
-<span id="L767"></span>
-<span id="L768">        fixture_root = self.root / &quot;fixture-root&quot;</span>
-<span id="L769">        fixture_path = fixture_root / &quot;tests/provenance_fixtures/public&quot;</span>
-<span id="L770">        shutil.copytree(</span>
-<span id="L771">            ROOT / &quot;tests/provenance_fixtures/public&quot;,</span>
-<span id="L772">            fixture_path,</span>
-<span id="L773">        )</span>
-<span id="L774">        artifact = fixture_path / &quot;example-artifact.txt&quot;</span>
-<span id="L775">        artifact.write_bytes(artifact.read_bytes() + b&quot;mutation&quot;)</span>
-<span id="L776">        with self.assertRaisesRegex(ValueError, &quot;artifact subject mismatch&quot;):</span>
-<span id="L777">            portable_provenance.verify_fixture(fixture_root, self.policy)</span>
-<span id="L778"></span>
-<span id="L779">        shutil.copy2(</span>
-<span id="L780">            ROOT / &quot;tests/provenance_fixtures/public/example-artifact.txt&quot;,</span>
-<span id="L781">            artifact,</span>
-<span id="L782">        )</span>
-<span id="L783">        envelope_path = fixture_path / &quot;dsse-envelope.json&quot;</span>
-<span id="L784">        envelope = json.loads(envelope_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L785">        envelope[&quot;signatures&quot;][0][&quot;sig&quot;] = (</span>
-<span id="L786">            &quot;A&quot; + envelope[&quot;signatures&quot;][0][&quot;sig&quot;][1:]</span>
-<span id="L787">        )</span>
-<span id="L788">        envelope_path.write_text(json.dumps(envelope), encoding=&quot;utf-8&quot;)</span>
-<span id="L789">        with self.assertRaisesRegex(ValueError, &quot;cryptographic signature&quot;):</span>
-<span id="L790">            portable_provenance.verify_fixture(fixture_root, self.policy)</span>
-<span id="L791"></span>
-<span id="L792">        for field in (</span>
-<span id="L793">            &quot;repository&quot;,</span>
-<span id="L794">            &quot;source_digest&quot;,</span>
-<span id="L795">            &quot;ref&quot;,</span>
-<span id="L796">            &quot;workflow&quot;,</span>
-<span id="L797">            &quot;issuer&quot;,</span>
-<span id="L798">            &quot;predicate_type&quot;,</span>
-<span id="L799">        ):</span>
-<span id="L800">            with self.subTest(field=field):</span>
-<span id="L801">                mutated = copy.deepcopy(self.policy)</span>
-<span id="L802">                mutated[&quot;signed_fixture&quot;][field] = &quot;mutated&quot;</span>
-<span id="L803">                with self.assertRaises(ValueError):</span>
-<span id="L804">                    portable_provenance.verify_fixture(ROOT, mutated)</span>
-<span id="L805"></span>
-<span id="L806">        shutil.copy2(</span>
-<span id="L807">            ROOT / &quot;tests/provenance_fixtures/public/dsse-envelope.json&quot;,</span>
-<span id="L808">            envelope_path,</span>
-<span id="L809">        )</span>
-<span id="L810">        trust_path = fixture_path / &quot;public-trust.json&quot;</span>
-<span id="L811">        trust = json.loads(trust_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L812">        trust[&quot;modulus_hex&quot;] = &quot;01&quot; + trust[&quot;modulus_hex&quot;][2:]</span>
-<span id="L813">        trust_path.write_text(json.dumps(trust), encoding=&quot;utf-8&quot;)</span>
-<span id="L814">        with self.assertRaisesRegex(ValueError, &quot;cryptographic signature&quot;):</span>
-<span id="L815">            portable_provenance.verify_fixture(fixture_root, self.policy)</span>
-<span id="L816"></span>
-<span id="L817">    def test_portable_assurance_static_manifest_reconciliation(self) -&gt; None:</span>
-<span id="L818">        database = self.root / &quot;compile_commands.json&quot;</span>
-<span id="L819">        source = ROOT / &quot;rt/src/runtime_profile.cpp&quot;</span>
-<span id="L820">        entry = {</span>
-<span id="L821">            &quot;directory&quot;: str(self.root),</span>
-<span id="L822">            &quot;file&quot;: str(source),</span>
-<span id="L823">            &quot;command&quot;: (</span>
-<span id="L824">                &quot;clang++ -o CMakeFiles/rtfw_runtime.dir/&quot;</span>
-<span id="L825">                &quot;rt/src/runtime_profile.cpp.o -c &quot; + str(source)</span>
-<span id="L826">            ),</span>
-<span id="L827">        }</span>
-<span id="L828">        database.write_text(json.dumps([entry]), encoding=&quot;utf-8&quot;)</span>
-<span id="L829">        manifest = self.root / &quot;sources.txt&quot;</span>
-<span id="L830">        manifest.write_text(</span>
-<span id="L831">            &quot;rtfw_runtime|rt/src/runtime_profile.cpp\n&quot;,</span>
-<span id="L832">            encoding=&quot;utf-8&quot;,</span>
-<span id="L833">        )</span>
-<span id="L834">        self.assertEqual(</span>
-<span id="L835">            portable_static.compile_entries(ROOT, database),</span>
-<span id="L836">            portable_static.load_manifest(manifest),</span>
-<span id="L837">        )</span>
-<span id="L838">        database.write_text(json.dumps([entry, entry]), encoding=&quot;utf-8&quot;)</span>
-<span id="L839">        with self.assertRaisesRegex(ValueError, &quot;duplicate&quot;):</span>
-<span id="L840">            portable_static.compile_entries(ROOT, database)</span>
-<span id="L841"></span>
-<span id="L842">        unsafe_manifest = self.root / &quot;unsafe-sources.txt&quot;</span>
-<span id="L843">        unsafe_manifest.write_text(&quot;target|../escape.cpp\n&quot;, encoding=&quot;utf-8&quot;)</span>
-<span id="L844">        with self.assertRaisesRegex(ValueError, &quot;unsafe&quot;):</span>
-<span id="L845">            portable_static.load_manifest(unsafe_manifest)</span>
-<span id="L846"></span>
-<span id="L847">        external_source = self.root / &quot;external.cpp&quot;</span>
-<span id="L848">        external_source.write_text(&quot;int external;\n&quot;, encoding=&quot;utf-8&quot;)</span>
-<span id="L849">        external_entry = copy.deepcopy(entry)</span>
-<span id="L850">        external_entry[&quot;file&quot;] = str(external_source)</span>
-<span id="L851">        database.write_text(json.dumps([external_entry]), encoding=&quot;utf-8&quot;)</span>
-<span id="L852">        with self.assertRaisesRegex(ValueError, &quot;outside the repository&quot;):</span>
-<span id="L853">            portable_static.compile_entries(ROOT, database)</span>
-<span id="L854"></span>
-<span id="L855">    def test_portable_assurance_dependency_inventory(self) -&gt; None:</span>
-<span id="L856">        result = portable_sbom.verify_dependencies(ROOT, self.dependency_path)</span>
-<span id="L857">        self.assertTrue(result[&quot;identity_only&quot;])</span>
-<span id="L858">        self.assertFalse(result[&quot;vulnerability_clearance&quot;])</span>
-<span id="L859"></span>
-<span id="L860">        policy = json.loads(self.dependency_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L861">        policy[&quot;dependencies&quot;][&quot;rapidcheck&quot;][&quot;commit&quot;] = &quot;master&quot;</span>
-<span id="L862">        mutated = self.root / &quot;dependencies.json&quot;</span>
-<span id="L863">        mutated.write_text(json.dumps(policy), encoding=&quot;utf-8&quot;)</span>
-<span id="L864">        with self.assertRaisesRegex(ValueError, &quot;RapidCheck immutable pin&quot;):</span>
-<span id="L865">            portable_sbom.verify_dependencies(ROOT, mutated)</span>
-<span id="L866"></span>
-<span id="L867">    def test_portable_fuzz_seed_manifests_fail_closed(self) -&gt; None:</span>
-<span id="L868">        valid = self.root / &quot;valid-seeds.json&quot;</span>
-<span id="L869">        valid.write_text(</span>
-<span id="L870">            &#x27;{&quot;empty.bin&quot;:{&quot;base64&quot;:&quot;&quot;},&quot;text.txt&quot;:{&quot;utf8&quot;:&quot;seed&quot;}}\n&#x27;,</span>
-<span id="L871">            encoding=&quot;utf-8&quot;,</span>
-<span id="L872">        )</span>
-<span id="L873">        self.assertEqual(</span>
-<span id="L874">            portable_fuzz.load_seeds(valid),</span>
-<span id="L875">            [(&quot;empty.bin&quot;, b&quot;&quot;), (&quot;text.txt&quot;, b&quot;seed&quot;)],</span>
-<span id="L876">        )</span>
-<span id="L877">        duplicate = self.root / &quot;duplicate-seeds.json&quot;</span>
-<span id="L878">        duplicate.write_text(</span>
-<span id="L879">            &#x27;{&quot;seed&quot;:{&quot;utf8&quot;:&quot;a&quot;},&quot;seed&quot;:{&quot;utf8&quot;:&quot;b&quot;}}\n&#x27;,</span>
-<span id="L880">            encoding=&quot;utf-8&quot;,</span>
-<span id="L881">        )</span>
-<span id="L882">        with self.assertRaisesRegex(ValueError, &quot;duplicate JSON key&quot;):</span>
-<span id="L883">            portable_fuzz.load_seeds(duplicate)</span>
-<span id="L884">        unsafe = self.root / &quot;unsafe-seeds.json&quot;</span>
-<span id="L885">        unsafe.write_text(</span>
-<span id="L886">            &#x27;{&quot;../escape&quot;:{&quot;utf8&quot;:&quot;a&quot;}}\n&#x27;,</span>
-<span id="L887">            encoding=&quot;utf-8&quot;,</span>
-<span id="L888">        )</span>
-<span id="L889">        with self.assertRaisesRegex(ValueError, &quot;unsafe seed&quot;):</span>
-<span id="L890">            portable_fuzz.load_seeds(unsafe)</span>
-<span id="L891"></span>
-<span id="L892"></span>
-<span id="L893">class QualificationToolTests(unittest.TestCase):</span>
-<span id="L894">    SCOPES = (&quot;nvidia&quot;, &quot;xdma&quot;, &quot;combined&quot;, &quot;rt1&quot;, &quot;rt2&quot;)</span>
-<span id="L895"></span>
-<span id="L896">    def fixture_paths(self, scope: str) -&gt; tuple[pathlib.Path, ...]:</span>
-<span id="L897">        prefix = &quot;&quot; if scope == &quot;nvidia&quot; else f&quot;{scope}-&quot;</span>
-<span id="L898">        return (</span>
-<span id="L899">            ROOT / &quot;tests/qualification_fixtures&quot; / f&quot;valid-{prefix}campaign-plan.json&quot;,</span>
-<span id="L900">            ROOT / &quot;tests/qualification_fixtures&quot; / f&quot;valid-{prefix}qualification-record.json&quot;,</span>
-<span id="L901">            ROOT / &quot;tests/qualification_fixtures&quot; / f&quot;valid-{prefix}promotion-review.json&quot;,</span>
-<span id="L902">            ROOT / &quot;tests/qualification_fixtures/artifacts&quot;,</span>
-<span id="L903">        )</span>
-<span id="L904"></span>
-<span id="L905">    @staticmethod</span>
-<span id="L906">    def errors_from(callback) -&gt; list[str]:</span>
-<span id="L907">        errors = qualification.ErrorCollector()</span>
-<span id="L908">        callback(errors)</span>
-<span id="L909">        return errors.errors</span>
+<span id="L513">    def setUp(self) -&gt; None:</span>
+<span id="L514">        self.temporary = tempfile.TemporaryDirectory()</span>
+<span id="L515"></span>
+<span id="L516">    def tearDown(self) -&gt; None:</span>
+<span id="L517">        self.temporary.cleanup()</span>
+<span id="L518"></span>
+<span id="L519">    def test_repository_contract_and_negative_mutations(self) -&gt; None:</span>
+<span id="L520">        fixture = self.fixture()</span>
+<span id="L521">        self.assertEqual(release_contract.validate_repository(fixture), [])</span>
+<span id="L522"></span>
+<span id="L523">        (fixture / &quot;VERSION.txt&quot;).write_text(&quot;1.0\n&quot;, encoding=&quot;utf-8&quot;)</span>
+<span id="L524">        errors = release_contract.validate_repository(fixture)</span>
+<span id="L525">        self.assertTrue(any(&quot;MAJOR.MINOR.PATCH&quot; in error for error in errors))</span>
+<span id="L526"></span>
+<span id="L527">        shutil.copy2(ROOT / &quot;VERSION.txt&quot;, fixture / &quot;VERSION.txt&quot;)</span>
+<span id="L528">        matrix_path = fixture / &quot;docs/portable_support_matrix.json&quot;</span>
+<span id="L529">        matrix = json.loads(matrix_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L530">        matrix[&quot;supported_tuples&quot;][0][&quot;rt_tier&quot;] = &quot;RT2&quot;</span>
+<span id="L531">        matrix_path.write_text(json.dumps(matrix), encoding=&quot;utf-8&quot;)</span>
+<span id="L532">        errors = release_contract.validate_repository(fixture)</span>
+<span id="L533">        self.assertTrue(any(&quot;may claim only RT0&quot; in error for error in errors))</span>
+<span id="L534"></span>
+<span id="L535">        shutil.copy2(</span>
+<span id="L536">            ROOT / &quot;docs/portable_support_matrix.json&quot;,</span>
+<span id="L537">            matrix_path,</span>
+<span id="L538">        )</span>
+<span id="L539">        header = fixture / &quot;rt/include/rt/c_api.h&quot;</span>
+<span id="L540">        header.write_text(</span>
+<span id="L541">            header.read_text(encoding=&quot;utf-8&quot;) + &quot;\n/* mutation */\n&quot;,</span>
+<span id="L542">            encoding=&quot;utf-8&quot;,</span>
+<span id="L543">        )</span>
+<span id="L544">        errors = release_contract.validate_repository(fixture)</span>
+<span id="L545">        self.assertTrue(any(&quot;digest mismatch&quot; in error for error in errors))</span>
+<span id="L546"></span>
+<span id="L547">    def test_malformed_nested_contract_values_fail_closed(self) -&gt; None:</span>
+<span id="L548">        fixture = self.fixture()</span>
+<span id="L549"></span>
+<span id="L550">        portable_path = fixture / &quot;docs/portable_support_matrix.json&quot;</span>
+<span id="L551">        portable = json.loads(portable_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L552">        portable[&quot;supported_tuples&quot;][0][&quot;validated_surfaces&quot;] = [{}]</span>
+<span id="L553">        portable_path.write_text(json.dumps(portable), encoding=&quot;utf-8&quot;)</span>
+<span id="L554"></span>
+<span id="L555">        cuda_path = fixture / &quot;docs/cuda_support_matrix.json&quot;</span>
+<span id="L556">        cuda = json.loads(cuda_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L557">        cuda[&quot;required_tuple_fields&quot;] = [{}]</span>
+<span id="L558">        cuda_path.write_text(json.dumps(cuda), encoding=&quot;utf-8&quot;)</span>
+<span id="L559"></span>
+<span id="L560">        contract_path = fixture / &quot;release/rtfw-release-contract.json&quot;</span>
+<span id="L561">        contract = json.loads(contract_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L562">        contract[&quot;cmake_package&quot;][&quot;always_components&quot;] = [{}]</span>
+<span id="L563">        contract_path.write_text(json.dumps(contract), encoding=&quot;utf-8&quot;)</span>
+<span id="L564"></span>
+<span id="L565">        errors = release_contract.validate_repository(fixture)</span>
+<span id="L566">        self.assertTrue(any(&quot;lacks package surfaces&quot; in error for error in errors))</span>
+<span id="L567">        self.assertTrue(</span>
+<span id="L568">            any(&quot;required_tuple_fields is incomplete&quot; in error for error in errors)</span>
+<span id="L569">        )</span>
+<span id="L570">        self.assertTrue(</span>
+<span id="L571">            any(&quot;CMake component contract mismatch&quot; in error for error in errors)</span>
+<span id="L572">        )</span>
+<span id="L573"></span>
+<span id="L574">    def test_movable_or_uncontracted_workflow_is_rejected(self) -&gt; None:</span>
+<span id="L575">        fixture = self.fixture()</span>
+<span id="L576">        workflow_path = fixture / &quot;.github/workflows/ci.yml&quot;</span>
+<span id="L577">        workflow = workflow_path.read_text(encoding=&quot;utf-8&quot;)</span>
+<span id="L578">        workflow_path.write_text(</span>
+<span id="L579">            workflow.replace(</span>
+<span id="L580">                (</span>
+<span id="L581">                    &quot;actions/checkout@&quot;</span>
+<span id="L582">                    &quot;11d5960a326750d5838078e36cf38b85af677262&quot;</span>
+<span id="L583">                ),</span>
+<span id="L584">                &quot;actions/checkout@v4&quot;,</span>
+<span id="L585">                1,</span>
+<span id="L586">            ),</span>
+<span id="L587">            encoding=&quot;utf-8&quot;,</span>
+<span id="L588">        )</span>
+<span id="L589">        errors = release_contract.validate_repository(fixture)</span>
+<span id="L590">        self.assertTrue(</span>
+<span id="L591">            any(&quot;unreviewed action reference&quot; in error for error in errors)</span>
+<span id="L592">        )</span>
+<span id="L593"></span>
+<span id="L594">        shutil.copy2(ROOT / &quot;.github/workflows/ci.yml&quot;, workflow_path)</span>
+<span id="L595">        rogue = fixture / &quot;.github/workflows/uncontracted.yaml&quot;</span>
+<span id="L596">        rogue.write_text(</span>
+<span id="L597">            &quot;name: uncontracted\non: workflow_dispatch\njobs: {}\n&quot;,</span>
+<span id="L598">            encoding=&quot;utf-8&quot;,</span>
+<span id="L599">        )</span>
+<span id="L600">        errors = release_contract.validate_repository(fixture)</span>
+<span id="L601">        self.assertTrue(</span>
+<span id="L602">            any(&quot;workflow set differs&quot; in error for error in errors)</span>
+<span id="L603">        )</span>
+<span id="L604"></span>
+<span id="L605"></span>
+<span id="L606">class PortableAssuranceTests(unittest.TestCase):</span>
+<span id="L607">    commit = &quot;0123456789abcdef0123456789abcdef01234567&quot;</span>
+<span id="L608">    tree = &quot;89abcdef0123456789abcdef0123456789abcdef&quot;</span>
+<span id="L609"></span>
+<span id="L610">    def setUp(self) -&gt; None:</span>
+<span id="L611">        self.temporary = tempfile.TemporaryDirectory()</span>
+<span id="L612">        self.root = pathlib.Path(self.temporary.name)</span>
+<span id="L613">        self.policy_path = ROOT / &quot;release/portable-assurance-policy.json&quot;</span>
+<span id="L614">        self.dependency_path = ROOT / &quot;tools/sbom_expected.json&quot;</span>
+<span id="L615">        self.policy = portable_sbom.load_assurance_policy(self.policy_path)</span>
+<span id="L616">        self.dependencies = portable_sbom.load_dependency_policy(</span>
+<span id="L617">            self.dependency_path</span>
+<span id="L618">        )</span>
+<span id="L619"></span>
+<span id="L620">    def tearDown(self) -&gt; None:</span>
+<span id="L621">        self.temporary.cleanup()</span>
+<span id="L622"></span>
+<span id="L623">    def candidate(self, name: str) -&gt; pathlib.Path:</span>
+<span id="L624">        candidate = self.root / name</span>
+<span id="L625">        candidate.mkdir()</span>
+<span id="L626">        archive = candidate / &quot;rtfw-1.2.1-test.tar.gz&quot;</span>
+<span id="L627">        archive.write_bytes(b&quot;candidate archive&quot;)</span>
+<span id="L628">        sidecar = candidate / (archive.name + &quot;.sha256&quot;)</span>
+<span id="L629">        sidecar.write_text(</span>
+<span id="L630">            f&quot;{portable_sbom.sha256(archive)}  {archive.name}\n&quot;,</span>
+<span id="L631">            encoding=&quot;utf-8&quot;,</span>
+<span id="L632">        )</span>
+<span id="L633">        return candidate</span>
+<span id="L634"></span>
+<span id="L635">    def create_sbom(self, candidate: pathlib.Path) -&gt; pathlib.Path:</span>
+<span id="L636">        path = candidate / &quot;rtfw.spdx.json&quot;</span>
+<span id="L637">        value = portable_sbom.create_sbom(</span>
+<span id="L638">            candidate,</span>
+<span id="L639">            self.policy,</span>
+<span id="L640">            self.dependencies,</span>
+<span id="L641">            self.commit,</span>
+<span id="L642">        )</span>
+<span id="L643">        portable_sbom.validate_spdx_shape(value)</span>
+<span id="L644">        portable_sbom.write_new(path, value)</span>
+<span id="L645">        return path</span>
+<span id="L646"></span>
+<span id="L647">    def test_portable_assurance_sbom_is_deterministic_and_fail_closed(</span>
+<span id="L648">        self,</span>
+<span id="L649">    ) -&gt; None:</span>
+<span id="L650">        first = self.candidate(&quot;first&quot;)</span>
+<span id="L651">        second = self.candidate(&quot;second&quot;)</span>
+<span id="L652">        first_sbom = self.create_sbom(first)</span>
+<span id="L653">        second_sbom = self.create_sbom(second)</span>
+<span id="L654">        self.assertEqual(first_sbom.read_bytes(), second_sbom.read_bytes())</span>
+<span id="L655">        result = portable_sbom.verify_sbom(</span>
+<span id="L656">            ROOT,</span>
+<span id="L657">            first_sbom,</span>
+<span id="L658">            first,</span>
+<span id="L659">            self.policy,</span>
+<span id="L660">            self.dependencies,</span>
+<span id="L661">            self.commit,</span>
+<span id="L662">        )</span>
+<span id="L663">        self.assertEqual(result[&quot;spdx_version&quot;], &quot;SPDX-2.3&quot;)</span>
+<span id="L664">        self.assertFalse(result[&quot;test_dependencies_shipped&quot;])</span>
+<span id="L665"></span>
+<span id="L666">        data = json.loads(first_sbom.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L667">        data[&quot;files&quot;][0][&quot;fileName&quot;] = &quot;../escape&quot;</span>
+<span id="L668">        first_sbom.write_text(</span>
+<span id="L669">            json.dumps(data, sort_keys=True, separators=(&quot;,&quot;, &quot;:&quot;)) + &quot;\n&quot;,</span>
+<span id="L670">            encoding=&quot;utf-8&quot;,</span>
+<span id="L671">        )</span>
+<span id="L672">        with self.assertRaisesRegex(ValueError, &quot;unsafe file path&quot;):</span>
+<span id="L673">            portable_sbom.verify_sbom(</span>
+<span id="L674">                ROOT,</span>
+<span id="L675">                first_sbom,</span>
+<span id="L676">                first,</span>
+<span id="L677">                self.policy,</span>
+<span id="L678">                self.dependencies,</span>
+<span id="L679">                self.commit,</span>
+<span id="L680">            )</span>
+<span id="L681"></span>
+<span id="L682">        clean = self.candidate(&quot;source-mismatch&quot;)</span>
+<span id="L683">        clean_sbom = self.create_sbom(clean)</span>
+<span id="L684">        with self.assertRaisesRegex(ValueError, &quot;exact package/source&quot;):</span>
+<span id="L685">            portable_sbom.verify_sbom(</span>
+<span id="L686">                ROOT,</span>
+<span id="L687">                clean_sbom,</span>
+<span id="L688">                clean,</span>
+<span id="L689">                self.policy,</span>
+<span id="L690">                self.dependencies,</span>
+<span id="L691">                &quot;f&quot; * 40,</span>
+<span id="L692">            )</span>
+<span id="L693"></span>
+<span id="L694">        extra = self.candidate(&quot;extra&quot;)</span>
+<span id="L695">        (extra / &quot;unlisted.bin&quot;).write_bytes(b&quot;unlisted&quot;)</span>
+<span id="L696">        with self.assertRaisesRegex(ValueError, &quot;unlisted files&quot;):</span>
+<span id="L697">            portable_sbom.create_sbom(</span>
+<span id="L698">                extra,</span>
+<span id="L699">                self.policy,</span>
+<span id="L700">                self.dependencies,</span>
+<span id="L701">                self.commit,</span>
+<span id="L702">            )</span>
+<span id="L703"></span>
+<span id="L704">        duplicate_json = self.root / &quot;duplicate.json&quot;</span>
+<span id="L705">        duplicate_json.write_text(&#x27;{&quot;a&quot;:1,&quot;a&quot;:2}\n&#x27;, encoding=&quot;utf-8&quot;)</span>
+<span id="L706">        with self.assertRaisesRegex(ValueError, &quot;duplicate JSON key&quot;):</span>
+<span id="L707">            portable_sbom.strict_json(duplicate_json)</span>
+<span id="L708"></span>
+<span id="L709">    def test_portable_assurance_unsigned_statement_and_manifest_binding(</span>
+<span id="L710">        self,</span>
+<span id="L711">    ) -&gt; None:</span>
+<span id="L712">        candidate = self.candidate(&quot;candidate&quot;)</span>
+<span id="L713">        self.create_sbom(candidate)</span>
+<span id="L714">        statement_path = candidate / &quot;rtfw.provenance.json&quot;</span>
+<span id="L715">        statement = portable_provenance.create_statement(</span>
+<span id="L716">            candidate,</span>
+<span id="L717">            self.policy,</span>
+<span id="L718">            self.dependency_path,</span>
+<span id="L719">            self.commit,</span>
+<span id="L720">            self.tree,</span>
+<span id="L721">            &quot;clean&quot;,</span>
+<span id="L722">            &quot;Ubuntu clang version 14.0.0&quot;,</span>
+<span id="L723">            &quot;cmake version 3.22.1&quot;,</span>
+<span id="L724">        )</span>
+<span id="L725">        portable_provenance.write_new(statement_path, statement)</span>
+<span id="L726">        manifest_path = candidate / &quot;rtfw-release-manifest.json&quot;</span>
+<span id="L727">        version_path = self.root / &quot;VERSION.txt&quot;</span>
+<span id="L728">        version_path.write_text(&quot;1.2.1\n&quot;, encoding=&quot;utf-8&quot;)</span>
+<span id="L729">        manifest = release_manifest.create_manifest(</span>
+<span id="L730">            candidate,</span>
+<span id="L731">            manifest_path,</span>
+<span id="L732">            version_path,</span>
+<span id="L733">            self.commit,</span>
+<span id="L734">        )</span>
+<span id="L735">        release_manifest.write_manifest(manifest_path, manifest)</span>
+<span id="L736">        self.assertEqual(</span>
+<span id="L737">            release_manifest.verify_manifest(</span>
+<span id="L738">                manifest_path,</span>
+<span id="L739">                candidate,</span>
+<span id="L740">                version_path,</span>
+<span id="L741">                self.commit,</span>
+<span id="L742">            ),</span>
+<span id="L743">            [],</span>
+<span id="L744">        )</span>
+<span id="L745">        result = portable_provenance.verify_statement(</span>
+<span id="L746">            statement_path,</span>
+<span id="L747">            candidate,</span>
+<span id="L748">            manifest_path,</span>
+<span id="L749">            self.policy,</span>
+<span id="L750">            self.dependency_path,</span>
+<span id="L751">            self.commit,</span>
+<span id="L752">            self.tree,</span>
+<span id="L753">            &quot;clean&quot;,</span>
+<span id="L754">            &quot;Ubuntu clang version 14.0.0&quot;,</span>
+<span id="L755">            &quot;cmake version 3.22.1&quot;,</span>
+<span id="L756">        )</span>
+<span id="L757">        self.assertFalse(result[&quot;authentication&quot;])</span>
+<span id="L758">        self.assertFalse(result[&quot;signed_target&quot;])</span>
+<span id="L759">        errors = release_manifest.verify_manifest(</span>
+<span id="L760">            manifest_path,</span>
+<span id="L761">            candidate,</span>
+<span id="L762">            version_path,</span>
+<span id="L763">            &quot;f&quot; * 40,</span>
+<span id="L764">        )</span>
+<span id="L765">        self.assertTrue(any(&quot;expected source&quot; in error for error in errors))</span>
+<span id="L766"></span>
+<span id="L767">    def test_portable_assurance_public_fixture_and_identity_mutations(</span>
+<span id="L768">        self,</span>
+<span id="L769">    ) -&gt; None:</span>
+<span id="L770">        result = portable_provenance.verify_fixture(ROOT, self.policy)</span>
+<span id="L771">        self.assertTrue(result[&quot;cryptographic_fixture_verified&quot;])</span>
+<span id="L772">        self.assertFalse(result[&quot;target_authenticated&quot;])</span>
+<span id="L773"></span>
+<span id="L774">        fixture_root = self.root / &quot;fixture-root&quot;</span>
+<span id="L775">        fixture_path = fixture_root / &quot;tests/provenance_fixtures/public&quot;</span>
+<span id="L776">        shutil.copytree(</span>
+<span id="L777">            ROOT / &quot;tests/provenance_fixtures/public&quot;,</span>
+<span id="L778">            fixture_path,</span>
+<span id="L779">        )</span>
+<span id="L780">        artifact = fixture_path / &quot;example-artifact.txt&quot;</span>
+<span id="L781">        artifact.write_bytes(artifact.read_bytes() + b&quot;mutation&quot;)</span>
+<span id="L782">        with self.assertRaisesRegex(ValueError, &quot;artifact subject mismatch&quot;):</span>
+<span id="L783">            portable_provenance.verify_fixture(fixture_root, self.policy)</span>
+<span id="L784"></span>
+<span id="L785">        shutil.copy2(</span>
+<span id="L786">            ROOT / &quot;tests/provenance_fixtures/public/example-artifact.txt&quot;,</span>
+<span id="L787">            artifact,</span>
+<span id="L788">        )</span>
+<span id="L789">        envelope_path = fixture_path / &quot;dsse-envelope.json&quot;</span>
+<span id="L790">        envelope = json.loads(envelope_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L791">        envelope[&quot;signatures&quot;][0][&quot;sig&quot;] = (</span>
+<span id="L792">            &quot;A&quot; + envelope[&quot;signatures&quot;][0][&quot;sig&quot;][1:]</span>
+<span id="L793">        )</span>
+<span id="L794">        envelope_path.write_text(json.dumps(envelope), encoding=&quot;utf-8&quot;)</span>
+<span id="L795">        with self.assertRaisesRegex(ValueError, &quot;cryptographic signature&quot;):</span>
+<span id="L796">            portable_provenance.verify_fixture(fixture_root, self.policy)</span>
+<span id="L797"></span>
+<span id="L798">        for field in (</span>
+<span id="L799">            &quot;repository&quot;,</span>
+<span id="L800">            &quot;source_digest&quot;,</span>
+<span id="L801">            &quot;ref&quot;,</span>
+<span id="L802">            &quot;workflow&quot;,</span>
+<span id="L803">            &quot;issuer&quot;,</span>
+<span id="L804">            &quot;predicate_type&quot;,</span>
+<span id="L805">        ):</span>
+<span id="L806">            with self.subTest(field=field):</span>
+<span id="L807">                mutated = copy.deepcopy(self.policy)</span>
+<span id="L808">                mutated[&quot;signed_fixture&quot;][field] = &quot;mutated&quot;</span>
+<span id="L809">                with self.assertRaises(ValueError):</span>
+<span id="L810">                    portable_provenance.verify_fixture(ROOT, mutated)</span>
+<span id="L811"></span>
+<span id="L812">        shutil.copy2(</span>
+<span id="L813">            ROOT / &quot;tests/provenance_fixtures/public/dsse-envelope.json&quot;,</span>
+<span id="L814">            envelope_path,</span>
+<span id="L815">        )</span>
+<span id="L816">        trust_path = fixture_path / &quot;public-trust.json&quot;</span>
+<span id="L817">        trust = json.loads(trust_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L818">        trust[&quot;modulus_hex&quot;] = &quot;01&quot; + trust[&quot;modulus_hex&quot;][2:]</span>
+<span id="L819">        trust_path.write_text(json.dumps(trust), encoding=&quot;utf-8&quot;)</span>
+<span id="L820">        with self.assertRaisesRegex(ValueError, &quot;cryptographic signature&quot;):</span>
+<span id="L821">            portable_provenance.verify_fixture(fixture_root, self.policy)</span>
+<span id="L822"></span>
+<span id="L823">    def test_portable_assurance_static_manifest_reconciliation(self) -&gt; None:</span>
+<span id="L824">        database = self.root / &quot;compile_commands.json&quot;</span>
+<span id="L825">        source = ROOT / &quot;rt/src/runtime_profile.cpp&quot;</span>
+<span id="L826">        entry = {</span>
+<span id="L827">            &quot;directory&quot;: str(self.root),</span>
+<span id="L828">            &quot;file&quot;: str(source),</span>
+<span id="L829">            &quot;command&quot;: (</span>
+<span id="L830">                &quot;clang++ -o CMakeFiles/rtfw_runtime.dir/&quot;</span>
+<span id="L831">                &quot;rt/src/runtime_profile.cpp.o -c &quot; + str(source)</span>
+<span id="L832">            ),</span>
+<span id="L833">        }</span>
+<span id="L834">        database.write_text(json.dumps([entry]), encoding=&quot;utf-8&quot;)</span>
+<span id="L835">        manifest = self.root / &quot;sources.txt&quot;</span>
+<span id="L836">        manifest.write_text(</span>
+<span id="L837">            &quot;rtfw_runtime|rt/src/runtime_profile.cpp\n&quot;,</span>
+<span id="L838">            encoding=&quot;utf-8&quot;,</span>
+<span id="L839">        )</span>
+<span id="L840">        self.assertEqual(</span>
+<span id="L841">            portable_static.compile_entries(ROOT, database),</span>
+<span id="L842">            portable_static.load_manifest(manifest),</span>
+<span id="L843">        )</span>
+<span id="L844">        database.write_text(json.dumps([entry, entry]), encoding=&quot;utf-8&quot;)</span>
+<span id="L845">        with self.assertRaisesRegex(ValueError, &quot;duplicate&quot;):</span>
+<span id="L846">            portable_static.compile_entries(ROOT, database)</span>
+<span id="L847"></span>
+<span id="L848">        unsafe_manifest = self.root / &quot;unsafe-sources.txt&quot;</span>
+<span id="L849">        unsafe_manifest.write_text(&quot;target|../escape.cpp\n&quot;, encoding=&quot;utf-8&quot;)</span>
+<span id="L850">        with self.assertRaisesRegex(ValueError, &quot;unsafe&quot;):</span>
+<span id="L851">            portable_static.load_manifest(unsafe_manifest)</span>
+<span id="L852"></span>
+<span id="L853">        external_source = self.root / &quot;external.cpp&quot;</span>
+<span id="L854">        external_source.write_text(&quot;int external;\n&quot;, encoding=&quot;utf-8&quot;)</span>
+<span id="L855">        external_entry = copy.deepcopy(entry)</span>
+<span id="L856">        external_entry[&quot;file&quot;] = str(external_source)</span>
+<span id="L857">        database.write_text(json.dumps([external_entry]), encoding=&quot;utf-8&quot;)</span>
+<span id="L858">        with self.assertRaisesRegex(ValueError, &quot;outside the repository&quot;):</span>
+<span id="L859">            portable_static.compile_entries(ROOT, database)</span>
+<span id="L860"></span>
+<span id="L861">    def test_portable_assurance_dependency_inventory(self) -&gt; None:</span>
+<span id="L862">        result = portable_sbom.verify_dependencies(ROOT, self.dependency_path)</span>
+<span id="L863">        self.assertTrue(result[&quot;identity_only&quot;])</span>
+<span id="L864">        self.assertFalse(result[&quot;vulnerability_clearance&quot;])</span>
+<span id="L865"></span>
+<span id="L866">        policy = json.loads(self.dependency_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L867">        policy[&quot;dependencies&quot;][&quot;rapidcheck&quot;][&quot;commit&quot;] = &quot;master&quot;</span>
+<span id="L868">        mutated = self.root / &quot;dependencies.json&quot;</span>
+<span id="L869">        mutated.write_text(json.dumps(policy), encoding=&quot;utf-8&quot;)</span>
+<span id="L870">        with self.assertRaisesRegex(ValueError, &quot;RapidCheck immutable pin&quot;):</span>
+<span id="L871">            portable_sbom.verify_dependencies(ROOT, mutated)</span>
+<span id="L872"></span>
+<span id="L873">    def test_portable_fuzz_seed_manifests_fail_closed(self) -&gt; None:</span>
+<span id="L874">        valid = self.root / &quot;valid-seeds.json&quot;</span>
+<span id="L875">        valid.write_text(</span>
+<span id="L876">            &#x27;{&quot;empty.bin&quot;:{&quot;base64&quot;:&quot;&quot;},&quot;text.txt&quot;:{&quot;utf8&quot;:&quot;seed&quot;}}\n&#x27;,</span>
+<span id="L877">            encoding=&quot;utf-8&quot;,</span>
+<span id="L878">        )</span>
+<span id="L879">        self.assertEqual(</span>
+<span id="L880">            portable_fuzz.load_seeds(valid),</span>
+<span id="L881">            [(&quot;empty.bin&quot;, b&quot;&quot;), (&quot;text.txt&quot;, b&quot;seed&quot;)],</span>
+<span id="L882">        )</span>
+<span id="L883">        duplicate = self.root / &quot;duplicate-seeds.json&quot;</span>
+<span id="L884">        duplicate.write_text(</span>
+<span id="L885">            &#x27;{&quot;seed&quot;:{&quot;utf8&quot;:&quot;a&quot;},&quot;seed&quot;:{&quot;utf8&quot;:&quot;b&quot;}}\n&#x27;,</span>
+<span id="L886">            encoding=&quot;utf-8&quot;,</span>
+<span id="L887">        )</span>
+<span id="L888">        with self.assertRaisesRegex(ValueError, &quot;duplicate JSON key&quot;):</span>
+<span id="L889">            portable_fuzz.load_seeds(duplicate)</span>
+<span id="L890">        unsafe = self.root / &quot;unsafe-seeds.json&quot;</span>
+<span id="L891">        unsafe.write_text(</span>
+<span id="L892">            &#x27;{&quot;../escape&quot;:{&quot;utf8&quot;:&quot;a&quot;}}\n&#x27;,</span>
+<span id="L893">            encoding=&quot;utf-8&quot;,</span>
+<span id="L894">        )</span>
+<span id="L895">        with self.assertRaisesRegex(ValueError, &quot;unsafe seed&quot;):</span>
+<span id="L896">            portable_fuzz.load_seeds(unsafe)</span>
+<span id="L897"></span>
+<span id="L898"></span>
+<span id="L899">class QualificationToolTests(unittest.TestCase):</span>
+<span id="L900">    SCOPES = (&quot;nvidia&quot;, &quot;xdma&quot;, &quot;combined&quot;, &quot;rt1&quot;, &quot;rt2&quot;)</span>
+<span id="L901"></span>
+<span id="L902">    def fixture_paths(self, scope: str) -&gt; tuple[pathlib.Path, ...]:</span>
+<span id="L903">        prefix = &quot;&quot; if scope == &quot;nvidia&quot; else f&quot;{scope}-&quot;</span>
+<span id="L904">        return (</span>
+<span id="L905">            ROOT / &quot;tests/qualification_fixtures&quot; / f&quot;valid-{prefix}campaign-plan.json&quot;,</span>
+<span id="L906">            ROOT / &quot;tests/qualification_fixtures&quot; / f&quot;valid-{prefix}qualification-record.json&quot;,</span>
+<span id="L907">            ROOT / &quot;tests/qualification_fixtures&quot; / f&quot;valid-{prefix}promotion-review.json&quot;,</span>
+<span id="L908">            ROOT / &quot;tests/qualification_fixtures/artifacts&quot;,</span>
+<span id="L909">        )</span>
 <span id="L910"></span>
-<span id="L911">    def test_four_independent_closed_draft_2020_12_schemas(self) -&gt; None:</span>
-<span id="L912">        names = (</span>
-<span id="L913">            &quot;campaign-plan&quot;,</span>
-<span id="L914">            &quot;qualification-record&quot;,</span>
-<span id="L915">            &quot;promotion-review&quot;,</span>
-<span id="L916">            &quot;promotion-proposal&quot;,</span>
-<span id="L917">        )</span>
-<span id="L918">        expected_types = {</span>
-<span id="L919">            &quot;campaign-plan&quot;: &quot;campaign_plan&quot;,</span>
-<span id="L920">            &quot;qualification-record&quot;: &quot;qualification_record&quot;,</span>
-<span id="L921">            &quot;promotion-review&quot;: &quot;promotion_review&quot;,</span>
-<span id="L922">            &quot;promotion-proposal&quot;: &quot;promotion_proposal&quot;,</span>
-<span id="L923">        }</span>
-<span id="L924">        for name in names:</span>
-<span id="L925">            with self.subTest(schema=name):</span>
-<span id="L926">                path = ROOT / &quot;qualification/schemas&quot; / f&quot;{name}.schema.json&quot;</span>
-<span id="L927">                raw = path.read_bytes()</span>
-<span id="L928">                schema = json.loads(raw)</span>
-<span id="L929">                self.assertEqual(schema[&quot;$schema&quot;], &quot;https://json-schema.org/draft/2020-12/schema&quot;)</span>
-<span id="L930">                self.assertTrue(schema[&quot;$id&quot;].endswith(f&quot;/{name}.schema.json&quot;))</span>
-<span id="L931">                self.assertFalse(schema[&quot;additionalProperties&quot;])</span>
-<span id="L932">                self.assertEqual(schema[&quot;properties&quot;][&quot;schema_version&quot;], {&quot;const&quot;: 1})</span>
-<span id="L933">                self.assertEqual(</span>
-<span id="L934">                    schema[&quot;properties&quot;][&quot;document_type&quot;],</span>
-<span id="L935">                    {&quot;const&quot;: expected_types[name]},</span>
-<span id="L936">                )</span>
-<span id="L937">                self.assertTrue(raw.endswith(b&quot;\n&quot;))</span>
-<span id="L938">                self.assertFalse(raw.endswith(b&quot;\n\n&quot;))</span>
-<span id="L939"></span>
-<span id="L940">    def test_all_scope_fixtures_validate_and_proposals_are_deterministic(self) -&gt; None:</span>
-<span id="L941">        for scope in self.SCOPES:</span>
-<span id="L942">            with self.subTest(scope=scope), tempfile.TemporaryDirectory() as temporary:</span>
-<span id="L943">                plan, record, review, artifacts = self.fixture_paths(scope)</span>
-<span id="L944">                validated = qualification.validate_set(plan, record, review, artifacts)</span>
-<span id="L945">                proposal = qualification.build_proposal(validated)</span>
-<span id="L946">                first = pathlib.Path(temporary) / &quot;first.json&quot;</span>
-<span id="L947">                second = pathlib.Path(temporary) / &quot;second.json&quot;</span>
-<span id="L948">                data = qualification._canonical_bytes(proposal)</span>
-<span id="L949">                qualification.write_new_atomic(first, data, (plan, record, review, artifacts))</span>
-<span id="L950">                qualification.write_new_atomic(second, data, (plan, record, review, artifacts))</span>
-<span id="L951">                self.assertEqual(first.read_bytes(), second.read_bytes())</span>
-<span id="L952">                self.assertTrue(data.endswith(b&quot;\n&quot;))</span>
-<span id="L953">                self.assertFalse(data.endswith(b&quot;\n\n&quot;))</span>
-<span id="L954">                self.assertEqual(proposal[&quot;claim_scope&quot;], scope)</span>
-<span id="L955">                self.assertEqual(proposal[&quot;evidence_class&quot;], &quot;synthetic_fixture&quot;)</span>
-<span id="L956">                self.assertFalse(proposal[&quot;support_matrix_eligible&quot;])</span>
-<span id="L957">                self.assertEqual(proposal[&quot;proposal_label&quot;], &quot;proposal_only&quot;)</span>
-<span id="L958"></span>
-<span id="L959">    def test_plan_required_groups_scope_facts_and_bounds_fail_closed(self) -&gt; None:</span>
-<span id="L960">        plan_path, _, _, _ = self.fixture_paths(&quot;nvidia&quot;)</span>
-<span id="L961">        base = json.loads(plan_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L962">        for field in (</span>
-<span id="L963">            &quot;campaign_id&quot;, &quot;tuple_id&quot;, &quot;source&quot;, &quot;host&quot;, &quot;topology&quot;, &quot;policy&quot;,</span>
-<span id="L964">            &quot;workload&quot;, &quot;measurement&quot;, &quot;accelerator&quot;, &quot;trials&quot;, &quot;thresholds&quot;,</span>
-<span id="L965">        ):</span>
-<span id="L966">            with self.subTest(field=field):</span>
-<span id="L967">                mutated = copy.deepcopy(base)</span>
-<span id="L968">                del mutated[field]</span>
-<span id="L969">                messages = self.errors_from(lambda errors: qualification.validate_plan(mutated, errors))</span>
-<span id="L970">                self.assertTrue(any(f&quot;missing required property {field}&quot; in message for message in messages))</span>
-<span id="L971"></span>
-<span id="L972">        for scope, missing in ((&quot;nvidia&quot;, &quot;nvidia&quot;), (&quot;xdma&quot;, &quot;xdma&quot;)):</span>
-<span id="L973">            path, _, _, _ = self.fixture_paths(scope)</span>
-<span id="L974">            mutated = json.loads(path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L975">            del mutated[&quot;accelerator&quot;][missing]</span>
-<span id="L976">            messages = self.errors_from(lambda errors: qualification.validate_plan(mutated, errors))</span>
-<span id="L977">            self.assertTrue(any(&quot;accelerator identities&quot; in message for message in messages))</span>
-<span id="L978"></span>
-<span id="L979">        combined_path, _, _, _ = self.fixture_paths(&quot;combined&quot;)</span>
-<span id="L980">        combined = json.loads(combined_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L981">        combined[&quot;accelerator&quot;][&quot;host_staging&quot;][&quot;direct_peer_dma&quot;] = True</span>
-<span id="L982">        messages = self.errors_from(lambda errors: qualification.validate_plan(combined, errors))</span>
-<span id="L983">        self.assertTrue(any(&quot;direct_peer_dma&quot; in message for message in messages))</span>
+<span id="L911">    @staticmethod</span>
+<span id="L912">    def errors_from(callback) -&gt; list[str]:</span>
+<span id="L913">        errors = qualification.ErrorCollector()</span>
+<span id="L914">        callback(errors)</span>
+<span id="L915">        return errors.errors</span>
+<span id="L916"></span>
+<span id="L917">    def test_four_independent_closed_draft_2020_12_schemas(self) -&gt; None:</span>
+<span id="L918">        names = (</span>
+<span id="L919">            &quot;campaign-plan&quot;,</span>
+<span id="L920">            &quot;qualification-record&quot;,</span>
+<span id="L921">            &quot;promotion-review&quot;,</span>
+<span id="L922">            &quot;promotion-proposal&quot;,</span>
+<span id="L923">        )</span>
+<span id="L924">        expected_types = {</span>
+<span id="L925">            &quot;campaign-plan&quot;: &quot;campaign_plan&quot;,</span>
+<span id="L926">            &quot;qualification-record&quot;: &quot;qualification_record&quot;,</span>
+<span id="L927">            &quot;promotion-review&quot;: &quot;promotion_review&quot;,</span>
+<span id="L928">            &quot;promotion-proposal&quot;: &quot;promotion_proposal&quot;,</span>
+<span id="L929">        }</span>
+<span id="L930">        for name in names:</span>
+<span id="L931">            with self.subTest(schema=name):</span>
+<span id="L932">                path = ROOT / &quot;qualification/schemas&quot; / f&quot;{name}.schema.json&quot;</span>
+<span id="L933">                raw = path.read_bytes()</span>
+<span id="L934">                schema = json.loads(raw)</span>
+<span id="L935">                self.assertEqual(schema[&quot;$schema&quot;], &quot;https://json-schema.org/draft/2020-12/schema&quot;)</span>
+<span id="L936">                self.assertTrue(schema[&quot;$id&quot;].endswith(f&quot;/{name}.schema.json&quot;))</span>
+<span id="L937">                self.assertFalse(schema[&quot;additionalProperties&quot;])</span>
+<span id="L938">                self.assertEqual(schema[&quot;properties&quot;][&quot;schema_version&quot;], {&quot;const&quot;: 1})</span>
+<span id="L939">                self.assertEqual(</span>
+<span id="L940">                    schema[&quot;properties&quot;][&quot;document_type&quot;],</span>
+<span id="L941">                    {&quot;const&quot;: expected_types[name]},</span>
+<span id="L942">                )</span>
+<span id="L943">                self.assertTrue(raw.endswith(b&quot;\n&quot;))</span>
+<span id="L944">                self.assertFalse(raw.endswith(b&quot;\n\n&quot;))</span>
+<span id="L945"></span>
+<span id="L946">    def test_all_scope_fixtures_validate_and_proposals_are_deterministic(self) -&gt; None:</span>
+<span id="L947">        for scope in self.SCOPES:</span>
+<span id="L948">            with self.subTest(scope=scope), tempfile.TemporaryDirectory() as temporary:</span>
+<span id="L949">                plan, record, review, artifacts = self.fixture_paths(scope)</span>
+<span id="L950">                validated = qualification.validate_set(plan, record, review, artifacts)</span>
+<span id="L951">                proposal = qualification.build_proposal(validated)</span>
+<span id="L952">                first = pathlib.Path(temporary) / &quot;first.json&quot;</span>
+<span id="L953">                second = pathlib.Path(temporary) / &quot;second.json&quot;</span>
+<span id="L954">                data = qualification._canonical_bytes(proposal)</span>
+<span id="L955">                qualification.write_new_atomic(first, data, (plan, record, review, artifacts))</span>
+<span id="L956">                qualification.write_new_atomic(second, data, (plan, record, review, artifacts))</span>
+<span id="L957">                self.assertEqual(first.read_bytes(), second.read_bytes())</span>
+<span id="L958">                self.assertTrue(data.endswith(b&quot;\n&quot;))</span>
+<span id="L959">                self.assertFalse(data.endswith(b&quot;\n\n&quot;))</span>
+<span id="L960">                self.assertEqual(proposal[&quot;claim_scope&quot;], scope)</span>
+<span id="L961">                self.assertEqual(proposal[&quot;evidence_class&quot;], &quot;synthetic_fixture&quot;)</span>
+<span id="L962">                self.assertFalse(proposal[&quot;support_matrix_eligible&quot;])</span>
+<span id="L963">                self.assertEqual(proposal[&quot;proposal_label&quot;], &quot;proposal_only&quot;)</span>
+<span id="L964"></span>
+<span id="L965">    def test_plan_required_groups_scope_facts_and_bounds_fail_closed(self) -&gt; None:</span>
+<span id="L966">        plan_path, _, _, _ = self.fixture_paths(&quot;nvidia&quot;)</span>
+<span id="L967">        base = json.loads(plan_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L968">        for field in (</span>
+<span id="L969">            &quot;campaign_id&quot;, &quot;tuple_id&quot;, &quot;source&quot;, &quot;host&quot;, &quot;topology&quot;, &quot;policy&quot;,</span>
+<span id="L970">            &quot;workload&quot;, &quot;measurement&quot;, &quot;accelerator&quot;, &quot;trials&quot;, &quot;thresholds&quot;,</span>
+<span id="L971">        ):</span>
+<span id="L972">            with self.subTest(field=field):</span>
+<span id="L973">                mutated = copy.deepcopy(base)</span>
+<span id="L974">                del mutated[field]</span>
+<span id="L975">                messages = self.errors_from(lambda errors: qualification.validate_plan(mutated, errors))</span>
+<span id="L976">                self.assertTrue(any(f&quot;missing required property {field}&quot; in message for message in messages))</span>
+<span id="L977"></span>
+<span id="L978">        for scope, missing in ((&quot;nvidia&quot;, &quot;nvidia&quot;), (&quot;xdma&quot;, &quot;xdma&quot;)):</span>
+<span id="L979">            path, _, _, _ = self.fixture_paths(scope)</span>
+<span id="L980">            mutated = json.loads(path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L981">            del mutated[&quot;accelerator&quot;][missing]</span>
+<span id="L982">            messages = self.errors_from(lambda errors: qualification.validate_plan(mutated, errors))</span>
+<span id="L983">            self.assertTrue(any(&quot;accelerator identities&quot; in message for message in messages))</span>
 <span id="L984"></span>
-<span id="L985">        rt2_path, _, _, _ = self.fixture_paths(&quot;rt2&quot;)</span>
-<span id="L986">        rt2 = json.loads(rt2_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L987">        rt2[&quot;policy&quot;][&quot;rt2&quot;][&quot;preempt_rt&quot;] = False</span>
-<span id="L988">        messages = self.errors_from(lambda errors: qualification.validate_plan(rt2, errors))</span>
-<span id="L989">        self.assertTrue(any(&quot;PREEMPT_RT&quot; in message for message in messages))</span>
+<span id="L985">        combined_path, _, _, _ = self.fixture_paths(&quot;combined&quot;)</span>
+<span id="L986">        combined = json.loads(combined_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L987">        combined[&quot;accelerator&quot;][&quot;host_staging&quot;][&quot;direct_peer_dma&quot;] = True</span>
+<span id="L988">        messages = self.errors_from(lambda errors: qualification.validate_plan(combined, errors))</span>
+<span id="L989">        self.assertTrue(any(&quot;direct_peer_dma&quot; in message for message in messages))</span>
 <span id="L990"></span>
-<span id="L991">        for field, value in (</span>
-<span id="L992">            (&quot;warmup_samples&quot;, qualification.MAX_SAMPLE_COUNT + 1),</span>
-<span id="L993">            (&quot;duration_seconds&quot;, qualification.MAX_DURATION_SECONDS + 1),</span>
-<span id="L994">            (&quot;sample_count&quot;, 0),</span>
-<span id="L995">        ):</span>
-<span id="L996">            mutated = copy.deepcopy(base)</span>
-<span id="L997">            mutated[&quot;measurement&quot;][field] = value</span>
-<span id="L998">            messages = self.errors_from(lambda errors: qualification.validate_plan(mutated, errors))</span>
-<span id="L999">            self.assertTrue(any(field in message for message in messages))</span>
-<span id="L1000"></span>
-<span id="L1001">    def test_trial_threshold_identity_and_recomputed_result_rejection(self) -&gt; None:</span>
-<span id="L1002">        plan_path, record_path, _, _ = self.fixture_paths(&quot;nvidia&quot;)</span>
-<span id="L1003">        plan_doc = qualification.load_document(plan_path, &quot;campaign_plan&quot;)</span>
-<span id="L1004">        base = json.loads(record_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L1005">        mutations = []</span>
-<span id="L1006">        missing_trial = copy.deepcopy(base)</span>
-<span id="L1007">        missing_trial[&quot;trials&quot;].pop()</span>
-<span id="L1008">        mutations.append(missing_trial)</span>
-<span id="L1009">        duplicate_trial = copy.deepcopy(base)</span>
-<span id="L1010">        duplicate_trial[&quot;trials&quot;][1][&quot;id&quot;] = duplicate_trial[&quot;trials&quot;][0][&quot;id&quot;]</span>
-<span id="L1011">        mutations.append(duplicate_trial)</span>
-<span id="L1012">        failed_trial = copy.deepcopy(base)</span>
-<span id="L1013">        failed_trial[&quot;trials&quot;][0][&quot;status&quot;] = &quot;fail&quot;</span>
-<span id="L1014">        mutations.append(failed_trial)</span>
-<span id="L1015">        malformed_recovery = copy.deepcopy(base)</span>
-<span id="L1016">        malformed_recovery[&quot;trials&quot;][5][&quot;recovery&quot;][&quot;success&quot;] = False</span>
-<span id="L1017">        mutations.append(malformed_recovery)</span>
-<span id="L1018">        drift = copy.deepcopy(base)</span>
-<span id="L1019">        drift[&quot;thresholds&quot;][0][&quot;definition&quot;][&quot;bound&quot;] = 100</span>
-<span id="L1020">        mutations.append(drift)</span>
-<span id="L1021">        forged = copy.deepcopy(base)</span>
-<span id="L1022">        forged[&quot;thresholds&quot;][0][&quot;observed&quot;] = 11</span>
-<span id="L1023">        forged[&quot;thresholds&quot;][0][&quot;passed&quot;] = True</span>
-<span id="L1024">        mutations.append(forged)</span>
-<span id="L1025">        allowance = copy.deepcopy(base)</span>
-<span id="L1026">        allowance[&quot;thresholds&quot;][0][&quot;misses&quot;] = 1</span>
-<span id="L1027">        mutations.append(allowance)</span>
-<span id="L1028">        unstable = copy.deepcopy(base)</span>
-<span id="L1029">        unstable[&quot;resource_trends&quot;][0][&quot;stable&quot;] = False</span>
-<span id="L1030">        mutations.append(unstable)</span>
-<span id="L1031">        unhealthy = copy.deepcopy(base)</span>
-<span id="L1032">        unhealthy[&quot;device_health&quot;][&quot;healthy&quot;] = False</span>
-<span id="L1033">        mutations.append(unhealthy)</span>
-<span id="L1034">        lost = copy.deepcopy(base)</span>
-<span id="L1035">        lost[&quot;device_health&quot;][&quot;losses&quot;] = 1</span>
-<span id="L1036">        mutations.append(lost)</span>
-<span id="L1037">        for index, mutated in enumerate(mutations):</span>
-<span id="L1038">            with self.subTest(mutation=index):</span>
-<span id="L1039">                messages = self.errors_from(</span>
-<span id="L1040">                    lambda errors: qualification.validate_record(</span>
-<span id="L1041">                        mutated, plan_doc.value, plan_doc.sha256, errors</span>
-<span id="L1042">                    )</span>
-<span id="L1043">                )</span>
-<span id="L1044">                self.assertTrue(messages)</span>
-<span id="L1045"></span>
-<span id="L1046">    def test_trend_values_reject_growth_inconsistent_extrema_and_thermal_range(self) -&gt; None:</span>
-<span id="L1047">        plan_path, record_path, _, _ = self.fixture_paths(&quot;nvidia&quot;)</span>
-<span id="L1048">        plan = qualification.load_document(plan_path, &quot;campaign_plan&quot;)</span>
-<span id="L1049">        base = json.loads(record_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L1050"></span>
-<span id="L1051">        growth = copy.deepcopy(base)</span>
-<span id="L1052">        growth[&quot;resource_trends&quot;][0].update(</span>
-<span id="L1053">            {&quot;start&quot;: 1, &quot;end&quot;: 2, &quot;maximum&quot;: 2, &quot;stable&quot;: True}</span>
-<span id="L1054">        )</span>
-<span id="L1055">        inconsistent = copy.deepcopy(base)</span>
-<span id="L1056">        inconsistent[&quot;resource_trends&quot;][0].update(</span>
-<span id="L1057">            {&quot;start&quot;: 2, &quot;end&quot;: 1, &quot;maximum&quot;: 0, &quot;stable&quot;: True}</span>
-<span id="L1058">        )</span>
-<span id="L1059">        out_of_range = copy.deepcopy(base)</span>
-<span id="L1060">        out_of_range[&quot;thermal_trends&quot;][0].update(</span>
-<span id="L1061">            {&quot;start&quot;: 301, &quot;end&quot;: 301, &quot;maximum&quot;: 301, &quot;stable&quot;: True}</span>
-<span id="L1062">        )</span>
-<span id="L1063"></span>
-<span id="L1064">        for name, mutated, expected in (</span>
-<span id="L1065">            (&quot;growth&quot;, growth, &quot;must not grow&quot;),</span>
-<span id="L1066">            (&quot;maximum&quot;, inconsistent, &quot;must cover start and end&quot;),</span>
-<span id="L1067">            (&quot;thermal&quot;, out_of_range, &quot;thermal value out of range&quot;),</span>
-<span id="L1068">        ):</span>
-<span id="L1069">            with self.subTest(case=name):</span>
-<span id="L1070">                messages = self.errors_from(</span>
-<span id="L1071">                    lambda errors: qualification.validate_record(</span>
-<span id="L1072">                        mutated, plan.value, plan.sha256, errors</span>
-<span id="L1073">                    )</span>
-<span id="L1074">                )</span>
-<span id="L1075">                self.assertTrue(any(expected in message for message in messages))</span>
-<span id="L1076"></span>
-<span id="L1077">    def test_cross_document_digest_identity_and_review_failures(self) -&gt; None:</span>
-<span id="L1078">        plan_path, record_path, review_path, _ = self.fixture_paths(&quot;nvidia&quot;)</span>
-<span id="L1079">        plan = qualification.load_document(plan_path, &quot;campaign_plan&quot;)</span>
-<span id="L1080">        record = qualification.load_document(record_path, &quot;qualification_record&quot;)</span>
-<span id="L1081">        review = json.loads(review_path.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L1082">        for field, value in (</span>
-<span id="L1083">            (&quot;plan_sha256&quot;, &quot;0&quot; * 64),</span>
-<span id="L1084">            (&quot;record_sha256&quot;, &quot;0&quot; * 64),</span>
-<span id="L1085">            (&quot;evidence_manifest_sha256&quot;, &quot;0&quot; * 64),</span>
-<span id="L1086">            (&quot;scope&quot;, &quot;xdma&quot;),</span>
-<span id="L1087">            (&quot;tuple_id&quot;, &quot;substituted-tuple&quot;),</span>
-<span id="L1088">            (&quot;decision&quot;, &quot;reject&quot;),</span>
-<span id="L1089">            (&quot;pre_run_provenance_verified&quot;, False),</span>
-<span id="L1090">            (&quot;reviewer_authentication&quot;, &quot;signed&quot;),</span>
-<span id="L1091">        ):</span>
-<span id="L1092">            with self.subTest(field=field):</span>
-<span id="L1093">                mutated = copy.deepcopy(review)</span>
-<span id="L1094">                mutated[field] = value</span>
-<span id="L1095">                messages = self.errors_from(</span>
-<span id="L1096">                    lambda errors: qualification.validate_review(</span>
-<span id="L1097">                        mutated, plan.value, record.value, plan.sha256,</span>
-<span id="L1098">                        record.sha256, errors,</span>
-<span id="L1099">                    )</span>
-<span id="L1100">                )</span>
-<span id="L1101">                self.assertTrue(messages)</span>
-<span id="L1102">        mutated = copy.deepcopy(review)</span>
-<span id="L1103">        mutated[&quot;exceptions&quot;] = [</span>
-<span id="L1104">            {&quot;id&quot;: &quot;waiver&quot;, &quot;resolved&quot;: False, &quot;rationale&quot;: &quot;synthetic&quot;}</span>
-<span id="L1105">        ]</span>
-<span id="L1106">        messages = self.errors_from(</span>
-<span id="L1107">            lambda errors: qualification.validate_review(</span>
-<span id="L1108">                mutated, plan.value, record.value, plan.sha256,</span>
-<span id="L1109">                record.sha256, errors,</span>
-<span id="L1110">            )</span>
-<span id="L1111">        )</span>
-<span id="L1112">        self.assertTrue(any(&quot;exceptions&quot; in message for message in messages))</span>
-<span id="L1113"></span>
-<span id="L1114">    def test_strict_json_parser_rejects_ambiguous_and_bounded_input(self) -&gt; None:</span>
-<span id="L1115">        cases = (</span>
-<span id="L1116">            b&#x27;{&quot;schema_version&quot;:1,&quot;schema_version&quot;:1,&quot;document_type&quot;:&quot;campaign_plan&quot;}&#x27;,</span>
-<span id="L1117">            b&#x27;{&quot;schema_version&quot;:1,&quot;document_type&quot;:&quot;campaign_plan&quot;,&quot;x&quot;:NaN}&#x27;,</span>
-<span id="L1118">            b&#x27;{&quot;schema_version&quot;:1,&quot;document_type&quot;:&quot;campaign_plan&quot;} trailing&#x27;,</span>
-<span id="L1119">            b&#x27;\xef\xbb\xbf{&quot;schema_version&quot;:1,&quot;document_type&quot;:&quot;campaign_plan&quot;}&#x27;,</span>
-<span id="L1120">            b&#x27;\xff&#x27;,</span>
-<span id="L1121">            (b&#x27;[&#x27; * (qualification.MAX_NESTING_DEPTH + 1)) + (b&#x27;]&#x27; * (qualification.MAX_NESTING_DEPTH + 1)),</span>
-<span id="L1122">        )</span>
-<span id="L1123">        with tempfile.TemporaryDirectory() as temporary:</span>
-<span id="L1124">            root = pathlib.Path(temporary)</span>
-<span id="L1125">            for index, raw in enumerate(cases):</span>
-<span id="L1126">                with self.subTest(case=index):</span>
-<span id="L1127">                    path = root / f&quot;case-{index}.json&quot;</span>
-<span id="L1128">                    path.write_bytes(raw)</span>
-<span id="L1129">                    with self.assertRaises(qualification.ValidationFailure):</span>
-<span id="L1130">                        qualification.load_document(path, &quot;campaign_plan&quot;)</span>
-<span id="L1131">            oversized = root / &quot;oversized.json&quot;</span>
-<span id="L1132">            oversized.write_bytes(b&quot; &quot; * (qualification.MAX_JSON_BYTES + 1))</span>
-<span id="L1133">            with self.assertRaises(qualification.ValidationFailure):</span>
-<span id="L1134">                qualification.load_document(oversized, &quot;campaign_plan&quot;)</span>
-<span id="L1135"></span>
-<span id="L1136">    def test_artifact_manifest_paths_digests_symlinks_and_inventory(self) -&gt; None:</span>
-<span id="L1137">        self.assertIsNone(qualification._safe_relative_path(&quot;../escape&quot;))</span>
-<span id="L1138">        self.assertIsNone(qualification._safe_relative_path(&quot;/absolute&quot;))</span>
-<span id="L1139">        self.assertIsNone(qualification._safe_relative_path(&quot;a//b&quot;))</span>
-<span id="L1140">        self.assertIsNone(qualification._safe_relative_path(r&quot;a\b&quot;))</span>
-<span id="L1141">        self.assertIsNone(qualification._safe_relative_path(&quot;C:/drive&quot;))</span>
-<span id="L1142">        self.assertIsNone(qualification._safe_relative_path(&quot;a/./b&quot;))</span>
-<span id="L1143">        with tempfile.TemporaryDirectory() as temporary:</span>
-<span id="L1144">            root = pathlib.Path(temporary)</span>
-<span id="L1145">            artifact = root / &quot;raw.bin&quot;</span>
-<span id="L1146">            artifact.write_bytes(b&quot;payload&quot;)</span>
-<span id="L1147">            entry = {</span>
-<span id="L1148">                &quot;path&quot;: &quot;raw.bin&quot;,</span>
-<span id="L1149">                &quot;size_bytes&quot;: 7,</span>
-<span id="L1150">                &quot;sha256&quot;: hashlib.sha256(b&quot;payload&quot;).hexdigest(),</span>
-<span id="L1151">            }</span>
-<span id="L1152">            errors = qualification.ErrorCollector()</span>
-<span id="L1153">            qualification.verify_artifacts(root, [entry], errors)</span>
-<span id="L1154">            self.assertEqual(errors.errors, [])</span>
-<span id="L1155"></span>
-<span id="L1156">            (root / &quot;unlisted.bin&quot;).write_bytes(b&quot;secret sentinel&quot;)</span>
-<span id="L1157">            errors = qualification.ErrorCollector()</span>
-<span id="L1158">            qualification.verify_artifacts(root, [entry], errors)</span>
-<span id="L1159">            self.assertTrue(any(&quot;unlisted&quot; in message for message in errors.errors))</span>
-<span id="L1160">            self.assertFalse(any(&quot;secret sentinel&quot; in message for message in errors.errors))</span>
-<span id="L1161">            (root / &quot;unlisted.bin&quot;).unlink()</span>
-<span id="L1162"></span>
-<span id="L1163">            link = root / &quot;link.bin&quot;</span>
-<span id="L1164">            try:</span>
-<span id="L1165">                link.symlink_to(artifact)</span>
-<span id="L1166">            except (OSError, NotImplementedError):</span>
-<span id="L1167">                pass</span>
-<span id="L1168">            else:</span>
-<span id="L1169">                linked = copy.deepcopy(entry)</span>
-<span id="L1170">                linked[&quot;path&quot;] = &quot;link.bin&quot;</span>
-<span id="L1171">                errors = qualification.ErrorCollector()</span>
-<span id="L1172">                qualification.verify_artifacts(root, [linked], errors)</span>
-<span id="L1173">                self.assertTrue(any(&quot;symlink&quot; in message for message in errors.errors))</span>
-<span id="L1174"></span>
-<span id="L1175">            bad = copy.deepcopy(entry)</span>
-<span id="L1176">            bad[&quot;size_bytes&quot;] = 8</span>
-<span id="L1177">            bad[&quot;sha256&quot;] = &quot;0&quot; * 64</span>
-<span id="L1178">            errors = qualification.ErrorCollector()</span>
-<span id="L1179">            qualification.verify_artifacts(root, [bad], errors)</span>
-<span id="L1180">            self.assertTrue(any(&quot;size mismatch&quot; in message for message in errors.errors))</span>
-<span id="L1181">            self.assertTrue(any(&quot;digest mismatch&quot; in message for message in errors.errors))</span>
-<span id="L1182"></span>
-<span id="L1183">        too_many = [</span>
-<span id="L1184">            {&quot;path&quot;: f&quot;a-{index:03d}&quot;, &quot;size_bytes&quot;: 0, &quot;sha256&quot;: &quot;0&quot; * 64}</span>
-<span id="L1185">            for index in range(qualification.MAX_ARTIFACTS + 1)</span>
-<span id="L1186">        ]</span>
-<span id="L1187">        messages = self.errors_from(</span>
-<span id="L1188">            lambda errors: qualification._validate_manifest_shape(</span>
-<span id="L1189">                too_many, &quot;manifest&quot;, errors</span>
-<span id="L1190">            )</span>
-<span id="L1191">        )</span>
-<span id="L1192">        self.assertTrue(any(&quot;artifact count&quot; in message for message in messages))</span>
-<span id="L1193"></span>
-<span id="L1194">    def test_artifact_tree_scan_rejects_excess_entries_before_unbounded_walk(self) -&gt; None:</span>
-<span id="L1195">        with tempfile.TemporaryDirectory() as temporary:</span>
-<span id="L1196">            root = pathlib.Path(temporary)</span>
-<span id="L1197">            for name in (&quot;a&quot;, &quot;b&quot;, &quot;c&quot;):</span>
-<span id="L1198">                (root / name).mkdir()</span>
-<span id="L1199">            errors = qualification.ErrorCollector()</span>
-<span id="L1200">            with mock.patch.object(qualification, &quot;MAX_ARTIFACT_TREE_ENTRIES&quot;, 2):</span>
-<span id="L1201">                qualification.verify_artifacts(root, [], errors)</span>
-<span id="L1202">            self.assertTrue(</span>
-<span id="L1203">                any(&quot;tree entry count exceeds 2&quot; in message for message in errors.errors)</span>
-<span id="L1204">            )</span>
-<span id="L1205"></span>
-<span id="L1206">    def test_artifact_hashing_stops_at_actual_aggregate_byte_limit(self) -&gt; None:</span>
-<span id="L1207">        with tempfile.TemporaryDirectory() as temporary:</span>
-<span id="L1208">            root = pathlib.Path(temporary)</span>
-<span id="L1209">            manifest = []</span>
-<span id="L1210">            for name in (&quot;a.bin&quot;, &quot;b.bin&quot;, &quot;c.bin&quot;):</span>
-<span id="L1211">                payload = b&quot;xx&quot;</span>
-<span id="L1212">                (root / name).write_bytes(payload)</span>
-<span id="L1213">                manifest.append(</span>
-<span id="L1214">                    {</span>
-<span id="L1215">                        &quot;path&quot;: name,</span>
-<span id="L1216">                        &quot;size_bytes&quot;: len(payload),</span>
-<span id="L1217">                        &quot;sha256&quot;: hashlib.sha256(payload).hexdigest(),</span>
-<span id="L1218">                    }</span>
-<span id="L1219">                )</span>
-<span id="L1220">            errors = qualification.ErrorCollector()</span>
-<span id="L1221">            original = qualification._sha256_file</span>
-<span id="L1222">            with (</span>
-<span id="L1223">                mock.patch.object(qualification, &quot;MAX_ARTIFACT_BYTES&quot;, 10),</span>
-<span id="L1224">                mock.patch.object(qualification, &quot;MAX_ARTIFACT_TOTAL_BYTES&quot;, 3),</span>
-<span id="L1225">                mock.patch.object(</span>
-<span id="L1226">                    qualification,</span>
-<span id="L1227">                    &quot;_sha256_file&quot;,</span>
-<span id="L1228">                    wraps=original,</span>
-<span id="L1229">                ) as hasher,</span>
-<span id="L1230">            ):</span>
-<span id="L1231">                qualification.verify_artifacts(root, manifest, errors)</span>
-<span id="L1232">            self.assertTrue(</span>
-<span id="L1233">                any(&quot;aggregate bytes exceed 3&quot; in message for message in errors.errors)</span>
-<span id="L1234">            )</span>
-<span id="L1235">            self.assertEqual(hasher.call_count, 2)</span>
-<span id="L1236"></span>
-<span id="L1237">    def test_proposal_nonoverwrite_atomic_cleanup_and_nonmutation(self) -&gt; None:</span>
-<span id="L1238">        plan, record, review, artifacts = self.fixture_paths(&quot;nvidia&quot;)</span>
-<span id="L1239">        validated = qualification.validate_set(plan, record, review, artifacts)</span>
-<span id="L1240">        data = qualification._canonical_bytes(qualification.build_proposal(validated))</span>
-<span id="L1241">        protected = [</span>
-<span id="L1242">            ROOT / &quot;docs/portable_support_matrix.json&quot;,</span>
-<span id="L1243">            ROOT / &quot;docs/cuda_support_matrix.json&quot;,</span>
-<span id="L1244">            ROOT / &quot;docs/xdma_support_matrix.json&quot;,</span>
-<span id="L1245">            ROOT / &quot;release/rtfw-release-contract.json&quot;,</span>
-<span id="L1246">            plan,</span>
-<span id="L1247">            record,</span>
-<span id="L1248">            review,</span>
-<span id="L1249">            artifacts / &quot;raw.json&quot;,</span>
-<span id="L1250">        ]</span>
-<span id="L1251">        before = {path: path.read_bytes() for path in protected}</span>
-<span id="L1252">        with tempfile.TemporaryDirectory() as temporary:</span>
-<span id="L1253">            root = pathlib.Path(temporary)</span>
-<span id="L1254">            output = root / &quot;proposal.json&quot;</span>
-<span id="L1255">            output.write_bytes(b&quot;keep&quot;)</span>
-<span id="L1256">            with self.assertRaises(FileExistsError):</span>
-<span id="L1257">                qualification.write_new_atomic(output, data, protected)</span>
-<span id="L1258">            self.assertEqual(output.read_bytes(), b&quot;keep&quot;)</span>
-<span id="L1259"></span>
-<span id="L1260">            fresh = root / &quot;fresh.json&quot;</span>
-<span id="L1261">            with mock.patch.object(qualification.os, &quot;link&quot;, side_effect=KeyboardInterrupt):</span>
-<span id="L1262">                with self.assertRaises(KeyboardInterrupt):</span>
-<span id="L1263">                    qualification.write_new_atomic(fresh, data, protected)</span>
-<span id="L1264">            self.assertFalse(fresh.exists())</span>
-<span id="L1265">            self.assertEqual(list(root.glob(&quot;.*.tmp&quot;)), [])</span>
-<span id="L1266"></span>
-<span id="L1267">            with self.assertRaises(ValueError):</span>
-<span id="L1268">                qualification.write_new_atomic(plan, data, protected)</span>
-<span id="L1269">        self.assertEqual(before, {path: path.read_bytes() for path in protected})</span>
-<span id="L1270"></span>
-<span id="L1271">    def test_cli_rejects_output_in_artifacts_and_noncanonical_proposal(self) -&gt; None:</span>
-<span id="L1272">        plan, record, review, artifacts = self.fixture_paths(&quot;nvidia&quot;)</span>
-<span id="L1273">        output = artifacts / &quot;attempted-proposal.json&quot;</span>
-<span id="L1274">        command = [</span>
-<span id="L1275">            sys.executable,</span>
-<span id="L1276">            str(ROOT / &quot;tools/qualification.py&quot;),</span>
-<span id="L1277">            &quot;propose&quot;,</span>
-<span id="L1278">            &quot;--plan&quot;, str(plan),</span>
-<span id="L1279">            &quot;--record&quot;, str(record),</span>
-<span id="L1280">            &quot;--review&quot;, str(review),</span>
-<span id="L1281">            &quot;--artifact-dir&quot;, str(artifacts),</span>
-<span id="L1282">            &quot;--output&quot;, str(output),</span>
-<span id="L1283">        ]</span>
-<span id="L1284">        result = subprocess.run(command, capture_output=True, text=True, check=False)</span>
-<span id="L1285">        self.assertNotEqual(result.returncode, 0)</span>
-<span id="L1286">        self.assertFalse(output.exists())</span>
-<span id="L1287"></span>
-<span id="L1288">        with tempfile.TemporaryDirectory() as temporary:</span>
-<span id="L1289">            validated = qualification.validate_set(plan, record, review, artifacts)</span>
-<span id="L1290">            canonical = qualification._canonical_bytes(</span>
-<span id="L1291">                qualification.build_proposal(validated)</span>
-<span id="L1292">            )</span>
-<span id="L1293">            noncanonical = pathlib.Path(temporary) / &quot;proposal.json&quot;</span>
-<span id="L1294">            noncanonical.write_text(</span>
-<span id="L1295">                json.dumps(json.loads(canonical), indent=2) + &quot;\n&quot;,</span>
-<span id="L1296">                encoding=&quot;utf-8&quot;,</span>
-<span id="L1297">            )</span>
-<span id="L1298">            loaded = qualification.load_document(noncanonical, &quot;promotion_proposal&quot;)</span>
-<span id="L1299">            messages = self.errors_from(</span>
-<span id="L1300">                lambda errors: errors.require(</span>
-<span id="L1301">                    loaded.raw == canonical,</span>
-<span id="L1302">                    &quot;proposal bytes are noncanonical&quot;,</span>
-<span id="L1303">                )</span>
-<span id="L1304">            )</span>
-<span id="L1305">            self.assertTrue(messages)</span>
-<span id="L1306"></span>
-<span id="L1307">    def test_real_combined_and_raw_m12_document_are_not_promotable(self) -&gt; None:</span>
-<span id="L1308">        plan, record, review, artifacts = self.fixture_paths(&quot;combined&quot;)</span>
-<span id="L1309">        with tempfile.TemporaryDirectory() as temporary:</span>
-<span id="L1310">            root = pathlib.Path(temporary)</span>
-<span id="L1311">            copies = []</span>
-<span id="L1312">            for source in (plan, record, review):</span>
-<span id="L1313">                value = json.loads(source.read_text(encoding=&quot;utf-8&quot;))</span>
-<span id="L1314">                value[&quot;evidence_class&quot;] = &quot;qualification_campaign&quot;</span>
-<span id="L1315">                destination = root / source.name</span>
-<span id="L1316">                destination.write_text(json.dumps(value) + &quot;\n&quot;, encoding=&quot;utf-8&quot;)</span>
-<span id="L1317">                copies.append(destination)</span>
-<span id="L1318">            with self.assertRaises(qualification.ValidationFailure) as context:</span>
-<span id="L1319">                qualification.validate_set(*copies, artifacts)</span>
-<span id="L1320">            self.assertTrue(any(&quot;M17-05&quot; in message for message in context.exception.errors))</span>
-<span id="L1321"></span>
-<span id="L1322">            raw = root / &quot;m12-evidence.json&quot;</span>
-<span id="L1323">            raw.write_text(</span>
-<span id="L1324">                json.dumps(HardwareEvidenceTests.evidence(&quot;cuda&quot;)) + &quot;\n&quot;,</span>
-<span id="L1325">                encoding=&quot;utf-8&quot;,</span>
-<span id="L1326">            )</span>
-<span id="L1327">            with self.assertRaises(qualification.ValidationFailure):</span>
-<span id="L1328">                qualification.load_document(raw, &quot;qualification_record&quot;)</span>
-<span id="L1329"></span>
-<span id="L1330">    def test_validation_isolation_and_recovery_after_failure(self) -&gt; None:</span>
-<span id="L1331">        plan, record, review, artifacts = self.fixture_paths(&quot;nvidia&quot;)</span>
-<span id="L1332">        validated = qualification.validate_set(plan, record, review, artifacts)</span>
-<span id="L1333">        self.assertEqual(validated.plan.value[&quot;tuple_id&quot;], &quot;fixture-nvidia-tuple&quot;)</span>
-<span id="L1334">        with tempfile.TemporaryDirectory() as temporary:</span>
-<span id="L1335">            bad_artifacts = pathlib.Path(temporary) / &quot;artifacts&quot;</span>
-<span id="L1336">            shutil.copytree(artifacts, bad_artifacts)</span>
-<span id="L1337">            (bad_artifacts / &quot;raw.json&quot;).write_bytes(b&quot;corrupt&quot;)</span>
-<span id="L1338">            with self.assertRaises(qualification.ValidationFailure):</span>
-<span id="L1339">                qualification.validate_set(plan, record, review, bad_artifacts)</span>
-<span id="L1340">        recovered = qualification.validate_set(plan, record, review, artifacts)</span>
-<span id="L1341">        self.assertEqual(recovered.plan.sha256, validated.plan.sha256)</span>
-<span id="L1342"></span>
-<span id="L1343"></span>
-<span id="L1344">class HardwareEvidenceTests(unittest.TestCase):</span>
-<span id="L1345">    @staticmethod</span>
-<span id="L1346">    def evidence(backend: str) -&gt; dict:</span>
-<span id="L1347">        if backend == &quot;cuda&quot;:</span>
-<span id="L1348">            labels = (&quot;host_to_device&quot;, &quot;kernel&quot;, &quot;device_to_host&quot;)</span>
-<span id="L1349">            label_key = &quot;stage&quot;</span>
-<span id="L1350">            identity = {</span>
-<span id="L1351">                &quot;backend_id&quot;: &quot;rtfw.cuda.driver.v1&quot;,</span>
-<span id="L1352">                &quot;os&quot;: &quot;linux&quot;,</span>
-<span id="L1353">                &quot;device_name&quot;: &quot;test gpu&quot;,</span>
-<span id="L1354">                &quot;pci_bus_id&quot;: &quot;0000:01:00.0&quot;,</span>
-<span id="L1355">                &quot;compute_capability&quot;: &quot;8.0&quot;,</span>
-<span id="L1356">                &quot;cuda_toolkit_version&quot;: 12000,</span>
-<span id="L1357">                &quot;cuda_driver_version&quot;: 12000,</span>
-<span id="L1358">            }</span>
-<span id="L1359">        else:</span>
-<span id="L1360">            labels = (&quot;h2c&quot;, &quot;c2h&quot;)</span>
-<span id="L1361">            label_key = &quot;direction&quot;</span>
-<span id="L1362">            identity = {</span>
-<span id="L1363">                &quot;backend_id&quot;: &quot;rtfw.xdma.xilinx_linux_aximm.v1&quot;,</span>
-<span id="L1364">                &quot;pci_bdf&quot;: &quot;0000:01:00.0&quot;,</span>
-<span id="L1365">                &quot;driver_id&quot;: &quot;test-driver&quot;,</span>
-<span id="L1366">                &quot;bitstream_id&quot;: &quot;test-bitstream&quot;,</span>
-<span id="L1367">                &quot;h2c_path&quot;: &quot;/dev/xdma0_h2c_0&quot;,</span>
-<span id="L1368">                &quot;c2h_path&quot;: &quot;/dev/xdma0_c2h_0&quot;,</span>
-<span id="L1369">                &quot;device_offset&quot;: 0,</span>
-<span id="L1370">                &quot;transfer_bytes&quot;: 4096,</span>
-<span id="L1371">            }</span>
-<span id="L1372">        warmup = 1</span>
-<span id="L1373">        measurement = 2</span>
-<span id="L1374">        samples = []</span>
-<span id="L1375">        for iteration in range(measurement):</span>
-<span id="L1376">            for label in labels:</span>
-<span id="L1377">                samples.append(</span>
-<span id="L1378">                    {</span>
-<span id="L1379">                        &quot;iteration&quot;: iteration,</span>
-<span id="L1380">                        label_key: label,</span>
-<span id="L1381">                        &quot;submit_call_ns&quot;: 1,</span>
-<span id="L1382">                        &quot;completion_wait_ns&quot;: 2,</span>
-<span id="L1383">                        &quot;poll_call_ns&quot;: 1,</span>
-<span id="L1384">                        &quot;poll_count&quot;: 1,</span>
-<span id="L1385">                    }</span>
-<span id="L1386">                )</span>
-<span id="L1387">        total = (warmup + measurement) * len(labels)</span>
-<span id="L1388">        return {</span>
-<span id="L1389">            &quot;schema_version&quot;: 1,</span>
-<span id="L1390">            &quot;runtime_version&quot;: &quot;1.0.0&quot;,</span>
-<span id="L1391">            &quot;result&quot;: &quot;pass&quot;,</span>
-<span id="L1392">            &quot;qualification_claim&quot;: &quot;evidence_only&quot;,</span>
-<span id="L1393">            **identity,</span>
-<span id="L1394">            &quot;warmup_iterations&quot;: warmup,</span>
-<span id="L1395">            &quot;measurement_iterations&quot;: measurement,</span>
-<span id="L1396">            &quot;health&quot;: {</span>
-<span id="L1397">                &quot;submissions&quot;: total,</span>
-<span id="L1398">                &quot;completions&quot;: total,</span>
-<span id="L1399">                &quot;timeouts&quot;: 0,</span>
-<span id="L1400">                &quot;errors&quot;: 0,</span>
-<span id="L1401">                &quot;losses&quot;: 0,</span>
-<span id="L1402">            },</span>
-<span id="L1403">            &quot;samples&quot;: samples,</span>
-<span id="L1404">        }</span>
-<span id="L1405"></span>
-<span id="L1406">    def test_cuda_and_xdma_evidence_only_schemas(self) -&gt; None:</span>
-<span id="L1407">        for backend in (&quot;cuda&quot;, &quot;xdma&quot;):</span>
-<span id="L1408">            with self.subTest(backend=backend):</span>
-<span id="L1409">                evidence = self.evidence(backend)</span>
-<span id="L1410">                self.assertEqual(</span>
-<span id="L1411">                    hardware_evidence.validate_evidence(</span>
-<span id="L1412">                        evidence,</span>
-<span id="L1413">                        backend,</span>
-<span id="L1414">                        &quot;1.0.0&quot;,</span>
-<span id="L1415">                    ),</span>
-<span id="L1416">                    [],</span>
-<span id="L1417">                )</span>
-<span id="L1418"></span>
-<span id="L1419">                promoted = copy.deepcopy(evidence)</span>
-<span id="L1420">                promoted[&quot;qualification_claim&quot;] = &quot;qualified&quot;</span>
-<span id="L1421">                errors = hardware_evidence.validate_evidence(</span>
-<span id="L1422">                    promoted,</span>
-<span id="L1423">                    backend,</span>
-<span id="L1424">                    &quot;1.0.0&quot;,</span>
-<span id="L1425">                )</span>
-<span id="L1426">                self.assertTrue(</span>
-<span id="L1427">                    any(&quot;evidence_only&quot; in error for error in errors)</span>
-<span id="L1428">                )</span>
-<span id="L1429"></span>
-<span id="L1430">                duplicated = copy.deepcopy(evidence)</span>
-<span id="L1431">                duplicated[&quot;samples&quot;][1] = copy.deepcopy(</span>
-<span id="L1432">                    duplicated[&quot;samples&quot;][0]</span>
-<span id="L1433">                )</span>
-<span id="L1434">                errors = hardware_evidence.validate_evidence(</span>
-<span id="L1435">                    duplicated,</span>
-<span id="L1436">                    backend,</span>
-<span id="L1437">                    &quot;1.0.0&quot;,</span>
-<span id="L1438">                )</span>
-<span id="L1439">                self.assertTrue(any(&quot;duplicates&quot; in error for error in errors))</span>
-<span id="L1440"></span>
-<span id="L1441">                unhealthy = copy.deepcopy(evidence)</span>
-<span id="L1442">                unhealthy[&quot;health&quot;][&quot;errors&quot;] = 1</span>
-<span id="L1443">                errors = hardware_evidence.validate_evidence(</span>
-<span id="L1444">                    unhealthy,</span>
-<span id="L1445">                    backend,</span>
-<span id="L1446">                    &quot;1.0.0&quot;,</span>
-<span id="L1447">                )</span>
-<span id="L1448">                self.assertTrue(</span>
-<span id="L1449">                    any(&quot;must be zero&quot; in error for error in errors)</span>
-<span id="L1450">                )</span>
-<span id="L1451"></span>
-<span id="L1452"></span>
-<span id="L1453">if __name__ == &quot;__main__&quot;:</span>
-<span id="L1454">    unittest.main()</span></pre></html>
+<span id="L991">        rt2_path, _, _, _ = self.fixture_paths(&quot;rt2&quot;)</span>
+<span id="L992">        rt2 = json.loads(rt2_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L993">        rt2[&quot;policy&quot;][&quot;rt2&quot;][&quot;preempt_rt&quot;] = False</span>
+<span id="L994">        messages = self.errors_from(lambda errors: qualification.validate_plan(rt2, errors))</span>
+<span id="L995">        self.assertTrue(any(&quot;PREEMPT_RT&quot; in message for message in messages))</span>
+<span id="L996"></span>
+<span id="L997">        for field, value in (</span>
+<span id="L998">            (&quot;warmup_samples&quot;, qualification.MAX_SAMPLE_COUNT + 1),</span>
+<span id="L999">            (&quot;duration_seconds&quot;, qualification.MAX_DURATION_SECONDS + 1),</span>
+<span id="L1000">            (&quot;sample_count&quot;, 0),</span>
+<span id="L1001">        ):</span>
+<span id="L1002">            mutated = copy.deepcopy(base)</span>
+<span id="L1003">            mutated[&quot;measurement&quot;][field] = value</span>
+<span id="L1004">            messages = self.errors_from(lambda errors: qualification.validate_plan(mutated, errors))</span>
+<span id="L1005">            self.assertTrue(any(field in message for message in messages))</span>
+<span id="L1006"></span>
+<span id="L1007">    def test_trial_threshold_identity_and_recomputed_result_rejection(self) -&gt; None:</span>
+<span id="L1008">        plan_path, record_path, _, _ = self.fixture_paths(&quot;nvidia&quot;)</span>
+<span id="L1009">        plan_doc = qualification.load_document(plan_path, &quot;campaign_plan&quot;)</span>
+<span id="L1010">        base = json.loads(record_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L1011">        mutations = []</span>
+<span id="L1012">        missing_trial = copy.deepcopy(base)</span>
+<span id="L1013">        missing_trial[&quot;trials&quot;].pop()</span>
+<span id="L1014">        mutations.append(missing_trial)</span>
+<span id="L1015">        duplicate_trial = copy.deepcopy(base)</span>
+<span id="L1016">        duplicate_trial[&quot;trials&quot;][1][&quot;id&quot;] = duplicate_trial[&quot;trials&quot;][0][&quot;id&quot;]</span>
+<span id="L1017">        mutations.append(duplicate_trial)</span>
+<span id="L1018">        failed_trial = copy.deepcopy(base)</span>
+<span id="L1019">        failed_trial[&quot;trials&quot;][0][&quot;status&quot;] = &quot;fail&quot;</span>
+<span id="L1020">        mutations.append(failed_trial)</span>
+<span id="L1021">        malformed_recovery = copy.deepcopy(base)</span>
+<span id="L1022">        malformed_recovery[&quot;trials&quot;][5][&quot;recovery&quot;][&quot;success&quot;] = False</span>
+<span id="L1023">        mutations.append(malformed_recovery)</span>
+<span id="L1024">        drift = copy.deepcopy(base)</span>
+<span id="L1025">        drift[&quot;thresholds&quot;][0][&quot;definition&quot;][&quot;bound&quot;] = 100</span>
+<span id="L1026">        mutations.append(drift)</span>
+<span id="L1027">        forged = copy.deepcopy(base)</span>
+<span id="L1028">        forged[&quot;thresholds&quot;][0][&quot;observed&quot;] = 11</span>
+<span id="L1029">        forged[&quot;thresholds&quot;][0][&quot;passed&quot;] = True</span>
+<span id="L1030">        mutations.append(forged)</span>
+<span id="L1031">        allowance = copy.deepcopy(base)</span>
+<span id="L1032">        allowance[&quot;thresholds&quot;][0][&quot;misses&quot;] = 1</span>
+<span id="L1033">        mutations.append(allowance)</span>
+<span id="L1034">        unstable = copy.deepcopy(base)</span>
+<span id="L1035">        unstable[&quot;resource_trends&quot;][0][&quot;stable&quot;] = False</span>
+<span id="L1036">        mutations.append(unstable)</span>
+<span id="L1037">        unhealthy = copy.deepcopy(base)</span>
+<span id="L1038">        unhealthy[&quot;device_health&quot;][&quot;healthy&quot;] = False</span>
+<span id="L1039">        mutations.append(unhealthy)</span>
+<span id="L1040">        lost = copy.deepcopy(base)</span>
+<span id="L1041">        lost[&quot;device_health&quot;][&quot;losses&quot;] = 1</span>
+<span id="L1042">        mutations.append(lost)</span>
+<span id="L1043">        for index, mutated in enumerate(mutations):</span>
+<span id="L1044">            with self.subTest(mutation=index):</span>
+<span id="L1045">                messages = self.errors_from(</span>
+<span id="L1046">                    lambda errors: qualification.validate_record(</span>
+<span id="L1047">                        mutated, plan_doc.value, plan_doc.sha256, errors</span>
+<span id="L1048">                    )</span>
+<span id="L1049">                )</span>
+<span id="L1050">                self.assertTrue(messages)</span>
+<span id="L1051"></span>
+<span id="L1052">    def test_trend_values_reject_growth_inconsistent_extrema_and_thermal_range(self) -&gt; None:</span>
+<span id="L1053">        plan_path, record_path, _, _ = self.fixture_paths(&quot;nvidia&quot;)</span>
+<span id="L1054">        plan = qualification.load_document(plan_path, &quot;campaign_plan&quot;)</span>
+<span id="L1055">        base = json.loads(record_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L1056"></span>
+<span id="L1057">        growth = copy.deepcopy(base)</span>
+<span id="L1058">        growth[&quot;resource_trends&quot;][0].update(</span>
+<span id="L1059">            {&quot;start&quot;: 1, &quot;end&quot;: 2, &quot;maximum&quot;: 2, &quot;stable&quot;: True}</span>
+<span id="L1060">        )</span>
+<span id="L1061">        inconsistent = copy.deepcopy(base)</span>
+<span id="L1062">        inconsistent[&quot;resource_trends&quot;][0].update(</span>
+<span id="L1063">            {&quot;start&quot;: 2, &quot;end&quot;: 1, &quot;maximum&quot;: 0, &quot;stable&quot;: True}</span>
+<span id="L1064">        )</span>
+<span id="L1065">        out_of_range = copy.deepcopy(base)</span>
+<span id="L1066">        out_of_range[&quot;thermal_trends&quot;][0].update(</span>
+<span id="L1067">            {&quot;start&quot;: 301, &quot;end&quot;: 301, &quot;maximum&quot;: 301, &quot;stable&quot;: True}</span>
+<span id="L1068">        )</span>
+<span id="L1069"></span>
+<span id="L1070">        for name, mutated, expected in (</span>
+<span id="L1071">            (&quot;growth&quot;, growth, &quot;must not grow&quot;),</span>
+<span id="L1072">            (&quot;maximum&quot;, inconsistent, &quot;must cover start and end&quot;),</span>
+<span id="L1073">            (&quot;thermal&quot;, out_of_range, &quot;thermal value out of range&quot;),</span>
+<span id="L1074">        ):</span>
+<span id="L1075">            with self.subTest(case=name):</span>
+<span id="L1076">                messages = self.errors_from(</span>
+<span id="L1077">                    lambda errors: qualification.validate_record(</span>
+<span id="L1078">                        mutated, plan.value, plan.sha256, errors</span>
+<span id="L1079">                    )</span>
+<span id="L1080">                )</span>
+<span id="L1081">                self.assertTrue(any(expected in message for message in messages))</span>
+<span id="L1082"></span>
+<span id="L1083">    def test_cross_document_digest_identity_and_review_failures(self) -&gt; None:</span>
+<span id="L1084">        plan_path, record_path, review_path, _ = self.fixture_paths(&quot;nvidia&quot;)</span>
+<span id="L1085">        plan = qualification.load_document(plan_path, &quot;campaign_plan&quot;)</span>
+<span id="L1086">        record = qualification.load_document(record_path, &quot;qualification_record&quot;)</span>
+<span id="L1087">        review = json.loads(review_path.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L1088">        for field, value in (</span>
+<span id="L1089">            (&quot;plan_sha256&quot;, &quot;0&quot; * 64),</span>
+<span id="L1090">            (&quot;record_sha256&quot;, &quot;0&quot; * 64),</span>
+<span id="L1091">            (&quot;evidence_manifest_sha256&quot;, &quot;0&quot; * 64),</span>
+<span id="L1092">            (&quot;scope&quot;, &quot;xdma&quot;),</span>
+<span id="L1093">            (&quot;tuple_id&quot;, &quot;substituted-tuple&quot;),</span>
+<span id="L1094">            (&quot;decision&quot;, &quot;reject&quot;),</span>
+<span id="L1095">            (&quot;pre_run_provenance_verified&quot;, False),</span>
+<span id="L1096">            (&quot;reviewer_authentication&quot;, &quot;signed&quot;),</span>
+<span id="L1097">        ):</span>
+<span id="L1098">            with self.subTest(field=field):</span>
+<span id="L1099">                mutated = copy.deepcopy(review)</span>
+<span id="L1100">                mutated[field] = value</span>
+<span id="L1101">                messages = self.errors_from(</span>
+<span id="L1102">                    lambda errors: qualification.validate_review(</span>
+<span id="L1103">                        mutated, plan.value, record.value, plan.sha256,</span>
+<span id="L1104">                        record.sha256, errors,</span>
+<span id="L1105">                    )</span>
+<span id="L1106">                )</span>
+<span id="L1107">                self.assertTrue(messages)</span>
+<span id="L1108">        mutated = copy.deepcopy(review)</span>
+<span id="L1109">        mutated[&quot;exceptions&quot;] = [</span>
+<span id="L1110">            {&quot;id&quot;: &quot;waiver&quot;, &quot;resolved&quot;: False, &quot;rationale&quot;: &quot;synthetic&quot;}</span>
+<span id="L1111">        ]</span>
+<span id="L1112">        messages = self.errors_from(</span>
+<span id="L1113">            lambda errors: qualification.validate_review(</span>
+<span id="L1114">                mutated, plan.value, record.value, plan.sha256,</span>
+<span id="L1115">                record.sha256, errors,</span>
+<span id="L1116">            )</span>
+<span id="L1117">        )</span>
+<span id="L1118">        self.assertTrue(any(&quot;exceptions&quot; in message for message in messages))</span>
+<span id="L1119"></span>
+<span id="L1120">    def test_strict_json_parser_rejects_ambiguous_and_bounded_input(self) -&gt; None:</span>
+<span id="L1121">        cases = (</span>
+<span id="L1122">            b&#x27;{&quot;schema_version&quot;:1,&quot;schema_version&quot;:1,&quot;document_type&quot;:&quot;campaign_plan&quot;}&#x27;,</span>
+<span id="L1123">            b&#x27;{&quot;schema_version&quot;:1,&quot;document_type&quot;:&quot;campaign_plan&quot;,&quot;x&quot;:NaN}&#x27;,</span>
+<span id="L1124">            b&#x27;{&quot;schema_version&quot;:1,&quot;document_type&quot;:&quot;campaign_plan&quot;} trailing&#x27;,</span>
+<span id="L1125">            b&#x27;\xef\xbb\xbf{&quot;schema_version&quot;:1,&quot;document_type&quot;:&quot;campaign_plan&quot;}&#x27;,</span>
+<span id="L1126">            b&#x27;\xff&#x27;,</span>
+<span id="L1127">            (b&#x27;[&#x27; * (qualification.MAX_NESTING_DEPTH + 1)) + (b&#x27;]&#x27; * (qualification.MAX_NESTING_DEPTH + 1)),</span>
+<span id="L1128">        )</span>
+<span id="L1129">        with tempfile.TemporaryDirectory() as temporary:</span>
+<span id="L1130">            root = pathlib.Path(temporary)</span>
+<span id="L1131">            for index, raw in enumerate(cases):</span>
+<span id="L1132">                with self.subTest(case=index):</span>
+<span id="L1133">                    path = root / f&quot;case-{index}.json&quot;</span>
+<span id="L1134">                    path.write_bytes(raw)</span>
+<span id="L1135">                    with self.assertRaises(qualification.ValidationFailure):</span>
+<span id="L1136">                        qualification.load_document(path, &quot;campaign_plan&quot;)</span>
+<span id="L1137">            oversized = root / &quot;oversized.json&quot;</span>
+<span id="L1138">            oversized.write_bytes(b&quot; &quot; * (qualification.MAX_JSON_BYTES + 1))</span>
+<span id="L1139">            with self.assertRaises(qualification.ValidationFailure):</span>
+<span id="L1140">                qualification.load_document(oversized, &quot;campaign_plan&quot;)</span>
+<span id="L1141"></span>
+<span id="L1142">    def test_artifact_manifest_paths_digests_symlinks_and_inventory(self) -&gt; None:</span>
+<span id="L1143">        self.assertIsNone(qualification._safe_relative_path(&quot;../escape&quot;))</span>
+<span id="L1144">        self.assertIsNone(qualification._safe_relative_path(&quot;/absolute&quot;))</span>
+<span id="L1145">        self.assertIsNone(qualification._safe_relative_path(&quot;a//b&quot;))</span>
+<span id="L1146">        self.assertIsNone(qualification._safe_relative_path(r&quot;a\b&quot;))</span>
+<span id="L1147">        self.assertIsNone(qualification._safe_relative_path(&quot;C:/drive&quot;))</span>
+<span id="L1148">        self.assertIsNone(qualification._safe_relative_path(&quot;a/./b&quot;))</span>
+<span id="L1149">        with tempfile.TemporaryDirectory() as temporary:</span>
+<span id="L1150">            root = pathlib.Path(temporary)</span>
+<span id="L1151">            artifact = root / &quot;raw.bin&quot;</span>
+<span id="L1152">            artifact.write_bytes(b&quot;payload&quot;)</span>
+<span id="L1153">            entry = {</span>
+<span id="L1154">                &quot;path&quot;: &quot;raw.bin&quot;,</span>
+<span id="L1155">                &quot;size_bytes&quot;: 7,</span>
+<span id="L1156">                &quot;sha256&quot;: hashlib.sha256(b&quot;payload&quot;).hexdigest(),</span>
+<span id="L1157">            }</span>
+<span id="L1158">            errors = qualification.ErrorCollector()</span>
+<span id="L1159">            qualification.verify_artifacts(root, [entry], errors)</span>
+<span id="L1160">            self.assertEqual(errors.errors, [])</span>
+<span id="L1161"></span>
+<span id="L1162">            (root / &quot;unlisted.bin&quot;).write_bytes(b&quot;secret sentinel&quot;)</span>
+<span id="L1163">            errors = qualification.ErrorCollector()</span>
+<span id="L1164">            qualification.verify_artifacts(root, [entry], errors)</span>
+<span id="L1165">            self.assertTrue(any(&quot;unlisted&quot; in message for message in errors.errors))</span>
+<span id="L1166">            self.assertFalse(any(&quot;secret sentinel&quot; in message for message in errors.errors))</span>
+<span id="L1167">            (root / &quot;unlisted.bin&quot;).unlink()</span>
+<span id="L1168"></span>
+<span id="L1169">            link = root / &quot;link.bin&quot;</span>
+<span id="L1170">            try:</span>
+<span id="L1171">                link.symlink_to(artifact)</span>
+<span id="L1172">            except (OSError, NotImplementedError):</span>
+<span id="L1173">                pass</span>
+<span id="L1174">            else:</span>
+<span id="L1175">                linked = copy.deepcopy(entry)</span>
+<span id="L1176">                linked[&quot;path&quot;] = &quot;link.bin&quot;</span>
+<span id="L1177">                errors = qualification.ErrorCollector()</span>
+<span id="L1178">                qualification.verify_artifacts(root, [linked], errors)</span>
+<span id="L1179">                self.assertTrue(any(&quot;symlink&quot; in message for message in errors.errors))</span>
+<span id="L1180"></span>
+<span id="L1181">            bad = copy.deepcopy(entry)</span>
+<span id="L1182">            bad[&quot;size_bytes&quot;] = 8</span>
+<span id="L1183">            bad[&quot;sha256&quot;] = &quot;0&quot; * 64</span>
+<span id="L1184">            errors = qualification.ErrorCollector()</span>
+<span id="L1185">            qualification.verify_artifacts(root, [bad], errors)</span>
+<span id="L1186">            self.assertTrue(any(&quot;size mismatch&quot; in message for message in errors.errors))</span>
+<span id="L1187">            self.assertTrue(any(&quot;digest mismatch&quot; in message for message in errors.errors))</span>
+<span id="L1188"></span>
+<span id="L1189">        too_many = [</span>
+<span id="L1190">            {&quot;path&quot;: f&quot;a-{index:03d}&quot;, &quot;size_bytes&quot;: 0, &quot;sha256&quot;: &quot;0&quot; * 64}</span>
+<span id="L1191">            for index in range(qualification.MAX_ARTIFACTS + 1)</span>
+<span id="L1192">        ]</span>
+<span id="L1193">        messages = self.errors_from(</span>
+<span id="L1194">            lambda errors: qualification._validate_manifest_shape(</span>
+<span id="L1195">                too_many, &quot;manifest&quot;, errors</span>
+<span id="L1196">            )</span>
+<span id="L1197">        )</span>
+<span id="L1198">        self.assertTrue(any(&quot;artifact count&quot; in message for message in messages))</span>
+<span id="L1199"></span>
+<span id="L1200">    def test_artifact_tree_scan_rejects_excess_entries_before_unbounded_walk(self) -&gt; None:</span>
+<span id="L1201">        with tempfile.TemporaryDirectory() as temporary:</span>
+<span id="L1202">            root = pathlib.Path(temporary)</span>
+<span id="L1203">            for name in (&quot;a&quot;, &quot;b&quot;, &quot;c&quot;):</span>
+<span id="L1204">                (root / name).mkdir()</span>
+<span id="L1205">            errors = qualification.ErrorCollector()</span>
+<span id="L1206">            with mock.patch.object(qualification, &quot;MAX_ARTIFACT_TREE_ENTRIES&quot;, 2):</span>
+<span id="L1207">                qualification.verify_artifacts(root, [], errors)</span>
+<span id="L1208">            self.assertTrue(</span>
+<span id="L1209">                any(&quot;tree entry count exceeds 2&quot; in message for message in errors.errors)</span>
+<span id="L1210">            )</span>
+<span id="L1211"></span>
+<span id="L1212">    def test_artifact_hashing_stops_at_actual_aggregate_byte_limit(self) -&gt; None:</span>
+<span id="L1213">        with tempfile.TemporaryDirectory() as temporary:</span>
+<span id="L1214">            root = pathlib.Path(temporary)</span>
+<span id="L1215">            manifest = []</span>
+<span id="L1216">            for name in (&quot;a.bin&quot;, &quot;b.bin&quot;, &quot;c.bin&quot;):</span>
+<span id="L1217">                payload = b&quot;xx&quot;</span>
+<span id="L1218">                (root / name).write_bytes(payload)</span>
+<span id="L1219">                manifest.append(</span>
+<span id="L1220">                    {</span>
+<span id="L1221">                        &quot;path&quot;: name,</span>
+<span id="L1222">                        &quot;size_bytes&quot;: len(payload),</span>
+<span id="L1223">                        &quot;sha256&quot;: hashlib.sha256(payload).hexdigest(),</span>
+<span id="L1224">                    }</span>
+<span id="L1225">                )</span>
+<span id="L1226">            errors = qualification.ErrorCollector()</span>
+<span id="L1227">            original = qualification._sha256_file</span>
+<span id="L1228">            with (</span>
+<span id="L1229">                mock.patch.object(qualification, &quot;MAX_ARTIFACT_BYTES&quot;, 10),</span>
+<span id="L1230">                mock.patch.object(qualification, &quot;MAX_ARTIFACT_TOTAL_BYTES&quot;, 3),</span>
+<span id="L1231">                mock.patch.object(</span>
+<span id="L1232">                    qualification,</span>
+<span id="L1233">                    &quot;_sha256_file&quot;,</span>
+<span id="L1234">                    wraps=original,</span>
+<span id="L1235">                ) as hasher,</span>
+<span id="L1236">            ):</span>
+<span id="L1237">                qualification.verify_artifacts(root, manifest, errors)</span>
+<span id="L1238">            self.assertTrue(</span>
+<span id="L1239">                any(&quot;aggregate bytes exceed 3&quot; in message for message in errors.errors)</span>
+<span id="L1240">            )</span>
+<span id="L1241">            self.assertEqual(hasher.call_count, 2)</span>
+<span id="L1242"></span>
+<span id="L1243">    def test_proposal_nonoverwrite_atomic_cleanup_and_nonmutation(self) -&gt; None:</span>
+<span id="L1244">        plan, record, review, artifacts = self.fixture_paths(&quot;nvidia&quot;)</span>
+<span id="L1245">        validated = qualification.validate_set(plan, record, review, artifacts)</span>
+<span id="L1246">        data = qualification._canonical_bytes(qualification.build_proposal(validated))</span>
+<span id="L1247">        protected = [</span>
+<span id="L1248">            ROOT / &quot;docs/portable_support_matrix.json&quot;,</span>
+<span id="L1249">            ROOT / &quot;docs/cuda_support_matrix.json&quot;,</span>
+<span id="L1250">            ROOT / &quot;docs/xdma_support_matrix.json&quot;,</span>
+<span id="L1251">            ROOT / &quot;release/rtfw-release-contract.json&quot;,</span>
+<span id="L1252">            plan,</span>
+<span id="L1253">            record,</span>
+<span id="L1254">            review,</span>
+<span id="L1255">            artifacts / &quot;raw.json&quot;,</span>
+<span id="L1256">        ]</span>
+<span id="L1257">        before = {path: path.read_bytes() for path in protected}</span>
+<span id="L1258">        with tempfile.TemporaryDirectory() as temporary:</span>
+<span id="L1259">            root = pathlib.Path(temporary)</span>
+<span id="L1260">            output = root / &quot;proposal.json&quot;</span>
+<span id="L1261">            output.write_bytes(b&quot;keep&quot;)</span>
+<span id="L1262">            with self.assertRaises(FileExistsError):</span>
+<span id="L1263">                qualification.write_new_atomic(output, data, protected)</span>
+<span id="L1264">            self.assertEqual(output.read_bytes(), b&quot;keep&quot;)</span>
+<span id="L1265"></span>
+<span id="L1266">            fresh = root / &quot;fresh.json&quot;</span>
+<span id="L1267">            with mock.patch.object(qualification.os, &quot;link&quot;, side_effect=KeyboardInterrupt):</span>
+<span id="L1268">                with self.assertRaises(KeyboardInterrupt):</span>
+<span id="L1269">                    qualification.write_new_atomic(fresh, data, protected)</span>
+<span id="L1270">            self.assertFalse(fresh.exists())</span>
+<span id="L1271">            self.assertEqual(list(root.glob(&quot;.*.tmp&quot;)), [])</span>
+<span id="L1272"></span>
+<span id="L1273">            with self.assertRaises(ValueError):</span>
+<span id="L1274">                qualification.write_new_atomic(plan, data, protected)</span>
+<span id="L1275">        self.assertEqual(before, {path: path.read_bytes() for path in protected})</span>
+<span id="L1276"></span>
+<span id="L1277">    def test_cli_rejects_output_in_artifacts_and_noncanonical_proposal(self) -&gt; None:</span>
+<span id="L1278">        plan, record, review, artifacts = self.fixture_paths(&quot;nvidia&quot;)</span>
+<span id="L1279">        output = artifacts / &quot;attempted-proposal.json&quot;</span>
+<span id="L1280">        command = [</span>
+<span id="L1281">            sys.executable,</span>
+<span id="L1282">            str(ROOT / &quot;tools/qualification.py&quot;),</span>
+<span id="L1283">            &quot;propose&quot;,</span>
+<span id="L1284">            &quot;--plan&quot;, str(plan),</span>
+<span id="L1285">            &quot;--record&quot;, str(record),</span>
+<span id="L1286">            &quot;--review&quot;, str(review),</span>
+<span id="L1287">            &quot;--artifact-dir&quot;, str(artifacts),</span>
+<span id="L1288">            &quot;--output&quot;, str(output),</span>
+<span id="L1289">        ]</span>
+<span id="L1290">        result = subprocess.run(command, capture_output=True, text=True, check=False)</span>
+<span id="L1291">        self.assertNotEqual(result.returncode, 0)</span>
+<span id="L1292">        self.assertFalse(output.exists())</span>
+<span id="L1293"></span>
+<span id="L1294">        with tempfile.TemporaryDirectory() as temporary:</span>
+<span id="L1295">            validated = qualification.validate_set(plan, record, review, artifacts)</span>
+<span id="L1296">            canonical = qualification._canonical_bytes(</span>
+<span id="L1297">                qualification.build_proposal(validated)</span>
+<span id="L1298">            )</span>
+<span id="L1299">            noncanonical = pathlib.Path(temporary) / &quot;proposal.json&quot;</span>
+<span id="L1300">            noncanonical.write_text(</span>
+<span id="L1301">                json.dumps(json.loads(canonical), indent=2) + &quot;\n&quot;,</span>
+<span id="L1302">                encoding=&quot;utf-8&quot;,</span>
+<span id="L1303">            )</span>
+<span id="L1304">            loaded = qualification.load_document(noncanonical, &quot;promotion_proposal&quot;)</span>
+<span id="L1305">            messages = self.errors_from(</span>
+<span id="L1306">                lambda errors: errors.require(</span>
+<span id="L1307">                    loaded.raw == canonical,</span>
+<span id="L1308">                    &quot;proposal bytes are noncanonical&quot;,</span>
+<span id="L1309">                )</span>
+<span id="L1310">            )</span>
+<span id="L1311">            self.assertTrue(messages)</span>
+<span id="L1312"></span>
+<span id="L1313">    def test_real_combined_and_raw_m12_document_are_not_promotable(self) -&gt; None:</span>
+<span id="L1314">        plan, record, review, artifacts = self.fixture_paths(&quot;combined&quot;)</span>
+<span id="L1315">        with tempfile.TemporaryDirectory() as temporary:</span>
+<span id="L1316">            root = pathlib.Path(temporary)</span>
+<span id="L1317">            copies = []</span>
+<span id="L1318">            for source in (plan, record, review):</span>
+<span id="L1319">                value = json.loads(source.read_text(encoding=&quot;utf-8&quot;))</span>
+<span id="L1320">                value[&quot;evidence_class&quot;] = &quot;qualification_campaign&quot;</span>
+<span id="L1321">                destination = root / source.name</span>
+<span id="L1322">                destination.write_text(json.dumps(value) + &quot;\n&quot;, encoding=&quot;utf-8&quot;)</span>
+<span id="L1323">                copies.append(destination)</span>
+<span id="L1324">            with self.assertRaises(qualification.ValidationFailure) as context:</span>
+<span id="L1325">                qualification.validate_set(*copies, artifacts)</span>
+<span id="L1326">            self.assertTrue(any(&quot;M17-05&quot; in message for message in context.exception.errors))</span>
+<span id="L1327"></span>
+<span id="L1328">            raw = root / &quot;m12-evidence.json&quot;</span>
+<span id="L1329">            raw.write_text(</span>
+<span id="L1330">                json.dumps(HardwareEvidenceTests.evidence(&quot;cuda&quot;)) + &quot;\n&quot;,</span>
+<span id="L1331">                encoding=&quot;utf-8&quot;,</span>
+<span id="L1332">            )</span>
+<span id="L1333">            with self.assertRaises(qualification.ValidationFailure):</span>
+<span id="L1334">                qualification.load_document(raw, &quot;qualification_record&quot;)</span>
+<span id="L1335"></span>
+<span id="L1336">    def test_validation_isolation_and_recovery_after_failure(self) -&gt; None:</span>
+<span id="L1337">        plan, record, review, artifacts = self.fixture_paths(&quot;nvidia&quot;)</span>
+<span id="L1338">        validated = qualification.validate_set(plan, record, review, artifacts)</span>
+<span id="L1339">        self.assertEqual(validated.plan.value[&quot;tuple_id&quot;], &quot;fixture-nvidia-tuple&quot;)</span>
+<span id="L1340">        with tempfile.TemporaryDirectory() as temporary:</span>
+<span id="L1341">            bad_artifacts = pathlib.Path(temporary) / &quot;artifacts&quot;</span>
+<span id="L1342">            shutil.copytree(artifacts, bad_artifacts)</span>
+<span id="L1343">            (bad_artifacts / &quot;raw.json&quot;).write_bytes(b&quot;corrupt&quot;)</span>
+<span id="L1344">            with self.assertRaises(qualification.ValidationFailure):</span>
+<span id="L1345">                qualification.validate_set(plan, record, review, bad_artifacts)</span>
+<span id="L1346">        recovered = qualification.validate_set(plan, record, review, artifacts)</span>
+<span id="L1347">        self.assertEqual(recovered.plan.sha256, validated.plan.sha256)</span>
+<span id="L1348"></span>
+<span id="L1349"></span>
+<span id="L1350">class HardwareEvidenceTests(unittest.TestCase):</span>
+<span id="L1351">    @staticmethod</span>
+<span id="L1352">    def evidence(backend: str) -&gt; dict:</span>
+<span id="L1353">        if backend == &quot;cuda&quot;:</span>
+<span id="L1354">            labels = (&quot;host_to_device&quot;, &quot;kernel&quot;, &quot;device_to_host&quot;)</span>
+<span id="L1355">            label_key = &quot;stage&quot;</span>
+<span id="L1356">            identity = {</span>
+<span id="L1357">                &quot;backend_id&quot;: &quot;rtfw.cuda.driver.v1&quot;,</span>
+<span id="L1358">                &quot;os&quot;: &quot;linux&quot;,</span>
+<span id="L1359">                &quot;device_name&quot;: &quot;test gpu&quot;,</span>
+<span id="L1360">                &quot;pci_bus_id&quot;: &quot;0000:01:00.0&quot;,</span>
+<span id="L1361">                &quot;compute_capability&quot;: &quot;8.0&quot;,</span>
+<span id="L1362">                &quot;cuda_toolkit_version&quot;: 12000,</span>
+<span id="L1363">                &quot;cuda_driver_version&quot;: 12000,</span>
+<span id="L1364">            }</span>
+<span id="L1365">        else:</span>
+<span id="L1366">            labels = (&quot;h2c&quot;, &quot;c2h&quot;)</span>
+<span id="L1367">            label_key = &quot;direction&quot;</span>
+<span id="L1368">            identity = {</span>
+<span id="L1369">                &quot;backend_id&quot;: &quot;rtfw.xdma.xilinx_linux_aximm.v1&quot;,</span>
+<span id="L1370">                &quot;pci_bdf&quot;: &quot;0000:01:00.0&quot;,</span>
+<span id="L1371">                &quot;driver_id&quot;: &quot;test-driver&quot;,</span>
+<span id="L1372">                &quot;bitstream_id&quot;: &quot;test-bitstream&quot;,</span>
+<span id="L1373">                &quot;h2c_path&quot;: &quot;/dev/xdma0_h2c_0&quot;,</span>
+<span id="L1374">                &quot;c2h_path&quot;: &quot;/dev/xdma0_c2h_0&quot;,</span>
+<span id="L1375">                &quot;device_offset&quot;: 0,</span>
+<span id="L1376">                &quot;transfer_bytes&quot;: 4096,</span>
+<span id="L1377">            }</span>
+<span id="L1378">        warmup = 1</span>
+<span id="L1379">        measurement = 2</span>
+<span id="L1380">        samples = []</span>
+<span id="L1381">        for iteration in range(measurement):</span>
+<span id="L1382">            for label in labels:</span>
+<span id="L1383">                samples.append(</span>
+<span id="L1384">                    {</span>
+<span id="L1385">                        &quot;iteration&quot;: iteration,</span>
+<span id="L1386">                        label_key: label,</span>
+<span id="L1387">                        &quot;submit_call_ns&quot;: 1,</span>
+<span id="L1388">                        &quot;completion_wait_ns&quot;: 2,</span>
+<span id="L1389">                        &quot;poll_call_ns&quot;: 1,</span>
+<span id="L1390">                        &quot;poll_count&quot;: 1,</span>
+<span id="L1391">                    }</span>
+<span id="L1392">                )</span>
+<span id="L1393">        total = (warmup + measurement) * len(labels)</span>
+<span id="L1394">        return {</span>
+<span id="L1395">            &quot;schema_version&quot;: 1,</span>
+<span id="L1396">            &quot;runtime_version&quot;: &quot;1.0.0&quot;,</span>
+<span id="L1397">            &quot;result&quot;: &quot;pass&quot;,</span>
+<span id="L1398">            &quot;qualification_claim&quot;: &quot;evidence_only&quot;,</span>
+<span id="L1399">            **identity,</span>
+<span id="L1400">            &quot;warmup_iterations&quot;: warmup,</span>
+<span id="L1401">            &quot;measurement_iterations&quot;: measurement,</span>
+<span id="L1402">            &quot;health&quot;: {</span>
+<span id="L1403">                &quot;submissions&quot;: total,</span>
+<span id="L1404">                &quot;completions&quot;: total,</span>
+<span id="L1405">                &quot;timeouts&quot;: 0,</span>
+<span id="L1406">                &quot;errors&quot;: 0,</span>
+<span id="L1407">                &quot;losses&quot;: 0,</span>
+<span id="L1408">            },</span>
+<span id="L1409">            &quot;samples&quot;: samples,</span>
+<span id="L1410">        }</span>
+<span id="L1411"></span>
+<span id="L1412">    def test_cuda_and_xdma_evidence_only_schemas(self) -&gt; None:</span>
+<span id="L1413">        for backend in (&quot;cuda&quot;, &quot;xdma&quot;):</span>
+<span id="L1414">            with self.subTest(backend=backend):</span>
+<span id="L1415">                evidence = self.evidence(backend)</span>
+<span id="L1416">                self.assertEqual(</span>
+<span id="L1417">                    hardware_evidence.validate_evidence(</span>
+<span id="L1418">                        evidence,</span>
+<span id="L1419">                        backend,</span>
+<span id="L1420">                        &quot;1.0.0&quot;,</span>
+<span id="L1421">                    ),</span>
+<span id="L1422">                    [],</span>
+<span id="L1423">                )</span>
+<span id="L1424"></span>
+<span id="L1425">                promoted = copy.deepcopy(evidence)</span>
+<span id="L1426">                promoted[&quot;qualification_claim&quot;] = &quot;qualified&quot;</span>
+<span id="L1427">                errors = hardware_evidence.validate_evidence(</span>
+<span id="L1428">                    promoted,</span>
+<span id="L1429">                    backend,</span>
+<span id="L1430">                    &quot;1.0.0&quot;,</span>
+<span id="L1431">                )</span>
+<span id="L1432">                self.assertTrue(</span>
+<span id="L1433">                    any(&quot;evidence_only&quot; in error for error in errors)</span>
+<span id="L1434">                )</span>
+<span id="L1435"></span>
+<span id="L1436">                duplicated = copy.deepcopy(evidence)</span>
+<span id="L1437">                duplicated[&quot;samples&quot;][1] = copy.deepcopy(</span>
+<span id="L1438">                    duplicated[&quot;samples&quot;][0]</span>
+<span id="L1439">                )</span>
+<span id="L1440">                errors = hardware_evidence.validate_evidence(</span>
+<span id="L1441">                    duplicated,</span>
+<span id="L1442">                    backend,</span>
+<span id="L1443">                    &quot;1.0.0&quot;,</span>
+<span id="L1444">                )</span>
+<span id="L1445">                self.assertTrue(any(&quot;duplicates&quot; in error for error in errors))</span>
+<span id="L1446"></span>
+<span id="L1447">                unhealthy = copy.deepcopy(evidence)</span>
+<span id="L1448">                unhealthy[&quot;health&quot;][&quot;errors&quot;] = 1</span>
+<span id="L1449">                errors = hardware_evidence.validate_evidence(</span>
+<span id="L1450">                    unhealthy,</span>
+<span id="L1451">                    backend,</span>
+<span id="L1452">                    &quot;1.0.0&quot;,</span>
+<span id="L1453">                )</span>
+<span id="L1454">                self.assertTrue(</span>
+<span id="L1455">                    any(&quot;must be zero&quot; in error for error in errors)</span>
+<span id="L1456">                )</span>
+<span id="L1457"></span>
+<span id="L1458"></span>
+<span id="L1459">if __name__ == &quot;__main__&quot;:</span>
+<span id="L1460">    unittest.main()</span></pre></html>

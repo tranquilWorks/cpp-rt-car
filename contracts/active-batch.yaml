@@ -1,35 +1,31 @@
 schema_version: 1
 batch:
-  id: M27-05
-  title: Deterministic Runtime regression coverage (owner-scoped)
-  goal: Exercise ordinary C++ lifecycle, checkpoint, replay inspection and typed-payload contracts with
-    deterministic public-API regression tests; preserve the excluded campaign work as unperformed.
+  id: M27-06
+  title: Independent build and provenance verification (owner-scoped)
+  goal: Compare independently built ordinary C++ packages and record observed source, dependency, toolchain
+    and archive identities without signing or publishing.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
   - products/cpp-rt-car/acceptance.yaml#CAP-M20
   - products/cpp-rt-car/evidence/M26-06-closure-2026-09-30/closure.md
-  milestone: products/cpp-rt-car/milestones/M27.md#m27-05
-  baseline_commit: b17606103e034ec4d6e9a49d5201f1ff33a95631
+  milestone: products/cpp-rt-car/milestones/M27.md#m27-06
+  baseline_commit: b8d54b3aced4083dfd91d34c65e871eab7e2e3c0
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M27-05.yaml
-  owner_scope: The owner additionally selected06, then explicitly limited work to the C++ simulation project
-    and asked to avoid behaviors causing interruptions. Complete only ordinary deterministic Runtime regression
-    tests for05, followed by build/provenance verification for06. Deliberate crash injection, generated-input
-    campaigns, security-scanning workflows and recurring execution are excluded. Preserve original M27-05
-    campaign acceptance as unperformed; do not promote continuous coverage or vulnerability clearance.
-    Standing scoped publication/guarded merge and actual zero-step control-only exception persist; no
-    target/local waiver.
+  control_plane_path: products/cpp-rt-car/batches/M27-06.yaml
+  owner_scope: Owner selected06 and narrowed ongoing work to ordinary C++ simulation tests and build/provenance
+    verification. Deliver independent fresh-directory package builds and exact source/dependency/toolchain/archive
+    records. Preserve existing fixture/candidate tooling and all original gates. No added scanner, generated-input
+    campaign, deliberate memory error, signing test identities, production key/signature, workflow or
+    schedule. Original06 signing-fixture expansion remains unperformed; no CAP-M20 or release acceptance
+    is promoted. Standing scoped publication/guarded merge persists; no target/local gate waived.
   activation: selected_after_canonical_plan_merge
-  predecessor_control_revision: b8bd05595c4918a22a09833247627e3ee0d6a46d
-  control_plane_revision: 4a5ba911553c0a541b406ddd3039785d2c8eae68
-  canonical_revision: 4a5ba911553c0a541b406ddd3039785d2c8eae68
-  canonical_blob_sha: 9c92cd06fdc9de957c2f99655b08b04c0cfa4026
+  predecessor_control_revision: 4a5ba911553c0a541b406ddd3039785d2c8eae68
+  control_plane_revision: 18dfecc0c890245689ea399824121e6e8d77262c
+  canonical_revision: 18dfecc0c890245689ea399824121e6e8d77262c
+  canonical_blob_sha: 664beef15566acb64bb5026816e72dd57f18aeb7
 dependencies:
-- M27-01
-- M27-02
-- M27-03
-- M27-04
+- M27-05
 scope:
   allowed_paths:
   - AGENTS.md
@@ -44,12 +40,11 @@ scope:
   - tests/golden_audit/test_catalog.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - docs/evidence/M27-05-*
-  - tests/CMakeLists.txt
-  - docs/portable_assurance.md
-  - docs/security_supply_chain.md
-  - tests/runtime_robustness/**
-  - docs/runtime_robustness.md
+  - tools/release_*
+  - tests/test_release_tools.py
+  - tests/release_verification/**
+  - docs/release_policy.md
+  - docs/evidence/M27-06-*
   forbidden_paths:
   - abi/
   - VERSION.txt
@@ -81,43 +76,36 @@ scope:
   - bench/
   - hal/
   - gpu/
-  - integrations/telemetry/
-  - tests/snapshot_fuzz.cpp
-  - tests/runtime_profile_fuzz.cpp
-  - tests/jobqueue_fuzz.cpp
-  - tests/fuzz_live_control_replay.cpp
-  - tests/fuzz/
-  - tools/run_fuzz_smoke.py
-  - tools/check_static_analysis.py
-  - tools/static_analysis_sources.txt
+  - integrations/
+  - tests/provenance_fixtures/
+  - tests/package_consumer/
+  - tools/provenance.py
   - tools/sbom.py
   - tools/sbom_expected.json
-  - tests/test_sampled_io_simulation.cpp
-  - tests/package_consumer/
+  - scripts/verify-portable-assurance.sh
   - docs/evidence/M27-01-*
   - docs/evidence/M27-02-*
   - docs/evidence/M27-03-*
   - docs/evidence/M27-04-*
-  - .github/workflows/security-campaign.yml
-  - tools/security_campaign/
-  - tests/security_campaign/
-  - scripts/verify-portable-assurance.sh
+  - docs/evidence/M27-05-*
 acceptance:
-- Add only ordinary deterministic public-API regression coverage for two independent Runtime owners, lifecycle
-  transitions, checkpoint round trips and refused restores, active replay inspection and typed payload
-  decode/round trips. Use fixed documented cases, return normal test failures and preserve all production
-  and predecessor sources/assertions/deadlines.
-- Exercise the actual new CTest and an independent installed/relocated SDK consumer, with normal sanitizer/static/default-ABI
-  checks. No intentional memory errors, generated-input campaign, crash minimizer, scanner or additional
-  hosted workflow is included. Retain the withdrawn unpublished prototype and its setup failure without
-  calling it completed validation.
-- Document the owner scope change and preserve original sustained/continuous campaign, seeded-defect discovery
-  and workflow obligations as unperformed/deferred. No CAP-M20 security or continuous-coverage acceptance
-  is promoted. M27-06 is selected next for build/provenance verification after this bounded05 integration;07/08
-  remain inactive.
-- Run complete repository contract/quick/full plus all32 exact final-head baseline hosted records with
-  exact names/multiplicity, risk review and clean/head/base/review/merge-tree guards before scoped integration
-  and canonical closure. No target/local gate is waived.
+- Inventory existing tooling first. Preserve its unsigned candidate and signed external fixture distinctions.
+  Existing artifact mode copies one archive to two directories, so it does not prove independent package
+  rebuilds. Add a separate ordinary build/report command that validates clean expected source commit/tree
+  and declared dependency policy, records actual tool paths/versions/hashes and complete invoked build
+  parameters, and builds twice in new independent directories.
+- Compare actual complete package archive hashes and member inventories, including file content, type/mode
+  and symlink targets. Record both raw archive equality and member differences; refuse to report reproducibility
+  on a mismatch or incomplete command. Bind every result to actual source/build/tool/dependency/archive
+  inputs and retain commands, failed outputs and bounded execution logs. Never infer authentication or
+  release eligibility from local matching bytes.
+- Exercise the real CLI, ordinary mismatch/missing/output/source-state cases and two independently built
+  current C++ packages with installed consumer validation. Keep normal repository contract/full156+161,
+  exact32 hosted names/multiplicity, ABI/defaults/prior tests/evidence and guarded integration/closure.
+  No original gate is waived.
+- Document the narrowed scope and runbook. Signing-fixture expansion, production identity/key custody/signing
+  approval, authenticated provenance and actual release remain unperformed/separate. M27-07 and08 remain
+  planned/inactive; no CAP-M20 promotion.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
@@ -127,21 +115,23 @@ validation:
     and actual installed package validation.
   - git diff --check
   focused_tests_to_add:
-  - Add only ordinary deterministic public-API regression coverage for two independent Runtime owners,
-    lifecycle transitions, checkpoint round trips and refused restores, active replay inspection and typed
-    payload decode/round trips. Use fixed documented cases, return normal test failures and preserve all
-    production and predecessor sources/assertions/deadlines.
-  - Exercise the actual new CTest and an independent installed/relocated SDK consumer, with normal sanitizer/static/default-ABI
-    checks. No intentional memory errors, generated-input campaign, crash minimizer, scanner or additional
-    hosted workflow is included. Retain the withdrawn unpublished prototype and its setup failure without
-    calling it completed validation.
-  - Document the owner scope change and preserve original sustained/continuous campaign, seeded-defect
-    discovery and workflow obligations as unperformed/deferred. No CAP-M20 security or continuous-coverage
-    acceptance is promoted. M27-06 is selected next for build/provenance verification after this bounded05
-    integration;07/08 remain inactive.
+  - Inventory existing tooling first. Preserve its unsigned candidate and signed external fixture distinctions.
+    Existing artifact mode copies one archive to two directories, so it does not prove independent package
+    rebuilds. Add a separate ordinary build/report command that validates clean expected source commit/tree
+    and declared dependency policy, records actual tool paths/versions/hashes and complete invoked build
+    parameters, and builds twice in new independent directories.
+  - Compare actual complete package archive hashes and member inventories, including file content, type/mode
+    and symlink targets. Record both raw archive equality and member differences; refuse to report reproducibility
+    on a mismatch or incomplete command. Bind every result to actual source/build/tool/dependency/archive
+    inputs and retain commands, failed outputs and bounded execution logs. Never infer authentication
+    or release eligibility from local matching bytes.
+  - Exercise the real CLI, ordinary mismatch/missing/output/source-state cases and two independently built
+    current C++ packages with installed consumer validation. Keep normal repository contract/full156+161,
+    exact32 hosted names/multiplicity, ABI/defaults/prior tests/evidence and guarded integration/closure.
+    No original gate is waived.
   required_ci:
-  - All32 exact final-head baseline checks pass with exact M26-06 names/multiplicity. The withdrawn33rd
-    campaign check is excluded by owner scope; no scheduled or additional workflow is added.
+  - All32 exact final-head target checks successful with exact M26-06 names/multiplicity. No target/local
+    gate waived.
   manual:
   - No physical/HIL/RT/human/controlled-performance/Unreal/production-signing/release/deployment claim
     from portable software tests.
@@ -159,9 +149,8 @@ rollback:
     and other planned batches.
 evidence:
   output:
-  - docs/evidence/M27-05-<date>.md
+  - docs/evidence/M27-06-<date>.md
   - Exact baseline/positive/negative commands, hashes, raw logs, risk review and final-head local/CI/merge/closure
     records.
-  claim_boundary: Ordinary deterministic C++ regression coverage only. Original M27-05 campaign/continuous-coverage
-    work is excluded and remains unperformed. Production, ABI/defaults, earlier tests and independent
-    qualification/release criteria are unchanged.
+  claim_boundary: Unsigned local ordinary C++ build comparison and provenance observations only. Original06
+    signing-fixture expansion and all production signing/authentication/release/qualification remain unperformed.
