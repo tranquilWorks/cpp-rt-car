@@ -1,3 +1,14 @@
+# M27-08 implementation checkpoint
+
+M27-07 target292/control604 is complete. M27-08 adds missing current installed-package
+version/component discovery, equivalent fixed lifecycle consumers for modern and
+legacy CMake targets, and bounded soak journals with measured elapsed time and
+explicit provider-resource accounting. See [migration.md](migration.md) for the
+coverage inventory and finite remaining gates. Implementation verification,
+all32 exact-head gates and guarded target/canonical closure are still required;
+this snapshot is not completion. Original05/06 exclusions, historical timing/
+initialization limitations and all external qualification boundaries remain.
+
 # M27-07 native golden XDMA host preparation
 
 The optional installed `golden_xdma_native` Linux kit assembles the frozen golden

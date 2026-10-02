@@ -1,30 +1,32 @@
 schema_version: 1
 batch:
-  id: M27-07
-  title: Native golden XDMA host preparation
-  goal: Wire the golden scenario to the existing native XDMA host interface with compile and simulated-driver
-    contract validation.
+  id: M27-08
+  title: Platform migration and portable soak readiness
+  goal: Complete remaining software-only migration/platform compatibility and sustained portable soak
+    evidence over the delivered software.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
-  - products/cpp-rt-car/acceptance.yaml#CAP-M18
+  - products/cpp-rt-car/acceptance.yaml#CAP-M20
   - products/cpp-rt-car/evidence/M26-06-closure-2026-09-30/closure.md
-  milestone: products/cpp-rt-car/milestones/M27.md#m27-07
-  baseline_commit: 3b9fc08afc1e7c4b5e6230b80f1235477a5acbab
+  milestone: products/cpp-rt-car/milestones/M27.md#m27-08
+  baseline_commit: 7567c9621d49dc113bca2fd4951cb477d5d63b67
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M27-07.yaml
-  owner_scope: Owner explicitly selected07 after completed owner-scoped05/06. Implement only native golden
-    XDMA host preparation using existing adapters and frozen workloads, ordinary simulated-driver and
-    installed-host validation. Standing scoped publication/guarded merge and completed zero-step control-only
-    exception persist; no target/local functional waiver.08 remains planned. Original05 campaign/continuous
-    and06 signature expansion remain unperformed.
+  control_plane_path: products/cpp-rt-car/batches/M27-08.yaml
+  owner_scope: Owner explicitly selected08 after completed07/closure604. Add missing ordinary installed-package
+    migration tests and bounded fixed C++ lifecycle/replay/owner-isolation soak with truthful journals/resource
+    observations. Preserve original05 generated-input/continuous/scanner and06 signature exclusions. Standing
+    scoped publication/guarded merge and completed zero-step control-only exception persist; no target/local
+    functional waiver.
   activation: owner_selected
-  control_plane_revision: 38437dba944fc305c35e5421411893d84473725d
-  canonical_revision: 38437dba944fc305c35e5421411893d84473725d
-  canonical_blob_sha: eb627197cfeaa94492ec5e097a5d58ce556ee3b3
+  control_plane_revision: 8a3e60b27959f8759d01b4629a2cc90510e24b46
+  canonical_revision: 8a3e60b27959f8759d01b4629a2cc90510e24b46
+  canonical_blob_sha: a43a6b39ea6010a95752eddd74d1231b98a5f324
 dependencies:
-- M27-01
+- M27-04
+- M27-05
 - M27-06
+- M27-07
 scope:
   allowed_paths:
   - AGENTS.md
@@ -39,13 +41,13 @@ scope:
   - tests/golden_audit/test_catalog.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - samples/golden_xdma_native/**
-  - tests/golden_xdma_native/**
+  - tests/platform_migration/**
   - tests/package_consumer/**
-  - CMakeLists.txt
+  - tools/portable_soak/**
+  - docs/migration.md
+  - docs/release_policy.md
+  - docs/evidence/M27-08-*
   - tests/CMakeLists.txt
-  - docs/golden_xdma_native.md
-  - docs/evidence/M27-07-*
   forbidden_paths:
   - abi/
   - VERSION.txt
@@ -77,9 +79,11 @@ scope:
   - samples/golden_system/
   - samples/golden_cuda/
   - samples/golden_xdma/
+  - samples/golden_xdma_native/
   - tests/golden_system/
   - tests/golden_cuda/
   - tests/golden_xdma/
+  - tests/golden_xdma_native/
   - tests/runtime_robustness/
   - tests/release_verification/
   - tools/release_rebuild.py
@@ -89,17 +93,24 @@ scope:
   - docs/evidence/M27-04-*
   - docs/evidence/M27-05-*
   - docs/evidence/M27-06-*
+  - docs/evidence/M27-07-*
 acceptance:
-- Use existing supported native adapter interfaces, explicit host staging, named tuple/configuration requirements
-  and checked startup/stop ownership; preserve frozen golden workloads and existing simulated kits.
-- Compile the actual optional installed host, validate absent-device refusal before side effects and fake-driver
-  protocol/lifecycle/format negatives without accessing live endpoints.
-- Leave real FPGA/bitstream/driver functional behavior, safe physical outputs, thermal/saturation/device-loss/endurance
-  and RT qualification unperformed until a named approved bench is available.
+- Inventory already-covered platforms and migrations and add only missing supported-version/package/API
+  paths with retained exact consumer inputs and observable outcomes.
+- Run bounded fixed ordinary portable lifecycle/replay/expected-refusal/owner-isolation repetitions with
+  complete logs, interruption/failure journals and resource conservation observations; distinguish logical
+  workload from measured wall duration. No generated-input campaign, deliberate crash/memory-error fixture,
+  scanner, workflow or continuous schedule.
+- Produce release-readiness evidence and finite remaining gate list, without interpreting portable soak
+  as physical endurance, controlled performance, RT, independent human acceptance, release approval or
+  deployment.
 - Preserve prior completed batches/evidence and protected ABI/default/support claims. Run complete repository
   contract/quick/full plus all32 exact final-head hosted records with exact baseline names/multiplicity;
   retain failed attempts and risk review. Guard clean/head/base/review/merge-tree equality before scoped
   integration and canonical closure.
+- tests/CMakeLists.txt changes are additive new-test wiring only; preserve every existing test/assertion/deadline.
+  Package migration uses the current actual SDK and documented same-major discovery/compatibility surfaces,
+  never fabricated historical binaries or new supported tuples.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
@@ -109,13 +120,15 @@ validation:
     and actual installed package validation.
   - git diff --check
   focused_tests_to_add:
-  - Use existing supported native adapter interfaces, explicit host staging, named tuple/configuration
-    requirements and checked startup/stop ownership; preserve frozen golden workloads and existing simulated
-    kits.
-  - Compile the actual optional installed host, validate absent-device refusal before side effects and
-    fake-driver protocol/lifecycle/format negatives without accessing live endpoints.
-  - Leave real FPGA/bitstream/driver functional behavior, safe physical outputs, thermal/saturation/device-loss/endurance
-    and RT qualification unperformed until a named approved bench is available.
+  - Inventory already-covered platforms and migrations and add only missing supported-version/package/API
+    paths with retained exact consumer inputs and observable outcomes.
+  - Run bounded fixed ordinary portable lifecycle/replay/expected-refusal/owner-isolation repetitions
+    with complete logs, interruption/failure journals and resource conservation observations; distinguish
+    logical workload from measured wall duration. No generated-input campaign, deliberate crash/memory-error
+    fixture, scanner, workflow or continuous schedule.
+  - Produce release-readiness evidence and finite remaining gate list, without interpreting portable soak
+    as physical endurance, controlled performance, RT, independent human acceptance, release approval
+    or deployment.
   required_ci:
   - All32 exact final-head target checks successful with exact M26-06 names/multiplicity. No target/local
     gate waived.
@@ -136,7 +149,7 @@ rollback:
     and other planned batches.
 evidence:
   output:
-  - docs/evidence/M27-07-<date>.md
+  - docs/evidence/M27-08-<date>.md
   - Exact baseline/positive/negative commands, hashes, raw logs, risk review and final-head local/CI/merge/closure
     records.
   claim_boundary: Portable software implementation and tested compatibility only. Original M18/M19/M20/M25/M26
