@@ -1,0 +1,47 @@
+cmake_minimum_required(VERSION 3.20)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  project(rtfw_platform_migration LANGUAGES CXX)
+  enable_testing()
+  find_package(rtfw 1.2 CONFIG REQUIRED COMPONENTS runtime cpp_runtime)
+endif()
+if(DEFINED RTFW_DATA_DIR)
+  set(migration_memory_dir "${RTFW_DATA_DIR}/examples/golden_system")
+else()
+  set(migration_memory_dir "${CMAKE_CURRENT_LIST_DIR}/../../samples/golden_system")
+endif()
+foreach(kind IN ITEMS current legacy)
+  add_executable(rtfw_migration_${kind} main.cpp)
+  target_compile_features(rtfw_migration_${kind} PRIVATE cxx_std_20)
+  target_include_directories(rtfw_migration_${kind} PRIVATE "${migration_memory_dir}")
+  if(kind STREQUAL "current")
+    target_link_libraries(rtfw_migration_${kind} PRIVATE rtfw::runtime)
+  else()
+    target_link_libraries(rtfw_migration_${kind} PRIVATE rtfw::simcore_rt)
+  endif()
+  if(WIN32)
+    target_link_libraries(rtfw_migration_${kind} PRIVATE psapi)
+  endif()
+  if(COMMAND rtfw_enable_project_warnings)
+    rtfw_enable_project_warnings(rtfw_migration_${kind})
+  elseif(MSVC)
+    target_compile_options(rtfw_migration_${kind} PRIVATE /W4 /WX)
+  else()
+    target_compile_options(rtfw_migration_${kind} PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
+  endif()
+  if(NOT RTFW_MIGRATION_VERIFY_DURING_BUILD)
+    add_test(NAME migration_${kind}_lifecycle COMMAND rtfw_migration_${kind})
+    set_tests_properties(migration_${kind}_lifecycle PROPERTIES TIMEOUT 60)
+  endif()
+endforeach()
+
+if(RTFW_MIGRATION_VERIFY_DURING_BUILD)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_custom_target(rtfw_installed_migration_check ALL
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_LIST_DIR}/verify_installed.py"
+      --current "$<TARGET_FILE:rtfw_migration_current>"
+      --legacy "$<TARGET_FILE:rtfw_migration_legacy>"
+      --prefix "${RTFW_PREFIX}"
+      --output "${CMAKE_CURRENT_BINARY_DIR}/verification"
+    DEPENDS rtfw_migration_current rtfw_migration_legacy
+    VERBATIM)
+endif()

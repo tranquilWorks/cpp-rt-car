@@ -625,3 +625,9 @@ add_subdirectory(telemetry_export)
 add_subdirectory(runtime_robustness)
 
 add_subdirectory(golden_xdma_native)
+
+# M27-08 fixed lifecycle equivalence and journal validation.
+add_subdirectory(platform_migration)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME portable_soak_journal COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tools/portable_soak/test_run.py")
+set_tests_properties(portable_soak_journal PROPERTIES TIMEOUT 60)

@@ -186,3 +186,13 @@ alone does not establish source provenance. Existing candidate provenance and
 external signature fixtures remain unchanged. Original M27-06 signature-fixture
 expansion is unperformed under the owner amendment; production identity, signing,
 release approval and publication remain separate. No CAP-M20 completion follows.
+
+## Migration and bounded portable readiness
+
+[The migration inventory](migration.md) maps existing platform/API/package checks
+and the additive M27-08 current-package discovery and fixed lifecycle repetitions.
+Retained soak reports distinguish logical workload, measured duration, interrupted
+work and provider-resource conservation. Passing is portable functional evidence;
+it does not close the finite qualification, human, performance, signing or release
+gates listed there. Original05/06 excluded work and historical timing limitations
+remain open; support matrices and release1.2.1 compatibility promises are unchanged.

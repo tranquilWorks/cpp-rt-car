@@ -270,3 +270,9 @@ if(RTFW_TEST_XDMA_LINUX)
   add_test(NAME installed_golden_xdma_native_absent COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/../golden_xdma_native/test_cli.py" $<TARGET_FILE:golden_xdma_native>)
 endif()
+
+# Preserve the frozen existing CTest inventory while requiring migration checks
+# in every complete installed-consumer build.
+set(RTFW_MIGRATION_VERIFY_DURING_BUILD TRUE)
+add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../platform_migration" platform-migration)
+unset(RTFW_MIGRATION_VERIFY_DURING_BUILD)

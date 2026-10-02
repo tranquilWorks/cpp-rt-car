@@ -50,6 +50,14 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    "tests/platform_migration/verify_installed.py",
+    'docs/migration.md',
+    'tests/platform_migration/CMakeLists.txt',
+    'tests/platform_migration/main.cpp',
+    'tests/platform_migration/discovery.py',
+    'tools/portable_soak/run.py',
+    'tools/portable_soak/test_run.py',
+
     'tests/package_consumer/telemetry_contract.cmake',
     'tests/telemetry_export/verify_package.py',
     'integrations/telemetry/CMakeLists.txt',

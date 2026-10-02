@@ -754,3 +754,14 @@ never access live endpoints during verification. Preserve production and prior
 evidence. Full local/all32 exact-head checks, risk review, scoped publication,
 guarded merge and canonical closure remain mandatory and authorized.08 and
 original05/06 excluded work plus external qualification remain separate.
+
+## M27-08 platform migration and bounded portable soak
+
+Canonical activation `8a3e60b27959f8759d01b4629a2cc90510e24b46` selects only08 after completed07.
+Add missing actual installed-package migration checks and bounded fixed ordinary
+lifecycle/replay/owner-isolation repetitions, journals and resource observations.
+Only additive new-test wiring; preserve production, old tests, ABI/defaults and
+all prior evidence. Original05/06 excluded work stays unperformed. Full local/
+all32 exact-head gates, risk review, scoped publication, guarded merge and
+canonical closure remain required and authorized. No physical/RT/Unreal/human/
+controlled-performance/signing/release/deployment claim follows.
