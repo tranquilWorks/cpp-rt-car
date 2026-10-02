@@ -1,3 +1,21 @@
+# M27-07 native golden XDMA host preparation
+
+The optional installed `golden_xdma_native` Linux kit assembles the frozen golden
+graph through the existing native XDMA adapter with explicit borrowed staging and
+named endpoint/bitstream/driver/window configuration. It retains native capability
+reporting and disables replay. Its CLI checks startup and stop only; full native
+scenario execution and physical qualification remain unperformed. Ordinary fake-
+driver tests exercise protocol/format refusals, partial ownership, stop retry and
+zero steady-frame allocation. Actual absent-device CLI and relocated package
+checks are required before closure. See [native host guide](golden_xdma_native.md).
+
+M27-01 through06 remain delivered.07 verification/integration is in progress;
+08 is the only later planned software batch. Original05 campaign/continuous and
+06 signature expansion plus hardware/RT, actual Unreal, controlled performance,
+unfamiliar-consumer and signing/release/deployment obligations remain separate.
+
+## Previous state
+
 # M27-04 implementation and verification checkpoint
 
 The optional installed host telemetry source kit implements bounded schema2

@@ -1497,3 +1497,14 @@ install(FILES integrations/telemetry/CMakeLists.txt integrations/telemetry/READM
     integrations/telemetry/main.cpp integrations/telemetry/export.py
     integrations/telemetry/requirements.txt
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/integrations/telemetry)
+
+# Optional source kit; no default SDK target/header inventory changes.
+install(FILES
+  samples/golden_xdma_native/CMakeLists.txt
+  samples/golden_xdma_native/configuration.hpp
+  samples/golden_xdma_native/io.hpp
+  samples/golden_xdma_native/session.hpp
+  samples/golden_xdma_native/main.cpp
+  samples/golden_xdma_native/README.md
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_xdma_native)
+install(FILES docs/golden_xdma_native.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)

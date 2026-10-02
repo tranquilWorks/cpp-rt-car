@@ -743,3 +743,14 @@ ABI/defaults and previous evidence. Original06 signature expansion remains
 unperformed; no additional campaign, scanner, signing fixture or workflow.
 Full local/all32, risk review and guarded integration/closure remain mandatory
 under standing scoped publication/merge authorization.07/08 remain inactive.
+
+## M27-07 native golden host preparation
+
+Owner selected07; canonical control603 `38437dba944fc305c35e5421411893d84473725d` activates only this batch
+from target291. Add an optional installed Linux host using existing native XDMA
+interfaces and frozen golden workload/codecs. Native replay stays disabled; no
+capability spoofing. Test ordinary injected drivers and absent-device refusal;
+never access live endpoints during verification. Preserve production and prior
+evidence. Full local/all32 exact-head checks, risk review, scoped publication,
+guarded merge and canonical closure remain mandatory and authorized.08 and
+original05/06 excluded work plus external qualification remain separate.

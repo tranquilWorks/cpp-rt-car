@@ -623,3 +623,5 @@ add_subdirectory(telemetry_export)
 
 # Fixed public-API lifecycle and serialization regressions.
 add_subdirectory(runtime_robustness)
+
+add_subdirectory(golden_xdma_native)

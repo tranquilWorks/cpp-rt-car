@@ -1,31 +1,30 @@
 schema_version: 1
 batch:
-  id: M27-06
-  title: Independent build and provenance verification (owner-scoped)
-  goal: Compare independently built ordinary C++ packages and record observed source, dependency, toolchain
-    and archive identities without signing or publishing.
+  id: M27-07
+  title: Native golden XDMA host preparation
+  goal: Wire the golden scenario to the existing native XDMA host interface with compile and simulated-driver
+    contract validation.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
-  - products/cpp-rt-car/acceptance.yaml#CAP-M20
+  - products/cpp-rt-car/acceptance.yaml#CAP-M18
   - products/cpp-rt-car/evidence/M26-06-closure-2026-09-30/closure.md
-  milestone: products/cpp-rt-car/milestones/M27.md#m27-06
-  baseline_commit: b8d54b3aced4083dfd91d34c65e871eab7e2e3c0
+  milestone: products/cpp-rt-car/milestones/M27.md#m27-07
+  baseline_commit: 3b9fc08afc1e7c4b5e6230b80f1235477a5acbab
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M27-06.yaml
-  owner_scope: Owner selected06 and narrowed ongoing work to ordinary C++ simulation tests and build/provenance
-    verification. Deliver independent fresh-directory package builds and exact source/dependency/toolchain/archive
-    records. Preserve existing fixture/candidate tooling and all original gates. No added scanner, generated-input
-    campaign, deliberate memory error, signing test identities, production key/signature, workflow or
-    schedule. Original06 signing-fixture expansion remains unperformed; no CAP-M20 or release acceptance
-    is promoted. Standing scoped publication/guarded merge persists; no target/local gate waived.
-  activation: selected_after_canonical_plan_merge
-  predecessor_control_revision: 4a5ba911553c0a541b406ddd3039785d2c8eae68
-  control_plane_revision: 18dfecc0c890245689ea399824121e6e8d77262c
-  canonical_revision: 18dfecc0c890245689ea399824121e6e8d77262c
-  canonical_blob_sha: 664beef15566acb64bb5026816e72dd57f18aeb7
+  control_plane_path: products/cpp-rt-car/batches/M27-07.yaml
+  owner_scope: Owner explicitly selected07 after completed owner-scoped05/06. Implement only native golden
+    XDMA host preparation using existing adapters and frozen workloads, ordinary simulated-driver and
+    installed-host validation. Standing scoped publication/guarded merge and completed zero-step control-only
+    exception persist; no target/local functional waiver.08 remains planned. Original05 campaign/continuous
+    and06 signature expansion remain unperformed.
+  activation: owner_selected
+  control_plane_revision: 38437dba944fc305c35e5421411893d84473725d
+  canonical_revision: 38437dba944fc305c35e5421411893d84473725d
+  canonical_blob_sha: eb627197cfeaa94492ec5e097a5d58ce556ee3b3
 dependencies:
-- M27-05
+- M27-01
+- M27-06
 scope:
   allowed_paths:
   - AGENTS.md
@@ -40,11 +39,13 @@ scope:
   - tests/golden_audit/test_catalog.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - tools/release_*
-  - tests/test_release_tools.py
-  - tests/release_verification/**
-  - docs/release_policy.md
-  - docs/evidence/M27-06-*
+  - samples/golden_xdma_native/**
+  - tests/golden_xdma_native/**
+  - tests/package_consumer/**
+  - CMakeLists.txt
+  - tests/CMakeLists.txt
+  - docs/golden_xdma_native.md
+  - docs/evidence/M27-07-*
   forbidden_paths:
   - abi/
   - VERSION.txt
@@ -71,41 +72,34 @@ scope:
   - docs/evidence/M25-*
   - docs/evidence/M26-*
   - rt/
+  - src/
   - include/
-  - core/
-  - bench/
-  - hal/
-  - gpu/
-  - integrations/
-  - tests/provenance_fixtures/
-  - tests/package_consumer/
-  - tools/provenance.py
-  - tools/sbom.py
-  - tools/sbom_expected.json
-  - scripts/verify-portable-assurance.sh
+  - samples/golden_system/
+  - samples/golden_cuda/
+  - samples/golden_xdma/
+  - tests/golden_system/
+  - tests/golden_cuda/
+  - tests/golden_xdma/
+  - tests/runtime_robustness/
+  - tests/release_verification/
+  - tools/release_rebuild.py
   - docs/evidence/M27-01-*
   - docs/evidence/M27-02-*
   - docs/evidence/M27-03-*
   - docs/evidence/M27-04-*
   - docs/evidence/M27-05-*
+  - docs/evidence/M27-06-*
 acceptance:
-- Inventory existing tooling first. Preserve its unsigned candidate and signed external fixture distinctions.
-  Existing artifact mode copies one archive to two directories, so it does not prove independent package
-  rebuilds. Add a separate ordinary build/report command that validates clean expected source commit/tree
-  and declared dependency policy, records actual tool paths/versions/hashes and complete invoked build
-  parameters, and builds twice in new independent directories.
-- Compare actual complete package archive hashes and member inventories, including file content, type/mode
-  and symlink targets. Record both raw archive equality and member differences; refuse to report reproducibility
-  on a mismatch or incomplete command. Bind every result to actual source/build/tool/dependency/archive
-  inputs and retain commands, failed outputs and bounded execution logs. Never infer authentication or
-  release eligibility from local matching bytes.
-- Exercise the real CLI, ordinary mismatch/missing/output/source-state cases and two independently built
-  current C++ packages with installed consumer validation. Keep normal repository contract/full156+161,
-  exact32 hosted names/multiplicity, ABI/defaults/prior tests/evidence and guarded integration/closure.
-  No original gate is waived.
-- Document the narrowed scope and runbook. Signing-fixture expansion, production identity/key custody/signing
-  approval, authenticated provenance and actual release remain unperformed/separate. M27-07 and08 remain
-  planned/inactive; no CAP-M20 promotion.
+- Use existing supported native adapter interfaces, explicit host staging, named tuple/configuration requirements
+  and checked startup/stop ownership; preserve frozen golden workloads and existing simulated kits.
+- Compile the actual optional installed host, validate absent-device refusal before side effects and fake-driver
+  protocol/lifecycle/format negatives without accessing live endpoints.
+- Leave real FPGA/bitstream/driver functional behavior, safe physical outputs, thermal/saturation/device-loss/endurance
+  and RT qualification unperformed until a named approved bench is available.
+- Preserve prior completed batches/evidence and protected ABI/default/support claims. Run complete repository
+  contract/quick/full plus all32 exact final-head hosted records with exact baseline names/multiplicity;
+  retain failed attempts and risk review. Guard clean/head/base/review/merge-tree equality before scoped
+  integration and canonical closure.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
@@ -115,20 +109,13 @@ validation:
     and actual installed package validation.
   - git diff --check
   focused_tests_to_add:
-  - Inventory existing tooling first. Preserve its unsigned candidate and signed external fixture distinctions.
-    Existing artifact mode copies one archive to two directories, so it does not prove independent package
-    rebuilds. Add a separate ordinary build/report command that validates clean expected source commit/tree
-    and declared dependency policy, records actual tool paths/versions/hashes and complete invoked build
-    parameters, and builds twice in new independent directories.
-  - Compare actual complete package archive hashes and member inventories, including file content, type/mode
-    and symlink targets. Record both raw archive equality and member differences; refuse to report reproducibility
-    on a mismatch or incomplete command. Bind every result to actual source/build/tool/dependency/archive
-    inputs and retain commands, failed outputs and bounded execution logs. Never infer authentication
-    or release eligibility from local matching bytes.
-  - Exercise the real CLI, ordinary mismatch/missing/output/source-state cases and two independently built
-    current C++ packages with installed consumer validation. Keep normal repository contract/full156+161,
-    exact32 hosted names/multiplicity, ABI/defaults/prior tests/evidence and guarded integration/closure.
-    No original gate is waived.
+  - Use existing supported native adapter interfaces, explicit host staging, named tuple/configuration
+    requirements and checked startup/stop ownership; preserve frozen golden workloads and existing simulated
+    kits.
+  - Compile the actual optional installed host, validate absent-device refusal before side effects and
+    fake-driver protocol/lifecycle/format negatives without accessing live endpoints.
+  - Leave real FPGA/bitstream/driver functional behavior, safe physical outputs, thermal/saturation/device-loss/endurance
+    and RT qualification unperformed until a named approved bench is available.
   required_ci:
   - All32 exact final-head target checks successful with exact M26-06 names/multiplicity. No target/local
     gate waived.
@@ -149,8 +136,8 @@ rollback:
     and other planned batches.
 evidence:
   output:
-  - docs/evidence/M27-06-<date>.md
+  - docs/evidence/M27-07-<date>.md
   - Exact baseline/positive/negative commands, hashes, raw logs, risk review and final-head local/CI/merge/closure
     records.
-  claim_boundary: Unsigned local ordinary C++ build comparison and provenance observations only. Original06
-    signing-fixture expansion and all production signing/authentication/release/qualification remain unperformed.
+  claim_boundary: Portable software implementation and tested compatibility only. Original M18/M19/M20/M25/M26
+    qualification and acceptance obligations remain separate.
