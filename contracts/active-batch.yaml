@@ -1,32 +1,27 @@
 schema_version: 1
 batch:
-  id: M27-08
-  title: Platform migration and portable soak readiness
-  goal: Complete remaining software-only migration/platform compatibility and sustained portable soak
-    evidence over the delivered software.
+  id: M28-01
+  title: Concurrent experimental clock initialization
+  goal: Remove the retained process-global initialization race while preserving caller-thread owner construction
+    and existing clock semantics.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
-  - products/cpp-rt-car/acceptance.yaml#CAP-M20
-  - products/cpp-rt-car/evidence/M26-06-closure-2026-09-30/closure.md
-  milestone: products/cpp-rt-car/milestones/M27.md#m27-08
-  baseline_commit: 7567c9621d49dc113bca2fd4951cb477d5d63b67
+  - products/cpp-rt-car/acceptance.yaml#CAP-M26
+  milestone: products/cpp-rt-car/milestones/M28.md#m28-01
+  baseline_commit: 389e3fc84cfc2a5946b6e555befdff0962f3989a
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M27-08.yaml
-  owner_scope: Owner explicitly selected08 after completed07/closure604. Add missing ordinary installed-package
-    migration tests and bounded fixed C++ lifecycle/replay/owner-isolation soak with truthful journals/resource
-    observations. Preserve original05 generated-input/continuous/scanner and06 signature exclusions. Standing
-    scoped publication/guarded merge and completed zero-step control-only exception persist; no target/local
-    functional waiver.
+  control_plane_path: products/cpp-rt-car/batches/M28-01.yaml
   activation: owner_selected
-  control_plane_revision: 8a3e60b27959f8759d01b4629a2cc90510e24b46
-  canonical_revision: 8a3e60b27959f8759d01b4629a2cc90510e24b46
-  canonical_blob_sha: a43a6b39ea6010a95752eddd74d1231b98a5f324
+  owner_scope: Owner selected M28-01 after merged plan607. Repair only experimental clock initialization/publication
+    and add independent concurrent-owner/read/init tests. Standing scoped publication and guarded merge
+    authorization continues; all original tests/deadlines and external gates remain. Later M28 batches
+    are inactive.
+  control_plane_revision: 937a5b100ba48798d0fafc6bfb57457c16ef600b
+  canonical_revision: 937a5b100ba48798d0fafc6bfb57457c16ef600b
+  canonical_blob_sha: 31a3206afb01859f36b884a753eb01333a80ddd6
 dependencies:
-- M27-04
-- M27-05
-- M27-06
-- M27-07
+- M27-08
 scope:
   allowed_paths:
   - AGENTS.md
@@ -34,33 +29,30 @@ scope:
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
   - docs/roadmap.md
-  - docs/architecture.md
+  - docs/migration.md
   - docs/sdk/generated/**
   - docs/golden_audit/**
   - samples/golden_audit/catalog.py
-  - tests/golden_audit/test_catalog.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - tests/platform_migration/**
-  - tests/package_consumer/**
-  - tools/portable_soak/**
-  - docs/migration.md
-  - docs/release_policy.md
-  - docs/evidence/M27-08-*
+  - include/simcore/highres_clock.hpp
+  - tests/closeout_clock/**
   - tests/CMakeLists.txt
+  - docs/evidence/M28-01-*
   forbidden_paths:
   - abi/
   - VERSION.txt
   - LICENSE
-  - release/keys/
-  - release/signatures/
   - qualification/
   - profiles/
   - configs/
-  - .github/workflows/ci.yml
-  - .github/workflows/release.yml
+  - .github/workflows/
+  - release/keys/
+  - release/signatures/
   - rt/include/rt/c_api.h
   - rt/include/rt/device_abi.h
+  - bench/real_device/
+  - samples/unreal/
   - docs/evidence/M15-*
   - docs/evidence/M16-*
   - docs/evidence/M17-*
@@ -73,84 +65,66 @@ scope:
   - docs/evidence/M24-*
   - docs/evidence/M25-*
   - docs/evidence/M26-*
-  - rt/
-  - src/
-  - include/
-  - samples/golden_system/
-  - samples/golden_cuda/
-  - samples/golden_xdma/
-  - samples/golden_xdma_native/
-  - tests/golden_system/
-  - tests/golden_cuda/
-  - tests/golden_xdma/
-  - tests/golden_xdma_native/
-  - tests/runtime_robustness/
-  - tests/release_verification/
-  - tools/release_rebuild.py
-  - docs/evidence/M27-01-*
-  - docs/evidence/M27-02-*
-  - docs/evidence/M27-03-*
-  - docs/evidence/M27-04-*
-  - docs/evidence/M27-05-*
-  - docs/evidence/M27-06-*
-  - docs/evidence/M27-07-*
+  - docs/evidence/M27-*
 acceptance:
-- Inventory already-covered platforms and migrations and add only missing supported-version/package/API
-  paths with retained exact consumer inputs and observable outcomes.
-- Run bounded fixed ordinary portable lifecycle/replay/expected-refusal/owner-isolation repetitions with
-  complete logs, interruption/failure journals and resource conservation observations; distinguish logical
-  workload from measured wall duration. No generated-input campaign, deliberate crash/memory-error fixture,
-  scanner, workflow or continuous schedule.
-- Produce release-readiness evidence and finite remaining gate list, without interpreting portable soak
-  as physical endurance, controlled performance, RT, independent human acceptance, release approval or
-  deployment.
-- Preserve prior completed batches/evidence and protected ABI/default/support claims. Run complete repository
-  contract/quick/full plus all32 exact final-head hosted records with exact baseline names/multiplicity;
-  retain failed attempts and risk review. Guard clean/head/base/review/merge-tree equality before scoped
-  integration and canonical closure.
-- tests/CMakeLists.txt changes are additive new-test wiring only; preserve every existing test/assertion/deadline.
-  Package migration uses the current actual SDK and documented same-major discovery/compatibility surfaces,
-  never fabricated historical binaries or new supported tuples.
+- Reproduce concurrent HighResClock initialization and concurrent owner construction on their execution
+  threads against the unchanged baseline; retain initialized TSan evidence and a deterministic causal
+  control where feasible.
+- Repair only the demonstrated clock publication/initialization defect. Preserve explicit injected-reader
+  behavior, monotonicity, fallback, independent owner lifetime and caller-thread arena binding. No new
+  global serialization on the clock read path, RT-lane allocation, or supported Runtime dependency on
+  experimental SimCore.
+- Run concurrent construction/read/destruction and repeated initialization tests, existing clock and 2/4/8-thread
+  determinism tests, applicable no-allocation checks, full instrumentation and installed legacy/current
+  target isolation. Preserve all existing tests and timing limits.
+- Activate only M28-01 from exact target baseline389e3fc84cfc2a5946b6e555befdff0962f3989a, then bind this
+  merged canonical revision/blob in the target active contract. All later M28 work remains inactive.
+- Preserve release1.2.1, portable RT0, C ABI8/70 exports/fingerprint/SONAME8, device ABI1, public/default
+  policies and supported tuples. Existing source tests/assertions/deadlines and all historical evidence
+  stay unchanged; tests/CMakeLists.txt permits additive new-test wiring only.
+- For each claimed repair retain a causal baseline failure and corrected outcome. Complete exact-head
+  local full validation and all32 hosted checks with the original names and multiplicity, applicable sanitizer/static/no-allocation/default/ABI/actual
+  installed package gates, risk review and guarded target/canonical closure. No functional gate is waived.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh quick
   - ./scripts/agent-verify.sh full
-  - Focused entry-point positive/negative tests, independently failing baseline control, applicable sanitizer/static/no-allocation/default-byte/ABI
-    and actual installed package validation.
   - git diff --check
   focused_tests_to_add:
-  - Inventory already-covered platforms and migrations and add only missing supported-version/package/API
-    paths with retained exact consumer inputs and observable outcomes.
-  - Run bounded fixed ordinary portable lifecycle/replay/expected-refusal/owner-isolation repetitions
-    with complete logs, interruption/failure journals and resource conservation observations; distinguish
-    logical workload from measured wall duration. No generated-input campaign, deliberate crash/memory-error
-    fixture, scanner, workflow or continuous schedule.
-  - Produce release-readiness evidence and finite remaining gate list, without interpreting portable soak
-    as physical endurance, controlled performance, RT, independent human acceptance, release approval
-    or deployment.
+  - Reproduce concurrent HighResClock initialization and concurrent owner construction on their execution
+    threads against the unchanged baseline; retain initialized TSan evidence and a deterministic causal
+    control where feasible.
+  - Repair only the demonstrated clock publication/initialization defect. Preserve explicit injected-reader
+    behavior, monotonicity, fallback, independent owner lifetime and caller-thread arena binding. No new
+    global serialization on the clock read path, RT-lane allocation, or supported Runtime dependency on
+    experimental SimCore.
+  - Run concurrent construction/read/destruction and repeated initialization tests, existing clock and
+    2/4/8-thread determinism tests, applicable no-allocation checks, full instrumentation and installed
+    legacy/current target isolation. Preserve all existing tests and timing limits.
   required_ci:
-  - All32 exact final-head target checks successful with exact M26-06 names/multiplicity. No target/local
-    gate waived.
+  - All32 exact final-head target checks successful, preserving original baseline names and multiplicity;
+    full canonical control validation on planning and closure.
   manual:
-  - No physical/HIL/RT/human/controlled-performance/Unreal/production-signing/release/deployment claim
-    from portable software tests.
+  - None inside this software batch. Final owner stage retains all bench, engine, independent human, controlled
+    performance, production signing/release/deployment acceptance.
 risk:
   class: high
   hazards:
-  - Software evidence is promoted to qualification or an unresolved finding is silently closed.
-  - A repair weakens compatibility, deadlines, bounds, prior tests or evidence.
+  - An unproven cause, retry pass or instrumented timing result is mistaken for a repair or qualification.
+  - A change weakens an old assertion, deadline, ABI/default or prior evidence.
   stop_conditions:
-  - A new public ABI/schema/default-policy decision or forbidden source change becomes necessary.
-  - Required hardware, real engine environment, production key or release/deployment authority is missing
-    for the claimed outcome.
+  - A new public API/ABI/schema/default-policy decision or path outside the activated cause-specific scope
+    is needed.
+  - Credible completion requires a bench, licensed engine, live endpoint, independent human judgement,
+    production key or release/deployment action; retain that item for the final owner stage.
 rollback:
-  strategy: Revert only this batch correction/additions and their wiring; preserve all predecessor code/evidence
-    and other planned batches.
+  strategy: Revert only this batch changes and additive wiring; preserve predecessor implementations,
+    immutable evidence and every final-stage obligation.
 evidence:
   output:
-  - docs/evidence/M27-08-<date>.md
-  - Exact baseline/positive/negative commands, hashes, raw logs, risk review and final-head local/CI/merge/closure
-    records.
-  claim_boundary: Portable software implementation and tested compatibility only. Original M18/M19/M20/M25/M26
-    qualification and acceptance obligations remain separate.
+  - docs/evidence/M28-01-<date>.md
+  - Exact source/tree, commands, raw failures/results, source hashes, risk review, final-head CI and guarded
+    merge/closure receipts.
+  claim_boundary: Portable software only. Investigation can classify an unresolved result without claiming
+    it passed. Global qualification, independent human acceptance and production release remain separate.
