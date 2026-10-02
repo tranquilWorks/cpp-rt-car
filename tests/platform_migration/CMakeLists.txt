@@ -28,6 +28,20 @@ foreach(kind IN ITEMS current legacy)
   else()
     target_compile_options(rtfw_migration_${kind} PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
   endif()
-  add_test(NAME migration_${kind}_lifecycle COMMAND rtfw_migration_${kind})
-  set_tests_properties(migration_${kind}_lifecycle PROPERTIES TIMEOUT 60)
+  if(NOT RTFW_MIGRATION_VERIFY_DURING_BUILD)
+    add_test(NAME migration_${kind}_lifecycle COMMAND rtfw_migration_${kind})
+    set_tests_properties(migration_${kind}_lifecycle PROPERTIES TIMEOUT 60)
+  endif()
 endforeach()
+
+if(RTFW_MIGRATION_VERIFY_DURING_BUILD)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_custom_target(rtfw_installed_migration_check ALL
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_LIST_DIR}/verify_installed.py"
+      --current "$<TARGET_FILE:rtfw_migration_current>"
+      --legacy "$<TARGET_FILE:rtfw_migration_legacy>"
+      --prefix "${RTFW_PREFIX}"
+      --output "${CMAKE_CURRENT_BINARY_DIR}/verification"
+    DEPENDS rtfw_migration_current rtfw_migration_legacy
+    VERBATIM)
+endif()

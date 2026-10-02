@@ -50,6 +50,7 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    "tests/platform_migration/verify_installed.py",
     'docs/migration.md',
     'tests/platform_migration/CMakeLists.txt',
     'tests/platform_migration/main.cpp',

@@ -32,3 +32,25 @@ High-risk batch, reviewed against activated canonical605 and baseline target292.
 Disposition: implementation passes focused/package/instrumented/static/contract
 review. Eligible for final full+hosted verification, then guarded scoped integration;
 not global qualification or release acceptance. No high-risk finding is waived.
+
+## Installed consumer inventory correction
+
+Initial head b9962b654dd801a16d2463666912fd6def6a37c6 passed full160/165 and
+its three platform package jobs (68/68 Linux,69/69 MSVC), but docs-contract job
+111010399336 correctly failed the frozen XDMA verifier's exact65-test assertion.
+The new installed CTest registrations caused this integration regression. The
+original failure and raw log remain retained; it is not an API/infrastructure waiver.
+
+Change only the new wiring: every complete installed-consumer build now requires
+`rtfw_installed_migration_check` (ALL), which executes both binaries, checks equal
+observations and all eight real discovery cases, and propagates failures. Original
+CTest declarations/counts/assertions remain unchanged. Standalone/source migration
+lifecycle tests remain registered. The unchanged complete XDMA package verifier
+passes locally, including actual CPack/relocation, original65 consumers, new mandatory
+build verification, embedding and prior negative controls. No old test is edited. Direct nonzero and zero-exit/missing-observation controls
+confirm the build verifier fails rather than accepting an unsuccessful consumer.
+
+The C++ workload is byte-identical to the instrumented/static/soak-tested source;
+only orchestration/wiring/docs change. Final corrected-head full160/165 and all32
+hosted gates are required again. Earlier package/soak observations retain their
+original bindings; canonical closure records final corrected-head package results.

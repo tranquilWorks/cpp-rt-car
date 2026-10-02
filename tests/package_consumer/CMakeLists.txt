@@ -271,10 +271,8 @@ if(RTFW_TEST_XDMA_LINUX)
     "${CMAKE_CURRENT_SOURCE_DIR}/../golden_xdma_native/test_cli.py" $<TARGET_FILE:golden_xdma_native>)
 endif()
 
-# Exercise both compatibility names against the same extracted SDK.
+# Preserve the frozen existing CTest inventory while requiring migration checks
+# in every complete installed-consumer build.
+set(RTFW_MIGRATION_VERIFY_DURING_BUILD TRUE)
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../platform_migration" platform-migration)
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-add_test(NAME installed_migration_discovery COMMAND ${Python3_EXECUTABLE}
-  "${CMAKE_CURRENT_LIST_DIR}/../platform_migration/discovery.py"
-  --prefix "${RTFW_PREFIX}" --output "${CMAKE_CURRENT_BINARY_DIR}/migration-discovery")
-set_tests_properties(installed_migration_discovery PROPERTIES TIMEOUT 180)
+unset(RTFW_MIGRATION_VERIFY_DURING_BUILD)

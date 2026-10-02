@@ -27,6 +27,11 @@ These test the documented version-selection promise against the actual current
 archive. They do not substitute fabricated metadata for historical SDK builds.
 
 The same public consumer is compiled against current and legacy CMake targets.
+Standalone/source builds register two lifecycle tests. Installed package-consumer
+builds require the `rtfw_installed_migration_check` ALL target: it executes both
+consumers, checks equal observations and runs discovery, retaining complete logs.
+Any failed command or observation fails the build. This preserves the exact prior
+CTest inventory required by the frozen package verifiers; no old test is changed.
 It uses two isolated Runtime owners, actual checkpoint capture/restore and fixed
 reexecution, stops one owner while the other progresses, and checks expected
 post-stop refusals and idempotent stop. Each cycle verifies all six provider
