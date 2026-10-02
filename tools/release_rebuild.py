@@ -173,6 +173,10 @@ def rebuild(root: Path, expected: str, work: Path, cc: str, cxx: str, timeout: i
     if work.exists():
         raise ValueError('work directory must be new')
     source = source_identity(root, expected)
+    driver = Path(__file__).resolve()
+    if driver != (root / 'tools/release_rebuild.py').resolve():
+        raise ValueError('driver must belong to the specified source checkout')
+    driver_record = {'path': str(driver), 'sha256': digest(driver)}
     identities = {name: tool_identity(command) for name, command in
                   [('cc', cc), ('cxx', cxx), ('cmake', 'cmake'), ('cpack', 'cpack'),
                    ('ctest', 'ctest'), ('python', sys.executable), ('git', 'git'),
@@ -190,7 +194,7 @@ def rebuild(root: Path, expected: str, work: Path, cc: str, cxx: str, timeout: i
         environment.pop(key, None)
     runner = Runner(work, environment, timeout)
     report = {'schema_version': 1, 'authentication': False, 'publication': False,
-              'source': source, 'source_root': str(root), 'tools': identities,
+              'source': source, 'source_root': str(root), 'tools': identities, 'driver': driver_record,
               'dependency_policy_sha256': digest(policy), 'dependencies': dependencies,
               'platform': platform.platform(), 'commands': runner.commands,
               'environment': {'SOURCE_DATE_EPOCH': str(source['epoch']), 'LC_ALL': 'C', 'TZ': 'UTC'},
@@ -225,23 +229,43 @@ def rebuild(root: Path, expected: str, work: Path, cc: str, cxx: str, timeout: i
             prefix = work / label / 'relocated'
             runner.run(identities['python']['path'], root / 'tools/extract_release_archive.py',
                        '--artifact-dir', output, '--destination', prefix)
+            config = prefix / 'lib/cmake/rtfw/rtfwConfig.cmake'
+            if not config.is_file():
+                raise ValueError('newly extracted SDK configuration is missing')
             consumer = work / label / 'consumer-source'
             consumer.mkdir()
+            consumer_hashes = {}
             for name in ('CMakeLists.txt', 'main.cpp', 'lifecycle.hpp'):
                 shutil.copy2(root / 'tests/runtime_robustness' / name, consumer / name)
+                consumer_hashes[name] = digest(consumer / name)
             runner.run(cmake, '-S', consumer, '-B', work / label / 'consumer-build',
                        '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_PREFIX_PATH=' + str(prefix),
+                       '-Drtfw_DIR=' + str(config.parent), '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON',
+                       '-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF', '-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF',
                        '-DCMAKE_CXX_COMPILER=' + identities['cxx']['path'])
             runner.run(cmake, '--build', work / label / 'consumer-build', '--parallel', '2')
             runner.run(identities['ctest']['path'], '--test-dir', work / label / 'consumer-build',
                        '--output-on-failure', '--no-tests=error')
+            consumer_build = work / label / 'consumer-build'
+            cache = (consumer_build / 'CMakeCache.txt').read_text()
+            if ('rtfw_DIR:UNINITIALIZED=' + str(config.parent)) not in cache and \
+                    ('rtfw_DIR:PATH=' + str(config.parent)) not in cache:
+                raise ValueError('consumer did not resolve the newly extracted SDK')
+            for entry in json.loads((consumer_build / 'compile_commands.json').read_text()):
+                command = entry.get('command', ' '.join(entry.get('arguments', [])))
+                if str(root) in command or str(build) in command:
+                    raise ValueError('consumer compile used checkout or private build paths')
             report['build_records'].append({'directory': str(build),
+                'consumer_sources': consumer_hashes, 'installed_config_sha256': digest(config),
+                'consumer_compile_commands_sha256': digest(consumer_build / 'compile_commands.json'),
                 'cache_sha256': digest(build / 'CMakeCache.txt'),
                 'compile_commands_sha256': digest(build / 'compile_commands.json'),
                 'cpack_config_sha256': digest(build / 'CPackConfig.cmake')})
         report['comparison'] = compare_archives(*archives)
         if source_identity(root, expected) != source or module.verify_dependencies(root, policy) != dependencies:
             raise ValueError('source or dependency inputs changed during builds')
+        if digest(driver) != driver_record['sha256']:
+            raise ValueError('driver changed during builds')
         for name, identity in identities.items():
             if tool_identity(identity['path']) != identity:
                 raise ValueError('tool changed during builds: ' + name)

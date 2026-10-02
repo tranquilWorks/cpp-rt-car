@@ -99,6 +99,11 @@ class BuildComparisonTests(unittest.TestCase):
             '-c', 'commit.gpgsign=false', 'commit', '-m', 'fixture')
         head = git('rev-parse', 'HEAD')
         self.assertEqual(rebuild.source_identity(repo, head)['tree'], git('rev-parse', 'HEAD^{tree}'))
+        if sys.platform.startswith('linux'):
+            result = self.cli('build', '--repo-root', repo, '--expected-commit', head,
+                              '--work-directory', self.root / 'new-output')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('driver must belong', result.stderr)
         with self.assertRaisesRegex(ValueError, 'differs'):
             rebuild.source_identity(repo, '0' * 40)
         (repo / 'extra.txt').write_text('untracked input')
