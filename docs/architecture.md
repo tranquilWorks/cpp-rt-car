@@ -694,3 +694,12 @@ Native Perfetto/OTLP encoding and Windows TraceLogging run outside Runtime lanes
 Session identity, explicit clock anchors, cursor conservation and separate queue,
 Runtime and collector loss semantics are documented in the kit README. No SDK
 ABI, exported target, installed header or execution policy changes.
+
+## Native golden preparation host
+
+The optional installed [native golden host](golden_xdma_native.md) uses the existing
+Linux XDMA driver and native HAL-v2 registration, six borrowed aligned staging
+buffers, explicit non-overlapping AXI windows and the frozen golden graph. It
+disables replay and simulation timing instead of changing backend capabilities.
+Startup/stop ownership is checked; tests only use injected drivers or absent paths.
+The preparation executable does not run or qualify a physical golden scenario.

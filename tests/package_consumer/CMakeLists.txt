@@ -262,3 +262,11 @@ if(WIN32)
     add_test(NAME telemetry_installed_etw_collection COMMAND rtfw_consumer_telemetry_etw)
     set_tests_properties(telemetry_installed_etw_collection PROPERTIES TIMEOUT 60)
 endif()
+
+# Actual optional installed native preparation host; never use checkout headers.
+if(RTFW_TEST_XDMA_LINUX)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_subdirectory("${RTFW_DATA_DIR}/examples/golden_xdma_native" golden-native-installed)
+  add_test(NAME installed_golden_xdma_native_absent COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/../golden_xdma_native/test_cli.py" $<TARGET_FILE:golden_xdma_native>)
+endif()
