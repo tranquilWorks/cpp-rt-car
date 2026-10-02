@@ -1,3 +1,21 @@
+# M27-05 ordinary regression verification checkpoint
+
+Canonical control PR600 narrows M27-05 to fixed public C++ Runtime regression
+cases. The new test covers two independent owners, lifecycle/checkpoint
+semantics, active replay inspection and typed payload round trips/refusals.
+See [usage and scope](runtime_robustness.md). Production, installed inventory,
+ABI/defaults, original assertions and all earlier evidence remain unchanged.
+
+Focused/full/package/sanitizer results and limitations are retained in
+[M27-05 evidence](evidence/M27-05-2026-10-02.md). Exact final-head full profiles,
+all32 original hosted check records and guarded integration/canonical closure
+remain required; the final PR/closure records their disposition. The withdrawn
+prototype setup failure is retained. Original campaign/continuous-coverage
+acceptance remains unperformed. M27-06 build/provenance is selected next;
+07/08 and external qualification/release obligations remain separate.
+
+## Previous checkpoints
+
 # M27-04 implementation and verification checkpoint
 
 The optional installed host telemetry source kit implements bounded schema2

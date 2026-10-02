@@ -1,35 +1,35 @@
 schema_version: 1
 batch:
-  id: M27-04
-  title: Non-RT telemetry exporters
-  goal: Deliver optional Perfetto, OpenTelemetry and ETW integrations over existing telemetry with explicit
-    loss, timestamp and identity semantics.
+  id: M27-05
+  title: Deterministic Runtime regression coverage (owner-scoped)
+  goal: Exercise ordinary C++ lifecycle, checkpoint, replay inspection and typed-payload contracts with
+    deterministic public-API regression tests; preserve the excluded campaign work as unperformed.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
   - products/cpp-rt-car/acceptance.yaml#CAP-M20
   - products/cpp-rt-car/evidence/M26-06-closure-2026-09-30/closure.md
-  milestone: products/cpp-rt-car/milestones/M27.md#m27-04
-  baseline_commit: 5f9a8a4c554cb065cb2ace33f10444d07466c313
+  milestone: products/cpp-rt-car/milestones/M27.md#m27-05
+  baseline_commit: b17606103e034ec4d6e9a49d5201f1ff33a95631
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M27-04.yaml
-  owner_scope: Owner selected04 after completed M27-03 target288/control594. Implement only M27-04 optional
-    non-RT telemetry source kit, bounded host snapshot queue and native Perfetto protobuf, OTLP HTTP/protobuf
-    and Windows ETW adapters. Use public global observability schema2 inspectors at caller-owned quiescent
-    boundaries. Explicit session identity and caller-supplied clock anchors preserve owner/timestamp meaning.
-    Native consumer validation is mandatory; Windows ETW collection runs on the existing real Windows
-    CI. Preserve Runtime, experimental/native implementations, old tests and all ABI/default/support claims.
-    Standing scoped publication/guarded merge and actual completed zero-step control-only exception persist;
-    no target/local functional waiver. M27-05..08 remain inactive.
+  control_plane_path: products/cpp-rt-car/batches/M27-05.yaml
+  owner_scope: The owner additionally selected06, then explicitly limited work to the C++ simulation project
+    and asked to avoid behaviors causing interruptions. Complete only ordinary deterministic Runtime regression
+    tests for05, followed by build/provenance verification for06. Deliberate crash injection, generated-input
+    campaigns, security-scanning workflows and recurring execution are excluded. Preserve original M27-05
+    campaign acceptance as unperformed; do not promote continuous coverage or vulnerability clearance.
+    Standing scoped publication/guarded merge and actual zero-step control-only exception persist; no
+    target/local waiver.
   activation: selected_after_canonical_plan_merge
-  predecessor_control_revision: 6186354bf7a585c25b7b13fa6aa75d33021d1660
-  control_plane_revision: 9035589abc4826167e2850733defc67051de8369
-  canonical_revision: 9035589abc4826167e2850733defc67051de8369
-  canonical_blob_sha: c7aac2d05ca409e1808b848b979afe7c6f214416
+  predecessor_control_revision: b8bd05595c4918a22a09833247627e3ee0d6a46d
+  control_plane_revision: 4a5ba911553c0a541b406ddd3039785d2c8eae68
+  canonical_revision: 4a5ba911553c0a541b406ddd3039785d2c8eae68
+  canonical_blob_sha: 9c92cd06fdc9de957c2f99655b08b04c0cfa4026
 dependencies:
 - M27-01
 - M27-02
 - M27-03
+- M27-04
 scope:
   allowed_paths:
   - AGENTS.md
@@ -44,13 +44,12 @@ scope:
   - tests/golden_audit/test_catalog.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - integrations/telemetry/**
-  - tests/telemetry_export/**
-  - tests/package_consumer/**
-  - CMakeLists.txt
+  - docs/evidence/M27-05-*
   - tests/CMakeLists.txt
-  - docs/observability.md
-  - docs/evidence/M27-04-*
+  - docs/portable_assurance.md
+  - docs/security_supply_chain.md
+  - tests/runtime_robustness/**
+  - docs/runtime_robustness.md
   forbidden_paths:
   - abi/
   - VERSION.txt
@@ -78,42 +77,47 @@ scope:
   - docs/evidence/M26-*
   - rt/
   - include/
+  - core/
   - bench/
   - hal/
   - gpu/
-  - samples/backend_authoring/
-  - samples/host_adapter/
-  - tests/test_observability.cpp
-  - tests/test_timing_reliability.cpp
-  - tests/timing_reliability/
+  - integrations/telemetry/
+  - tests/snapshot_fuzz.cpp
+  - tests/runtime_profile_fuzz.cpp
+  - tests/jobqueue_fuzz.cpp
+  - tests/fuzz_live_control_replay.cpp
+  - tests/fuzz/
+  - tools/run_fuzz_smoke.py
+  - tools/check_static_analysis.py
+  - tools/static_analysis_sources.txt
+  - tools/sbom.py
+  - tools/sbom_expected.json
+  - tests/test_sampled_io_simulation.cpp
+  - tests/package_consumer/
   - docs/evidence/M27-01-*
   - docs/evidence/M27-02-*
   - docs/evidence/M27-03-*
+  - docs/evidence/M27-04-*
+  - .github/workflows/security-campaign.yml
+  - tools/security_campaign/
+  - tests/security_campaign/
+  - scripts/verify-portable-assurance.sh
 acceptance:
-- Implement each named format through documented native consumers and real decoding/collection tests on
-  its supported OS; do not relabel the existing JSON exporter as native integration.
-- Deliver an optional installed source kit, not a new default SDK target/header or Runtime ABI. A bounded
-  host queue captures copied global schema2 snapshots only at quiescent boundaries, preserves cursors
-  on disabled/full/failing capture, and exposes shutdown/backpressure/loss semantics. An explicit versioned
-  intermediate spool may feed optional native encoders; it is not itself a native format. Use official
-  Perfetto and OpenTelemetry protobuf modules and real Trace Processor/Collector; Windows TraceLogging
-  events require ETL/TDH decoding on a real Windows runner. Preserve exact integers and timestamp/identity
-  provenance; distinguish transport acceptance, partial rejection and ambiguous failures without silent
-  retries.
-- Test installed and relocated source-kit clients, real native consumers, malformed/truncated/oversize
-  input, clock mapping bounds, separate/concurrent owners, queue overflow, failed writes, disabled export
-  and drain/discard shutdown. Retain exact dependency/tool versions and hashes. Refresh only related installed
-  documentation/release inventory/hash bindings and audit mappings; no predecessor evidence or broader
-  qualification promotion.
-- Keep collection and encoding off Runtime lanes, bounded input queues with explicit losses and exact
-  clock/owner correlation. Preserve default SDK isolation and existing public ABI/schema bytes.
-- Validate actual optional installed/relocated clients, malformed records, backpressure, disabled exporters,
-  concurrent instances and shutdown. ETW requires a working Windows toolchain/test runner; missing collector/OS
-  remains unperformed.
-- Preserve prior completed batches/evidence and protected ABI/default/support claims. Run complete repository
-  contract/quick/full plus all32 exact final-head hosted records with exact baseline names/multiplicity;
-  retain failed attempts and risk review. Guard clean/head/base/review/merge-tree equality before scoped
-  integration and canonical closure.
+- Add only ordinary deterministic public-API regression coverage for two independent Runtime owners, lifecycle
+  transitions, checkpoint round trips and refused restores, active replay inspection and typed payload
+  decode/round trips. Use fixed documented cases, return normal test failures and preserve all production
+  and predecessor sources/assertions/deadlines.
+- Exercise the actual new CTest and an independent installed/relocated SDK consumer, with normal sanitizer/static/default-ABI
+  checks. No intentional memory errors, generated-input campaign, crash minimizer, scanner or additional
+  hosted workflow is included. Retain the withdrawn unpublished prototype and its setup failure without
+  calling it completed validation.
+- Document the owner scope change and preserve original sustained/continuous campaign, seeded-defect discovery
+  and workflow obligations as unperformed/deferred. No CAP-M20 security or continuous-coverage acceptance
+  is promoted. M27-06 is selected next for build/provenance verification after this bounded05 integration;07/08
+  remain inactive.
+- Run complete repository contract/quick/full plus all32 exact final-head baseline hosted records with
+  exact names/multiplicity, risk review and clean/head/base/review/merge-tree guards before scoped integration
+  and canonical closure. No target/local gate is waived.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
@@ -123,16 +127,21 @@ validation:
     and actual installed package validation.
   - git diff --check
   focused_tests_to_add:
-  - Implement each named format through documented native consumers and real decoding/collection tests
-    on its supported OS; do not relabel the existing JSON exporter as native integration.
-  - Keep collection and encoding off Runtime lanes, bounded input queues with explicit losses and exact
-    clock/owner correlation. Preserve default SDK isolation and existing public ABI/schema bytes.
-  - Validate actual optional installed/relocated clients, malformed records, backpressure, disabled exporters,
-    concurrent instances and shutdown. ETW requires a working Windows toolchain/test runner; missing collector/OS
-    remains unperformed.
+  - Add only ordinary deterministic public-API regression coverage for two independent Runtime owners,
+    lifecycle transitions, checkpoint round trips and refused restores, active replay inspection and typed
+    payload decode/round trips. Use fixed documented cases, return normal test failures and preserve all
+    production and predecessor sources/assertions/deadlines.
+  - Exercise the actual new CTest and an independent installed/relocated SDK consumer, with normal sanitizer/static/default-ABI
+    checks. No intentional memory errors, generated-input campaign, crash minimizer, scanner or additional
+    hosted workflow is included. Retain the withdrawn unpublished prototype and its setup failure without
+    calling it completed validation.
+  - Document the owner scope change and preserve original sustained/continuous campaign, seeded-defect
+    discovery and workflow obligations as unperformed/deferred. No CAP-M20 security or continuous-coverage
+    acceptance is promoted. M27-06 is selected next for build/provenance verification after this bounded05
+    integration;07/08 remain inactive.
   required_ci:
-  - All32 exact final-head target checks successful with exact M26-06 names/multiplicity. No target/local
-    gate waived.
+  - All32 exact final-head baseline checks pass with exact M26-06 names/multiplicity. The withdrawn33rd
+    campaign check is excluded by owner scope; no scheduled or additional workflow is added.
   manual:
   - No physical/HIL/RT/human/controlled-performance/Unreal/production-signing/release/deployment claim
     from portable software tests.
@@ -150,8 +159,9 @@ rollback:
     and other planned batches.
 evidence:
   output:
-  - docs/evidence/M27-04-<date>.md
+  - docs/evidence/M27-05-<date>.md
   - Exact baseline/positive/negative commands, hashes, raw logs, risk review and final-head local/CI/merge/closure
     records.
-  claim_boundary: Portable software implementation and tested compatibility only. Original M18/M19/M20/M25/M26
-    qualification and acceptance obligations remain separate.
+  claim_boundary: Ordinary deterministic C++ regression coverage only. Original M27-05 campaign/continuous-coverage
+    work is excluded and remains unperformed. Production, ABI/defaults, earlier tests and independent
+    qualification/release criteria are unchanged.
