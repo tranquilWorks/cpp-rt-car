@@ -11,6 +11,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('local_rebuild', ROOT / 'tools/release_rebuild.py')
@@ -121,6 +122,14 @@ class BuildComparisonTests(unittest.TestCase):
             runner.run(sys.executable, '-c', 'print("ordinary failed check"); raise SystemExit(3)')
         self.assertEqual(runner.commands[0]['exit_code'], 3)
         self.assertIn('ordinary failed check', Path(runner.commands[0]['log']).read_text())
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'runner is Linux-only')
+    def test_finished_command_over_log_limit_is_not_accepted(self):
+        runner = rebuild.Runner(self.root, dict(os.environ), 30)
+        with mock.patch.object(rebuild, 'MAX_LOG_BYTES', 8):
+            with self.assertRaisesRegex(ValueError, 'log limit'):
+                runner.run(sys.executable, '-c', 'print("ordinary output beyond configured limit")')
+        self.assertGreater(runner.commands[0]['log_bytes'], 8)
 
     @unittest.skipUnless(sys.platform.startswith('linux'), 'build command is Linux-only')
     def test_existing_output_refused_without_changes(self):

@@ -160,6 +160,10 @@ class Runner:
                         process.wait()
         record.update(exit_code=process.returncode, seconds=time.monotonic() - start,
                       log_sha256=digest(log), log_bytes=log.stat().st_size)
+        if record['log_bytes'] > MAX_LOG_BYTES:
+            reason = reason or 'command log limit exceeded'
+        if record['seconds'] > self.timeout:
+            reason = reason or 'command timeout'
         if reason or process.returncode:
             raise ValueError(reason or 'command failed; see ' + str(log))
 
