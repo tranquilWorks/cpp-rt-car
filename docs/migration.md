@@ -73,10 +73,14 @@ and start a new observation. Reports are unsigned observations, not attestations
 
 ## Remaining gates after M27 software delivery
 
-1. Resolve/review the retained experimental concurrent-clock initialization and
+1. M28-01 repairs the experimental concurrent-clock initialization race through
+   versioned calibration publication and caller-thread owner tests; see its retained
+   evidence for exact validation and limits. Resolve/review the remaining
    benchmark submission-count assumptions, sampled native startup timing result,
    and M27-07 full-native-frame TSan deadline observation before claims that depend
-   on those outcomes. Existing assertions and deadlines remain intact.
+   on those outcomes. Existing assertions and deadlines remain intact. The optional
+   experimental full-SimCore installed consumer also lacks a required HAL header;
+   M28-01 retains that pre-existing packaging finding for subsequent closeout triage.
 2. Original M27-05 generated-input/continuous coverage and M27-06 signature-fixture
    expansion remain unperformed under the owner's narrowed scope. CAP-M20 is not
    promoted by ordinary regression or unsigned rebuild observations.
@@ -88,5 +92,6 @@ and start a new observation. Reports are unsigned observations, not attestations
 5. Controlled performance measurements, authenticated provenance/production signing,
    release approval, publication and deployment remain separate gates.
 
-No additional M27 software card follows08. This finite list is a readiness handoff,
+No additional M27 software card follows08. M28 now tracks the remaining software
+closeout work separately. This finite list is a readiness handoff,
 not global feature/qualification acceptance or authorization to release.

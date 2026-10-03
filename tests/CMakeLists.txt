@@ -631,3 +631,6 @@ add_subdirectory(platform_migration)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME portable_soak_journal COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tools/portable_soak/test_run.py")
 set_tests_properties(portable_soak_journal PROPERTIES TIMEOUT 60)
+
+# M28-01 concurrent experimental clock publication and caller-thread owners.
+add_subdirectory(closeout_clock)

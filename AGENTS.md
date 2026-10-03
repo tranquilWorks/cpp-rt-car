@@ -765,3 +765,13 @@ all prior evidence. Original05/06 excluded work stays unperformed. Full local/
 all32 exact-head gates, risk review, scoped publication, guarded merge and
 canonical closure remain required and authorized. No physical/RT/Unreal/human/
 controlled-performance/signing/release/deployment claim follows.
+
+## M28-01 concurrent experimental clock initialization
+
+Owner selected01; canonical control608 `937a5b100ba48798d0fafc6bfb57457c16ef600b` activates only the
+experimental clock header, new closeout_clock tests/additive wiring and necessary
+current documentation/hash bindings. Preserve caller-thread arenas, supported
+Runtime/defaults/ABI, all old tests/deadlines and historical evidence. Full local,
+instrumented/static/allocation/installed and all32 exact-head gates plus guarded
+target/canonical integration remain mandatory under standing authorization.
+M28-02..06 and the final owner bench/engine/human/release stage stay inactive.

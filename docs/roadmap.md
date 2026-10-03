@@ -1,3 +1,28 @@
+# M28-01 concurrent clock initialization repair checkpoint
+
+Canonical control608 selects M28-01 from target293. The experimental clock now
+calibrates under a writer-only mutex and publishes atomic, versioned calibration
+fields. Reads take one snapshot attempt and fall back during publication; they
+never take that mutex. Stale failed reads cannot disable a replacement generation,
+failed calibration disables TSC, and reinitialization preserves the monotonic floor.
+The 50ms calibration and 1ms drift threshold stay unchanged. Injected callbacks
+must remain valid, non-reentrant into initialization, and support concurrent calls
+when used concurrently. Supported Runtime, default SDK, ABI and old tests remain.
+
+New tests cover held calibration, stale failure versus replacement, concurrent
+read/init/setter, failed calibration recovery, allocation controls and repeated
+concurrent SimCore owners constructed/run/destroyed on their own caller threads.
+The owner test covers the existing FMA-off configuration; no broader global-policy
+concurrency claim follows. Installed verification covers the clock and supported
+public Runtime targets. Full experimental SimCore installation still lacks a HAL
+header, retained as an independent software packaging finding for closeout triage.
+Baseline causal and initialized TSan failures are retained. See
+[evidence](evidence/M28-01-2026-10-02.md) for actual validation and limits.
+Final exact-head full/all32 and guarded integration remain required. Later M28
+batches and all owner bench/Unreal/human/signing/release stages stay inactive.
+
+## Previous checkpoint
+
 # M27-08 implementation checkpoint
 
 M27-07 target292/control604 is complete. M27-08 adds missing current installed-package
