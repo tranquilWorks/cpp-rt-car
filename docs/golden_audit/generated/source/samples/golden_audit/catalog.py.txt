@@ -557,5 +557,5 @@ def verify_bundle(directory):
             require(candidate.is_file() and directory.resolve() in candidate.resolve().parents,
                     'broken/escaped offline link')
             if fragment:
-                require('id="' + fragment + '"' in candidate.read_text(), 'broken offline fragment')
+                require('id="' + fragment + '"' in candidate.read_text(encoding='utf-8'), 'broken offline fragment')
     return inventory

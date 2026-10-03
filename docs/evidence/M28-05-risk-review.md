@@ -30,3 +30,10 @@ actual relocated installed bundle/public consumers and guarded head/base/review/
 merge-tree equality remain integration gates. No new external campaign or test
 fixture expansion is performed. Final-stage owner procedures and M28-06 remain
 separately selected work; no obligation is waived.
+
+The expanded evidence exposed a Windows CP1252 read in the existing fragment
+checker. The new Windows-default control fails the first candidate; explicit
+UTF-8 decoding fixes the reader without changing source bytes or old assertions.
+The correction stays inside the activated catalog scope. First-head local/package
+passes, actual hosted failure and cancelled jobs remain retained; final-head full,
+installed and all32 hosted gates are repeated before integration.

@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'samples/golden_audit'))
@@ -133,6 +134,13 @@ class CloseoutTests(unittest.TestCase):
         inventory = c.load(root / 'inventory.json')
         inventory['outputs'][name] = c.sha(data)
         (root / 'inventory.json').write_bytes(c.encoded(inventory))
+
+    def test_utf8_bundle_independent_of_windows_default_encoding(self):
+        original = Path.read_text
+        def windows_default(path, encoding=None, errors=None):
+            return original(path, encoding=encoding or 'cp1252', errors=errors)
+        with mock.patch.object(Path, 'read_text', windows_default):
+            self.bundle(lambda root: None)
 
     def test_actual_offline_bundle(self):
         self.bundle(lambda root: None)
