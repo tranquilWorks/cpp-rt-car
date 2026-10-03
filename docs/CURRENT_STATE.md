@@ -1,3 +1,33 @@
+# M28-02 benchmark timeout accounting checkpoint
+
+Canonical activation610 and amendment611 select only M28-02 from target294.
+The failure/timeout provider keeps its original1ms deadline, exact terminal and
+nonpublication checks, and all Runtime/backend sources unchanged. It captures
+backend acceptance as a lower bound at the terminal, then checks final accounting
+after successful stop joins the submission lane. Zero accepted work requires one
+submit attempt refused after shutdown closed admission and no device copies,
+actions, completions or cancellations. One accepted submission requires matching
+copy/action counts and the exact timeout or completion-error disposition.
+
+A fixture-owned command-extension observer publishes submit's result atomically
+before forwarding cancellation. This avoids the demonstrated loopback completion
+storage race in these two provider cases without blocking callbacks or altering
+other workloads. The broader pre-existing backend cancel/submit race remains an
+independent software finding for later M28 closeout; this is no global backend fix.
+
+The unchanged held-submit benchmark failure and unchanged-source initialized TSan
+race are retained. New actual-provider before/after-acceptance/stop controls and
+accounting-error negatives pass, including ASan/UBSan/leaks, initialized TSan and
+Clang14 analysis. Actual CLI/installed provider, complete existing benchmark suites,
+final-head full/all32 and guarded integration/closure remain required. See the
+[M28-02 evidence](evidence/M28-02-2026-10-03.md) for final validation disposition.
+
+M28-03..06, the experimental SDK HAL-header gap, sampled/native timing findings,
+original05/06 exclusions and all owner bench/Unreal/human/signing/release stages
+remain open. The exact historical hosted benchmark failure cause is still unproven.
+
+## Previous checkpoint
+
 # M28-01 concurrent clock initialization repair checkpoint
 
 Canonical control608 selects M28-01 from target293. The experimental clock now

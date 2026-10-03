@@ -634,3 +634,6 @@ set_tests_properties(portable_soak_journal PROPERTIES TIMEOUT 60)
 
 # M28-01 concurrent experimental clock publication and caller-thread owners.
 add_subdirectory(closeout_clock)
+
+# M28-02 real provider timeout, acceptance and checked shutdown accounting.
+add_subdirectory(closeout_benchmark)

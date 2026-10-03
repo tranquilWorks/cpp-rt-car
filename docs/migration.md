@@ -75,8 +75,11 @@ and start a new observation. Reports are unsigned observations, not attestations
 
 1. M28-01 repairs the experimental concurrent-clock initialization race through
    versioned calibration publication and caller-thread owner tests; see its retained
-   evidence for exact validation and limits. Resolve/review the remaining
-   benchmark submission-count assumptions, sampled native startup timing result,
+   evidence for exact validation and limits. M28-02 corrects the demonstrated
+   benchmark timeout/submission assumption and publishes provider acceptance before
+   cancellation; its historical hosted failure cause remains unproven. The broader
+   loopback backend cancel/submit storage race is retained for later software triage.
+   Resolve/review the sampled native startup timing result,
    and M27-07 full-native-frame TSan deadline observation before claims that depend
    on those outcomes. Existing assertions and deadlines remain intact. The optional
    experimental full-SimCore installed consumer also lacks a required HAL header;

@@ -775,3 +775,21 @@ Runtime/defaults/ABI, all old tests/deadlines and historical evidence. Full loca
 instrumented/static/allocation/installed and all32 exact-head gates plus guarded
 target/canonical integration remain mandatory under standing authorization.
 M28-02..06 and the final owner bench/engine/human/release stage stay inactive.
+
+## M28-02 benchmark timeout and submission accounting
+
+Owner selected02 after target294/control609. Canonical activation610 merged
+`710807b2b8dafc967cccb2d3f17f5db59b0f4bf5`, blob `1771c505153d6ea3ca0eefd7a65a0ad7bd9cc4c1`. Only the
+benchmark provider device.cpp, new closeout_benchmark tests/additive wiring and
+necessary current documentation/hash bindings are active. Preserve Runtime,
+original1ms deadline, all old tests/catalog/schema/ABI/defaults and historical
+evidence. Require causal before/after-acceptance controls, checked cleanup, actual
+CLI/installed provider, full local/all32 exact-head and guarded target/canonical
+closure under standing scoped publication/integration authorization. M28-03..06,
+original05/06 exclusions and all final owner-stage obligations remain inactive.
+
+Canonical amendment611 `8280b2eb547c5bb3847732070238aedd420bc52c`, blob `ad9462d599dca1ca32a7b04ca24e5c5be8044c5e`,
+adds fixture-owned acceptance publication before forwarding cancellation within the
+same benchmark device.cpp scope after retained initialized TSan proves the unchanged
+loopback cancel/submit race. No Runtime/backend edit or callback mutex/allocation;
+retain that broader backend finding for later closeout. All gates remain required.
