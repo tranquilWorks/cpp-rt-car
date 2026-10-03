@@ -42,8 +42,9 @@ from each obligation. This creates no new qualification cards or thresholds.
   separate. Original M27-05 campaign/scanner and M27-06 signature-fixture expansion
   are excluded and unperformed; unsigned matching builds do not close them.
 
-None of these actions is executed or approved by this ledger. M28-06 remains a
-separately selected portable closure batch; it cannot erase unresolved defects.
+None of these actions is executed or approved by this ledger. The separately
+selected [M28-06 final artifact and ordered handoff](final-handoff.md) repeats
+portable verification; it cannot erase unresolved defects.
 
 ## Reproduce and validate
 

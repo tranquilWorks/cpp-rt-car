@@ -816,3 +816,7 @@ Canonical control617 merged at `7cae639252f16bb921a22839f738fb72dc91ae3b`. Only 
 is active from target297. Preserve runtime, original tests, frozen inventories and
 historical evidence. Standing scoped publication/integration continues; M28-06 and
 owner-stage bench/engine/human/production acceptance remain inactive.
+
+## M28-06 activation
+
+Owner selected final portable package verification and bounded handoff after target298/control618. Canonical activation `8b3bafb943ba2e39aafdda71f005b55dcdc55329` binds target main `232df8fe2b56ffbdf174fc2bcf24a99995062d09`. Reuse existing default/optional package, modern/legacy bounded4096-cycle soak and independent unsigned rebuild tooling. Standing scoped publication and guarded integration continues. Preserve production, original tests, ledger identities, all unresolved findings and original05/06 exclusions. Software-complete and CAP-M20 claims remain false; final owner hardware/engine/human/signing/release stages remain inactive.

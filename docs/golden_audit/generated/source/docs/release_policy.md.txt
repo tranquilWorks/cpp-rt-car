@@ -196,3 +196,21 @@ work and provider-resource conservation. Passing is portable functional evidence
 it does not close the finite qualification, human, performance, signing or release
 gates listed there. Original05/06 excluded work and historical timing limitations
 remain open; support matrices and release1.2.1 compatibility promises are unchanged.
+
+## Final portable handoff boundary (M28-06)
+
+The [final artifact/evidence index](closeout/final-handoff.md) binds default and
+optional benchmark-enabled CPack, installed modern/legacy consumers, fixed4096-cycle
+portable soak and unsigned independent rebuild records to the last clean tested
+source/tree. Exact-head local full and all32 original hosted checks, raw failures,
+archive hashes, risk review and fetched merge-tree equality remain prerequisites
+for this scoped delivery. Final receipts live in the M28-06 target PR and canonical
+control closure, after the final source commit; generated source snapshots alone
+are not those execution receipts.
+
+The existing ledger still has software_complete=false and cap_m20_complete=false.
+The direct loopback cancel/submit race and optional full-SimCore absent HAL header
+remain unresolved. Original timing observations, native-frame TSan limitation,
+excluded original05/06 work and external acceptance stay explicit. An unchanged
+retry pass does not repair a finding. This handoff creates no release version,
+qualification, signing identity, tag, publication, deployment or human approval.

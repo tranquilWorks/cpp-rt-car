@@ -1,35 +1,26 @@
 schema_version: 1
 batch:
-  id: M28-05
-  title: Acceptance and remaining-work reconciliation
-  goal: Produce one source-linked closeout ledger covering every original requirement, retained finding
-    and deferred obligation.
+  id: M28-06
+  title: Final portable package and repository closeout
+  goal: Verify the final software artifact and publish a bounded software-closeout handoff ready for the
+    owner final stage.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
-  - products/cpp-rt-car/acceptance.yaml#CAP-M15
-  - products/cpp-rt-car/acceptance.yaml#CAP-M16
-  - products/cpp-rt-car/acceptance.yaml#CAP-M17
-  - products/cpp-rt-car/acceptance.yaml#CAP-M18
-  - products/cpp-rt-car/acceptance.yaml#CAP-M19
   - products/cpp-rt-car/acceptance.yaml#CAP-M20
-  - products/cpp-rt-car/acceptance.yaml#CAP-M21
-  - products/cpp-rt-car/acceptance.yaml#CAP-M22
-  - products/cpp-rt-car/acceptance.yaml#CAP-M23
-  - products/cpp-rt-car/acceptance.yaml#CAP-M24
   - products/cpp-rt-car/acceptance.yaml#CAP-M25
   - products/cpp-rt-car/acceptance.yaml#CAP-M26
-  milestone: products/cpp-rt-car/milestones/M28.md#m28-05
-  baseline_commit: b37c124d6fd7c6ea7dd2b4dffcfc5531b0eb3c8e
+  milestone: products/cpp-rt-car/milestones/M28.md#m28-06
+  baseline_commit: 232df8fe2b56ffbdf174fc2bcf24a99995062d09
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M28-05.yaml
+  control_plane_path: products/cpp-rt-car/batches/M28-06.yaml
   activation: owner_selected
-  owner_scope: Owner selected M28-05 after target297/control616 completed M28-04. Standing scoped publication
-    and guarded integration continues. M28-06 and final owner stage remain inactive.
-  control_plane_revision: 7cae639252f16bb921a22839f738fb72dc91ae3b
-  canonical_batch_blob: 9f00018990574ab34159bcd552290324807229ef
+  owner_scope: Owner selected M28-06 after completed target298/control618. Standing scoped publication
+    and guarded integration continues. Final owner bench/engine/human/signing/release stages remain inactive.
+  control_plane_revision: 8b3bafb943ba2e39aafdda71f005b55dcdc55329
+  canonical_batch_blob: bfe61fdf6bb410faa5aa4d4543b251e1e7139a54
 dependencies:
-- M28-04
+- M28-05
 scope:
   allowed_paths:
   - AGENTS.md
@@ -40,14 +31,11 @@ scope:
   - docs/migration.md
   - docs/sdk/generated/**
   - docs/golden_audit/**
-  - samples/golden_audit/catalog.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
   - docs/closeout/**
-  - tests/closeout_audit/**
-  - tests/CMakeLists.txt
-  - tests/golden_audit/test_catalog.py
-  - docs/evidence/M28-05-*
+  - docs/release_policy.md
+  - docs/evidence/M28-06-*
   forbidden_paths:
   - abi/
   - VERSION.txt
@@ -79,39 +67,39 @@ scope:
   - docs/evidence/M28-02-*
   - docs/evidence/M28-03-*
   - docs/evidence/M28-04-*
+  - docs/evidence/M28-05-*
   - rt/src/
   - rt/include/
   - core/
   - src/
   - bench/
+  - tests/
   - CMakeLists.txt
+  - samples/
 acceptance:
-- Reconcile the full canonical acceptance inventory and living golden audit with M27 delivery and M28-01
-  through04 evidence, rather than limiting the audit to four summarized findings. Every remaining item
-  needs its original requirement/evidence link, current disposition, dependency and next action.
-- Distinguish demonstrated repair, retained unresolved software finding, evidence-supported instrumentation
-  limitation, owner-excluded scope and final-stage external acceptance. An unresolved software defect
-  prevents an unqualified software-complete claim. No new acceptance waiver or human risk acceptance is
-  inferred.
-- Preserve original M27-05 generated-input/continuous/scanner and M27-06 signature-fixture exclusions
-  as unperformed; do not implement them or promote CAP-M20. Existing unsigned rebuild evidence is not
-  authenticated provenance.
-- 'Create the final-stage handoff for the owner: existing M18 physical CUDA/XDMA/combined/RT/endurance
-  cards, M19-02..04 real Unreal, CAP-M23 controlled performance, M25 unfamiliar-consumer review, production
-  identity/signing and release/deployment decisions. Reuse existing procedures and identities; create
-  no duplicate qualification cards or inferred passes.'
-- Machine-check missing/duplicate requirement IDs, broken local evidence references and invalid pass/qualification
-  claims if a new ledger consumer is added. Update living summaries without rewriting historical evidence
-  or changing acceptance thresholds.
-- Activate only M28-05 at exact target main b37c124d6fd7c6ea7dd2b4dffcfc5531b0eb3c8e and bind merged canonical
-  revision/blob before implementation. Add a source-linked reconciliation ledger, offline standard-library
-  validation and additive tests; integrate the overlay with the existing golden audit and actual installed
-  bundle. Preserve original canonical requirements, frozen scenario and existing tests/assertions. Update
-  living summaries and mechanically generated/digest-bound documents only. No runtime repair, new qualification
-  card, excluded campaign or M28-06 activation.
-- Preserve release1.2.1, portable RT0, C ABI8/70 exports/fingerprint/SONAME8, device ABI1, public/default
-  policies and supported tuples. Existing source tests/assertions/deadlines and all historical evidence
-  stay unchanged; tests/CMakeLists.txt permits additive new-test wiring only.
+- 'Use existing release/package tooling on the exact final source: clean default and applicable optional
+  CPack artifacts, source/contract hashes, relocated installed public consumers, modern/legacy migration
+  and supported OS/compiler evidence. Keep optional native validation compile/injected-driver/absent-device
+  only.'
+- Repeat the existing bounded fixed portable soak and unsigned independent rebuild comparison with complete
+  commands, hashes, measured duration, resource and terminal journals. Reuse delivered tools and tests;
+  do not create a new campaign, schedule, workflow, signing fixture or release version.
+- Bind the final package and evidence to exact tested source/tree and review all remaining ledger items
+  after the last change. Preserve full local gates, all32 hosted names/multiplicity, failures and exact
+  fetched merge-tree guards. Rerun affected verification if a final change invalidates evidence.
+- Produce the final artifact/evidence index, rollback reference and ordered owner test handoff. Mark only
+  the scoped software delivery complete if its exit criteria actually pass. Otherwise report the specific
+  remaining software blocker. M18/M19/CAP-M20/manual acceptance stays open as applicable; no keys, signing,
+  tag, release publication, deployment or human approval occurs in this batch.
+- Activate only M28-06 from exact target main232df8fe2b56ffbdf174fc2bcf24a99995062d09 and bind merged
+  canonical revision/blob before implementation. Reuse existing package, migration, bounded4096-cycle
+  modern/legacy soak and actual two-build unsigned comparison tooling. Add bounded final artifact/evidence
+  index, rollback and ordered owner handoff; update living/generated documents and release digest coverage
+  only. No production/tool behavior repair, new tests/workflow/campaign/qualification card, signature
+  fixture, signing or release activity. Preserve all M28-05 ledger identities and unresolved dispositions.
+- Preserve release1.2.1 portable RT0, C ABI8/70 exports/fingerprint/SONAME8, device ABI1, public/default
+  policies, supported tuples, existing tests/assertions/deadlines and historical evidence. No test wiring
+  or runtime changes are authorized in this final documentation/verification batch.
 - For each claimed repair retain a causal baseline failure and corrected outcome. Complete exact-head
   local full validation and all32 hosted checks with the original names and multiplicity, applicable sanitizer/static/no-allocation/default/ABI/actual
   installed package gates, risk review and guarded target/canonical closure. No functional gate is waived.
@@ -122,16 +110,8 @@ validation:
   - ./scripts/agent-verify.sh full
   - git diff --check
   focused_tests_to_add:
-  - Reconcile the full canonical acceptance inventory and living golden audit with M27 delivery and M28-01
-    through04 evidence, rather than limiting the audit to four summarized findings. Every remaining item
-    needs its original requirement/evidence link, current disposition, dependency and next action.
-  - Distinguish demonstrated repair, retained unresolved software finding, evidence-supported instrumentation
-    limitation, owner-excluded scope and final-stage external acceptance. An unresolved software defect
-    prevents an unqualified software-complete claim. No new acceptance waiver or human risk acceptance
-    is inferred.
-  - Preserve original M27-05 generated-input/continuous/scanner and M27-06 signature-fixture exclusions
-    as unperformed; do not implement them or promote CAP-M20. Existing unsigned rebuild evidence is not
-    authenticated provenance.
+  - Reuse existing migration, package, portable soak and unsigned rebuild checks; add no redundant test
+    suite.
   required_ci:
   - All32 exact final-head target checks successful, preserving original baseline names and multiplicity;
     full canonical control validation on planning and closure.
@@ -153,7 +133,7 @@ rollback:
     immutable evidence and every final-stage obligation.
 evidence:
   output:
-  - docs/evidence/M28-05-<date>.md
+  - docs/evidence/M28-06-<date>.md
   - Exact source/tree, commands, raw failures/results, source hashes, risk review, final-head CI and guarded
     merge/closure receipts.
   claim_boundary: Portable software only. Investigation can classify an unresolved result without claiming
