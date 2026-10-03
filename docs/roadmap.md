@@ -1,3 +1,21 @@
+## M28-06 final portable verification and handoff
+
+The [final artifact/evidence index and ordered owner handoff](closeout/final-handoff.md)
+cover existing default/optional CPack, installed modern/legacy migration, fixed
+4096-cycle portable repetitions and two independent unsigned default builds.
+Final exact-head full/local and original32 hosted checks, source/package hashes,
+failures and guarded target/canonical receipts are required by this delivery.
+The final PR and canonical M28-06 closure record their actual dispositions.
+
+The M28-05 ledger remains unchanged: broader loopback cancel/submit storage race
+and optional full-SimCore missing HAL header remain software blockers; historical
+startup/benchmark/Windows observations and native-frame TSan limitation remain.
+Software-complete and CAP-M20-complete claims stay false. Final owner hardware/RT,
+Unreal, performance, human, signing/release/deployment and original05/06 exclusions
+remain open. No further batch is activated by this handoff.
+
+## Historical checkpoints
+
 ## M28-05 acceptance reconciliation
 
 The [current ledger](closeout/README.md) reconciles all112 canonical requirements,

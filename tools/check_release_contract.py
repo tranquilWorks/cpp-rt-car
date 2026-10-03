@@ -50,6 +50,7 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    "docs/closeout/final-handoff.md",
     'docs/closeout/ledger.json',
     'docs/closeout/README.md',
     'tests/closeout_audit/CMakeLists.txt',
