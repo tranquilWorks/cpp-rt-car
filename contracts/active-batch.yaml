@@ -1,28 +1,25 @@
 schema_version: 1
 batch:
-  id: M28-03
-  title: Sampled startup and cleanup timing investigation
-  goal: Resolve software lifecycle/status causes behind retained startup timing findings without extending
-    deadlines or masking cleanup ownership.
+  id: M28-04
+  title: Instrumented simulated-driver deadline investigation
+  goal: Establish a software-only disposition for the retained full-frame TSan submission deadline observation.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
-  - products/cpp-rt-car/acceptance.yaml#CAP-M21
   - products/cpp-rt-car/acceptance.yaml#CAP-M26
-  milestone: products/cpp-rt-car/milestones/M28.md#m28-03
-  baseline_commit: b5275b0a6094ddab1ab902632cc7cf35e9d20e59
+  milestone: products/cpp-rt-car/milestones/M28.md#m28-04
+  baseline_commit: 526c13065475650f6c86de0ea8fc760d699a07a3
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M28-03.yaml
+  control_plane_path: products/cpp-rt-car/batches/M28-04.yaml
   activation: owner_selected
-  owner_scope: Owner selected M28-03 after target295/control612 completed M28-02. Investigate retained
-    sampled startup/cleanup observations using controlled injected drivers and unchanged original tests.
-    Standing scoped publication and guarded integration authorization continues. M28-04..06 and final
-    owner-stage work remain inactive.
-  control_plane_revision: 6571b0fe4c11357020a47a8beca8bab18bc50036
-  canonical_revision: 6571b0fe4c11357020a47a8beca8bab18bc50036
-  canonical_blob_sha: 8deac68fbf5658348861ab7d7ca203d5eee7e57a
+  owner_scope: Owner selected the next batch after target296/control614 completed M28-03. Activate only
+    M28-04 deadline investigation with injected drivers and unchanged full-frame probe. Standing scoped
+    publication and guarded integration continues; M28-05..06 and final owner stage remain inactive.
+  control_plane_revision: 640e7c4ef46b28d8ab8bf704d7b9b10bd381fa37
+  canonical_revision: 640e7c4ef46b28d8ab8bf704d7b9b10bd381fa37
+  canonical_blob_sha: 0ae6f19936992ebe522bb559ff8ec2cf481c6729
 dependencies:
-- M28-02
+- M28-03
 scope:
   allowed_paths:
   - AGENTS.md
@@ -36,9 +33,9 @@ scope:
   - samples/golden_audit/catalog.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - tests/closeout_startup/**
+  - tests/closeout_deadline/**
   - tests/CMakeLists.txt
-  - docs/evidence/M28-03-*
+  - docs/evidence/M28-04-*
   forbidden_paths:
   - abi/
   - VERSION.txt
@@ -68,33 +65,35 @@ scope:
   - docs/evidence/M27-*
   - docs/evidence/M28-01-*
   - docs/evidence/M28-02-*
+  - docs/evidence/M28-03-*
   - rt/src/
   - rt/include/
   - core/
   - src/
   - bench/
-  - tests/package_consumer/
-  - tests/sampled_io_simulation/
-  - tests/startup_poll_reliability/
-  - tests/test_sampled_io_simulation.cpp
+  - samples/golden_xdma/
+  - samples/golden_xdma_native/
+  - tests/golden_xdma_native/
 acceptance:
-- Inventory M27-02 and M27-07 startup observations, including SampledSimulationUnselectedNative status
-  -2 versus -18 under the original 8ms bound and the separately retained Windows 2s observation. Read
-  their raw evidence before choosing a cause; do not assume all observations share one defect.
-- Use only injected/simulated drivers and controlled scheduling to distinguish genuine timeout from pending
-  cleanup and status precedence. Preserve safe output, no copied invalid payload, terminal visibility,
-  borrowed lifetimes, zero-live accounting after successful checked stop, and failed-stop ownership for
-  retry.
-- Repair only an independently reproduced private lifecycle defect. Add ordered startup/timeout/late completion/repeated-stop/independent-owner
-  controls and run all original sampled tests unchanged on existing supported CI tuples. Preserve 8ms,
-  2s and every other existing timeout/assertion. Unreproduced or timing-environment-only observations
-  remain explicitly unresolved; no retry pass closes them.
-- 'Activate M28-03 from exact target main b5275b0a6094ddab1ab902632cc7cf35e9d20e59 and bind the merged
-  canonical revision/blob before implementation. Initial cause-specific scope is additive public-API lifecycle
-  controls and evidence only: existing M27-02 controls demonstrate valid pending ownership, not a proved
-  new production defect. Production edits require an independently reproduced private defect and a bounded
-  canonical amendment before editing. An investigation may complete with explicitly unresolved historical
-  timing observations; no retry pass or new control is a repair claim.'
+- Reproduce and retain the unchanged test_golden_xdma_native --frame observation with the injected driver,
+  ordinary execution, ASan/UBSan and initialized TSan; classify pre-main sanitizer startup failures separately.
+  No real XDMA node, GPU, FPGA, driver installation or bench access.
+- Trace submission scheduling and ownership around the unchanged 500us deadline using offline diagnostic
+  builds. Distinguish sanitizer-induced scheduling delay from an actual race/lifecycle defect. Do not
+  infer a race from a timeout or dismiss a sanitizer report as overhead.
+- If a private software defect is demonstrated, retain a failing baseline control and repair it within
+  the narrowed activation scope. Otherwise record a causally supported instrumentation limitation and
+  its still-unpassed full-frame result. Preserve all original full-frame/oracle/refusal assertions, mandatory
+  preparation/protocol gates and deadline values; new observations cannot replace the failed result or
+  claim hardware timing qualification.
+- Activate M28-04 from exact target main 526c13065475650f6c86de0ea8fc760d699a07a3 and bind merged canonical
+  revision/blob before implementation. Initial cause-specific scope is additive test-owned offline diagnostics,
+  controlled scheduling/ownership observations and evidence; production remains unchanged. An offline
+  tool may generate an explicitly marked diagnostic copy of private DeviceManager source with fixed-storage
+  timestamp hooks, source hashes and exact patch retention, never linked into shipped Runtime. No changed
+  deadline, assertion, capability or sanitizer suppression. A demonstrated production defect requires
+  a bounded canonical amendment before production edits. An unresolved full-frame timing result may receive
+  a truthful limitation disposition; retry success closes no finding.
 - Preserve release1.2.1, portable RT0, C ABI8/70 exports/fingerprint/SONAME8, device ABI1, public/default
   policies and supported tuples. Existing source tests/assertions/deadlines and all historical evidence
   stay unchanged; tests/CMakeLists.txt permits additive new-test wiring only.
@@ -108,17 +107,17 @@ validation:
   - ./scripts/agent-verify.sh full
   - git diff --check
   focused_tests_to_add:
-  - Inventory M27-02 and M27-07 startup observations, including SampledSimulationUnselectedNative status
-    -2 versus -18 under the original 8ms bound and the separately retained Windows 2s observation. Read
-    their raw evidence before choosing a cause; do not assume all observations share one defect.
-  - Use only injected/simulated drivers and controlled scheduling to distinguish genuine timeout from
-    pending cleanup and status precedence. Preserve safe output, no copied invalid payload, terminal visibility,
-    borrowed lifetimes, zero-live accounting after successful checked stop, and failed-stop ownership
-    for retry.
-  - Repair only an independently reproduced private lifecycle defect. Add ordered startup/timeout/late
-    completion/repeated-stop/independent-owner controls and run all original sampled tests unchanged on
-    existing supported CI tuples. Preserve 8ms, 2s and every other existing timeout/assertion. Unreproduced
-    or timing-environment-only observations remain explicitly unresolved; no retry pass closes them.
+  - Reproduce and retain the unchanged test_golden_xdma_native --frame observation with the injected driver,
+    ordinary execution, ASan/UBSan and initialized TSan; classify pre-main sanitizer startup failures
+    separately. No real XDMA node, GPU, FPGA, driver installation or bench access.
+  - Trace submission scheduling and ownership around the unchanged 500us deadline using offline diagnostic
+    builds. Distinguish sanitizer-induced scheduling delay from an actual race/lifecycle defect. Do not
+    infer a race from a timeout or dismiss a sanitizer report as overhead.
+  - If a private software defect is demonstrated, retain a failing baseline control and repair it within
+    the narrowed activation scope. Otherwise record a causally supported instrumentation limitation and
+    its still-unpassed full-frame result. Preserve all original full-frame/oracle/refusal assertions,
+    mandatory preparation/protocol gates and deadline values; new observations cannot replace the failed
+    result or claim hardware timing qualification.
   required_ci:
   - All32 exact final-head target checks successful, preserving original baseline names and multiplicity;
     full canonical control validation on planning and closure.
@@ -140,7 +139,7 @@ rollback:
     immutable evidence and every final-stage obligation.
 evidence:
   output:
-  - docs/evidence/M28-03-<date>.md
+  - docs/evidence/M28-04-<date>.md
   - Exact source/tree, commands, raw failures/results, source hashes, risk review, final-head CI and guarded
     merge/closure receipts.
   claim_boundary: Portable software only. Investigation can classify an unresolved result without claiming
