@@ -1,3 +1,15 @@
+## M28-04 native deadline investigation
+
+The unchanged native full-frame probe passes ordinary and ASan/UBSan execution
+and still fails initialized TSan at the original500us deadline with zero
+allocations. Mandatory preparation/protocol passes in all three modes. Offline
+traces show submitted-work expiry, quarantine, late completion and checked
+shutdown; a2ms delay control reproduces that path. Production and original tests
+are unchanged. This is a timing-limitation disposition, not a repair or a passing
+full-frame TSan result. See [M28-04 evidence](evidence/M28-04-2026-10-03.md).
+M28-05 reconciliation and M28-06 final portable closure remain next/inactive;
+other software findings and all final owner-stage obligations remain open.
+
 # M28-03 sampled startup and cleanup investigation
 
 M28-02 is delivered as target295/control612. Canonical activation613 selects
