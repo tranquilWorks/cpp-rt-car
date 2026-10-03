@@ -1,3 +1,13 @@
+## M29-01 experimental full-owner installation
+
+The experimental-only package now installs the root `hal.hpp` dependency used by
+`simcore/hal.hpp`. The actual relocated optional CPack is tested with complete
+concurrent SimCore owners, using custom include/data paths and removed original
+prefixes, alongside modern/legacy supported Runtime consumers. The default
+header/target inventory and Runtime isolation remain unchanged. SimCore remains
+experimental; broader global policy concurrency is not established by this fix.
+See [the M29 repair overlay](closeout/m29-followups.md) for final receipt locations.
+
 ## M28-06 final portable verification and handoff
 
 The [final artifact/evidence index and ordered owner handoff](closeout/final-handoff.md)

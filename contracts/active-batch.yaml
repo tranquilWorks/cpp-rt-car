@@ -1,26 +1,29 @@
 schema_version: 1
 batch:
-  id: M28-06
-  title: Final portable package and repository closeout
-  goal: Verify the final software artifact and publish a bounded software-closeout handoff ready for the
-    owner final stage.
+  id: M29-01
+  title: Repair loopback ownership and optional full-SimCore SDK
+  goal: Repair both demonstrated remaining software defects with causal controls, bounded ownership and
+    actual installed full-owner validation.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
   - products/cpp-rt-car/acceptance.yaml#CAP-M20
+  - products/cpp-rt-car/acceptance.yaml#CAP-M21
   - products/cpp-rt-car/acceptance.yaml#CAP-M25
   - products/cpp-rt-car/acceptance.yaml#CAP-M26
-  milestone: products/cpp-rt-car/milestones/M28.md#m28-06
-  baseline_commit: 232df8fe2b56ffbdf174fc2bcf24a99995062d09
+  milestone: products/cpp-rt-car/milestones/M29.md#m29-01
+  baseline_commit: 6ead6d8428bad2240936498ce356305a3bacdd2a
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M28-06.yaml
+  control_plane_path: products/cpp-rt-car/batches/M29-01.yaml
   activation: owner_selected
-  owner_scope: Owner selected M28-06 after completed target298/control618. Standing scoped publication
-    and guarded integration continues. Final owner bench/engine/human/signing/release stages remain inactive.
-  control_plane_revision: 8b3bafb943ba2e39aafdda71f005b55dcdc55329
-  canonical_batch_blob: bfe61fdf6bb410faa5aa4d4543b251e1e7139a54
+  owner_scope: 'Owner requested exactly three batches: combined repairs, retained findings, previously
+    excluded work, then begin repairs promptly. This supersedes prior exclusions only for the planned
+    software scope of03. Standing scoped publication and guarded merges persist; all physical/engine/human/production
+    final-stage actions remain deferred.'
+  control_plane_revision: ad9d37acd2b8740a003d23f73965efa26d02e31a
+  canonical_batch_blob: b063a9fd7c89f9b7173bfa2f80f0c6e2c8feaafc
 dependencies:
-- M28-05
+- M28-06
 scope:
   allowed_paths:
   - AGENTS.md
@@ -31,21 +34,27 @@ scope:
   - docs/migration.md
   - docs/sdk/generated/**
   - docs/golden_audit/**
+  - docs/closeout/**
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - docs/closeout/**
-  - docs/release_policy.md
-  - docs/evidence/M28-06-*
+  - rt/src/loopback_backend.cpp
+  - rt/include/rt/loopback_backend.hpp
+  - CMakeLists.txt
+  - include/simcore/hal.hpp
+  - tests/CMakeLists.txt
+  - tests/repair_closeout/**
+  - docs/sampled_io.md
+  - docs/evidence/M29-01-*
+  - docs/cuda_capabilities.json
   forbidden_paths:
   - abi/
   - VERSION.txt
   - LICENSE
+  - release/keys/
+  - release/signatures/
   - qualification/
   - profiles/
   - configs/
-  - .github/workflows/
-  - release/keys/
-  - release/signatures/
   - rt/include/rt/c_api.h
   - rt/include/rt/device_abi.h
   - bench/real_device/
@@ -63,46 +72,40 @@ scope:
   - docs/evidence/M25-*
   - docs/evidence/M26-*
   - docs/evidence/M27-*
-  - docs/evidence/M28-01-*
-  - docs/evidence/M28-02-*
-  - docs/evidence/M28-03-*
-  - docs/evidence/M28-04-*
-  - docs/evidence/M28-05-*
-  - rt/src/
-  - rt/include/
-  - core/
-  - src/
+  - docs/evidence/M28-*
+  - .github/workflows/
+  - rt/src/runtime.cpp
   - bench/
-  - tests/
-  - CMakeLists.txt
-  - samples/
+  - tests/test_loopback_backend.cpp
 acceptance:
-- 'Use existing release/package tooling on the exact final source: clean default and applicable optional
-  CPack artifacts, source/contract hashes, relocated installed public consumers, modern/legacy migration
-  and supported OS/compiler evidence. Keep optional native validation compile/injected-driver/absent-device
-  only.'
-- Repeat the existing bounded fixed portable soak and unsigned independent rebuild comparison with complete
-  commands, hashes, measured duration, resource and terminal journals. Reuse delivered tools and tests;
-  do not create a new campaign, schedule, workflow, signing fixture or release version.
-- Bind the final package and evidence to exact tested source/tree and review all remaining ledger items
-  after the last change. Preserve full local gates, all32 hosted names/multiplicity, failures and exact
-  fetched merge-tree guards. Rerun affected verification if a final change invalidates evidence.
-- Produce the final artifact/evidence index, rollback reference and ordered owner test handoff. Mark only
-  the scoped software delivery complete if its exit criteria actually pass. Otherwise report the specific
-  remaining software blocker. M18/M19/CAP-M20/manual acceptance stays open as applicable; no keys, signing,
-  tag, release publication, deployment or human approval occurs in this batch.
-- Activate only M28-06 from exact target main232df8fe2b56ffbdf174fc2bcf24a99995062d09 and bind merged
-  canonical revision/blob before implementation. Reuse existing package, migration, bounded4096-cycle
-  modern/legacy soak and actual two-build unsigned comparison tooling. Add bounded final artifact/evidence
-  index, rollback and ordered owner handoff; update living/generated documents and release digest coverage
-  only. No production/tool behavior repair, new tests/workflow/campaign/qualification card, signature
-  fixture, signing or release activity. Preserve all M28-05 ledger identities and unresolved dispositions.
-- Preserve release1.2.1 portable RT0, C ABI8/70 exports/fingerprint/SONAME8, device ABI1, public/default
-  policies, supported tuples, existing tests/assertions/deadlines and historical evidence. No test wiring
-  or runtime changes are authorized in this final documentation/verification batch.
-- For each claimed repair retain a causal baseline failure and corrected outcome. Complete exact-head
-  local full validation and all32 hosted checks with the original names and multiplicity, applicable sanitizer/static/no-allocation/default/ABI/actual
-  installed package gates, risk review and guarded target/canonical closure. No functional gate is waived.
+- 'Reproduce both original defects before repair: retain an unchanged-source direct loopback cancel/submit
+  publication failure (including initialized TSan evidence) and an actual relocated full-SimCore consumer
+  compile failure on the missing HAL header. Add deterministic scheduling controls without production
+  test hooks and keep all existing tests/assertions/deadlines unchanged.'
+- Repair private loopback slot ownership/publication across submit, poll and cancel. Cover accepted and
+  in-progress submissions, published timeout slots, competing consumers, repeated cancellation, capacity/reuse,
+  stop/shutdown/reset/restart and isolated instances. Cancellation/poll must never access unpublished
+  or exclusively owned completion storage. Retain bounded nonblocking callbacks, no allocation after construction
+  and checked lifecycle ownership; no broad Runtime or benchmark rewrite.
+- Repair the optional full-SimCore installed header dependency using the narrow install/forward-header
+  boundary. Build actual clean default and experimental CPack variants, delete original prefixes, relocate
+  with spaces/custom install directories, and compile/run independent complete SimCore owners plus modern/legacy
+  supported Runtime consumers. Preserve default SDK inventory, supported Runtime isolation and experimental
+  support classification.
+- Run baseline versus corrected controls, focused ordinary/ASan/UBSan/leaks/initialized TSan and Clang14
+  analysis, no-allocation checks, complete existing relevant suites, exact-head full local and all32 original
+  hosted names/multiplicity, actual installed package gates, risk review and guarded target/canonical
+  integration. No functional gate waiver or instrumentation pre-main failure counted as a test pass.
+- Preserve the immutable M28 ledger and historic evidence; add an evidence-bound M29 current disposition
+  for the two repaired findings only after validation. Keep every other retained finding and external
+  obligation explicit. M29-02/03 remain planned, not activated by01; final owner stage stays deferred.
+- Before implementation bind the merged canonical revision/blob to the exact refreshed main baseline.
+  For planned02/03 narrow cause-specific implementation paths at selection; planning alone activates neither.
+  Preserve release1.2.1 portable RT0, stable C ABI8/70 exports/fingerprint/SONAME8, device ABI1, default
+  policies, license, original tests/deadlines and all historical evidence.
+- Refresh only the existing product_sources SHA256 entries for rt/src/loopback_backend.cpp and rt/include/rt/loopback_backend.hpp
+  in docs/cuda_capabilities.json after the scoped repair. Preserve every source inventory identity, coverage
+  row, gate, status, support tuple and qualification claim; this is a source binding refresh only.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
@@ -110,31 +113,38 @@ validation:
   - ./scripts/agent-verify.sh full
   - git diff --check
   focused_tests_to_add:
-  - Reuse existing migration, package, portable soak and unsigned rebuild checks; add no redundant test
-    suite.
+  - 'Reproduce both original defects before repair: retain an unchanged-source direct loopback cancel/submit
+    publication failure (including initialized TSan evidence) and an actual relocated full-SimCore consumer
+    compile failure on the missing HAL header. Add deterministic scheduling controls without production
+    test hooks and keep all existing tests/assertions/deadlines unchanged.'
+  - Repair private loopback slot ownership/publication across submit, poll and cancel. Cover accepted
+    and in-progress submissions, published timeout slots, competing consumers, repeated cancellation,
+    capacity/reuse, stop/shutdown/reset/restart and isolated instances. Cancellation/poll must never access
+    unpublished or exclusively owned completion storage. Retain bounded nonblocking callbacks, no allocation
+    after construction and checked lifecycle ownership; no broad Runtime or benchmark rewrite.
   required_ci:
-  - All32 exact final-head target checks successful, preserving original baseline names and multiplicity;
-    full canonical control validation on planning and closure.
+  - All32 original exact-head hosted names/multiplicity successful; full canonical control validation;
+    only03 may add its explicitly scoped deterministic gate.
   manual:
-  - None inside this software batch. Final owner stage retains all bench, engine, independent human, controlled
-    performance, production signing/release/deployment acceptance.
+  - None in these software batches; final actual owner-stage hardware/engine/human/performance/production
+    acceptance remains deferred.
 risk:
-  class: moderate
+  class: high
   hazards:
-  - An unproven cause, retry pass or instrumented timing result is mistaken for a repair or qualification.
-  - A change weakens an old assertion, deadline, ABI/default or prior evidence.
+  - Ownership repair introduces a publication/reuse race or weakens bounded execution.
+  - A retry, limitation, test identity or software pass is misrepresented as global completion/qualification.
   stop_conditions:
-  - A new public API/ABI/schema/default-policy decision or path outside the activated cause-specific scope
-    is needed.
-  - Credible completion requires a bench, licensed engine, live endpoint, independent human judgement,
-    production key or release/deployment action; retain that item for the final owner stage.
+  - A new public ABI/schema/default decision or forbidden path is necessary; narrow/amend canonical scope
+    before that change.
+  - Only external hardware, licensed engine, independent human or production authority can substantiate
+    a claim; retain it as final-stage acceptance.
 rollback:
-  strategy: Revert only this batch changes and additive wiring; preserve predecessor implementations,
-    immutable evidence and every final-stage obligation.
+  strategy: Revert only this batch changes and additive wiring; preserve all previous repairs, original
+    assertions, failures and exact receipts.
 evidence:
   output:
-  - docs/evidence/M28-06-<date>.md
-  - Exact source/tree, commands, raw failures/results, source hashes, risk review, final-head CI and guarded
-    merge/closure receipts.
-  claim_boundary: Portable software only. Investigation can classify an unresolved result without claiming
-    it passed. Global qualification, independent human acceptance and production release remain separate.
+  - docs/evidence/M29-01-<date>.md
+  - Baseline/corrected source hashes, raw commands/results, instrumentation status, packages, risk, exact-head
+    CI and guarded closure receipts.
+  claim_boundary: Portable software delivery only. No physical/RT/engine/human/controlled-performance/production
+    authenticity/release/deployment claim from these batches.

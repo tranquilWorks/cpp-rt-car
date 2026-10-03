@@ -1110,6 +1110,8 @@ if (RTFW_INSTALL_EXPERIMENTAL)
   install(
       FILES api/cabi.h
       DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/api)
+  # Preserve the <hal.hpp> dependency of the experimental forwarding header.
+  install(FILES hal/hal.hpp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   install(
       DIRECTORY hal/
       DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/hal

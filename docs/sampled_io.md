@@ -76,3 +76,21 @@ global state, hidden thread, process observation, or sleep timing participates.
 This is fake software loopback evidence. It does not establish DAC, DAQ, CAN,
 IIO, XDMA, CUDA, electrical scaling, physical trigger/sample-clock accuracy,
 HIL, controlled latency, RT1, or RT2 behavior.
+
+## Completion ownership and direct-caller lifecycle
+
+Submission privately owns a free slot until its completion and accounting are
+published. A normal completion becomes ready; an injected timeout becomes held
+and remains invisible to polling until cancellation. Poll and cancel each claim
+exclusive ownership before reading or writing completion storage. Cancellation
+checks the batch ID after claiming, preventing stale-ID access during slot reuse;
+a nonmatching slot is restored to its original published state. Repeated cancel
+before polling is idempotent and increments cancellation accounting once.
+
+All scans stay bounded by configured capacity and use no blocking lock or heap
+allocation. A cancel scan may return `invalid_argument` while the matching submit
+or competing consumer has exclusive ownership. `request_stop` prevents later
+admission, while an already admitted callback may finish. Direct users must
+quiesce callbacks before buffer mutation, reset, shutdown, initialization, move
+or destruction, matching Runtime's checked-stop ordering. This is not a new
+concurrent-reset guarantee or a change to Runtime's safety deadlines.
