@@ -793,3 +793,15 @@ adds fixture-owned acceptance publication before forwarding cancellation within 
 same benchmark device.cpp scope after retained initialized TSan proves the unchanged
 loopback cancel/submit race. No Runtime/backend edit or callback mutex/allocation;
 retain that broader backend finding for later closeout. All gates remain required.
+
+## M28-03 sampled startup and cleanup investigation
+
+Owner selected03 after target295/control612. Canonical activation613 merged
+`6571b0fe4c11357020a47a8beca8bab18bc50036`, blob `8deac68fbf5658348861ab7d7ca203d5eee7e57a`. Initial scope is additive
+public-API lifecycle controls and evidence only, preserving original8ms/2s
+deadlines/assertions and all production/ABI/default sources. Existing controlled
+-2 pending ownership is not a proved new defect. Any production repair requires
+an independently reproduced cause and bounded canonical amendment first. Require
+full local/all32 exact-head, sanitizer/static/allocation/actual installed checks,
+risk review and guarded target/canonical closure under standing authorization.
+M28-04..06 and final owner stage remain inactive; preserve all unresolved findings.

@@ -1,28 +1,28 @@
 schema_version: 1
 batch:
-  id: M28-02
-  title: Benchmark timeout and submission accounting
-  goal: Replace the demonstrated scheduling assumption in the benchmark provider with causally correct
-    timeout and ownership accounting.
+  id: M28-03
+  title: Sampled startup and cleanup timing investigation
+  goal: Resolve software lifecycle/status causes behind retained startup timing findings without extending
+    deadlines or masking cleanup ownership.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
-  - products/cpp-rt-car/acceptance.yaml#CAP-M23
+  - products/cpp-rt-car/acceptance.yaml#CAP-M21
   - products/cpp-rt-car/acceptance.yaml#CAP-M26
-  milestone: products/cpp-rt-car/milestones/M28.md#m28-02
-  baseline_commit: ab22bb4580de18794fcb2bad2b72b4e8a1e104c5
+  milestone: products/cpp-rt-car/milestones/M28.md#m28-03
+  baseline_commit: b5275b0a6094ddab1ab902632cc7cf35e9d20e59
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M28-02.yaml
+  control_plane_path: products/cpp-rt-car/batches/M28-03.yaml
   activation: owner_selected
-  owner_scope: Owner selected M28-02 after target294/control609 completed M28-01. Repair only the demonstrated
-    benchmark timeout/submission accounting assumption; retain exact 1ms deadline, old tests, schemas
-    and evidence. Standing scoped publication and guarded merge authorization continues. M28-03..06 and
-    all final owner-stage work remain inactive.
-  control_plane_revision: 8280b2eb547c5bb3847732070238aedd420bc52c
-  canonical_revision: 8280b2eb547c5bb3847732070238aedd420bc52c
-  canonical_blob_sha: ad9462d599dca1ca32a7b04ca24e5c5be8044c5e
+  owner_scope: Owner selected M28-03 after target295/control612 completed M28-02. Investigate retained
+    sampled startup/cleanup observations using controlled injected drivers and unchanged original tests.
+    Standing scoped publication and guarded integration authorization continues. M28-04..06 and final
+    owner-stage work remain inactive.
+  control_plane_revision: 6571b0fe4c11357020a47a8beca8bab18bc50036
+  canonical_revision: 6571b0fe4c11357020a47a8beca8bab18bc50036
+  canonical_blob_sha: 8deac68fbf5658348861ab7d7ca203d5eee7e57a
 dependencies:
-- M28-01
+- M28-02
 scope:
   allowed_paths:
   - AGENTS.md
@@ -36,10 +36,9 @@ scope:
   - samples/golden_audit/catalog.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - bench/providers/runtime_cases/device.cpp
-  - tests/closeout_benchmark/**
+  - tests/closeout_startup/**
   - tests/CMakeLists.txt
-  - docs/evidence/M28-02-*
+  - docs/evidence/M28-03-*
   forbidden_paths:
   - abi/
   - VERSION.txt
@@ -68,27 +67,34 @@ scope:
   - docs/evidence/M26-*
   - docs/evidence/M27-*
   - docs/evidence/M28-01-*
+  - docs/evidence/M28-02-*
+  - rt/src/
+  - rt/include/
+  - core/
+  - src/
+  - bench/
+  - tests/package_consumer/
+  - tests/sampled_io_simulation/
+  - tests/startup_poll_reliability/
+  - tests/test_sampled_io_simulation.cpp
 acceptance:
-- Retain the M27-03 held-submit reproducer and historical M23 failure. Separately observe provider entry,
-  backend acceptance, terminal timeout, copied output and checked cleanup before and after submit preemption.
-- Correct only the demonstrated provider accounting assumption for device-timeout-nonpublication. Define
-  exact valid state transitions for zero accepted submissions versus one accepted submission; never simply
-  relax an equality or ignore a missing terminal/output/ownership check. Preserve the original 1ms deadline,
-  case identity, schemas and historical tests.
-- Add deterministic before-acceptance and after-acceptance controls, successful submission and real accounting-error
-  negatives. Validate the actual benchmark CLI, existing catalog/result validators, installed provider
-  and complete existing benchmark suites. A new deterministic cause does not retroactively prove the exact
-  cause of the old hosted failure.
-- 'Initialized TSan of the actual held-after-acceptance provider also exposes loopback cancel reading
-  completion storage without submission publication. Within the same allowed device.cpp only, add a fixture-owned
-  command-extension observer for the single failure/timeout invocation: publish acceptance after submit
-  returns, forward cancellation only after that publication, retain nonblocking failed cancellation before
-  acceptance and checked-stop ownership. Bind final observed acceptance to backend accounting. Do not
-  change Runtime/backend sources, other workloads, deadline or schema. Retain the broader pre-existing
-  loopback backend race as unresolved outside this provider-local correction.'
-- Activate only M28-02 from exact target baseline ab22bb4580de18794fcb2bad2b72b4e8a1e104c5, bind this
-  merged canonical revision/blob before implementation, and preserve all M28-01 source/tests/evidence.
-  Later M28 work remains inactive.
+- Inventory M27-02 and M27-07 startup observations, including SampledSimulationUnselectedNative status
+  -2 versus -18 under the original 8ms bound and the separately retained Windows 2s observation. Read
+  their raw evidence before choosing a cause; do not assume all observations share one defect.
+- Use only injected/simulated drivers and controlled scheduling to distinguish genuine timeout from pending
+  cleanup and status precedence. Preserve safe output, no copied invalid payload, terminal visibility,
+  borrowed lifetimes, zero-live accounting after successful checked stop, and failed-stop ownership for
+  retry.
+- Repair only an independently reproduced private lifecycle defect. Add ordered startup/timeout/late completion/repeated-stop/independent-owner
+  controls and run all original sampled tests unchanged on existing supported CI tuples. Preserve 8ms,
+  2s and every other existing timeout/assertion. Unreproduced or timing-environment-only observations
+  remain explicitly unresolved; no retry pass closes them.
+- 'Activate M28-03 from exact target main b5275b0a6094ddab1ab902632cc7cf35e9d20e59 and bind the merged
+  canonical revision/blob before implementation. Initial cause-specific scope is additive public-API lifecycle
+  controls and evidence only: existing M27-02 controls demonstrate valid pending ownership, not a proved
+  new production defect. Production edits require an independently reproduced private defect and a bounded
+  canonical amendment before editing. An investigation may complete with explicitly unresolved historical
+  timing observations; no retry pass or new control is a repair claim.'
 - Preserve release1.2.1, portable RT0, C ABI8/70 exports/fingerprint/SONAME8, device ABI1, public/default
   policies and supported tuples. Existing source tests/assertions/deadlines and all historical evidence
   stay unchanged; tests/CMakeLists.txt permits additive new-test wiring only.
@@ -102,23 +108,17 @@ validation:
   - ./scripts/agent-verify.sh full
   - git diff --check
   focused_tests_to_add:
-  - Retain the M27-03 held-submit reproducer and historical M23 failure. Separately observe provider entry,
-    backend acceptance, terminal timeout, copied output and checked cleanup before and after submit preemption.
-  - Correct only the demonstrated provider accounting assumption for device-timeout-nonpublication. Define
-    exact valid state transitions for zero accepted submissions versus one accepted submission; never
-    simply relax an equality or ignore a missing terminal/output/ownership check. Preserve the original
-    1ms deadline, case identity, schemas and historical tests.
-  - Add deterministic before-acceptance and after-acceptance controls, successful submission and real
-    accounting-error negatives. Validate the actual benchmark CLI, existing catalog/result validators,
-    installed provider and complete existing benchmark suites. A new deterministic cause does not retroactively
-    prove the exact cause of the old hosted failure.
-  - 'Initialized TSan of the actual held-after-acceptance provider also exposes loopback cancel reading
-    completion storage without submission publication. Within the same allowed device.cpp only, add a
-    fixture-owned command-extension observer for the single failure/timeout invocation: publish acceptance
-    after submit returns, forward cancellation only after that publication, retain nonblocking failed
-    cancellation before acceptance and checked-stop ownership. Bind final observed acceptance to backend
-    accounting. Do not change Runtime/backend sources, other workloads, deadline or schema. Retain the
-    broader pre-existing loopback backend race as unresolved outside this provider-local correction.'
+  - Inventory M27-02 and M27-07 startup observations, including SampledSimulationUnselectedNative status
+    -2 versus -18 under the original 8ms bound and the separately retained Windows 2s observation. Read
+    their raw evidence before choosing a cause; do not assume all observations share one defect.
+  - Use only injected/simulated drivers and controlled scheduling to distinguish genuine timeout from
+    pending cleanup and status precedence. Preserve safe output, no copied invalid payload, terminal visibility,
+    borrowed lifetimes, zero-live accounting after successful checked stop, and failed-stop ownership
+    for retry.
+  - Repair only an independently reproduced private lifecycle defect. Add ordered startup/timeout/late
+    completion/repeated-stop/independent-owner controls and run all original sampled tests unchanged on
+    existing supported CI tuples. Preserve 8ms, 2s and every other existing timeout/assertion. Unreproduced
+    or timing-environment-only observations remain explicitly unresolved; no retry pass closes them.
   required_ci:
   - All32 exact final-head target checks successful, preserving original baseline names and multiplicity;
     full canonical control validation on planning and closure.
@@ -140,7 +140,7 @@ rollback:
     immutable evidence and every final-stage obligation.
 evidence:
   output:
-  - docs/evidence/M28-02-<date>.md
+  - docs/evidence/M28-03-<date>.md
   - Exact source/tree, commands, raw failures/results, source hashes, risk review, final-head CI and guarded
     merge/closure receipts.
   claim_boundary: Portable software only. Investigation can classify an unresolved result without claiming
