@@ -1,3 +1,20 @@
+## M28-05 acceptance reconciliation
+
+The [current ledger](closeout/README.md) reconciles all112 canonical requirements,
+12 predecessor deliveries and30 retained findings/obligations. The original golden
+audit and installed offline bundle link its complete source/evidence inventory.
+Causal repairs stay distinct from unresolved loopback/optional-SDK defects,
+historical startup/benchmark/Windows observations and the failed native-frame TSan
+result. Software-complete and CAP-M20 completion are not claimed. Existing final
+bench/RT/Unreal/performance/human/signing/release identities are reused; original
+M27-05/06 exclusions remain unperformed. M28-06 remains inactive.
+
+Exact-head full/local, original32 hosted checks, actual installed bundle validation
+and guarded target/canonical closure are required before completion. Their final
+receipts are recorded in this batch's PR and canonical closure.
+
+## Historical checkpoints
+
 ## M28-04 native deadline investigation
 
 The unchanged native full-frame probe passes ordinary and ASan/UBSan execution

@@ -10,10 +10,30 @@
         {
           "anchor": "# Golden XDMA and combined source kit",
           "path": "samples/golden_xdma/README.md"
+        },
+        {
+          "anchor": "# Qualification records and promotion proposals",
+          "path": "docs/qualification.md"
+        },
+        {
+          "anchor": "# M27-07 native golden XDMA preparation",
+          "path": "docs/evidence/M27-07-2026-10-02.md"
+        },
+        {
+          "anchor": "# Native golden XDMA host preparation",
+          "path": "samples/golden_xdma_native/README.md"
+        },
+        {
+          "anchor": "# Real-Time Readiness Gates",
+          "path": "docs/real_time_readiness_checklist.md"
+        },
+        {
+          "anchor": "# M27-08 platform migration and bounded portable readiness",
+          "path": "docs/evidence/M27-08-2026-10-02.md"
         }
       ],
       "id": "M18-physical-rt",
-      "next_action": "Select named hardware, driver, bitstream, topology and workload tuples and predeclare thresholds. Complete native golden XDMA host integration where needed, then actual correctness, thermal, saturation, device-loss/reset, endurance, safe-output and RT campaigns. Preserve unavailable outcomes; no portable artifact qualifies them.",
+      "next_action": "M28-05 ledger tracks physical-cuda, physical-xdma, physical-combined, rt-policy-endurance. Use existing M18 NVIDIA plan/record/review process with predeclared thresholds and exact device/toolchain/workload identity; retain raw outcomes before separate promotion. Use existing M18 XDMA card with exact bitstream/driver/window/topology identity and real functional/fault/thermal/endurance trials. Host preparation must not be reported as a complete golden execution. Use the existing combined-deployment card; resolve its original promotion prerequisites through bounded work and retain actual CUDA/XDMA combined evidence. No direct peer-DMA claim. Use existing RT/endurance card; predeclare policy, workloads, populations and thresholds, retain affinity/scheduling/NUMA/locking/residency and raw duration/resource evidence, then independent review.",
       "status": "gated"
     },
     {
@@ -21,10 +41,14 @@
         {
           "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
           "path": "docs/evidence/M19-01-2026-08-12.md"
+        },
+        {
+          "anchor": "# Extension registration ABI v1",
+          "path": "docs/extension_registration.md"
         }
       ],
       "id": "M19-unreal",
-      "next_action": "Implement and validate the separate Unreal host adapter, engine jobs/allocator/clock/world ownership, editor and packaged lifecycle, multiple instances and long-run teardown. The existing independent host and extension ABI are prerequisites, not an Unreal completion claim.",
+      "next_action": "M28-05 ledger tracks real-unreal. Resume existing M19-02 approved adapter card with licensed exact engine/UBT/UAT/compiler/SDK tuple, then existing03 world/unload and04 complete-sample roadmap identities. Retain actual editor and packaged results.",
       "status": "open"
     },
     {
@@ -40,10 +64,46 @@
         {
           "anchor": "# M27-04 optional non-RT telemetry \u2014 implementation candidate",
           "path": "docs/evidence/M27-04-2026-10-01.md"
+        },
+        {
+          "anchor": "# M27-05 ordinary public-API regression evidence",
+          "path": "docs/evidence/M27-05-2026-10-02.md"
+        },
+        {
+          "anchor": "# M27-05 source and compatibility review",
+          "path": "docs/evidence/M27-05-risk-review.md"
+        },
+        {
+          "anchor": "# M27-06 independent build/provenance evidence",
+          "path": "docs/evidence/M27-06-2026-10-02.md"
+        },
+        {
+          "anchor": "# M27-06 review",
+          "path": "docs/evidence/M27-06-risk-review.md"
+        },
+        {
+          "anchor": "# Benchmark analysis and extension kit",
+          "path": "docs/benchmark_analysis.md"
+        },
+        {
+          "anchor": "# M28-02 benchmark timeout and submission accounting",
+          "path": "docs/evidence/M28-02-2026-10-03.md"
+        },
+        {
+          "anchor": "# M27-08 platform migration and bounded portable readiness",
+          "path": "docs/evidence/M27-08-2026-10-02.md"
+        },
+        {
+          "anchor": "# Migrating a portable RTFW 1.x application",
+          "path": "docs/migration.md"
+        },
+        {
+          "anchor": "# Release and Compatibility Policy",
+          "path": "docs/release_policy.md"
         }
       ],
       "id": "M20-release-engineering",
-      "next_action": "Complete controlled performance gates, continuous fuzz/static/security campaigns, target signing and reproducible provenance, platform/migration/soak review, release approval and deployment. M27-04 supplies optional native non-RT Perfetto/OTLP/ETW integration; its format evidence and exact-head gate/closure records do not complete broader CAP-M20 release acceptance.",
+      "next_action": "M28-05 ledger tracks excluded-generated-campaigns, excluded-signature-fixtures, controlled-performance, platform-release-review, production-signing-release. Keep excluded scope unperformed; only a later explicit owner scope decision may reopen the original campaign obligations. Retain unsigned rebuild observations and existing fixtures; later owner scope must explicitly address the excluded expansion. Use CAP-M23 manual acceptance and M20 controlled-performance card; retain predeclared compatible baseline/policy/host/source, independent threshold review and actual controlled runs. Reuse M20 platform/migration/release card and migration inventory; select any new tuple separately, review actual workload/soak outcomes and obtain release/deployment decisions. Use existing M20 signing and release procedures, owner-controlled identity/custody and release decisions after dependencies; do not infer approval or CAP-M20 promotion.",
       "status": "open"
     },
     {
@@ -51,10 +111,18 @@
         {
           "anchor": "# M25-06 installed documentation, reference and recipes",
           "path": "docs/evidence/M25-06-2026-09-28.md"
+        },
+        {
+          "anchor": "# Installed SDK recipes",
+          "path": "docs/sdk/recipes.md"
+        },
+        {
+          "anchor": "# M28-01 concurrent experimental clock initialization",
+          "path": "docs/evidence/M28-01-2026-10-02.md"
         }
       ],
       "id": "M25-human-review",
-      "next_action": "Have a consumer unfamiliar with repository internals perform and record the installed first-use walkthrough and findings. Automated recipe, relocation and audit runs are not a human review.",
+      "next_action": "M28-05 ledger tracks unfamiliar-consumer, optional-sdk-hal-header. Use existing M25-06 recipes and CAP-M25 manual criterion, record independent first-use commands, findings and resolution. Include the optional SDK gap in the handoff. Select an optional SDK packaging repair; reproduce the original full-owner compile failure, preserve default SDK isolation and verify the actual relocated full-owner consumer.",
       "status": "gated"
     },
     {
@@ -62,10 +130,50 @@
         {
           "anchor": "# M26-05 Windows configuration correction and full local pass",
           "path": "docs/evidence/M26-05-2026-09-30.md"
+        },
+        {
+          "anchor": "# M27-02 startup and device poll failure conservation",
+          "path": "docs/evidence/M27-02-2026-09-30.md"
+        },
+        {
+          "anchor": "# M27-03 submission and experimental timeout investigation",
+          "path": "docs/evidence/M27-03-2026-10-01.md"
+        },
+        {
+          "anchor": "# M28-01 concurrent experimental clock initialization",
+          "path": "docs/evidence/M28-01-2026-10-02.md"
+        },
+        {
+          "anchor": "# M28-02 benchmark timeout and submission accounting",
+          "path": "docs/evidence/M28-02-2026-10-03.md"
+        },
+        {
+          "anchor": "# M28-03 sampled startup and cleanup timing investigation",
+          "path": "docs/evidence/M28-03-2026-10-03.md"
+        },
+        {
+          "anchor": "# M28-05 predecessor integration observations",
+          "path": "docs/evidence/M28-05-predecessors.md"
+        },
+        {
+          "anchor": "# M27-07 native golden XDMA preparation",
+          "path": "docs/evidence/M27-07-2026-10-02.md"
+        },
+        {
+          "anchor": "# M28-04: native full-frame deadline investigation (2026-10-03)",
+          "path": "docs/evidence/M28-04-2026-10-03.md"
+        },
+        {
+          "anchor": "# M27-05 ordinary public-API regression evidence",
+          "path": "docs/evidence/M27-05-2026-10-02.md"
+        },
+        {
+          "anchor": "# M27-05 source and compatibility review",
+          "path": "docs/evidence/M27-05-risk-review.md"
         }
       ],
       "id": "protected-fixture-findings",
-      "next_action": "M27-02 independently reproduces and retains one-shot command poll failures until an eligible batch receives them, while preserving idle polling needed to reap late native completions. Controlled startup shows invalid_state(-2) correctly retains unfinished native cleanup while channel status preserves device_timeout(-18); old fixtures assume immediate cleanup and remain unchanged. Retain those earlier failures and any later passes. M23 timing-sensitive submission and experimental SimCore 4/8-thread timeouts remain separate open investigations.",
+      "next_action": "M28-05 ledger tracks poll-error-conservation, experimental-worker-lifetime, experimental-watchdog, experimental-clock-sampling, experimental-clock-initialization, benchmark-acceptance-accounting, loopback-cancel-submit, historical-benchmark-predicate, sampled-startup-pending-cleanup, windows-startup-2024ms, windows-negative-overlap, native-frame-tsan-deadline, partial-runtime-tsan, offline-diagnostic-warning, experimental-global-policy. Preserve causal regressions, idle reaping and state-before-identity ordering; do not reinstate the rejected idle-poll guard. Preserve schedule controls and original determinism tests; this does not close every historical timing failure. Preserve callback handoff and shutdown controls; supported Runtime watchdog behavior is separate. Preserve original calibration, drift threshold, determinism controls and fallback behavior. Preserve borrowed callback lifetime/thread-safety restrictions and caller-thread arena ownership; global FMA-policy concurrency is not qualified. Preserve exact terminal/nonpublication/accounting checks; direct loopback callers still require the separate backend repair. Select a separately bounded backend ownership/publication repair, retain the unchanged baseline race and verify direct callers, cancellation, shutdown, no-allocation and installed consumers. Keep the original failure and causal limit; require original raw predicate/scheduling evidence before claiming exact historical cause. Retain original assertions/deadlines and failures. Diagnose the original fixture scheduling independently; a retry pass is not a repair. Capture original Windows scheduling/driver progress in a separate bounded investigation without changing its8ms argument or two-second fixture wait. Retain the failed overlap result and obtain a causal original-platform control before asserting repair. Keep the failed full-frame result separate from mandatory protocol passes; preserve source-bound diagnostics and unchanged deadline. Any claimed repair or physical timing acceptance needs independent causal/controlled evidence. Use complete relevant instrumentation for future concurrency evidence; do not count the partial run or pre-main mapping/signal failures as passes. Preserve the warning and call-path review with the offline diagnostic evidence; do not promote diagnostic code into product targets. Keep the existing configuration boundary; review and causally verify any future broader policy-concurrency claim.",
       "status": "open"
     },
     {
@@ -77,10 +185,14 @@
         {
           "anchor": "# M26-05 Windows configuration correction and full local pass",
           "path": "docs/evidence/M26-05-2026-09-30.md"
+        },
+        {
+          "anchor": "# M27-01 trusted active replay rejection preserves capture",
+          "path": "docs/evidence/M27-01-2026-09-30.md"
         }
       ],
       "id": "foreign-replay-boundary",
-      "next_action": "M27-01 repairs foreign trusted active owner refusal before live-control bookkeeping, including independent outer/nested owner checks and subsequent capture in v1/v2. Preserve sample pre-effect owner/telemetry guards. Broader invalid-artifact and post-execution failure transactionality remains unproven and separately reviewable; this scoped repair is not a universal replay rollback guarantee.",
+      "next_action": "M28-05 ledger tracks replay-owner-refusal, replay-transactionality. Preserve owner-refusal regressions and sample guards; broader transactionality is tracked separately. Separately bound and test additional transactionality before expanding claims; preserve owner guards and distinguish parsing/refusal from execution rollback.",
       "status": "open"
     },
     {
@@ -91,13 +203,13 @@
         }
       ],
       "id": "application-models",
-      "next_action": "Applications own production plant/vehicle physics, domain calibration, vendor adapters and safety integration. The integer scenario and owned simulators demonstrate framework composition only; peer DMA and arbitrary physical replay are outside the delivered claim.",
+      "next_action": "M28-05 ledger tracks application-models. Applications supply and validate domain models and integration under their own requirements; do not infer those from golden software coverage.",
       "status": "gated"
     }
   ],
   "requirements": [
     {
-      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Requested/resolved/applied/verified thread and memory policy, startup barriers and retryable ownership accounting are implemented. Injected and native-policy tests do not establish deployment RT latency.",
+      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Requested/resolved/applied/verified thread and memory policy, startup barriers and retryable ownership accounting are implemented. Injected and native-policy tests do not establish deployment RT latency. Current M28-05 reconciliation retains all related findings and external obligations in closeout.json; this source-level assessment is not an unqualified software-complete claim.",
       "evidence": [
         {
           "anchor": "# M15-04 retained evidence \u2014 2026-08-05",
@@ -497,7 +609,7 @@
       ]
     },
     {
-      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Reference scheduling, copied cross-rate samples, mandatory admission, bounded late actions and optional shedding/recovery are implemented. Declared budgets remain inputs, not qualified WCET.",
+      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Reference scheduling, copied cross-rate samples, mandatory admission, bounded late actions and optional shedding/recovery are implemented. Declared budgets remain inputs, not qualified WCET. Current M28-05 reconciliation retains all related findings and external obligations in closeout.json; this source-level assessment is not an unqualified software-complete claim.",
       "evidence": [
         {
           "anchor": "# M16-04 retained evidence \u2014 2026-08-05",
@@ -937,7 +1049,7 @@
       ]
     },
     {
-      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. HAL-v2 ownership, heterogeneous memory, bounded command timelines and v1 compatibility are implemented. Native backend protocol tests and host staging establish portable integration; named real combined-device trials remain open.",
+      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. HAL-v2 ownership, heterogeneous memory, bounded command timelines and v1 compatibility are implemented. Native backend protocol tests and host staging establish portable integration; named real combined-device trials remain open. Current M28-05 reconciliation retains all related findings and external obligations in closeout.json; this source-level assessment is not an unqualified software-complete claim.",
       "evidence": [
         {
           "anchor": "# M17-06 retained implementation evidence",
@@ -1337,7 +1449,7 @@
       ]
     },
     {
-      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Offline schema/provenance/threshold and nonmutating promotion tooling exists. Synthetic records exercise validation only. No named physical CUDA, XDMA, combined, RT1 or RT2 campaign is established by this audit.",
+      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Offline schema/provenance/threshold and nonmutating promotion tooling exists. Synthetic records exercise validation only. No named physical CUDA, XDMA, combined, RT1 or RT2 campaign is established by this audit. Current M28-05 reconciliation retains all related findings and external obligations in closeout.json; this source-level assessment is not an unqualified software-complete claim.",
       "evidence": [
         {
           "anchor": "# M18-01 qualification schema and promotion-tool evidence",
@@ -1505,7 +1617,7 @@
       ]
     },
     {
-      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. The bounded extension ABI registration, negotiation, detach/quiescence and stale-reference contract is implemented. The independent host reference is usable; it does not supply an Unreal engine adapter, editor/packaged-build lifecycle or engine-specific long-run teardown.",
+      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. The bounded extension ABI registration, negotiation, detach/quiescence and stale-reference contract is implemented. The independent host reference is usable; it does not supply an Unreal engine adapter, editor/packaged-build lifecycle or engine-specific long-run teardown. Current M28-05 reconciliation retains all related findings and external obligations in closeout.json; this source-level assessment is not an unqualified software-complete claim.",
       "evidence": [
         {
           "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
@@ -1729,7 +1841,7 @@
       ]
     },
     {
-      "assessment": "M27-04 implements optional non-RT native Perfetto protobuf, OTLP/HTTP logs/metrics and Windows TraceLogging over unchanged global schema2. Actual Trace Processor, OpenTelemetry Collector and installed Windows ETL/TDH consumers have passed scoped format checks; PR289 retains required exact-head full/hosted acceptance and integration. Controlled performance, continuous security campaigns, signed reproducible provenance, platform/migration/soak review and release approval remain separate and open.",
+      "assessment": "CAP-M20 remains incomplete. M27-04 delivers optional non-RT exporters, M27-06 records two matching unsigned local builds, and M27-08 delivers current-platform/migration and bounded portable soak coverage. Controlled performance, excluded original campaign/signature expansion, authenticated provenance, human soak/release review and deployment remain open; no promotion follows.",
       "evidence": [
         {
           "anchor": "# M20-PRE-01 retained implementation evidence",
@@ -1769,7 +1881,7 @@
       ]
     },
     {
-      "assessment": "M27-04 implements optional non-RT native Perfetto protobuf, OTLP/HTTP logs/metrics and Windows TraceLogging over unchanged global schema2. Actual Trace Processor, OpenTelemetry Collector and installed Windows ETL/TDH consumers have passed scoped format checks; PR289 retains required exact-head full/hosted acceptance and integration. Controlled performance, continuous security campaigns, signed reproducible provenance, platform/migration/soak review and release approval remain separate and open.",
+      "assessment": "The complete M23 benchmark inventory and M28-02 provider-accounting correction supply portable evidence. CAP-M23 manual baseline/threshold review and M20-01 actual controlled-host performance gates remain unperformed. Portable structural passes are not controlled timing acceptance.",
       "evidence": [
         {
           "anchor": "# M20-PRE-01 retained implementation evidence",
@@ -1809,7 +1921,7 @@
       ]
     },
     {
-      "assessment": "M27-04 implements optional non-RT native Perfetto protobuf, OTLP/HTTP logs/metrics and Windows TraceLogging over unchanged global schema2. Actual Trace Processor, OpenTelemetry Collector and installed Windows ETL/TDH consumers have passed scoped format checks; PR289 retains required exact-head full/hosted acceptance and integration. Controlled performance, continuous security campaigns, signed reproducible provenance, platform/migration/soak review and release approval remain separate and open.",
+      "assessment": "M27-06 independently rebuilt and consumed two matching default packages on one recorded host. These are unsigned local observations, not authenticated provenance or a reproducible-release guarantee. Original signature-fixture expansion and production identity/signing acceptance remain unperformed.",
       "evidence": [
         {
           "anchor": "# M20-PRE-01 retained implementation evidence",
@@ -1901,7 +2013,7 @@
       ]
     },
     {
-      "assessment": "M27-04 implements optional non-RT native Perfetto protobuf, OTLP/HTTP logs/metrics and Windows TraceLogging over unchanged global schema2. Actual Trace Processor, OpenTelemetry Collector and installed Windows ETL/TDH consumers have passed scoped format checks; PR289 retains required exact-head full/hosted acceptance and integration. Controlled performance, continuous security campaigns, signed reproducible provenance, platform/migration/soak review and release approval remain separate and open.",
+      "assessment": "M27-08 verifies current supported tuples, modern/legacy target parity, actual relocated package discovery and fixed portable lifecycle repetition. No new supported tuple or historical binary package is qualified. Tuple expansion and controlled migration/soak/release review remain separate.",
       "evidence": [
         {
           "anchor": "# M20-PRE-01 retained implementation evidence",
@@ -1941,7 +2053,7 @@
       ]
     },
     {
-      "assessment": "M27-04 implements optional non-RT native Perfetto protobuf, OTLP/HTTP logs/metrics and Windows TraceLogging over unchanged global schema2. Actual Trace Processor, OpenTelemetry Collector and installed Windows ETL/TDH consumers have passed scoped format checks; PR289 retains required exact-head full/hosted acceptance and integration. Controlled performance, continuous security campaigns, signed reproducible provenance, platform/migration/soak review and release approval remain separate and open.",
+      "assessment": "Existing mandatory gates and M27 fixed C++ regressions, unsigned rebuilds, installed documentation and portable soak checks are retained. Original M27-05 generated-input/continuous/scanner expansion and M27-06 signature-fixture expansion remain excluded/unperformed. These scoped deliveries do not complete the original continuous acceptance.",
       "evidence": [
         {
           "anchor": "# M20-PRE-01 retained implementation evidence",
@@ -1981,7 +2093,7 @@
       ]
     },
     {
-      "assessment": "UNPERFORMED in this audit: signing-key custody, controlled runner review, soak review, and release approval. Portable fuzz/static/dependency/SBOM and unsigned candidate provenance checks exist. Controlled performance, continuous security campaigns, signed reproducible target provenance, supported migration/soak promotion and release approval remain open. The supported export is JSON; native Perfetto/OpenTelemetry/ETW integrations remain engineering work.",
+      "assessment": "No agent or automated run supplies key custody, controlled runner review, independent soak review or release approval. Existing M20 signing/performance/platform-release identities remain owner-stage obligations with no inferred waiver.",
       "evidence": [
         {
           "anchor": "# M20-PRE-01 retained implementation evidence",
@@ -2061,7 +2173,7 @@
       ]
     },
     {
-      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Active mixed CPU/device rates, payload identity, sampled safety acknowledgement and simulated replay are implemented. M26-04 prerequisite repairs add opt-in ring4, per-backend capacity and bounded lifecycle/timing corrections while preserving defaults and native deadlines.",
+      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Active mixed CPU/device rates, payload identity, sampled safety acknowledgement and simulated replay are implemented. M26-04 prerequisite repairs add opt-in ring4, per-backend capacity and bounded lifecycle/timing corrections while preserving defaults and native deadlines. Current M28-05 reconciliation retains all related findings and external obligations in closeout.json; this source-level assessment is not an unqualified software-complete claim.",
       "evidence": [
         {
           "anchor": "# M21-05 implementation evidence \u2014 2026-08-27",
@@ -2589,7 +2701,7 @@
       ]
     },
     {
-      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Copied bounded control admission, exact-boundary immutable publication, replacement/rejection, generation rollback and trusted replay are implemented. Application/backend side-effect recovery remains owner-managed, and executable code reload is excluded.",
+      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Copied bounded control admission, exact-boundary immutable publication, replacement/rejection, generation rollback and trusted replay are implemented. Application/backend side-effect recovery remains owner-managed, and executable code reload is excluded. Current M28-05 reconciliation retains all related findings and external obligations in closeout.json; this source-level assessment is not an unqualified software-complete claim.",
       "evidence": [
         {
           "anchor": "# M22-04 assurance evidence",
@@ -3057,7 +3169,7 @@
       ]
     },
     {
-      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Versioned providers, exact descriptor/raw-result identities, portable subsystem and whole-pipeline cases, extension registration and offline comparisons are implemented. Fake and steady evidence remain distinct; controlled baselines and thresholds are a separate release gate.",
+      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Versioned providers, exact descriptor/raw-result identities, portable subsystem and whole-pipeline cases, extension registration and offline comparisons are implemented. Fake and steady evidence remain distinct; controlled baselines and thresholds are a separate release gate. Current M28-05 reconciliation retains all related findings and external obligations in closeout.json; this source-level assessment is not an unqualified software-complete claim.",
       "evidence": [
         {
           "anchor": "# M23-05 analysis and extension implementation evidence",
@@ -3497,7 +3609,7 @@
       ]
     },
     {
-      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Runtime CUDA kernel/Graph physics, exact oracle, lifecycle/fault/no-allocation/packaging and benchmark coverage are implemented with owned simulated drivers. The declared matrix retains 40 of 44 rows and all 37 critical rows; named real-device correctness and endurance remain M18 work.",
+      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Runtime CUDA kernel/Graph physics, exact oracle, lifecycle/fault/no-allocation/packaging and benchmark coverage are implemented with owned simulated drivers. The declared matrix retains 40 of 44 rows and all 37 critical rows; named real-device correctness and endurance remain M18 work. Current M28-05 reconciliation retains all related findings and external obligations in closeout.json; this source-level assessment is not an unqualified software-complete claim.",
       "evidence": [
         {
           "anchor": "# M24-04 CUDA benchmark and maturity verification",
@@ -3857,7 +3969,7 @@
       ]
     },
     {
-      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Public C/C++ and typed helpers, HAL backend authoring, shared-memory external controller, independent host and installed API/recipes are delivered and package-tested. An actual unfamiliar-consumer first-use walkthrough has not been performed and is not replaced by automated or agent review.",
+      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Public C/C++ and typed helpers, HAL backend authoring, shared-memory external controller, independent host and installed API/recipes are delivered and package-tested. An actual unfamiliar-consumer first-use walkthrough has not been performed and is not replaced by automated or agent review. Current M28-05 reconciliation retains all related findings and external obligations in closeout.json; this source-level assessment is not an unqualified software-complete claim.",
       "evidence": [
         {
           "anchor": "# M25-06 installed documentation, reference and recipes",
@@ -4473,7 +4585,7 @@
       ]
     },
     {
-      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Portable CPU, simulated CUDA/XDMA/combined, native/host and actual external CIL compose through the frozen golden scenario. Fifteen benchmark cases, 36 settings and eleven fault campaigns have independent state/identity/cleanup evidence. M26-06 adds the installed source map, requirement audit and separately retained fresh soak; physical and Unreal variants remain gated.",
+      "assessment": "Parent outcome: the portable source/evidence assessment below does not close separately listed manual or qualification requirements. Portable CPU, simulated CUDA/XDMA/combined, native/host and actual external CIL compose through the frozen golden scenario. Fifteen benchmark cases, 36 settings and eleven fault campaigns have independent state/identity/cleanup evidence. M26-06 adds the installed source map, requirement audit and separately retained fresh soak; physical and Unreal variants remain gated. Current M28-05 reconciliation retains all related findings and external obligations in closeout.json; this source-level assessment is not an unqualified software-complete claim.",
       "evidence": [
         {
           "anchor": "# M26-05 Windows configuration correction and full local pass",

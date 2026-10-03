@@ -1,0 +1,80 @@
+# M27-08 platform migration and bounded portable readiness
+
+Baseline `7567c9621d49dc113bca2fd4951cb477d5d63b67`; canonical activation605 merged at
+8a3e60b27959f8759d01b4629a2cc90510e24b46. Target implementation is ready for
+final exact-head full/local32-hosted gates, guarded integration and canonical closure.
+
+The existing three supported platform tuples, C ABI/aliases, C++ aggregate defaults,
+profiles/replay, optional components and relocated consumers were inventoried in
+[the migration guide](../migration.md). Additive coverage compiles the identical
+public consumer against current `rtfw::runtime` and legacy `rtfw::simcore_rt`.
+An actual fresh default CPack archive is extracted beneath a relocated path with
+spaces/custom include/data directories after deleting its original install prefix.
+Copied consumer builds contain no checkout/SDK-build/original-prefix include paths.
+Both consumers run and emit identical fixed records. Eight actual version/component
+requests pass their expected acceptance/refusal; optional unknown remains absent.
+No historical binary package or additional supported tuple is claimed.
+
+Each installed executable completed4096 cycles in one process, covering790528
+callbacks,79052800 logical nanoseconds,8192 owner lifetimes,4096 checkpoint
+reexecutions,8192 expected post-stop refusals and24576 provider acquisitions/releases.
+Current-target wall time was53.958946s; legacy-target
+wall time was55.082664s. Every cycle balanced resources
+and retained zero live provider regions/violations. Only three explicit provider
+regions per owner are accounted, not all process memory. Fixed checkpoint restoration
+and replayed steps are distinct from the existing active/live-control replay gates.
+
+The bounded journal runner retains start/terminal records, complete stdout/stderr,
+arguments, executable/runner/log hashes, wall time and logical totals. Behavioral
+tests cover success, immutable existing output, nonzero diagnostic preservation,
+missing output, unbalanced record, real timeout/reaping and POSIX interruption.
+Windows skips only POSIX signal delivery; timeout/failure tests still run. No
+hard-kill recovery or resumed-result aggregation is claimed. A start-only journal
+is incomplete. No generated-input campaign, new schedule/workflow or scanner added.
+
+Focused3/3 and complete contract pass. The new C++ consumer plus unchanged fully
+instrumented Runtime passes ASan/UBSan/leaks and16 cycles under initialized TSan;
+Clang14 static analysis reports no warning. TSan initialized on attempt48; retain
+all47 pre-main mapping/empty-signal failures separately from the actual passing run.
+No race report was suppressed. First contract attempts caught stale generated docs
+and existing digest bindings; refreshes preserve schemas, targets and support claims.
+Canonical605 first hosted validation failed unrelated temporary-Git cleanup with
+Errno39; unchanged retry passed. All raw attempts remain retained.
+
+Production/default/ABI/old-test byte comparisons pass; CMake test edits only append
+new declarations. Existing ABI/default/no-allocation tests remain mandatory in full
+verification. This batch adds coverage over already-correct baseline behavior;
+there is no production repair or invented baseline defect. Ordinary failing journal
+controls establish that nonpassing observations are not accepted as successful.
+No target/local gate is waived. Final full160/strict165 and all32 exact-head check
+names/multiplicity remain mandatory; final receipts belong to PR/canonical closure.
+
+No M27 software card follows08. Remaining: original05 generated-input/continuous
+and06 signature expansion (CAP-M20 not promoted); historical clock/benchmark/native
+timing issues including07 full-frame TSan; actual Unreal and unfamiliar-consumer
+human review; named hardware/RT/endurance qualification; controlled performance;
+production identity/signing, release approval/publication/deployment. These remain
+open under their original procedures. Portable software readiness is not global
+acceptance or release authorization.
+
+## Installed consumer inventory correction
+
+Initial head b9962b654dd801a16d2463666912fd6def6a37c6 passed full160/165 and
+its three platform package jobs (68/68 Linux,69/69 MSVC), but docs-contract job
+111010399336 correctly failed the frozen XDMA verifier's exact65-test assertion.
+The new installed CTest registrations caused this integration regression. The
+original failure and raw log remain retained; it is not an API/infrastructure waiver.
+
+Change only the new wiring: every complete installed-consumer build now requires
+`rtfw_installed_migration_check` (ALL), which executes both binaries, checks equal
+observations and all eight real discovery cases, and propagates failures. Original
+CTest declarations/counts/assertions remain unchanged. Standalone/source migration
+lifecycle tests remain registered. The unchanged complete XDMA package verifier
+passes locally, including actual CPack/relocation, original65 consumers, new mandatory
+build verification, embedding and prior negative controls. No old test is edited. Direct nonzero and zero-exit/missing-observation controls
+confirm the build verifier fails rather than accepting an unsuccessful consumer.
+
+The C++ workload is byte-identical to the instrumented/static/soak-tested source;
+only orchestration/wiring/docs change. Final corrected-head full160/165 and all32
+hosted gates are required again. Earlier package/soak observations retain their
+original bindings; canonical closure records final corrected-head package results.

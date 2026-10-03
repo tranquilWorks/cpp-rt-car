@@ -809,3 +809,10 @@ M28-04..06 and final owner stage remain inactive; preserve all unresolved findin
 ## M28-04 activation (2026-10-03)
 
 Canonical control615 at `640e7c4ef46b28d8ab8bf704d7b9b10bd381fa37` activates only M28-04 from target296. Retain original native500us full-frame results, including initialized TSan timeout. Add test-owned offline timestamp diagnostics and causal scheduling controls; generated private-source copies never enter the shipped Runtime. Production, original tests/assertions/deadlines and prior evidence stay unchanged. Complete full local/all32 hosted, applicable instrumented/static/no-allocation/ABI/package and guarded integration. M28-05..06 and final owner stage remain inactive; standing scoped publication/merge authority continues.
+
+## M28-05 activation
+
+Canonical control617 merged at `7cae639252f16bb921a22839f738fb72dc91ae3b`. Only M28-05 acceptance reconciliation
+is active from target297. Preserve runtime, original tests, frozen inventories and
+historical evidence. Standing scoped publication/integration continues; M28-06 and
+owner-stage bench/engine/human/production acceptance remain inactive.

@@ -1,0 +1,89 @@
+# M28-01 concurrent experimental clock initialization
+
+Baseline target293 `389e3fc84cfc2a5946b6e555befdff0962f3989a`;
+canonical activation608 `937a5b100ba48798d0fafc6bfb57457c16ef600b`.
+Only the experimental clock header changes production behavior. Supported Runtime,
+all other production headers/sources, old tests, ABI/defaults and workflows remain
+byte-identical. New CMake wiring is appended to the exact previous test file.
+
+## Cause and correction
+
+The unchanged public entry point deterministically exposes a replacement reader
+while its calibration is held: the new callback is called twice where only its
+single calibration entry should be visible (exit41). Initialized TSan independently
+reports concurrent initialization writes to HighResClock::tsc_reader_. A separate
+concurrent SimCore-owner baseline also reports this same global data race. No
+fixture construction lock is used for that control.
+
+Initialization calibrates under a writer-only mutex, then publishes an even
+generation with atomic reader/frequency/epoch fields. Sequentially consistent
+operations make one equal-even snapshot consistent; readers encountering a
+publication immediately use the existing monotonic fallback. Read paths never
+take the writer mutex or retry the snapshot. The pre-existing monotonic CAS loop
+remains. Failed samples disable only their own generation; stale readers cannot
+disable a newer initialization. Failed calibration disables TSC, and init never
+resets the shared monotonic floor. Calibration remains50ms and drift bound1ms.
+Generation exhaustion disables TSC instead of reusing an identity.
+
+Injected function pointers remain borrowed. Concurrently used callbacks must be
+thread-safe, valid throughout outstanding calls, and non-reentrant into init or
+set_tsc_reader. No plugin lifetime management or physical timing guarantee is
+added. This repairs the shared clock, not every experimental SimCore global policy.
+The owner test uses the existing FMA-off configuration and retains caller-thread
+arena construction/run/destruction. Broader global FMA-policy concurrency is not
+qualified or changed by this batch.
+
+## Validation at the reviewed implementation
+
+- New strict source-build clock and owner tests pass. Held calibration cannot
+  publish its reader; old failed reads cannot disable replacement; null/invalid
+  calibration falls back and valid reinit recovers. Concurrent init/read/setter
+  preserves per-reader monotonicity. Clock read/reinit paths allocate zero tracked
+  C++ heap objects, with a positive allocation-counter control.
+- Two independent owners construct, run16 exact integer frames and destruct on
+  their own caller threads with2/4 workers, repeated three times. Exact independent
+  outputs pass without a fixture construction mutex.
+- New clock/owner ASan+UBSan+leak checks, initialized TSan and Clang14 static
+  analysis pass. Complete affected header/platform source is instrumented; the
+  unchanged supported Runtime archive is reused only after source and archive/member
+  hashes match its retained instrumented build. Legacy runtime.cpp is not linked
+  into these direct instrumentation probes.
+- Unmodified original clock/integration, timing-reliability and2/4/8-thread FMA-off
+  determinism tests pass ASan+UBSan+leaks and initialized TSan. The unchanged prior
+  clock-outlier/floor and watchdog-stop causal-control runner also passes, retaining
+  its original baseline failures. TSan pre-main mapping failures remain distinct
+  from initialized findings and passes; none is relabeled as a passing test.
+- An actual optional experimental CPack archive is extracted under a relocated
+  custom include/data prefix after deleting the original install. The copied
+  standalone clock test passes using the byte-identical installed header. Existing
+  copied public Runtime modern/legacy migration consumers both pass against this
+  archive, without checkout/build/original-prefix include paths.
+- Contract checks, SDK/audit generation and release hash validation pass. Full local
+  profiles (expected portable161/strict167), all32 original exact-head hosted checks,
+  and final committed-source repackaging remain required before integration. Final
+  receipts belong to the guarded PR/canonical closure; this precommit checkpoint
+  does not invent completed final-head gates.
+
+## Retained failures and remaining work
+
+The first new allocation probe hit GCC's inlined mismatched-new-delete diagnostic;
+out-of-line/noinline test replacement delete functions corrected the probe without
+disabling warnings. The first owner link lacked the existing experimental platform
+library; new wiring now links it and adds owner coverage only in source experimental
+builds. An initial baseline overlay included both current and old clock headers via
+quoted includes; a complete unchanged include-tree copy fixes the diagnostic setup.
+The baseline-owner TSan report inlines init into SimCore's constructor but names the
+clock global; the diagnostic classifier was corrected and the original report kept.
+
+The first installed full-owner consumer exposed a pre-existing optional experimental
+SDK packaging gap: simcore/hal.hpp includes an absent hal.hpp. This is retained as
+an unresolved software packaging finding for later M28 closeout triage, not repaired
+or passed here. Standalone installation validation is scoped to the clock and the
+supported public Runtime targets; full-owner tests stay in the source build. No old
+package test, test count, requirement or default installation is weakened.
+
+M28-02..06 remain unperformed. The benchmark/startup/native-frame timing findings,
+original05/06 excluded scope and final owner hardware/RT/Unreal/performance/human/
+production-signing/release/deployment acceptance remain separate. No physical or
+RT claim follows. Revert this header correction and new test wiring for rollback;
+retain every predecessor source and evidence record.

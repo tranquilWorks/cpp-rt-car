@@ -50,6 +50,10 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'docs/closeout/ledger.json',
+    'docs/closeout/README.md',
+    'tests/closeout_audit/CMakeLists.txt',
+    'tests/closeout_audit/test_closeout.py',
     "tests/platform_migration/verify_installed.py",
     'docs/migration.md',
     'tests/platform_migration/CMakeLists.txt',
