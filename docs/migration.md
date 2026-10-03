@@ -79,9 +79,14 @@ and start a new observation. Reports are unsigned observations, not attestations
    benchmark timeout/submission assumption and publishes provider acceptance before
    cancellation; its historical hosted failure cause remains unproven. The broader
    loopback backend cancel/submit storage race is retained for later software triage.
-   Resolve/review the sampled native startup timing result,
-   and M27-07 full-native-frame TSan deadline observation before claims that depend
-   on those outcomes. Existing assertions and deadlines remain intact. The optional
+   M28-03 adds ordered public-API startup/cleanup controls: pending ownership
+   correctly takes status precedence while the channel retains the timeout.
+   Terminal completion, logical expiry and an injected shutdown failure have
+   distinct outcomes. Production remains unchanged; neither the historical
+   native/mock 8ms assertions nor Windows 2024ms observation is claimed repaired.
+   See [the investigation](evidence/M28-03-2026-10-03.md). Resolve/review those
+   retained observations and the M27-07 full-native-frame TSan deadline finding
+   before claims that depend on them. Existing assertions and deadlines remain intact. The optional
    experimental full-SimCore installed consumer also lacks a required HAL header;
    M28-01 retains that pre-existing packaging finding for subsequent closeout triage.
 2. Original M27-05 generated-input/continuous coverage and M27-06 signature-fixture

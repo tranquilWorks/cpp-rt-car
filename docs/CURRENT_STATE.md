@@ -1,3 +1,36 @@
+# M28-03 sampled startup and cleanup investigation
+
+M28-02 is delivered as target295/control612. Canonical activation613 selects
+M28-03 from target commit `b5275b0a6094ddab1ab902632cc7cf35e9d20e59`.
+The investigation adds public-API lifecycle controls; production source is unchanged.
+
+The controls distinguish a timeout from the ownership state of its cleanup:
+`invalid_state` (-2) retains native work and borrowed storage for checked-stop retry;
+`device_timeout` (-18) is returned when timeout cleanup completes; `device_error`
+(-19) takes precedence when native shutdown fails. The sampled channel separately
+retains the original timeout and unknown safety. Late native readback does not
+publish application state or a Runtime timeline after logical expiry. Successful
+startup, ordinary frames and acknowledged shutdown remain positive controls.
+
+The original fixture's two-second injected driver wait can independently return a
+timeout while logical time is frozen. This controlled path does not establish the
+cause of the historical Windows 2024ms failure. Original unselected native/mock
+8ms assertions also remain unchanged and timing-sensitive. No new production defect
+or repair is claimed, and retry success does not resolve historical failures.
+
+The additive suite covers submission before acceptance, held native work, terminal
+timeout, logical expiry, shutdown failure, repeated stop, restart/step refusal while
+cleanup is pending, two independent owners, zero outstanding work after cleanup and
+allocation controls. Normal, ASan/UBSan/leaks, initialized TSan and Clang14 checks
+pass. See [M28-03 evidence](evidence/M28-03-2026-10-03.md) for exact results; final-head
+full/all32/installed-package verification and guarded closure remain mandatory.
+
+M28-04..06 remain inactive. The broader loopback race, SDK HAL-header gap, retained
+timing findings, original05/06 exclusions and final owner bench/Unreal/human/
+signing/release/deployment obligations remain open.
+
+## Previous checkpoint
+
 # M28-02 benchmark timeout accounting checkpoint
 
 Canonical activation610 and amendment611 select only M28-02 from target294.

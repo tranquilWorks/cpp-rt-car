@@ -637,3 +637,6 @@ add_subdirectory(closeout_clock)
 
 # M28-02 real provider timeout, acceptance and checked shutdown accounting.
 add_subdirectory(closeout_benchmark)
+
+# M28-03 sampled startup terminal status, pending ownership and checked cleanup.
+add_subdirectory(closeout_startup)
