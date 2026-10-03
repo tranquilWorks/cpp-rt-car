@@ -1,0 +1,105 @@
+# M28-02 benchmark timeout and submission accounting
+
+Baseline target294 `ab22bb4580de18794fcb2bad2b72b4e8a1e104c5`.
+Canonical activation610 `710807b2b8dafc967cccb2d3f17f5db59b0f4bf5` and
+ordering amendment611 `8280b2eb547c5bb3847732070238aedd420bc52c` passed
+full local and actual hosted control validation before guarded integration.
+
+Status: reviewed implementation and focused/installed checks pass. Exact final-head
+full local and all32 original hosted records plus guarded integration/canonical
+closure remain mandatory and are recorded in the associated PR/closure. This
+precommit record does not claim those pending gates passed.
+
+## Cause and correction
+
+The unchanged historical runner passes1000 ordinary invocations. Its held-submit
+control retains the original1ms deadline, one provider call, one timeout terminal
+and no copied output, but observes zero backend submissions and fails the original
+exact-one-submission predicate. Raw exit1 and diagnostic are retained. The same new
+before-acceptance control also rejects the unchanged provider and passes the repair.
+This proves a scheduling assumption; the exact cause of the historical hosted
+M26-03/M23 benchmark failure remains unproven and its evidence is unchanged.
+
+The provider retains exact terminal status/count, sampled nonpublication and
+callback/state checks. It records backend submissions at the terminal as a lower
+bound, then successfully stops the Runtime before checking stable final accounting.
+There must be exactly one observed submit attempt. The valid final states are:
+
+| Terminal to settled acceptance | Submit return | Final device work |
+| --- | --- | --- |
+| 0 to0, timeout only | invalid_state after stop closed admission | zero copies/actions/completions/cancellations/rejections |
+| 0 or1 to1, timeout | ok | one copy/action; either no successful cancellation/completion or exactly one of each |
+| 1 to1, injected completion error | ok | one copy/action/completion, no cancellation |
+
+Every state also requires unchanged sampled output and copied application state,
+zero Runtime outstanding work after checked stop, and no backend queue rejection.
+No observer storage or borrowed Runtime/backend/clock/buffer lifetime ends early.
+
+Initialized TSan of the first candidate exposed a pre-existing loopback backend
+race: cancel reads completion storage before submit publishes its writes for a
+held timeout. The same held-after-acceptance control independently reproduces that
+race against unchanged device.cpp (initialized attempt46). Canonical amendment611
+permits a fixture-owned observer only for failure/timeout cases. It publishes
+submit's returned status with release ordering, and forwards cancellation only
+following an acquire observation of acceptance. Before acceptance, cancellation
+returns invalid_argument and ownership stays with checked shutdown. It adds no
+callback mutex, retry loop, allocation, thread, or Runtime/backend modification.
+Other benchmark workloads and existing source/public schemas remain unchanged.
+
+This corrects the provider's use of the backend, not every direct backend caller.
+The broader loopback cancel/submit storage race remains an unresolved software
+finding for later M28 closeout triage; no global backend qualification is claimed.
+
+## Verification and evidence
+
+- tests/closeout_benchmark compiles a test-only copy of the actual provider with
+  public command-table scheduling and observation seams. Production gains no test
+  hooks. Three deterministic schedules establish0-to-1,0-to-0,1-to-1 behavior;
+  ordinary timeout, completion error and successful copied output also pass.
+  Ten corrupt-observation controls on each of accepted and unaccepted paths reject
+  extra submission/completion/cancellation, wrong device copy/action accounting,
+  queue rejection, missing submit attempt, wrong returned status, missing terminal
+  and application output publication. Final suite covers26 fixed scenarios.
+- The exact final new test/provider source passes ASan/UBSan/leak checks, initialized
+  TSan (attempt36 after retained pre-main failures) and Clang14 static analysis.
+  Provider and test sources are freshly instrumented. The supported Runtime archive
+  is reused only after rt/core source and retained archive/member hashes match.
+  The genuine first-candidate race, unchanged baseline race and all pre-main mapping
+  or empty-signal failures remain separate from passing initialized runs.
+- All17 selected benchmark-related CTest entries pass: full
+  contract/runner/artifact/provider tests,
+  all inventories and original no-allocation checks, package consumers and CUDA
+  benchmark CLI checks. The selection has17 total CTests, including closeout_benchmark.
+  The final expanded26-scenario accounting suite is separately verified above and
+  again in the actual installed consumer; old suites/source remain byte-identical.
+- An actual optional benchmark CPack archive is extracted under a new path with
+  spaces after deleting the original install. Copied independent accounting,
+  original Runtime provider, and modern/legacy public Runtime consumers pass using
+  only the relocated installation. Compile commands contain no checkout, SDK build
+  or original-prefix include paths. Installed device.cpp and release-contract bytes
+  match the reviewed source. Installed timeout/error CLI cases pass both fake and
+  steady clocks with unchanged installed validators, two warmups/five measurements,
+  status ok and their original structural/portable evidence classes.
+- Contract checks, SDK/audit regeneration and release hashes pass. Only existing
+  hash values change; package inventory, validators, catalog and schema stay intact.
+  Final full validation will keep the optional benchmark selection in portable
+  quick (expected180 tests) and the original strict experimental profile plus the
+  additive accounting entry (expected168). All previous tests remain included.
+  Final committed-source repackaging and all32 exact check names/multiplicity are
+  mandatory before guarded integration.
+
+Exact commands, source copies, stdout/stderr, results, configurations, retained
+hashes and review bindings are in M28-02-checkpoint. The installed fake clock is
+structural evidence; steady elapsed times are not controlled performance evidence.
+Lifecycle fixtures intentionally allocate on the host; original steady-case
+no-allocation checks remain active. No new RT allocation claim is invented.
+
+## Remaining work and rollback
+
+M28-03..06 remain inactive. Retain the broader loopback backend race, optional
+experimental full-SimCore SDK missing hal.hpp, sampled startup failures and native
+simulated-frame instrumented deadline finding. Original05/06 exclusions, physical
+CUDA/XDMA/FPGA/HIL/RT/endurance, real Unreal, independent human acceptance,
+controlled performance, production signing, release and deployment remain open.
+Rollback only this provider correction, new tests/additive wiring and current
+bindings; preserve every predecessor implementation and historical failure.

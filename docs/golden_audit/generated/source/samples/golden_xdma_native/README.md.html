@@ -1,0 +1,99 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>samples/golden_xdma_native/README.md</title><h1>samples/golden_xdma_native/README.md</h1><p>Exact source snapshot for documentation. Private implementation and test files are not installed SDK APIs.</p><pre><span id="L1"># Native golden XDMA host preparation</span>
+<span id="L2"></span>
+<span id="L3">This optional 64-bit Linux source kit assembles the frozen golden graph using</span>
+<span id="L4">`rtfw::xdma_linux` and explicit borrowed host staging. Its native backend keeps</span>
+<span id="L5">`deterministic_mock=0`; active and live-control replay are disabled. The CPU model,</span>
+<span id="L6">integer codecs, phase/domain/channel identities, 500-microsecond completion budget</span>
+<span id="L7">and 8-millisecond safe transition deadline remain unchanged. It does not use CUDA</span>
+<span id="L8">or peer DMA. The existing simulated golden kits are preserved.</span>
+<span id="L9"></span>
+<span id="L10">The executable performs graph construction, startup and checked stop only. It</span>
+<span id="L11">never reports a completed golden run. A successful preparation means the native</span>
+<span id="L12">protocol acknowledged the startup/stop requests; physical output safety, FPGA</span>
+<span id="L13">correctness, timing and qualification still require independent bench evidence.</span>
+<span id="L14">The scenario graph is available in the kit&#x27;s Session for subsequent bench work;</span>
+<span id="L15">full native execution, external CIL, replay and a hardware artifact validator are</span>
+<span id="L16">not delivered by this preparation batch.</span>
+<span id="L17"></span>
+<span id="L18">## Build the actual installed host</span>
+<span id="L19"></span>
+<span id="L20">Build/install RTFW with `-DRTFW_ENABLE_XDMA=ON` on Linux, then build the kit against</span>
+<span id="L21">that installation. Keep the sibling golden_system and golden_xdma source kits.</span>
+<span id="L22"></span>
+<span id="L23">```sh</span>
+<span id="L24">cmake -S /sdk/share/rtfw/examples/golden_xdma_native -B /tmp/native-host \</span>
+<span id="L25">  -DCMAKE_PREFIX_PATH=/sdk</span>
+<span id="L26">cmake --build /tmp/native-host</span>
+<span id="L27">/tmp/native-host/golden_xdma_native --prepare /approved-bench/tuple.cfg</span>
+<span id="L28">```</span>
+<span id="L29"></span>
+<span id="L30">The default SDK cannot satisfy the optional xdma_linux component and must refuse</span>
+<span id="L31">this configure. No native target or feature macro is added to `rtfw::runtime`.</span>
+<span id="L32"></span>
+<span id="L33">## Named configuration and FPGA contract</span>
+<span id="L34"></span>
+<span id="L35">All 15 keys below are required, unique and exact. Offsets are decimal unsigned</span>
+<span id="L36">integers, 64-byte aligned, within signed Linux off_t range, and four windows must</span>
+<span id="L37">not overlap even if both channel nodes share one AXI address space. Sensor windows</span>
+<span id="L38">are 6264 bytes; actuator windows are 3192 bytes. The control aperture is eight</span>
+<span id="L39">bytes: 32-bit little-endian calibration words at 0 and 4; events 0 and 1 acknowledge</span>
+<span id="L40">the corresponding lanes. Each lane uploads input, uploads the output envelope,</span>
+<span id="L41">writes calibration, waits for its event, then downloads output. The FPGA must</span>
+<span id="L42">preserve sampled header identity/sequence/generation/nominal timestamp, apply the</span>
+<span id="L43">frozen sensor calibration or actuator echo, zero safe output payloads, and recompute</span>
+<span id="L44">the sampled payload checksum. A generic XDMA memory image is insufficient.</span>
+<span id="L45"></span>
+<span id="L46">This is a template only: replace every tuple, hash, path and offset with the named</span>
+<span id="L47">approved bench values. No endpoint has a fallback or guessed default.</span>
+<span id="L48"></span>
+<span id="L49">```text</span>
+<span id="L50">tuple=APPROVED_BENCH_RECORD</span>
+<span id="L51">bitstream_sha256=REPLACE_WITH_64_LOWERCASE_HEX_DIGITS</span>
+<span id="L52">driver_revision=8721136e74a66500b02d16cb41922d966139cd46</span>
+<span id="L53">layout=golden-xdma-native-v1</span>
+<span id="L54">h2c0=/approved/h2c0</span>
+<span id="L55">h2c1=/approved/h2c1</span>
+<span id="L56">c2h0=/approved/c2h0</span>
+<span id="L57">c2h1=/approved/c2h1</span>
+<span id="L58">user=/approved/user</span>
+<span id="L59">event0=/approved/event0</span>
+<span id="L60">event1=/approved/event1</span>
+<span id="L61">input0=0</span>
+<span id="L62">output0=8192</span>
+<span id="L63">input1=32768</span>
+<span id="L64">output1=40960</span>
+<span id="L65">```</span>
+<span id="L66"></span>
+<span id="L67">The tuple must resolve to the operator&#x27;s retained CPU/NUMA, PCI BDF/link, IOMMU,</span>
+<span id="L68">OS/kernel, module parameters, FPGA/IP/clock/memory map, compiler/runtime build,</span>
+<span id="L69">host-memory and worker policy record described in `xdma_support_matrix.json`.</span>
+<span id="L70">The file records operator assertions; it does not attest a loaded driver/bitstream</span>
+<span id="L71">or qualify a tuple. Paths are checked before constructing the adapter or Runtime.</span>
+<span id="L72">Missing paths return exit3 and `NOT_RUN`; malformed configuration or non-character</span>
+<span id="L73">nodes return exit2. Startup/stop failure returns exit1. Preparation success returns</span>
+<span id="L74">exit0 and explicitly leaves scenario execution unverified. Filesystem inspection</span>
+<span id="L75">cannot prevent endpoint replacement between inspection and native open; an approved</span>
+<span id="L76">bench must retain exclusive endpoint/configuration control.</span>
+<span id="L77"></span>
+<span id="L78">## Ownership and evidence boundary</span>
+<span id="L79"></span>
+<span id="L80">Driver, backend, six aligned host buffers and Runtime memory outlive checked stop.</span>
+<span id="L81">Failed startup still goes through cleanup. A failed stop retains ownership for a</span>
+<span id="L82">bounded retry; persistent failure follows the existing fail-stop Session destructor</span>
+<span id="L83">contract rather than releasing borrowed storage while work may remain. This is an</span>
+<span id="L84">off-lane preparation command, not a real-time launcher. Native frame execution uses</span>
+<span id="L85">the caller&#x27;s monotonic RuntimeClock; injected logical clocks in tests are simulation</span>
+<span id="L86">only, never hardware timing evidence.</span>
+<span id="L87"></span>
+<span id="L88">Ordinary tests exercise the native capability path with an injected driver,</span>
+<span id="L89">startup/stop, zero protocol submit/poll allocations, format/protocol</span>
+<span id="L90">refusals, partial initialization and missing endpoints in the actual executable.</span>
+<span id="L91">The retained optional `test_golden_xdma_native --frame` probe checks one full</span>
+<span id="L92">native frame and the frozen oracle. Ordinary and ASan runs passed, but TSan</span>
+<span id="L93">execution exceeded the unchanged 500-microsecond Runtime submission deadline.</span>
+<span id="L94">The mandatory preparation/protocol suite uses the injected driver clock and does</span>
+<span id="L95">not assert host timing. No deadline, original test or native capability is changed.</span>
+<span id="L96">No live node is opened by validation. FPGA/driver functionality, physical safe</span>
+<span id="L97">outputs, device-loss/thermal/saturation/endurance, actual golden native execution,</span>
+<span id="L98">controlled latency, HIL and RT1/RT2 remain unperformed. Existing support claims,</span>
+<span id="L99">ABI v8/device ABI1, frozen workload and original tests remain unchanged.</span></pre></html>

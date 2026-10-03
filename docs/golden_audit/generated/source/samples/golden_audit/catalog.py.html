@@ -185,97 +185,377 @@
 <span id="L185">        &#x27;controlled_performance&#x27;: &#x27;NOT_RUN&#x27;, &#x27;unreal&#x27;: &#x27;NOT_RUN&#x27;, &#x27;release&#x27;: &#x27;NOT_RUN&#x27;}</span>
 <span id="L186"></span>
 <span id="L187"></span>
-<span id="L188">def render(root):</span>
-<span id="L189">    inputs = root / &#x27;docs/golden_audit&#x27;</span>
-<span id="L190">    requirement_bytes = read(inputs, &#x27;requirements.json&#x27;)</span>
-<span id="L191">    yaml_bytes = read(inputs, &#x27;requirements.yaml&#x27;)</span>
-<span id="L192">    binding = load(inputs / &#x27;requirements-binding.json&#x27;)</span>
-<span id="L193">    require(binding == REQUIREMENT_BINDING, &#x27;canonical requirement binding&#x27;)</span>
-<span id="L194">    contract_bytes = read(root, &#x27;samples/golden_system/contract.json&#x27;)</span>
-<span id="L195">    contract = json.loads(contract_bytes)</span>
-<span id="L196">    mapping, audit = load(inputs / &#x27;source-map.json&#x27;), load(inputs / &#x27;capabilities.json&#x27;)</span>
-<span id="L197">    verify_inputs(requirement_bytes, yaml_bytes, contract, mapping, audit)</span>
-<span id="L198">    refs = references(mapping, audit)</span>
-<span id="L199">    paths = {r[&#x27;path&#x27;] for r in refs} | {&#x27;samples/golden_system/contract.json&#x27;}</span>
-<span id="L200">    snapshots = {p: read(root, p) for p in sorted(paths)}</span>
-<span id="L201">    for ref in refs:</span>
-<span id="L202">        reference_line(snapshots[ref[&#x27;path&#x27;]], ref)</span>
-<span id="L203">    output = {&#x27;requirements.json&#x27;: requirement_bytes, &#x27;requirements.yaml&#x27;: yaml_bytes,</span>
-<span id="L204">              &#x27;requirements-binding.json&#x27;: read(inputs, &#x27;requirements-binding.json&#x27;),</span>
-<span id="L205">              &#x27;contract.json&#x27;: contract_bytes, &#x27;source-map.json&#x27;: encoded(mapping),</span>
-<span id="L206">              &#x27;capabilities.json&#x27;: encoded(audit)}</span>
-<span id="L207">    for path, data in snapshots.items():</span>
-<span id="L208">        output[&#x27;source/&#x27; + path + &#x27;.txt&#x27;] = data</span>
-<span id="L209">        output[&#x27;source/&#x27; + path + &#x27;.html&#x27;] = source_page(data, path)</span>
-<span id="L210">    def links(items):</span>
-<span id="L211">        return &#x27; · &#x27;.join(&#x27;&lt;a href=&quot;source/&#x27; + r[&#x27;path&#x27;] + &#x27;.html#L&#x27; +</span>
-<span id="L212">                         str(reference_line(snapshots[r[&#x27;path&#x27;]], r)) + &#x27;&quot;&gt;&#x27; +</span>
-<span id="L213">                         html.escape(r[&#x27;path&#x27;]) + &#x27;&lt;/a&gt;&#x27; for r in items)</span>
-<span id="L214">    sections = [&#x27;&lt;h2 id=&quot;scenario&quot;&gt;Complete scenario map&lt;/h2&gt;&#x27;]</span>
-<span id="L215">    for row in mapping[&#x27;entries&#x27;]:</span>
-<span id="L216">        sections += [&#x27;&lt;section id=&quot;&#x27; + row[&#x27;id&#x27;].replace(&#x27;/&#x27;, &#x27;-&#x27;) + &#x27;&quot;&gt;&lt;h3&gt;&#x27; +</span>
-<span id="L217">                     html.escape(row[&#x27;id&#x27;]) + &#x27;&lt;/h3&gt;&lt;p&gt;&#x27; + html.escape(row[&#x27;explanation&#x27;]) +</span>
-<span id="L218">                     &#x27;&lt;/p&gt;&lt;p&gt;Source: &#x27; + links(row[&#x27;sources&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Checks: &#x27; +</span>
-<span id="L219">                     links(row[&#x27;tests&#x27;]) + &#x27;&lt;/p&gt;&lt;details&gt;&lt;summary&gt;Frozen requirement record&lt;/summary&gt;&lt;pre&gt;&#x27; +</span>
-<span id="L220">                     html.escape(json.dumps(row[&#x27;contract&#x27;], indent=2)) + &#x27;&lt;/pre&gt;&lt;/details&gt;&lt;/section&gt;&#x27;]</span>
-<span id="L221">    sections += [&#x27;&lt;h2 id=&quot;capabilities&quot;&gt;CAP-M15 through CAP-M26 audit&lt;/h2&gt;&#x27;]</span>
-<span id="L222">    for row in audit[&#x27;requirements&#x27;]:</span>
-<span id="L223">        sections += [&#x27;&lt;section id=&quot;&#x27; + row[&#x27;id&#x27;].replace(&#x27;/&#x27;, &#x27;-&#x27;) + &#x27;&quot;&gt;&lt;h3&gt;&#x27; +</span>
-<span id="L224">                     html.escape(row[&#x27;id&#x27;]) + &#x27; — &#x27; + row[&#x27;status&#x27;] + &#x27;&lt;/h3&gt;&lt;p&gt;&#x27; +</span>
-<span id="L225">                     html.escape(row[&#x27;requirement&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;&#x27; + html.escape(row[&#x27;assessment&#x27;]) +</span>
-<span id="L226">                     &#x27;&lt;/p&gt;&lt;p&gt;Source: &#x27; + links(row[&#x27;sources&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Checks: &#x27; +</span>
-<span id="L227">                     links(row[&#x27;tests&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Retained evidence: &#x27; + links(row[&#x27;evidence&#x27;]) +</span>
-<span id="L228">                     &#x27;&lt;/p&gt;&lt;/section&gt;&#x27;]</span>
-<span id="L229">    sections += [&#x27;&lt;h2 id=&quot;remaining&quot;&gt;Remaining actions&lt;/h2&gt;&#x27;]</span>
-<span id="L230">    for row in audit[&#x27;remaining_actions&#x27;]:</span>
-<span id="L231">        sections += [&#x27;&lt;section id=&quot;&#x27; + row[&#x27;id&#x27;] + &#x27;&quot;&gt;&lt;h3&gt;&#x27; + row[&#x27;id&#x27;] + &#x27;&lt;/h3&gt;&lt;p&gt;&#x27; +</span>
-<span id="L232">                     html.escape(row[&#x27;next_action&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;&#x27; + links(row[&#x27;evidence&#x27;]) + &#x27;&lt;/p&gt;&lt;/section&gt;&#x27;]</span>
-<span id="L233">    narrative = read(inputs, &#x27;guide.html&#x27;).decode()</span>
-<span id="L234">    output[&#x27;index.html&#x27;] = (&#x27;&lt;!doctype html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&#x27;</span>
-<span id="L235">                           &#x27;&lt;title&gt;RTFW golden system and capability audit&lt;/title&gt;&#x27;</span>
-<span id="L236">                           &#x27;&lt;style&gt;body{max-width:1000px;margin:2rem auto;padding:0 1rem;&#x27;</span>
-<span id="L237">                           &#x27;font:17px/1.5 system-ui}pre{overflow:auto;background:#f2f4f6;padding:1rem}&#x27;</span>
-<span id="L238">                           &#x27;section{border-top:1px solid #ddd;padding:1rem 0}&lt;/style&gt;&#x27; +</span>
-<span id="L239">                           narrative + &#x27;\n&#x27;.join(sections) + &#x27;&lt;/html&gt;\n&#x27;).encode()</span>
-<span id="L240">    output[&#x27;coverage.json&#x27;] = encoded(coverage(mapping, audit))</span>
-<span id="L241">    output[&#x27;inventory.json&#x27;] = encoded({&#x27;schema&#x27;: 1, &#x27;baseline&#x27;: BASELINE,</span>
-<span id="L242">        &#x27;sources&#x27;: {p: sha(v) for p, v in snapshots.items()},</span>
-<span id="L243">        &#x27;outputs&#x27;: {p: sha(v) for p, v in sorted(output.items())}})</span>
-<span id="L244">    return output</span>
-<span id="L245"></span>
-<span id="L246"></span>
-<span id="L247">def verify_bundle(directory):</span>
-<span id="L248">    inventory = load(directory / &#x27;inventory.json&#x27;)</span>
-<span id="L249">    require(inventory[&#x27;schema&#x27;] == 1 and inventory[&#x27;baseline&#x27;] == BASELINE, &#x27;bundle identity&#x27;)</span>
-<span id="L250">    actual = {p.relative_to(directory).as_posix() for p in directory.rglob(&#x27;*&#x27;) if p.is_file()}</span>
-<span id="L251">    require(actual == set(inventory[&#x27;outputs&#x27;]) | {&#x27;inventory.json&#x27;}, &#x27;bundle file inventory&#x27;)</span>
-<span id="L252">    for path, digest in inventory[&#x27;outputs&#x27;].items():</span>
-<span id="L253">        require(sha(read(directory, path)) == digest, &#x27;stale bundle file: &#x27; + path)</span>
-<span id="L254">    mapping, audit = load(directory / &#x27;source-map.json&#x27;), load(directory / &#x27;capabilities.json&#x27;)</span>
-<span id="L255">    require(load(directory / &#x27;requirements-binding.json&#x27;) == REQUIREMENT_BINDING,</span>
-<span id="L256">            &#x27;canonical requirement binding&#x27;)</span>
-<span id="L257">    verify_inputs(read(directory, &#x27;requirements.json&#x27;), read(directory, &#x27;requirements.yaml&#x27;),</span>
-<span id="L258">                  load(directory / &#x27;contract.json&#x27;), mapping, audit)</span>
-<span id="L259">    require(load(directory / &#x27;coverage.json&#x27;) == coverage(mapping, audit), &#x27;fabricated capability coverage&#x27;)</span>
-<span id="L260">    refs = references(mapping, audit)</span>
-<span id="L261">    require(set(inventory[&#x27;sources&#x27;]) == {r[&#x27;path&#x27;] for r in refs} | {&#x27;samples/golden_system/contract.json&#x27;},</span>
-<span id="L262">            &#x27;source snapshot inventory&#x27;)</span>
-<span id="L263">    for path, digest in inventory[&#x27;sources&#x27;].items():</span>
-<span id="L264">        data = read(directory, &#x27;source/&#x27; + path + &#x27;.txt&#x27;)</span>
-<span id="L265">        require(sha(data) == digest and read(directory, &#x27;source/&#x27; + path + &#x27;.html&#x27;) == source_page(data, path),</span>
-<span id="L266">                &#x27;source snapshot/line anchor mismatch&#x27;)</span>
-<span id="L267">    for ref in refs:</span>
-<span id="L268">        reference_line(read(directory, &#x27;source/&#x27; + ref[&#x27;path&#x27;] + &#x27;.txt&#x27;), ref)</span>
-<span id="L269">    for path in actual:</span>
-<span id="L270">        if not path.endswith(&#x27;.html&#x27;):</span>
-<span id="L271">            continue</span>
-<span id="L272">        content = read(directory, path).decode()</span>
-<span id="L273">        for target in re.findall(r&#x27;href=&quot;([^&quot;]+)&quot;&#x27;, content):</span>
-<span id="L274">            require(not re.match(r&#x27;\w+:|//&#x27;, target), &#x27;offline manual contains external link&#x27;)</span>
-<span id="L275">            location, _, fragment = target.partition(&#x27;#&#x27;)</span>
-<span id="L276">            candidate = (directory / path).parent / location if location else directory / path</span>
-<span id="L277">            require(candidate.is_file() and directory.resolve() in candidate.resolve().parents,</span>
-<span id="L278">                    &#x27;broken/escaped offline link&#x27;)</span>
-<span id="L279">            if fragment:</span>
-<span id="L280">                require(&#x27;id=&quot;&#x27; + fragment + &#x27;&quot;&#x27; in candidate.read_text(), &#x27;broken offline fragment&#x27;)</span>
-<span id="L281">    return inventory</span></pre></html>
+<span id="L188"></span>
+<span id="L189"># Reviewed M28-05 reconciliation policy. Updating an obligation is an explicit</span>
+<span id="L190"># evidence review, never a result inferred from a successful retry or bundle hash.</span>
+<span id="L191">CLOSEOUT_FINDINGS = {&#x27;replay-owner-refusal&#x27;: &#x27;demonstrated_repair&#x27;,</span>
+<span id="L192"> &#x27;poll-error-conservation&#x27;: &#x27;demonstrated_repair&#x27;,</span>
+<span id="L193"> &#x27;experimental-worker-lifetime&#x27;: &#x27;demonstrated_repair&#x27;,</span>
+<span id="L194"> &#x27;experimental-watchdog&#x27;: &#x27;demonstrated_repair&#x27;,</span>
+<span id="L195"> &#x27;experimental-clock-sampling&#x27;: &#x27;demonstrated_repair&#x27;,</span>
+<span id="L196"> &#x27;experimental-clock-initialization&#x27;: &#x27;demonstrated_repair&#x27;,</span>
+<span id="L197"> &#x27;benchmark-acceptance-accounting&#x27;: &#x27;demonstrated_repair&#x27;,</span>
+<span id="L198"> &#x27;loopback-cancel-submit&#x27;: &#x27;unresolved_software&#x27;,</span>
+<span id="L199"> &#x27;optional-sdk-hal-header&#x27;: &#x27;unresolved_software&#x27;,</span>
+<span id="L200"> &#x27;historical-benchmark-predicate&#x27;: &#x27;unresolved_observation&#x27;,</span>
+<span id="L201"> &#x27;sampled-startup-pending-cleanup&#x27;: &#x27;unresolved_observation&#x27;,</span>
+<span id="L202"> &#x27;windows-startup-2024ms&#x27;: &#x27;unresolved_observation&#x27;,</span>
+<span id="L203"> &#x27;windows-negative-overlap&#x27;: &#x27;unresolved_observation&#x27;,</span>
+<span id="L204"> &#x27;native-frame-tsan-deadline&#x27;: &#x27;instrumentation_limitation&#x27;,</span>
+<span id="L205"> &#x27;partial-runtime-tsan&#x27;: &#x27;instrumentation_limitation&#x27;,</span>
+<span id="L206"> &#x27;offline-diagnostic-warning&#x27;: &#x27;instrumentation_limitation&#x27;,</span>
+<span id="L207"> &#x27;replay-transactionality&#x27;: &#x27;unproven_boundary&#x27;,</span>
+<span id="L208"> &#x27;experimental-global-policy&#x27;: &#x27;unproven_boundary&#x27;,</span>
+<span id="L209"> &#x27;application-models&#x27;: &#x27;claim_boundary&#x27;,</span>
+<span id="L210"> &#x27;excluded-generated-campaigns&#x27;: &#x27;owner_excluded&#x27;,</span>
+<span id="L211"> &#x27;excluded-signature-fixtures&#x27;: &#x27;owner_excluded&#x27;,</span>
+<span id="L212"> &#x27;physical-cuda&#x27;: &#x27;external_acceptance&#x27;,</span>
+<span id="L213"> &#x27;physical-xdma&#x27;: &#x27;external_acceptance&#x27;,</span>
+<span id="L214"> &#x27;physical-combined&#x27;: &#x27;external_acceptance&#x27;,</span>
+<span id="L215"> &#x27;rt-policy-endurance&#x27;: &#x27;external_acceptance&#x27;,</span>
+<span id="L216"> &#x27;real-unreal&#x27;: &#x27;external_acceptance&#x27;,</span>
+<span id="L217"> &#x27;controlled-performance&#x27;: &#x27;external_acceptance&#x27;,</span>
+<span id="L218"> &#x27;unfamiliar-consumer&#x27;: &#x27;external_acceptance&#x27;,</span>
+<span id="L219"> &#x27;platform-release-review&#x27;: &#x27;external_acceptance&#x27;,</span>
+<span id="L220"> &#x27;production-signing-release&#x27;: &#x27;external_acceptance&#x27;}</span>
+<span id="L221">CLOSEOUT_CARDS = [{&#x27;id&#x27;: &#x27;CAP-M23/manual/1&#x27;,</span>
+<span id="L222">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L223">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L224">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/acceptance.yaml&#x27;,</span>
+<span id="L225">  &#x27;blob&#x27;: &#x27;cfe72dd40080626953df24355880703e437aa83a&#x27;,</span>
+<span id="L226">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/acceptance.yaml&#x27;},</span>
+<span id="L227"> {&#x27;id&#x27;: &#x27;CAP-M25/manual/1&#x27;,</span>
+<span id="L228">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L229">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L230">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/acceptance.yaml&#x27;,</span>
+<span id="L231">  &#x27;blob&#x27;: &#x27;cfe72dd40080626953df24355880703e437aa83a&#x27;,</span>
+<span id="L232">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/acceptance.yaml&#x27;},</span>
+<span id="L233"> {&#x27;id&#x27;: &#x27;M18-02-nvidia-tuple&#x27;,</span>
+<span id="L234">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L235">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L236">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/roadmap.yaml&#x27;,</span>
+<span id="L237">  &#x27;blob&#x27;: &#x27;3c163b8a4c563e9fe71c52d7f769ccb9d2b93578&#x27;,</span>
+<span id="L238">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml&#x27;},</span>
+<span id="L239"> {&#x27;id&#x27;: &#x27;M18-03-xdma-tuple&#x27;,</span>
+<span id="L240">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L241">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L242">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/roadmap.yaml&#x27;,</span>
+<span id="L243">  &#x27;blob&#x27;: &#x27;3c163b8a4c563e9fe71c52d7f769ccb9d2b93578&#x27;,</span>
+<span id="L244">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml&#x27;},</span>
+<span id="L245"> {&#x27;id&#x27;: &#x27;M18-04-combined-deployment&#x27;,</span>
+<span id="L246">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L247">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L248">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/roadmap.yaml&#x27;,</span>
+<span id="L249">  &#x27;blob&#x27;: &#x27;3c163b8a4c563e9fe71c52d7f769ccb9d2b93578&#x27;,</span>
+<span id="L250">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml&#x27;},</span>
+<span id="L251"> {&#x27;id&#x27;: &#x27;M18-05-rt1-rt2-and-endurance&#x27;,</span>
+<span id="L252">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L253">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L254">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/roadmap.yaml&#x27;,</span>
+<span id="L255">  &#x27;blob&#x27;: &#x27;3c163b8a4c563e9fe71c52d7f769ccb9d2b93578&#x27;,</span>
+<span id="L256">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml&#x27;},</span>
+<span id="L257"> {&#x27;id&#x27;: &#x27;M19-02-unreal-jobs-allocator-clock&#x27;,</span>
+<span id="L258">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L259">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L260">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/roadmap.yaml&#x27;,</span>
+<span id="L261">  &#x27;blob&#x27;: &#x27;3c163b8a4c563e9fe71c52d7f769ccb9d2b93578&#x27;,</span>
+<span id="L262">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml&#x27;},</span>
+<span id="L263"> {&#x27;id&#x27;: &#x27;M19-03-world-lifecycle-multiple-instances-unload&#x27;,</span>
+<span id="L264">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L265">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L266">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/roadmap.yaml&#x27;,</span>
+<span id="L267">  &#x27;blob&#x27;: &#x27;3c163b8a4c563e9fe71c52d7f769ccb9d2b93578&#x27;,</span>
+<span id="L268">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml&#x27;},</span>
+<span id="L269"> {&#x27;id&#x27;: &#x27;M19-04-complete-engine-sample&#x27;,</span>
+<span id="L270">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L271">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L272">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/roadmap.yaml&#x27;,</span>
+<span id="L273">  &#x27;blob&#x27;: &#x27;3c163b8a4c563e9fe71c52d7f769ccb9d2b93578&#x27;,</span>
+<span id="L274">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml&#x27;},</span>
+<span id="L275"> {&#x27;id&#x27;: &#x27;M20-01-controlled-performance-gates&#x27;,</span>
+<span id="L276">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L277">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L278">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/roadmap.yaml&#x27;,</span>
+<span id="L279">  &#x27;blob&#x27;: &#x27;3c163b8a4c563e9fe71c52d7f769ccb9d2b93578&#x27;,</span>
+<span id="L280">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml&#x27;},</span>
+<span id="L281"> {&#x27;id&#x27;: &#x27;M20-02-fuzz-static-security-signing&#x27;,</span>
+<span id="L282">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L283">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L284">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/roadmap.yaml&#x27;,</span>
+<span id="L285">  &#x27;blob&#x27;: &#x27;3c163b8a4c563e9fe71c52d7f769ccb9d2b93578&#x27;,</span>
+<span id="L286">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml&#x27;},</span>
+<span id="L287"> {&#x27;id&#x27;: &#x27;M20-04-platform-migration-soak-and-release&#x27;,</span>
+<span id="L288">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L289">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L290">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/roadmap.yaml&#x27;,</span>
+<span id="L291">  &#x27;blob&#x27;: &#x27;3c163b8a4c563e9fe71c52d7f769ccb9d2b93578&#x27;,</span>
+<span id="L292">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml&#x27;},</span>
+<span id="L293"> {&#x27;id&#x27;: &#x27;M25-06&#x27;,</span>
+<span id="L294">  &#x27;repository&#x27;: &#x27;tranquilWorks/portfolio-control&#x27;,</span>
+<span id="L295">  &#x27;revision&#x27;: &#x27;7cae639252f16bb921a22839f738fb72dc91ae3b&#x27;,</span>
+<span id="L296">  &#x27;path&#x27;: &#x27;products/cpp-rt-car/batches/M25-06.yaml&#x27;,</span>
+<span id="L297">  &#x27;blob&#x27;: &#x27;ac12e901ec4c12d945d83beda7535d5e84defc22&#x27;,</span>
+<span id="L298">  &#x27;url&#x27;: &#x27;https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/batches/M25-06.yaml&#x27;}]</span>
+<span id="L299">CLOSEOUT_ACTIONS = {&#x27;M18-physical-rt&#x27;: [&#x27;physical-cuda&#x27;, &#x27;physical-xdma&#x27;, &#x27;physical-combined&#x27;, &#x27;rt-policy-endurance&#x27;],</span>
+<span id="L300"> &#x27;M19-unreal&#x27;: [&#x27;real-unreal&#x27;],</span>
+<span id="L301"> &#x27;M20-release-engineering&#x27;: [&#x27;excluded-generated-campaigns&#x27;,</span>
+<span id="L302">                             &#x27;excluded-signature-fixtures&#x27;,</span>
+<span id="L303">                             &#x27;controlled-performance&#x27;,</span>
+<span id="L304">                             &#x27;platform-release-review&#x27;,</span>
+<span id="L305">                             &#x27;production-signing-release&#x27;],</span>
+<span id="L306"> &#x27;M25-human-review&#x27;: [&#x27;unfamiliar-consumer&#x27;, &#x27;optional-sdk-hal-header&#x27;],</span>
+<span id="L307"> &#x27;protected-fixture-findings&#x27;: [&#x27;poll-error-conservation&#x27;,</span>
+<span id="L308">                                &#x27;experimental-worker-lifetime&#x27;,</span>
+<span id="L309">                                &#x27;experimental-watchdog&#x27;,</span>
+<span id="L310">                                &#x27;experimental-clock-sampling&#x27;,</span>
+<span id="L311">                                &#x27;experimental-clock-initialization&#x27;,</span>
+<span id="L312">                                &#x27;benchmark-acceptance-accounting&#x27;,</span>
+<span id="L313">                                &#x27;loopback-cancel-submit&#x27;,</span>
+<span id="L314">                                &#x27;historical-benchmark-predicate&#x27;,</span>
+<span id="L315">                                &#x27;sampled-startup-pending-cleanup&#x27;,</span>
+<span id="L316">                                &#x27;windows-startup-2024ms&#x27;,</span>
+<span id="L317">                                &#x27;windows-negative-overlap&#x27;,</span>
+<span id="L318">                                &#x27;native-frame-tsan-deadline&#x27;,</span>
+<span id="L319">                                &#x27;partial-runtime-tsan&#x27;,</span>
+<span id="L320">                                &#x27;offline-diagnostic-warning&#x27;,</span>
+<span id="L321">                                &#x27;experimental-global-policy&#x27;],</span>
+<span id="L322"> &#x27;foreign-replay-boundary&#x27;: [&#x27;replay-owner-refusal&#x27;, &#x27;replay-transactionality&#x27;],</span>
+<span id="L323"> &#x27;application-models&#x27;: [&#x27;application-models&#x27;]}</span>
+<span id="L324"></span>
+<span id="L325"></span>
+<span id="L326">def closeout_references(ledger):</span>
+<span id="L327">    refs = []</span>
+<span id="L328">    for row in ledger[&#x27;requirements&#x27;]:</span>
+<span id="L329">        for kind in (&#x27;sources&#x27;, &#x27;tests&#x27;, &#x27;evidence&#x27;):</span>
+<span id="L330">            refs.extend(row[kind])</span>
+<span id="L331">    for row in ledger[&#x27;findings&#x27;] + ledger[&#x27;deliveries&#x27;]:</span>
+<span id="L332">        refs.extend(row[&#x27;evidence&#x27;])</span>
+<span id="L333">    return refs</span>
+<span id="L334"></span>
+<span id="L335"></span>
+<span id="L336">def verify_closeout(ledger, audit, reader):</span>
+<span id="L337">    require(set(ledger) == {&#x27;schema&#x27;, &#x27;batch&#x27;, &#x27;baseline&#x27;, &#x27;requirement_binding&#x27;,</span>
+<span id="L338">            &#x27;claims&#x27;, &#x27;requirements&#x27;, &#x27;findings&#x27;, &#x27;existing_cards&#x27;, &#x27;remaining_actions&#x27;,</span>
+<span id="L339">            &#x27;deliveries&#x27;}, &#x27;closeout fields&#x27;)</span>
+<span id="L340">    require(type(ledger[&#x27;schema&#x27;]) is int and ledger[&#x27;schema&#x27;] == 1 and</span>
+<span id="L341">            ledger[&#x27;batch&#x27;] == &#x27;M28-05&#x27; and</span>
+<span id="L342">            ledger[&#x27;baseline&#x27;] == &#x27;b37c124d6fd7c6ea7dd2b4dffcfc5531b0eb3c8e&#x27;, &#x27;closeout identity&#x27;)</span>
+<span id="L343">    require(ledger[&#x27;requirement_binding&#x27;] == REQUIREMENT_BINDING, &#x27;closeout canonical binding&#x27;)</span>
+<span id="L344">    require(ledger[&#x27;claims&#x27;] == dict(software_complete=False, cap_m20_complete=False,</span>
+<span id="L345">            physical=&#x27;NOT_RUN&#x27;, rt=&#x27;NOT_RUN&#x27;, unreal=&#x27;NOT_RUN&#x27;, human_acceptance=&#x27;NOT_RUN&#x27;,</span>
+<span id="L346">            controlled_performance=&#x27;NOT_RUN&#x27;, authenticated_provenance=&#x27;NOT_RUN&#x27;,</span>
+<span id="L347">            release=&#x27;NOT_RUN&#x27;, deployment=&#x27;NOT_RUN&#x27;) and</span>
+<span id="L348">            type(ledger[&#x27;claims&#x27;][&#x27;software_complete&#x27;]) is bool and</span>
+<span id="L349">            type(ledger[&#x27;claims&#x27;][&#x27;cap_m20_complete&#x27;]) is bool, &#x27;invalid closeout acceptance claim&#x27;)</span>
+<span id="L350">    require(ledger[&#x27;existing_cards&#x27;] == CLOSEOUT_CARDS, &#x27;existing owner-stage identities&#x27;)</span>
+<span id="L351">    require(ledger[&#x27;remaining_actions&#x27;] == CLOSEOUT_ACTIONS and</span>
+<span id="L352">            set(ledger[&#x27;remaining_actions&#x27;]) == {r[&#x27;id&#x27;] for r in audit[&#x27;remaining_actions&#x27;]},</span>
+<span id="L353">            &#x27;closeout remaining-action inventory&#x27;)</span>
+<span id="L354">    rows, findings = ledger[&#x27;requirements&#x27;], ledger[&#x27;findings&#x27;]</span>
+<span id="L355">    require([r[&#x27;id&#x27;] for r in rows] == [r[&#x27;id&#x27;] for r in audit[&#x27;requirements&#x27;]],</span>
+<span id="L356">            &#x27;closeout missing/duplicate requirement IDs&#x27;)</span>
+<span id="L357">    require([f[&#x27;id&#x27;] for f in findings] == list(CLOSEOUT_FINDINGS),</span>
+<span id="L358">            &#x27;closeout missing/duplicate finding IDs&#x27;)</span>
+<span id="L359">    ids = {r[&#x27;id&#x27;] for r in rows}</span>
+<span id="L360">    for f in findings:</span>
+<span id="L361">        require(set(f) == {&#x27;id&#x27;, &#x27;status&#x27;, &#x27;requirements&#x27;, &#x27;evidence&#x27;, &#x27;assessment&#x27;,</span>
+<span id="L362">                &#x27;dependencies&#x27;, &#x27;next_action&#x27;, &#x27;cards&#x27;}, &#x27;closeout finding fields&#x27;)</span>
+<span id="L363">        require(f[&#x27;status&#x27;] == CLOSEOUT_FINDINGS[f[&#x27;id&#x27;]], &#x27;invalid finding disposition&#x27;)</span>
+<span id="L364">        require(f[&#x27;requirements&#x27;] and len(f[&#x27;requirements&#x27;]) == len(set(f[&#x27;requirements&#x27;])) and</span>
+<span id="L365">                set(f[&#x27;requirements&#x27;]) &lt;= ids, &#x27;finding requirement links&#x27;)</span>
+<span id="L366">        require(len(f[&#x27;dependencies&#x27;]) == len(set(f[&#x27;dependencies&#x27;])) and</span>
+<span id="L367">                set(f[&#x27;dependencies&#x27;]) &lt;= set(CLOSEOUT_FINDINGS) and</span>
+<span id="L368">                f[&#x27;id&#x27;] not in f[&#x27;dependencies&#x27;], &#x27;finding dependency links&#x27;)</span>
+<span id="L369">        require(len(f[&#x27;cards&#x27;]) == len(set(f[&#x27;cards&#x27;])) and</span>
+<span id="L370">                set(f[&#x27;cards&#x27;]) &lt;= {c[&#x27;id&#x27;] for c in CLOSEOUT_CARDS}, &#x27;finding card links&#x27;)</span>
+<span id="L371">        require(f[&#x27;evidence&#x27;] and isinstance(f[&#x27;assessment&#x27;], str) and len(f[&#x27;assessment&#x27;]) &gt;= 40</span>
+<span id="L372">                and isinstance(f[&#x27;next_action&#x27;], str) and len(f[&#x27;next_action&#x27;]) &gt;= 30,</span>
+<span id="L373">                &#x27;finding evidence/action missing&#x27;)</span>
+<span id="L374">        if f[&#x27;status&#x27;] in (&#x27;external_acceptance&#x27;, &#x27;owner_excluded&#x27;):</span>
+<span id="L375">            require(f[&#x27;cards&#x27;], &#x27;missing existing acceptance identity&#x27;)</span>
+<span id="L376">    visiting, visited = set(), set()</span>
+<span id="L377">    by_id = {f[&#x27;id&#x27;]: f for f in findings}</span>
+<span id="L378">    def visit(key):</span>
+<span id="L379">        require(key not in visiting, &#x27;cyclic closeout dependencies&#x27;)</span>
+<span id="L380">        if key in visited:</span>
+<span id="L381">            return</span>
+<span id="L382">        visiting.add(key)</span>
+<span id="L383">        for dependency in by_id[key][&#x27;dependencies&#x27;]:</span>
+<span id="L384">            visit(dependency)</span>
+<span id="L385">        visiting.remove(key)</span>
+<span id="L386">        visited.add(key)</span>
+<span id="L387">    for key in by_id:</span>
+<span id="L388">        visit(key)</span>
+<span id="L389">    for row, original in zip(rows, audit[&#x27;requirements&#x27;]):</span>
+<span id="L390">        require(set(row) == {&#x27;id&#x27;, &#x27;requirement&#x27;, &#x27;original_status&#x27;, &#x27;status&#x27;, &#x27;evidence&#x27;,</span>
+<span id="L391">                &#x27;sources&#x27;, &#x27;tests&#x27;, &#x27;dependencies&#x27;, &#x27;assessment&#x27;, &#x27;next_action&#x27;},</span>
+<span id="L392">                &#x27;closeout requirement fields&#x27;)</span>
+<span id="L393">        require(row[&#x27;requirement&#x27;] == original[&#x27;requirement&#x27;] and</span>
+<span id="L394">                row[&#x27;original_status&#x27;] == original[&#x27;status&#x27;], &#x27;closeout requirement drift&#x27;)</span>
+<span id="L395">        require(all(row[k] == original[k] for k in (&#x27;evidence&#x27;, &#x27;sources&#x27;, &#x27;tests&#x27;)),</span>
+<span id="L396">                &#x27;closeout original evidence drift&#x27;)</span>
+<span id="L397">        deps = [f[&#x27;id&#x27;] for f in findings if row[&#x27;id&#x27;] in f[&#x27;requirements&#x27;]]</span>
+<span id="L398">        require(row[&#x27;dependencies&#x27;] == deps, &#x27;closeout requirement dependency mismatch&#x27;)</span>
+<span id="L399">        status = (&#x27;claim_limit&#x27; if &#x27;/limit/&#x27; in row[&#x27;id&#x27;] else</span>
+<span id="L400">                  &#x27;retained_evidence_with_obligations&#x27; if deps else &#x27;retained_portable_evidence&#x27;)</span>
+<span id="L401">        require(row[&#x27;status&#x27;] == status, &#x27;invalid requirement acceptance claim&#x27;)</span>
+<span id="L402">        require(isinstance(row[&#x27;assessment&#x27;], str) and len(row[&#x27;assessment&#x27;]) &gt;= 30 and</span>
+<span id="L403">                isinstance(row[&#x27;next_action&#x27;], str) and len(row[&#x27;next_action&#x27;]) &gt;= 30,</span>
+<span id="L404">                &#x27;requirement assessment/action missing&#x27;)</span>
+<span id="L405">    require([d[&#x27;id&#x27;] for d in ledger[&#x27;deliveries&#x27;]] ==</span>
+<span id="L406">            [&#x27;M27-%02d&#x27; % i for i in range(1, 9)] + [&#x27;M28-%02d&#x27; % i for i in range(1, 5)],</span>
+<span id="L407">            &#x27;missing predecessor delivery&#x27;)</span>
+<span id="L408">    for d in ledger[&#x27;deliveries&#x27;]:</span>
+<span id="L409">        require(set(d) == {&#x27;id&#x27;, &#x27;evidence&#x27;} and d[&#x27;evidence&#x27;], &#x27;delivery evidence&#x27;)</span>
+<span id="L410">    for ref in closeout_references(ledger):</span>
+<span id="L411">        reference_line(reader(ref[&#x27;path&#x27;]), ref)</span>
+<span id="L412">    return ledger</span>
+<span id="L413"></span>
+<span id="L414"></span>
+<span id="L415">def closeout_page(ledger, reader):</span>
+<span id="L416">    def links(refs):</span>
+<span id="L417">        return &#x27; · &#x27;.join(&#x27;&lt;a href=&quot;source/&#x27; + r[&#x27;path&#x27;] + &#x27;.html#L&#x27; +</span>
+<span id="L418">                         str(reference_line(reader(r[&#x27;path&#x27;]), r)) + &#x27;&quot;&gt;&#x27; +</span>
+<span id="L419">                         html.escape(r[&#x27;path&#x27;]) + &#x27;&lt;/a&gt;&#x27; for r in refs)</span>
+<span id="L420">    parts = [&#x27;&lt;!doctype html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&#x27;</span>
+<span id="L421">             &#x27;&lt;title&gt;M28-05 acceptance reconciliation&lt;/title&gt;&#x27;</span>
+<span id="L422">             &#x27;&lt;style&gt;body{max-width:1100px;margin:2rem auto;font:17px/1.5 system-ui}&#x27;</span>
+<span id="L423">             &#x27;section{border-top:1px solid #bbb;padding:1rem}table{border-collapse:collapse}&#x27;</span>
+<span id="L424">             &#x27;td,th{border:1px solid #bbb;padding:.5rem;vertical-align:top}&lt;/style&gt;&#x27;</span>
+<span id="L425">             &#x27;&lt;h1&gt;M28-05 acceptance and remaining-work ledger&lt;/h1&gt;&#x27;</span>
+<span id="L426">             &#x27;&lt;p&gt;&lt;a href=&quot;index.html&quot;&gt;Original golden audit&lt;/a&gt; · &#x27;</span>
+<span id="L427">             &#x27;&lt;a href=&quot;closeout.json&quot;&gt;Machine-readable ledger&lt;/a&gt;&lt;/p&gt;&#x27;</span>
+<span id="L428">             &#x27;&lt;p&gt;All 112 original requirements are retained. Software-complete and CAP-M20 &#x27;</span>
+<span id="L429">             &#x27;completion are not claimed. Physical, RT, Unreal, independent human, controlled &#x27;</span>
+<span id="L430">             &#x27;performance, authenticated provenance, release and deployment acceptance remain &#x27;</span>
+<span id="L431">             &#x27;NOT_RUN. Dependencies include capability-level context; they do not mean every &#x27;</span>
+<span id="L432">             &#x27;implemented subcriterion has failed. Original audit statuses describe implementation, &#x27;</span>
+<span id="L433">             &#x27;not current global acceptance. No waiver or human risk acceptance is inferred.&lt;/p&gt;&#x27;]</span>
+<span id="L434">    parts += [&#x27;&lt;h2&gt;Retained findings and obligations&lt;/h2&gt;&#x27;]</span>
+<span id="L435">    for f in ledger[&#x27;findings&#x27;]:</span>
+<span id="L436">        deps = &#x27; · &#x27;.join(&#x27;&lt;a href=&quot;#&#x27; + d + &#x27;&quot;&gt;&#x27; + d + &#x27;&lt;/a&gt;&#x27; for d in f[&#x27;dependencies&#x27;]) or &#x27;None&#x27;</span>
+<span id="L437">        parts += [&#x27;&lt;section id=&quot;&#x27; + f[&#x27;id&#x27;] + &#x27;&quot;&gt;&lt;h3&gt;&#x27; + f[&#x27;id&#x27;] + &#x27; — &#x27; + f[&#x27;status&#x27;] +</span>
+<span id="L438">                  &#x27;&lt;/h3&gt;&lt;p&gt;&#x27; + html.escape(f[&#x27;assessment&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Next: &#x27; +</span>
+<span id="L439">                  html.escape(f[&#x27;next_action&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Dependencies: &#x27; + deps +</span>
+<span id="L440">                  &#x27;&lt;/p&gt;&lt;p&gt;Existing acceptance identities: &#x27; + html.escape(&#x27;, &#x27;.join(f[&#x27;cards&#x27;]) or &#x27;None&#x27;) +</span>
+<span id="L441">                  &#x27;&lt;/p&gt;&lt;p&gt;Evidence: &#x27; + links(f[&#x27;evidence&#x27;]) + &#x27;&lt;/p&gt;&lt;/section&gt;&#x27;]</span>
+<span id="L442">    parts += [&#x27;&lt;h2&gt;Complete original requirement inventory&lt;/h2&gt;&#x27;]</span>
+<span id="L443">    for row in ledger[&#x27;requirements&#x27;]:</span>
+<span id="L444">        deps = &#x27; · &#x27;.join(&#x27;&lt;a href=&quot;#&#x27; + d + &#x27;&quot;&gt;&#x27; + d + &#x27;&lt;/a&gt;&#x27; for d in row[&#x27;dependencies&#x27;]) or &#x27;None&#x27;</span>
+<span id="L445">        parts += [&#x27;&lt;section id=&quot;&#x27; + row[&#x27;id&#x27;].replace(&#x27;/&#x27;, &#x27;-&#x27;) + &#x27;&quot;&gt;&lt;h3&gt;&#x27; + row[&#x27;id&#x27;] + &#x27;&lt;/h3&gt;&lt;p&gt;&#x27; +</span>
+<span id="L446">                  html.escape(row[&#x27;requirement&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Original implementation disposition: &#x27; +</span>
+<span id="L447">                  row[&#x27;original_status&#x27;] + &#x27;; reconciliation: &#x27; + row[&#x27;status&#x27;] + &#x27;&lt;/p&gt;&lt;p&gt;&#x27; +</span>
+<span id="L448">                  html.escape(row[&#x27;assessment&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Dependencies: &#x27; + deps + &#x27;&lt;/p&gt;&lt;p&gt;Next: &#x27; +</span>
+<span id="L449">                  html.escape(row[&#x27;next_action&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Source: &#x27; + links(row[&#x27;sources&#x27;]) +</span>
+<span id="L450">                  &#x27;&lt;/p&gt;&lt;p&gt;Checks: &#x27; + links(row[&#x27;tests&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Evidence: &#x27; + links(row[&#x27;evidence&#x27;]) +</span>
+<span id="L451">                  &#x27;&lt;/p&gt;&lt;/section&gt;&#x27;]</span>
+<span id="L452">    parts += [&#x27;&lt;h2&gt;Existing final-stage identities&lt;/h2&gt;&lt;p&gt;These are pointers to existing &#x27;</span>
+<span id="L453">              &#x27;canonical cards or criteria, not newly created qualification cards. Pinned &#x27;</span>
+<span id="L454">              &#x27;repository paths and URLs below are provenance text; this bundle stays offline.&lt;/p&gt;&lt;ul&gt;&#x27;]</span>
+<span id="L455">    for card in ledger[&#x27;existing_cards&#x27;]:</span>
+<span id="L456">        parts += [&#x27;&lt;li&gt;&#x27; + html.escape(card[&#x27;id&#x27;] + &#x27; — &#x27; + card[&#x27;url&#x27;] + &#x27; (blob &#x27; + card[&#x27;blob&#x27;] + &#x27;)&#x27;) + &#x27;&lt;/li&gt;&#x27;]</span>
+<span id="L457">    parts += [&#x27;&lt;/ul&gt;&lt;h2&gt;Delivered batch evidence&lt;/h2&gt;&#x27;]</span>
+<span id="L458">    for d in ledger[&#x27;deliveries&#x27;]:</span>
+<span id="L459">        parts += [&#x27;&lt;p&gt;&#x27; + d[&#x27;id&#x27;] + &#x27;: &#x27; + links(d[&#x27;evidence&#x27;]) + &#x27;&lt;/p&gt;&#x27;]</span>
+<span id="L460">    return (&#x27;\n&#x27;.join(parts) + &#x27;&lt;/html&gt;\n&#x27;).encode()</span>
+<span id="L461"></span>
+<span id="L462">def render(root):</span>
+<span id="L463">    inputs = root / &#x27;docs/golden_audit&#x27;</span>
+<span id="L464">    requirement_bytes = read(inputs, &#x27;requirements.json&#x27;)</span>
+<span id="L465">    yaml_bytes = read(inputs, &#x27;requirements.yaml&#x27;)</span>
+<span id="L466">    binding = load(inputs / &#x27;requirements-binding.json&#x27;)</span>
+<span id="L467">    require(binding == REQUIREMENT_BINDING, &#x27;canonical requirement binding&#x27;)</span>
+<span id="L468">    contract_bytes = read(root, &#x27;samples/golden_system/contract.json&#x27;)</span>
+<span id="L469">    contract = json.loads(contract_bytes)</span>
+<span id="L470">    mapping, audit = load(inputs / &#x27;source-map.json&#x27;), load(inputs / &#x27;capabilities.json&#x27;)</span>
+<span id="L471">    verify_inputs(requirement_bytes, yaml_bytes, contract, mapping, audit)</span>
+<span id="L472">    ledger = verify_closeout(load(root / &#x27;docs/closeout/ledger.json&#x27;), audit, lambda p: read(root, p))</span>
+<span id="L473">    refs = references(mapping, audit) + closeout_references(ledger)</span>
+<span id="L474">    paths = {r[&#x27;path&#x27;] for r in refs} | {&#x27;samples/golden_system/contract.json&#x27;}</span>
+<span id="L475">    snapshots = {p: read(root, p) for p in sorted(paths)}</span>
+<span id="L476">    for ref in refs:</span>
+<span id="L477">        reference_line(snapshots[ref[&#x27;path&#x27;]], ref)</span>
+<span id="L478">    output = {&#x27;requirements.json&#x27;: requirement_bytes, &#x27;requirements.yaml&#x27;: yaml_bytes,</span>
+<span id="L479">              &#x27;requirements-binding.json&#x27;: read(inputs, &#x27;requirements-binding.json&#x27;),</span>
+<span id="L480">              &#x27;contract.json&#x27;: contract_bytes, &#x27;source-map.json&#x27;: encoded(mapping),</span>
+<span id="L481">              &#x27;capabilities.json&#x27;: encoded(audit), &#x27;closeout.json&#x27;: encoded(ledger),</span>
+<span id="L482">              &#x27;closeout.html&#x27;: closeout_page(ledger, lambda p: read(root, p))}</span>
+<span id="L483">    for path, data in snapshots.items():</span>
+<span id="L484">        output[&#x27;source/&#x27; + path + &#x27;.txt&#x27;] = data</span>
+<span id="L485">        output[&#x27;source/&#x27; + path + &#x27;.html&#x27;] = source_page(data, path)</span>
+<span id="L486">    def links(items):</span>
+<span id="L487">        return &#x27; · &#x27;.join(&#x27;&lt;a href=&quot;source/&#x27; + r[&#x27;path&#x27;] + &#x27;.html#L&#x27; +</span>
+<span id="L488">                         str(reference_line(snapshots[r[&#x27;path&#x27;]], r)) + &#x27;&quot;&gt;&#x27; +</span>
+<span id="L489">                         html.escape(r[&#x27;path&#x27;]) + &#x27;&lt;/a&gt;&#x27; for r in items)</span>
+<span id="L490">    sections = [&#x27;&lt;p&gt;&lt;a href=&quot;closeout.html&quot;&gt;Current M28-05 acceptance and remaining-work ledger&lt;/a&gt;&lt;/p&gt;&#x27;, &#x27;&lt;h2 id=&quot;scenario&quot;&gt;Complete scenario map&lt;/h2&gt;&#x27;]</span>
+<span id="L491">    for row in mapping[&#x27;entries&#x27;]:</span>
+<span id="L492">        sections += [&#x27;&lt;section id=&quot;&#x27; + row[&#x27;id&#x27;].replace(&#x27;/&#x27;, &#x27;-&#x27;) + &#x27;&quot;&gt;&lt;h3&gt;&#x27; +</span>
+<span id="L493">                     html.escape(row[&#x27;id&#x27;]) + &#x27;&lt;/h3&gt;&lt;p&gt;&#x27; + html.escape(row[&#x27;explanation&#x27;]) +</span>
+<span id="L494">                     &#x27;&lt;/p&gt;&lt;p&gt;Source: &#x27; + links(row[&#x27;sources&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Checks: &#x27; +</span>
+<span id="L495">                     links(row[&#x27;tests&#x27;]) + &#x27;&lt;/p&gt;&lt;details&gt;&lt;summary&gt;Frozen requirement record&lt;/summary&gt;&lt;pre&gt;&#x27; +</span>
+<span id="L496">                     html.escape(json.dumps(row[&#x27;contract&#x27;], indent=2)) + &#x27;&lt;/pre&gt;&lt;/details&gt;&lt;/section&gt;&#x27;]</span>
+<span id="L497">    sections += [&#x27;&lt;h2 id=&quot;capabilities&quot;&gt;CAP-M15 through CAP-M26 audit&lt;/h2&gt;&#x27;]</span>
+<span id="L498">    for row in audit[&#x27;requirements&#x27;]:</span>
+<span id="L499">        sections += [&#x27;&lt;section id=&quot;&#x27; + row[&#x27;id&#x27;].replace(&#x27;/&#x27;, &#x27;-&#x27;) + &#x27;&quot;&gt;&lt;h3&gt;&#x27; +</span>
+<span id="L500">                     html.escape(row[&#x27;id&#x27;]) + &#x27; — &#x27; + row[&#x27;status&#x27;] + &#x27;&lt;/h3&gt;&lt;p&gt;&#x27; +</span>
+<span id="L501">                     html.escape(row[&#x27;requirement&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;&#x27; + html.escape(row[&#x27;assessment&#x27;]) +</span>
+<span id="L502">                     &#x27;&lt;/p&gt;&lt;p&gt;Source: &#x27; + links(row[&#x27;sources&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Checks: &#x27; +</span>
+<span id="L503">                     links(row[&#x27;tests&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;Retained evidence: &#x27; + links(row[&#x27;evidence&#x27;]) +</span>
+<span id="L504">                     &#x27;&lt;/p&gt;&lt;/section&gt;&#x27;]</span>
+<span id="L505">    sections += [&#x27;&lt;h2 id=&quot;remaining&quot;&gt;Remaining actions&lt;/h2&gt;&#x27;]</span>
+<span id="L506">    for row in audit[&#x27;remaining_actions&#x27;]:</span>
+<span id="L507">        sections += [&#x27;&lt;section id=&quot;&#x27; + row[&#x27;id&#x27;] + &#x27;&quot;&gt;&lt;h3&gt;&#x27; + row[&#x27;id&#x27;] + &#x27;&lt;/h3&gt;&lt;p&gt;&#x27; +</span>
+<span id="L508">                     html.escape(row[&#x27;next_action&#x27;]) + &#x27;&lt;/p&gt;&lt;p&gt;&#x27; + links(row[&#x27;evidence&#x27;]) + &#x27;&lt;/p&gt;&lt;/section&gt;&#x27;]</span>
+<span id="L509">    narrative = read(inputs, &#x27;guide.html&#x27;).decode()</span>
+<span id="L510">    output[&#x27;index.html&#x27;] = (&#x27;&lt;!doctype html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&#x27;</span>
+<span id="L511">                           &#x27;&lt;title&gt;RTFW golden system and capability audit&lt;/title&gt;&#x27;</span>
+<span id="L512">                           &#x27;&lt;style&gt;body{max-width:1000px;margin:2rem auto;padding:0 1rem;&#x27;</span>
+<span id="L513">                           &#x27;font:17px/1.5 system-ui}pre{overflow:auto;background:#f2f4f6;padding:1rem}&#x27;</span>
+<span id="L514">                           &#x27;section{border-top:1px solid #ddd;padding:1rem 0}&lt;/style&gt;&#x27; +</span>
+<span id="L515">                           narrative + &#x27;\n&#x27;.join(sections) + &#x27;&lt;/html&gt;\n&#x27;).encode()</span>
+<span id="L516">    output[&#x27;coverage.json&#x27;] = encoded(coverage(mapping, audit))</span>
+<span id="L517">    output[&#x27;inventory.json&#x27;] = encoded({&#x27;schema&#x27;: 1, &#x27;baseline&#x27;: BASELINE,</span>
+<span id="L518">        &#x27;sources&#x27;: {p: sha(v) for p, v in snapshots.items()},</span>
+<span id="L519">        &#x27;outputs&#x27;: {p: sha(v) for p, v in sorted(output.items())}})</span>
+<span id="L520">    return output</span>
+<span id="L521"></span>
+<span id="L522"></span>
+<span id="L523">def verify_bundle(directory):</span>
+<span id="L524">    inventory = load(directory / &#x27;inventory.json&#x27;)</span>
+<span id="L525">    require(inventory[&#x27;schema&#x27;] == 1 and inventory[&#x27;baseline&#x27;] == BASELINE, &#x27;bundle identity&#x27;)</span>
+<span id="L526">    actual = {p.relative_to(directory).as_posix() for p in directory.rglob(&#x27;*&#x27;) if p.is_file()}</span>
+<span id="L527">    require(actual == set(inventory[&#x27;outputs&#x27;]) | {&#x27;inventory.json&#x27;}, &#x27;bundle file inventory&#x27;)</span>
+<span id="L528">    for path, digest in inventory[&#x27;outputs&#x27;].items():</span>
+<span id="L529">        require(sha(read(directory, path)) == digest, &#x27;stale bundle file: &#x27; + path)</span>
+<span id="L530">    mapping, audit = load(directory / &#x27;source-map.json&#x27;), load(directory / &#x27;capabilities.json&#x27;)</span>
+<span id="L531">    require(load(directory / &#x27;requirements-binding.json&#x27;) == REQUIREMENT_BINDING,</span>
+<span id="L532">            &#x27;canonical requirement binding&#x27;)</span>
+<span id="L533">    verify_inputs(read(directory, &#x27;requirements.json&#x27;), read(directory, &#x27;requirements.yaml&#x27;),</span>
+<span id="L534">                  load(directory / &#x27;contract.json&#x27;), mapping, audit)</span>
+<span id="L535">    require(load(directory / &#x27;coverage.json&#x27;) == coverage(mapping, audit), &#x27;fabricated capability coverage&#x27;)</span>
+<span id="L536">    ledger = verify_closeout(load(directory / &#x27;closeout.json&#x27;), audit,</span>
+<span id="L537">                             lambda p: read(directory, &#x27;source/&#x27; + p + &#x27;.txt&#x27;))</span>
+<span id="L538">    require(read(directory, &#x27;closeout.html&#x27;) == closeout_page(ledger,</span>
+<span id="L539">            lambda p: read(directory, &#x27;source/&#x27; + p + &#x27;.txt&#x27;)), &#x27;fabricated closeout page&#x27;)</span>
+<span id="L540">    refs = references(mapping, audit) + closeout_references(ledger)</span>
+<span id="L541">    require(set(inventory[&#x27;sources&#x27;]) == {r[&#x27;path&#x27;] for r in refs} | {&#x27;samples/golden_system/contract.json&#x27;},</span>
+<span id="L542">            &#x27;source snapshot inventory&#x27;)</span>
+<span id="L543">    for path, digest in inventory[&#x27;sources&#x27;].items():</span>
+<span id="L544">        data = read(directory, &#x27;source/&#x27; + path + &#x27;.txt&#x27;)</span>
+<span id="L545">        require(sha(data) == digest and read(directory, &#x27;source/&#x27; + path + &#x27;.html&#x27;) == source_page(data, path),</span>
+<span id="L546">                &#x27;source snapshot/line anchor mismatch&#x27;)</span>
+<span id="L547">    for ref in refs:</span>
+<span id="L548">        reference_line(read(directory, &#x27;source/&#x27; + ref[&#x27;path&#x27;] + &#x27;.txt&#x27;), ref)</span>
+<span id="L549">    for path in actual:</span>
+<span id="L550">        if not path.endswith(&#x27;.html&#x27;):</span>
+<span id="L551">            continue</span>
+<span id="L552">        content = read(directory, path).decode()</span>
+<span id="L553">        for target in re.findall(r&#x27;href=&quot;([^&quot;]+)&quot;&#x27;, content):</span>
+<span id="L554">            require(not re.match(r&#x27;\w+:|//&#x27;, target), &#x27;offline manual contains external link&#x27;)</span>
+<span id="L555">            location, _, fragment = target.partition(&#x27;#&#x27;)</span>
+<span id="L556">            candidate = (directory / path).parent / location if location else directory / path</span>
+<span id="L557">            require(candidate.is_file() and directory.resolve() in candidate.resolve().parents,</span>
+<span id="L558">                    &#x27;broken/escaped offline link&#x27;)</span>
+<span id="L559">            if fragment:</span>
+<span id="L560">                require(&#x27;id=&quot;&#x27; + fragment + &#x27;&quot;&#x27; in candidate.read_text(encoding=&#x27;utf-8&#x27;), &#x27;broken offline fragment&#x27;)</span>
+<span id="L561">    return inventory</span></pre></html>

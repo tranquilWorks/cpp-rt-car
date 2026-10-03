@@ -640,3 +640,5 @@ add_subdirectory(closeout_benchmark)
 
 # M28-03 sampled startup terminal status, pending ownership and checked cleanup.
 add_subdirectory(closeout_startup)
+
+add_subdirectory(closeout_audit)

@@ -1,0 +1,83 @@
+# M28-03 sampled startup and cleanup timing investigation
+
+Baseline target295 `b5275b0a6094ddab1ab902632cc7cf35e9d20e59`; canonical activation613
+`6571b0fe4c11357020a47a8beca8bab18bc50036`, blob
+`8deac68fbf5658348861ab7d7ca203d5eee7e57a`. Production/old tests/ABI/defaults are
+byte-preserved. This completes an investigation and additive controls when the
+final gates below pass; it claims no production repair or global timing closure.
+
+## Historical evidence and classification
+
+- M27-02 local and hosted mock/native unselected tests: startup -2 instead of -18,
+  native event argument 8000000ns, then cleanup0/live0. Initialized hosted TSan
+  reported the same functional assertion. M27-07 Clang Debug native and M28-02 GCC
+  Debug mock logs repeat it. Their raw logs are retained with source/hash bindings.
+- M27-02 Windows Debug: SampledSimulationStartup returned -18 instead of0 after
+  2024ms, event argument8000000ns, entered1, cleanup0/live0. This is a distinct
+  observation. Its exact scheduling/driver cause is unproven.
+- M27-02's unchanged native held-work baseline records start/channel -2/-18,
+  two pending stops -2, live1, then actual completion, cleanup0/live0. Current
+  independent controls confirm that this ownership precedence is required.
+- An unchanged fixture Card holds its wait_user_event callback for at most two
+  seconds independently of the Runtime logical clock and simulator host watchdog.
+  Explicitly retaining that hold reproduces a two-second timeout on this host.
+  It is an existence/control result, not proof of the old Windows cause.
+
+## Acceptance and actual entry point
+
+The new tests/closeout_startup executable directly configures/finalizes/starts/
+steps/stops the public Runtime and actual XDMA backend using an injected driver.
+It includes the original public fixture verbatim and wraps only new test callbacks.
+It never accesses a device node. The 8ms safe argument and original two-second
+fixture wait remain exact; an explicitly selected100ms simulation watchdog drives
+new held-work controls, as in existing startup reliability coverage. Logical expiry
+is checked separately on returned completion. No original timeout is altered.
+
+Thirteen fixed scenarios cover successful safe startup/frame/shutdown, terminal
+native timeout, late successful native readback after logical expiry, one-shot
+shutdown error, timeout before backend acceptance, selected/unselected mock and
+unselected native pending work, a successful owner while another retains work,
+the original two-second driver bound, and concurrent independent owners. Exact
+channel status/safety, no invalid application/timeline publication, restart/step
+refusal while pending, live borrowed ownership, repeated stop, one final native
+shutdown, zero Runtime outstanding work and zero frame/checked-stop allocation
+are asserted. An explicit allocation positive control validates the observer.
+
+The baseline and current Runtime production are identical. All normal controls
+pass; there is no causal baseline defect/corrected production claim. Existing
+13 CommandBatch.SampledSimulation tests and startup_poll_reliability pass unchanged.
+Historical failures remain unresolved observations, never erased by those passes.
+
+## Verification and retained drafts
+
+- Ordinary direct strict-warning compilation and execution: PASS.
+- CMake/CTest new entry and unchanged startup_poll_reliability: 2/2 PASS.
+- Original SampledSimulation GTests: 13/13 PASS.
+- ASan/UBSan with leaks, initialized TSan, and Clang14 analysis: PASS.
+  Supported Runtime instrumented archives are hash-bound to their retained builds
+  and current rt/core byte equality; the experimental highres_clock change is
+  outside that library. New test, allocation observer and XDMA backend are freshly
+  instrumented. Pre-main TSan failures remain separate retained observations.
+- Initial fixture drafts failed their own ordering assertions: a stop callback
+  waited on progress of the same service lane, and logical-clock advance alone
+  did not expire held submission before the configured host watchdog. The corrected
+  controls use a returned terminal timeout and explicit host watchdog respectively.
+  Those are new-fixture corrections, not production repairs. Raw drafts/logs remain.
+- The first archive-binding helper included an unrelated experimental clock header
+  in the Runtime equality check and refused. The corrected binding checks rt/core,
+  identifies the sole changed experimental header and verifies Runtime dependencies
+  do not reference it. The failed setup log remains.
+
+Final exact-head full local, all32 original hosted names/multiplicity, actual
+relocated CPack consumer, source/ABI/contract guards and target/canonical merges
+are required. Their final results are recorded in the target PR and canonical
+closure; this pre-commit checkpoint cannot waive them.
+
+## Limits and rollback
+
+No production edit, old-test relaxation, ABI/default/schema/deadline change,
+physical timing, RT1/RT2, CUDA/XDMA hardware or human acceptance claim. Broader
+loopback backend race, experimental SDK missing hal.hpp, native-frame TSan finding,
+old startup assertions, original05/06 exclusions and final owner-stage obligations
+remain open. Revert only the additive suite/wiring and current documentation/bindings;
+preserve predecessor source and evidence. M28-04 is next to select after closure.

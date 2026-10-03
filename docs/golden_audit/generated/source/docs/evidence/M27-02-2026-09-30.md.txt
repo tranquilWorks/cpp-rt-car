@@ -1,0 +1,29 @@
+# M27-02 startup and device poll failure conservation
+
+Final implementation supersedes candidate30c5c2f and the historical M27-02-checkpoint. Use M27-02-final-checkpoint for final-source validation and review. The earlier checkpoint, local/hosted failure, intermediate race and all original assertions/evidence are retained.
+
+Baseline677fae6976f8eddd6ed7e060f222c3535a9e7ae2 is completed M27-01 target286/control585. Canonical activation586 and source-binding amendment587 are merged; exact revision/blob is retained in activation.json. Both controls passed full local validation; completed hosted zero-step failures were UNPERFORMED under the standing control-only exception. No target/local gate is waived.
+
+## Acceptance
+
+| Requirement | Final result |
+| --- | --- |
+| Independent causes | Main baseline loses a one-shot command polling fault before an owner is published. Controlled baseline logs/binaries retain that failure. Startup separately preserves -18 channel timeout while returning -2 for actual pending cleanup; cleanup/live0 follows actual completion. |
+| Bounded causal repair | Keep polling so previously timed-out native work is reaped. Retain the first unclaimed callback-status/count-overflow error in existing private control padding until actual delivery. Check before and after polling so publication during a callback cannot bypass the error. Preserve existing staged-result precedence, reset/shutdown clearing, deadlines and public/native/default behavior. |
+| Negative/positive/regression controls |26 ordered fault cases, reset and successful subsequent work,24 normal integrations, independent owners, four pending startups and six preserved lifecycle oracles; ten complete repeats pass. A deterministic new control fails the intermediate latch draft and passes the final implementation.117 unchanged command/rate/replay/allocation/MemoryPlan tests and the unchanged M17 late-native-completion/recovery sample pass. |
+| Allocation/sanitizers/static | Positive allocation control; zero allocations for step/reset/recovery/checked stop and terminal cleanup. ASan/UBSan/leaks and TSan pass. Clang14 production36-TU manifest and new fixture analysis pass. Runtime launch failures and unsuccessful attempts remain retained; actual Runtime metadata and new-fixture reset races were corrected before validation, with three supplemental instrumented passes. |
+| Default/ABI/package | Exact MemoryPlan and checkpoint/active bytes equal baseline, confirming unchanged control allocation size. ABI8/70exports/fingerprint0xd0e7a5a14bf35f97/SONAME8/deviceABI1/configschema7 remain unchanged. Actual default/optional CPack archives, removed original prefixes, copied independent public consumers and all71 prior SDK consumers pass; missing-SDK refusal is tested. |
+| Scope/documentation | Frozen requirements, previous tests/native/public sources and support claims unchanged. CUDA source hashes and generated documentation reproduce. Initial candidate and intermediate failures are explicitly superseded, never waived. |
+| Integration | Fresh exact-final-head full profiles and all32 hosted records with baseline names/multiplicity plus guarded target/canonical integration remain mandatory. Final records are in the PR/control closure; this prepublication checkpoint does not claim those later gates. |
+
+## Retained failures and review
+
+The first candidate's idle-poll guard prevented before-stop native completion reaping. Full local and hosted embedding test failures caught it; that candidate was not merged. The replacement retains errors without suppressing polling. A repeated test then exposed publication during poll; a deterministic barrier reproduces the intermediate draft failure and establishes the required after-poll check. One initial barrier fixture lacked a driving outstanding owner and timed out; the corrected fixture retains backend1 completion. TSan also caught an unpublished-slot identity read and an unsafe immediate reset in the new test wrapper. The Runtime now checks slot state before identity; only the new wrapper protects reset/reuse storage while polling stays nonblocking. Actual races were corrected, never treated as startup failures. No earlier assertion or deadline was weakened.
+
+The intermediate pass3 preserved run also reproduced the old unselected-native startup assertion (-2 versus -18, exact8ms event, later cleanup0/live0). A full unchanged117-test rerun passes, with the failed attempt retained. The new controlled tests establish why pending cleanup requires -2 while channel status preserves -18. Those original timing-sensitive assertions remain an explicit limitation, not a fixed production defect.
+
+M27-02-final-checkpoint includes full raw gzip logs/hashes, exact argv/exit records, baseline and intermediate controls, default artifact equality, source review and verified installed-consumer evidence archive. Original baseline library/prototypes remain in the historical checkpoint archive. The superseded candidate1 package workspace is retained in a verified archive, including symlinks and modes, identified by candidate1-package-archive.json. Complete relocated package02 workspace is retained outside checkout. Risk review details concurrency, native ownership, error precedence and claim limits.
+
+## Remaining work
+
+M27-03 submission/experimental timeouts,04 non-RT exporters,05 fuzz/security,06 test-identity provenance verification,07 native XDMA host preparation and08 migration/portable soak remain inactive until selected/refreshed. Physical/HIL/RT, actual licensed Unreal, controlled performance, unfamiliar-consumer review and production signing/release/deployment remain independent obligations. This scoped change does not promise universal backend error persistence or physical fault recovery.

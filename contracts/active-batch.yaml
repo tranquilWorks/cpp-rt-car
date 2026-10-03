@@ -1,25 +1,35 @@
 schema_version: 1
 batch:
-  id: M28-04
-  title: Instrumented simulated-driver deadline investigation
-  goal: Establish a software-only disposition for the retained full-frame TSan submission deadline observation.
+  id: M28-05
+  title: Acceptance and remaining-work reconciliation
+  goal: Produce one source-linked closeout ledger covering every original requirement, retained finding
+    and deferred obligation.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
+  - products/cpp-rt-car/acceptance.yaml#CAP-M15
+  - products/cpp-rt-car/acceptance.yaml#CAP-M16
+  - products/cpp-rt-car/acceptance.yaml#CAP-M17
+  - products/cpp-rt-car/acceptance.yaml#CAP-M18
+  - products/cpp-rt-car/acceptance.yaml#CAP-M19
+  - products/cpp-rt-car/acceptance.yaml#CAP-M20
+  - products/cpp-rt-car/acceptance.yaml#CAP-M21
+  - products/cpp-rt-car/acceptance.yaml#CAP-M22
+  - products/cpp-rt-car/acceptance.yaml#CAP-M23
+  - products/cpp-rt-car/acceptance.yaml#CAP-M24
+  - products/cpp-rt-car/acceptance.yaml#CAP-M25
   - products/cpp-rt-car/acceptance.yaml#CAP-M26
-  milestone: products/cpp-rt-car/milestones/M28.md#m28-04
-  baseline_commit: 526c13065475650f6c86de0ea8fc760d699a07a3
+  milestone: products/cpp-rt-car/milestones/M28.md#m28-05
+  baseline_commit: b37c124d6fd7c6ea7dd2b4dffcfc5531b0eb3c8e
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M28-04.yaml
+  control_plane_path: products/cpp-rt-car/batches/M28-05.yaml
   activation: owner_selected
-  owner_scope: Owner selected the next batch after target296/control614 completed M28-03. Activate only
-    M28-04 deadline investigation with injected drivers and unchanged full-frame probe. Standing scoped
-    publication and guarded integration continues; M28-05..06 and final owner stage remain inactive.
-  control_plane_revision: 640e7c4ef46b28d8ab8bf704d7b9b10bd381fa37
-  canonical_revision: 640e7c4ef46b28d8ab8bf704d7b9b10bd381fa37
-  canonical_blob_sha: 0ae6f19936992ebe522bb559ff8ec2cf481c6729
+  owner_scope: Owner selected M28-05 after target297/control616 completed M28-04. Standing scoped publication
+    and guarded integration continues. M28-06 and final owner stage remain inactive.
+  control_plane_revision: 7cae639252f16bb921a22839f738fb72dc91ae3b
+  canonical_batch_blob: 9f00018990574ab34159bcd552290324807229ef
 dependencies:
-- M28-03
+- M28-04
 scope:
   allowed_paths:
   - AGENTS.md
@@ -33,9 +43,11 @@ scope:
   - samples/golden_audit/catalog.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - tests/closeout_deadline/**
+  - docs/closeout/**
+  - tests/closeout_audit/**
   - tests/CMakeLists.txt
-  - docs/evidence/M28-04-*
+  - tests/golden_audit/test_catalog.py
+  - docs/evidence/M28-05-*
   forbidden_paths:
   - abi/
   - VERSION.txt
@@ -66,34 +78,37 @@ scope:
   - docs/evidence/M28-01-*
   - docs/evidence/M28-02-*
   - docs/evidence/M28-03-*
+  - docs/evidence/M28-04-*
   - rt/src/
   - rt/include/
   - core/
   - src/
   - bench/
-  - samples/golden_xdma/
-  - samples/golden_xdma_native/
-  - tests/golden_xdma_native/
+  - CMakeLists.txt
 acceptance:
-- Reproduce and retain the unchanged test_golden_xdma_native --frame observation with the injected driver,
-  ordinary execution, ASan/UBSan and initialized TSan; classify pre-main sanitizer startup failures separately.
-  No real XDMA node, GPU, FPGA, driver installation or bench access.
-- Trace submission scheduling and ownership around the unchanged 500us deadline using offline diagnostic
-  builds. Distinguish sanitizer-induced scheduling delay from an actual race/lifecycle defect. Do not
-  infer a race from a timeout or dismiss a sanitizer report as overhead.
-- If a private software defect is demonstrated, retain a failing baseline control and repair it within
-  the narrowed activation scope. Otherwise record a causally supported instrumentation limitation and
-  its still-unpassed full-frame result. Preserve all original full-frame/oracle/refusal assertions, mandatory
-  preparation/protocol gates and deadline values; new observations cannot replace the failed result or
-  claim hardware timing qualification.
-- Activate M28-04 from exact target main 526c13065475650f6c86de0ea8fc760d699a07a3 and bind merged canonical
-  revision/blob before implementation. Initial cause-specific scope is additive test-owned offline diagnostics,
-  controlled scheduling/ownership observations and evidence; production remains unchanged. An offline
-  tool may generate an explicitly marked diagnostic copy of private DeviceManager source with fixed-storage
-  timestamp hooks, source hashes and exact patch retention, never linked into shipped Runtime. No changed
-  deadline, assertion, capability or sanitizer suppression. A demonstrated production defect requires
-  a bounded canonical amendment before production edits. An unresolved full-frame timing result may receive
-  a truthful limitation disposition; retry success closes no finding.
+- Reconcile the full canonical acceptance inventory and living golden audit with M27 delivery and M28-01
+  through04 evidence, rather than limiting the audit to four summarized findings. Every remaining item
+  needs its original requirement/evidence link, current disposition, dependency and next action.
+- Distinguish demonstrated repair, retained unresolved software finding, evidence-supported instrumentation
+  limitation, owner-excluded scope and final-stage external acceptance. An unresolved software defect
+  prevents an unqualified software-complete claim. No new acceptance waiver or human risk acceptance is
+  inferred.
+- Preserve original M27-05 generated-input/continuous/scanner and M27-06 signature-fixture exclusions
+  as unperformed; do not implement them or promote CAP-M20. Existing unsigned rebuild evidence is not
+  authenticated provenance.
+- 'Create the final-stage handoff for the owner: existing M18 physical CUDA/XDMA/combined/RT/endurance
+  cards, M19-02..04 real Unreal, CAP-M23 controlled performance, M25 unfamiliar-consumer review, production
+  identity/signing and release/deployment decisions. Reuse existing procedures and identities; create
+  no duplicate qualification cards or inferred passes.'
+- Machine-check missing/duplicate requirement IDs, broken local evidence references and invalid pass/qualification
+  claims if a new ledger consumer is added. Update living summaries without rewriting historical evidence
+  or changing acceptance thresholds.
+- Activate only M28-05 at exact target main b37c124d6fd7c6ea7dd2b4dffcfc5531b0eb3c8e and bind merged canonical
+  revision/blob before implementation. Add a source-linked reconciliation ledger, offline standard-library
+  validation and additive tests; integrate the overlay with the existing golden audit and actual installed
+  bundle. Preserve original canonical requirements, frozen scenario and existing tests/assertions. Update
+  living summaries and mechanically generated/digest-bound documents only. No runtime repair, new qualification
+  card, excluded campaign or M28-06 activation.
 - Preserve release1.2.1, portable RT0, C ABI8/70 exports/fingerprint/SONAME8, device ABI1, public/default
   policies and supported tuples. Existing source tests/assertions/deadlines and all historical evidence
   stay unchanged; tests/CMakeLists.txt permits additive new-test wiring only.
@@ -107,17 +122,16 @@ validation:
   - ./scripts/agent-verify.sh full
   - git diff --check
   focused_tests_to_add:
-  - Reproduce and retain the unchanged test_golden_xdma_native --frame observation with the injected driver,
-    ordinary execution, ASan/UBSan and initialized TSan; classify pre-main sanitizer startup failures
-    separately. No real XDMA node, GPU, FPGA, driver installation or bench access.
-  - Trace submission scheduling and ownership around the unchanged 500us deadline using offline diagnostic
-    builds. Distinguish sanitizer-induced scheduling delay from an actual race/lifecycle defect. Do not
-    infer a race from a timeout or dismiss a sanitizer report as overhead.
-  - If a private software defect is demonstrated, retain a failing baseline control and repair it within
-    the narrowed activation scope. Otherwise record a causally supported instrumentation limitation and
-    its still-unpassed full-frame result. Preserve all original full-frame/oracle/refusal assertions,
-    mandatory preparation/protocol gates and deadline values; new observations cannot replace the failed
-    result or claim hardware timing qualification.
+  - Reconcile the full canonical acceptance inventory and living golden audit with M27 delivery and M28-01
+    through04 evidence, rather than limiting the audit to four summarized findings. Every remaining item
+    needs its original requirement/evidence link, current disposition, dependency and next action.
+  - Distinguish demonstrated repair, retained unresolved software finding, evidence-supported instrumentation
+    limitation, owner-excluded scope and final-stage external acceptance. An unresolved software defect
+    prevents an unqualified software-complete claim. No new acceptance waiver or human risk acceptance
+    is inferred.
+  - Preserve original M27-05 generated-input/continuous/scanner and M27-06 signature-fixture exclusions
+    as unperformed; do not implement them or promote CAP-M20. Existing unsigned rebuild evidence is not
+    authenticated provenance.
   required_ci:
   - All32 exact final-head target checks successful, preserving original baseline names and multiplicity;
     full canonical control validation on planning and closure.
@@ -125,7 +139,7 @@ validation:
   - None inside this software batch. Final owner stage retains all bench, engine, independent human, controlled
     performance, production signing/release/deployment acceptance.
 risk:
-  class: high
+  class: moderate
   hazards:
   - An unproven cause, retry pass or instrumented timing result is mistaken for a repair or qualification.
   - A change weakens an old assertion, deadline, ABI/default or prior evidence.
@@ -139,7 +153,7 @@ rollback:
     immutable evidence and every final-stage obligation.
 evidence:
   output:
-  - docs/evidence/M28-04-<date>.md
+  - docs/evidence/M28-05-<date>.md
   - Exact source/tree, commands, raw failures/results, source hashes, risk review, final-head CI and guarded
     merge/closure receipts.
   claim_boundary: Portable software only. Investigation can classify an unresolved result without claiming
