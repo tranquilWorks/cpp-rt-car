@@ -12,12 +12,13 @@ add_test(NAME host_adapter_repair_public COMMAND rtfw_repair_public)
 set_tests_properties(host_adapter_repair_public PROPERTIES TIMEOUT 60)
 if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  get_filename_component(repair_root "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
   set(observed "${CMAKE_CURRENT_BINARY_DIR}/observed")
   add_custom_command(OUTPUT "${observed}/observed.cpp" "${observed}/observed.hpp"
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/prepare.py"
-      --source-root "${CMAKE_SOURCE_DIR}" --output "${observed}"
-    DEPENDS prepare.py "${CMAKE_SOURCE_DIR}/rt/src/loopback_backend.cpp"
-      "${CMAKE_SOURCE_DIR}/rt/include/rt/loopback_backend.hpp" VERBATIM)
+      --source-root "${repair_root}" --output "${observed}"
+    DEPENDS prepare.py "${repair_root}/rt/src/loopback_backend.cpp"
+      "${repair_root}/rt/include/rt/loopback_backend.hpp" VERBATIM)
   add_executable(rtfw_repair_ownership ownership.cpp "${observed}/observed.cpp")
   target_compile_features(rtfw_repair_ownership PRIVATE cxx_std_20)
   target_include_directories(rtfw_repair_ownership PRIVATE "${observed}" "${CMAKE_CURRENT_SOURCE_DIR}")
