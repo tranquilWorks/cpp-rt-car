@@ -2,7 +2,7 @@
 <html lang="en"><meta charset="utf-8"><title>rt/loopback_backend.hpp — RTFW 1.2.1</title>
 <style>body{font:16px system-ui;margin:2rem}pre{font:13px monospace;overflow:auto}pre a{color:#555}a{color:#0758a5}</style>
 <h1>rt/loopback_backend.hpp</h1><p>Default installed header. Version 1.2.1.</p>
-<p>Source: rt/include/rt/loopback_backend.hpp; SHA-256: ee3d43fcbb773152a2a0b360d32f66324478ccd76e28e18a1b3886560c806d4c. Exact declaration/comment source; private/detail content is not a supported API promise.</p>
+<p>Source: rt/include/rt/loopback_backend.hpp; SHA-256: db143bd62f5ab92a13b03deed3a62450c1c562e0a68ccea52a514d6115f47105. Exact declaration/comment source; private/detail content is not a supported API promise.</p>
 <p><a href="index.html">API index</a> · <a href="../README.md">Manual</a></p><pre><span id="L1"><a href="#L1">    1</a> #pragma once</span>
 <span id="L2"><a href="#L2">    2</a> </span>
 <span id="L3"><a href="#L3">    3</a> #include &lt;rt/runtime.hpp&gt;</span>
@@ -70,38 +70,45 @@
 <span id="L65"><a href="#L65">   65</a> // examples, and portable tests. Each configured dispatch opcode copies buffer</span>
 <span id="L66"><a href="#L66">   66</a> // reference 0 to reference 1 and rewrites the sampled-frame destination</span>
 <span id="L67"><a href="#L67">   67</a> // identity fields. It performs no allocation after construction.</span>
-<span id="L68"><a href="#L68">   68</a> class SampledIoLoopbackBackend final {</span>
-<span id="L69"><a href="#L69">   69</a> public:</span>
-<span id="L70"><a href="#L70">   70</a>     explicit SampledIoLoopbackBackend(</span>
-<span id="L71"><a href="#L71">   71</a>         const SampledIoLoopbackConfig&amp; config = {});</span>
-<span id="L72"><a href="#L72">   72</a>     ~SampledIoLoopbackBackend();</span>
-<span id="L73"><a href="#L73">   73</a> </span>
-<span id="L74"><a href="#L74">   74</a>     SampledIoLoopbackBackend(const SampledIoLoopbackBackend&amp;) = delete;</span>
-<span id="L75"><a href="#L75">   75</a>     SampledIoLoopbackBackend&amp; operator=(</span>
-<span id="L76"><a href="#L76">   76</a>         const SampledIoLoopbackBackend&amp;) = delete;</span>
-<span id="L77"><a href="#L77">   77</a>     SampledIoLoopbackBackend(SampledIoLoopbackBackend&amp;&amp;) noexcept;</span>
-<span id="L78"><a href="#L78">   78</a>     SampledIoLoopbackBackend&amp; operator=(</span>
-<span id="L79"><a href="#L79">   79</a>         SampledIoLoopbackBackend&amp;&amp;) noexcept;</span>
+<span id="L68"><a href="#L68">   68</a> // Submit, poll and cancel use exclusive completion-slot ownership. Cancellation</span>
+<span id="L69"><a href="#L69">   69</a> // can claim only a published batch; an in-progress submit or competing consumer</span>
+<span id="L70"><a href="#L70">   70</a> // may make a bounded cancel scan return invalid_argument. A published injected</span>
+<span id="L71"><a href="#L71">   71</a> // timeout remains held until cancellation. Repeated cancellation before polling</span>
+<span id="L72"><a href="#L72">   72</a> // is idempotent. request_stop closes admission; callbacks already admitted may</span>
+<span id="L73"><a href="#L73">   73</a> // finish. The caller quiesces callbacks before buffer changes, reset, shutdown,</span>
+<span id="L74"><a href="#L74">   74</a> // reinitialization, move or destruction, as in Runtime&#x27;s checked-stop lifecycle.</span>
+<span id="L75"><a href="#L75">   75</a> class SampledIoLoopbackBackend final {</span>
+<span id="L76"><a href="#L76">   76</a> public:</span>
+<span id="L77"><a href="#L77">   77</a>     explicit SampledIoLoopbackBackend(</span>
+<span id="L78"><a href="#L78">   78</a>         const SampledIoLoopbackConfig&amp; config = {});</span>
+<span id="L79"><a href="#L79">   79</a>     ~SampledIoLoopbackBackend();</span>
 <span id="L80"><a href="#L80">   80</a> </span>
-<span id="L81"><a href="#L81">   81</a>     [[nodiscard]] Status add_route(</span>
-<span id="L82"><a href="#L82">   82</a>         const SampledIoLoopbackRoute&amp; route) noexcept;</span>
-<span id="L83"><a href="#L83">   83</a>     // One bounded atomic injection consumed by the next batch submission.</span>
-<span id="L84"><a href="#L84">   84</a>     [[nodiscard]] Status inject_next(</span>
-<span id="L85"><a href="#L85">   85</a>         SampledIoLoopbackFault fault) noexcept;</span>
-<span id="L86"><a href="#L86">   86</a>     [[nodiscard]] HalV2BackendRegistration hal_v2_registration(</span>
-<span id="L87"><a href="#L87">   87</a>         std::string_view name = &quot;sampled_io.loopback&quot;) noexcept;</span>
-<span id="L88"><a href="#L88">   88</a>     [[nodiscard]] SampledIoLoopbackStats stats() const noexcept;</span>
-<span id="L89"><a href="#L89">   89</a>     // Logical replay hooks are bounded and instance-local. Reset is accepted</span>
-<span id="L90"><a href="#L90">   90</a>     // only after checked backend shutdown; inspection uses retained order.</span>
-<span id="L91"><a href="#L91">   91</a>     [[nodiscard]] Status reset_logical_actions() noexcept;</span>
-<span id="L92"><a href="#L92">   92</a>     [[nodiscard]] std::size_t logical_action_count() const noexcept;</span>
-<span id="L93"><a href="#L93">   93</a>     [[nodiscard]] bool logical_action_at(</span>
-<span id="L94"><a href="#L94">   94</a>         std::size_t chronological_index,</span>
-<span id="L95"><a href="#L95">   95</a>         SampledIoLoopbackLogicalAction&amp; action) const noexcept;</span>
-<span id="L96"><a href="#L96">   96</a> </span>
-<span id="L97"><a href="#L97">   97</a> private:</span>
-<span id="L98"><a href="#L98">   98</a>     struct Impl;</span>
-<span id="L99"><a href="#L99">   99</a>     std::unique_ptr&lt;Impl&gt; impl_;</span>
-<span id="L100"><a href="#L100">  100</a> };</span>
-<span id="L101"><a href="#L101">  101</a> </span>
-<span id="L102"><a href="#L102">  102</a> } // namespace rt</span></pre></html>
+<span id="L81"><a href="#L81">   81</a>     SampledIoLoopbackBackend(const SampledIoLoopbackBackend&amp;) = delete;</span>
+<span id="L82"><a href="#L82">   82</a>     SampledIoLoopbackBackend&amp; operator=(</span>
+<span id="L83"><a href="#L83">   83</a>         const SampledIoLoopbackBackend&amp;) = delete;</span>
+<span id="L84"><a href="#L84">   84</a>     SampledIoLoopbackBackend(SampledIoLoopbackBackend&amp;&amp;) noexcept;</span>
+<span id="L85"><a href="#L85">   85</a>     SampledIoLoopbackBackend&amp; operator=(</span>
+<span id="L86"><a href="#L86">   86</a>         SampledIoLoopbackBackend&amp;&amp;) noexcept;</span>
+<span id="L87"><a href="#L87">   87</a> </span>
+<span id="L88"><a href="#L88">   88</a>     [[nodiscard]] Status add_route(</span>
+<span id="L89"><a href="#L89">   89</a>         const SampledIoLoopbackRoute&amp; route) noexcept;</span>
+<span id="L90"><a href="#L90">   90</a>     // One bounded atomic injection consumed by the next batch submission.</span>
+<span id="L91"><a href="#L91">   91</a>     [[nodiscard]] Status inject_next(</span>
+<span id="L92"><a href="#L92">   92</a>         SampledIoLoopbackFault fault) noexcept;</span>
+<span id="L93"><a href="#L93">   93</a>     [[nodiscard]] HalV2BackendRegistration hal_v2_registration(</span>
+<span id="L94"><a href="#L94">   94</a>         std::string_view name = &quot;sampled_io.loopback&quot;) noexcept;</span>
+<span id="L95"><a href="#L95">   95</a>     [[nodiscard]] SampledIoLoopbackStats stats() const noexcept;</span>
+<span id="L96"><a href="#L96">   96</a>     // Logical replay hooks are bounded and instance-local. Reset is accepted</span>
+<span id="L97"><a href="#L97">   97</a>     // only after checked backend shutdown; inspection uses retained order.</span>
+<span id="L98"><a href="#L98">   98</a>     [[nodiscard]] Status reset_logical_actions() noexcept;</span>
+<span id="L99"><a href="#L99">   99</a>     [[nodiscard]] std::size_t logical_action_count() const noexcept;</span>
+<span id="L100"><a href="#L100">  100</a>     [[nodiscard]] bool logical_action_at(</span>
+<span id="L101"><a href="#L101">  101</a>         std::size_t chronological_index,</span>
+<span id="L102"><a href="#L102">  102</a>         SampledIoLoopbackLogicalAction&amp; action) const noexcept;</span>
+<span id="L103"><a href="#L103">  103</a> </span>
+<span id="L104"><a href="#L104">  104</a> private:</span>
+<span id="L105"><a href="#L105">  105</a>     struct Impl;</span>
+<span id="L106"><a href="#L106">  106</a>     std::unique_ptr&lt;Impl&gt; impl_;</span>
+<span id="L107"><a href="#L107">  107</a> };</span>
+<span id="L108"><a href="#L108">  108</a> </span>
+<span id="L109"><a href="#L109">  109</a> } // namespace rt</span></pre></html>

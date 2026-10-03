@@ -65,6 +65,13 @@ static_assert(sizeof(SampledIoLoopbackLogicalAction) == 64);
 // examples, and portable tests. Each configured dispatch opcode copies buffer
 // reference 0 to reference 1 and rewrites the sampled-frame destination
 // identity fields. It performs no allocation after construction.
+// Submit, poll and cancel use exclusive completion-slot ownership. Cancellation
+// can claim only a published batch; an in-progress submit or competing consumer
+// may make a bounded cancel scan return invalid_argument. A published injected
+// timeout remains held until cancellation. Repeated cancellation before polling
+// is idempotent. request_stop closes admission; callbacks already admitted may
+// finish. The caller quiesces callbacks before buffer changes, reset, shutdown,
+// reinitialization, move or destruction, as in Runtime's checked-stop lifecycle.
 class SampledIoLoopbackBackend final {
 public:
     explicit SampledIoLoopbackBackend(

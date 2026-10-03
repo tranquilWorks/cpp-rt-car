@@ -50,6 +50,16 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    "docs/closeout/m29-followups.md",
+    "tests/repair_closeout/CMakeLists.txt",
+    "tests/repair_closeout/allocation_guard.hpp",
+    "tests/repair_closeout/fixture.hpp",
+    "tests/repair_closeout/hooks.hpp",
+    "tests/repair_closeout/owners.cpp",
+    "tests/repair_closeout/ownership.cpp",
+    "tests/repair_closeout/prepare.py",
+    "tests/repair_closeout/public.cpp",
+
     "docs/closeout/final-handoff.md",
     'docs/closeout/ledger.json',
     'docs/closeout/README.md',

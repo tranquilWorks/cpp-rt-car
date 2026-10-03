@@ -1,3 +1,9 @@
+> Subsequent owner-selected work: [M29 three-batch plan and current repair overlay](m29-followups.md).
+> The following M28 checkpoint is retained; its two defects are addressed by01,
+> retained software findings by02, and reopened software exclusions by03.
+> Final owner-stage identities remain unchanged. See final canonical receipts
+> before interpreting a repair as integrated or a batch as complete.
+
 # Final portable artifact and owner handoff (M28-06)
 
 This is a bounded portable verification delivery for release 1.2.1 at RT0.

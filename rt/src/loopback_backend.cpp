@@ -15,6 +15,10 @@ namespace {
 constexpr std::uint32_t kFree = 0;
 constexpr std::uint32_t kOwned = 1;
 constexpr std::uint32_t kReady = 2;
+// A timeout completion is fully published but only cancellation may release it.
+// kOwned always grants exclusive access: submit, poll and cancel never inspect
+// another callback's completion storage, including stale data during reuse.
+constexpr std::uint32_t kHeld = 3;
 constexpr std::uint32_t kKnownAccess =
     RTFW_DEVICE_BUFFER_HOST_READ | RTFW_DEVICE_BUFFER_HOST_WRITE |
     RTFW_DEVICE_BUFFER_DEVICE_READ | RTFW_DEVICE_BUFFER_DEVICE_WRITE;
@@ -628,9 +632,9 @@ struct SampledIoLoopbackBackend::Impl {
             completion.device_timestamp);
         slot->completion = completion;
         backend->submissions.fetch_add(1, std::memory_order_relaxed);
-        if (fault != SampledIoLoopbackFault::completion_timeout) {
-            slot->state.store(kReady, std::memory_order_release);
-        }
+        slot->state.store(
+            fault == SampledIoLoopbackFault::completion_timeout ? kHeld : kReady,
+            std::memory_order_release);
         return HalV2Status::ok;
     }
 
@@ -667,15 +671,28 @@ struct SampledIoLoopbackBackend::Impl {
         for (std::size_t index = 0;
              index < backend->config.queue_capacity; ++index) {
             auto& slot = backend->slots[index];
-            const auto state = slot.state.load(std::memory_order_acquire);
-            if ((state == kReady || state == kOwned) &&
-                slot.completion.batch_id == batch_id) {
-                slot.completion.status = static_cast<std::int32_t>(
-                    HalV2Status::canceled);
-                backend->cancellations.fetch_add(1, std::memory_order_relaxed);
-                slot.state.store(kReady, std::memory_order_release);
-                return HalV2Status::ok;
+            auto state = slot.state.load(std::memory_order_acquire);
+            if (state != kReady && state != kHeld) {
+                continue;
             }
+            const auto published_state = state;
+            if (!slot.state.compare_exchange_strong(
+                    state, kOwned, std::memory_order_acq_rel)) {
+                continue;
+            }
+            // Check identity only after ownership: the slot may have been
+            // retired and reused since our initial state observation.
+            if (slot.completion.batch_id != batch_id) {
+                slot.state.store(published_state, std::memory_order_release);
+                continue;
+            }
+            const auto canceled = static_cast<std::int32_t>(HalV2Status::canceled);
+            if (slot.completion.status != canceled) {
+                slot.completion.status = canceled;
+                backend->cancellations.fetch_add(1, std::memory_order_relaxed);
+            }
+            slot.state.store(kReady, std::memory_order_release);
+            return HalV2Status::ok;
         }
         return HalV2Status::invalid_argument;
     }

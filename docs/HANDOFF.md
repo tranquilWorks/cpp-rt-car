@@ -1,3 +1,23 @@
+## M29-01 combined repairs; three-batch software follow-up
+
+The owner selected three batches in [the M29 plan](closeout/m29-followups.md):
+01 combines the direct loopback ownership and optional full-SimCore SDK repairs;
+02 resolves retained software findings and claim boundaries; 03 completes the
+previously excluded software assurance and final verification. Only01 is active.
+The latest request reopens the historical software exclusions for planned03.
+Actual hardware/RT/Unreal/human/performance/production acceptance remains the
+final owner stage after all software obligations have been discharged.
+
+The repair separates exclusive completion access from published timeout storage
+and installs the experimental forwarding header's actual HAL dependency. Causal
+baseline failures and corrected local/installed controls are retained in
+[M29-01 evidence](evidence/M29-01-2026-10-03.md). Final exact-head full/all32 and
+package receipts plus guarded integration are required and recorded in the PR
+and canonical closure. Neither this checkpoint nor the immutable M28 ledger
+claims global software completion or CAP-M20 acceptance.
+
+## Historical checkpoints
+
 ## M28-06 final portable verification and handoff
 
 The [final artifact/evidence index and ordered owner handoff](closeout/final-handoff.md)

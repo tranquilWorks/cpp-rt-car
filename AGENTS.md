@@ -820,3 +820,9 @@ owner-stage bench/engine/human/production acceptance remain inactive.
 ## M28-06 activation
 
 Owner selected final portable package verification and bounded handoff after target298/control618. Canonical activation `8b3bafb943ba2e39aafdda71f005b55dcdc55329` binds target main `232df8fe2b56ffbdf174fc2bcf24a99995062d09`. Reuse existing default/optional package, modern/legacy bounded4096-cycle soak and independent unsigned rebuild tooling. Standing scoped publication and guarded integration continues. Preserve production, original tests, ledger identities, all unresolved findings and original05/06 exclusions. Software-complete and CAP-M20 claims remain false; final owner hardware/engine/human/signing/release stages remain inactive.
+
+## M29-01 combined repairs activation
+
+Canonical three-batch plan `c50198dfc5a4aafb93b088ab2e5d3923b8e59902` activates only M29-01 from `6ead6d8428bad2240936498ce356305a3bacdd2a`. Repair private loopback completion ownership/publication and the optional full-SimCore installed HAL dependency. Preserve original tests/deadlines, immutable M28 ledger and historical failures. Require causal baseline controls, actual full-owner CPack consumers, ordinary/instrumented/static/no-allocation/full/all32 verification and guarded integration under standing scoped authorization. M29-02 retained findings and M29-03 reopened excluded software remain planned. All actual hardware/RT/engine/human/performance/production signing/release/deployment acceptance stays in the final owner stage.
+
+Canonical M29-01 binding amendment `ad9d37acd2b8740a003d23f73965efa26d02e31a` additionally permits only the two existing loopback source digests in docs/cuda_capabilities.json. Preserve inventory, coverage, statuses and qualification claims. All repair gates remain mandatory.
