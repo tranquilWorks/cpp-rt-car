@@ -1,27 +1,28 @@
 schema_version: 1
 batch:
-  id: M28-01
-  title: Concurrent experimental clock initialization
-  goal: Remove the retained process-global initialization race while preserving caller-thread owner construction
-    and existing clock semantics.
+  id: M28-02
+  title: Benchmark timeout and submission accounting
+  goal: Replace the demonstrated scheduling assumption in the benchmark provider with causally correct
+    timeout and ownership accounting.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
+  - products/cpp-rt-car/acceptance.yaml#CAP-M23
   - products/cpp-rt-car/acceptance.yaml#CAP-M26
-  milestone: products/cpp-rt-car/milestones/M28.md#m28-01
-  baseline_commit: 389e3fc84cfc2a5946b6e555befdff0962f3989a
+  milestone: products/cpp-rt-car/milestones/M28.md#m28-02
+  baseline_commit: ab22bb4580de18794fcb2bad2b72b4e8a1e104c5
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M28-01.yaml
+  control_plane_path: products/cpp-rt-car/batches/M28-02.yaml
   activation: owner_selected
-  owner_scope: Owner selected M28-01 after merged plan607. Repair only experimental clock initialization/publication
-    and add independent concurrent-owner/read/init tests. Standing scoped publication and guarded merge
-    authorization continues; all original tests/deadlines and external gates remain. Later M28 batches
-    are inactive.
-  control_plane_revision: 937a5b100ba48798d0fafc6bfb57457c16ef600b
-  canonical_revision: 937a5b100ba48798d0fafc6bfb57457c16ef600b
-  canonical_blob_sha: 31a3206afb01859f36b884a753eb01333a80ddd6
+  owner_scope: Owner selected M28-02 after target294/control609 completed M28-01. Repair only the demonstrated
+    benchmark timeout/submission accounting assumption; retain exact 1ms deadline, old tests, schemas
+    and evidence. Standing scoped publication and guarded merge authorization continues. M28-03..06 and
+    all final owner-stage work remain inactive.
+  control_plane_revision: 8280b2eb547c5bb3847732070238aedd420bc52c
+  canonical_revision: 8280b2eb547c5bb3847732070238aedd420bc52c
+  canonical_blob_sha: ad9462d599dca1ca32a7b04ca24e5c5be8044c5e
 dependencies:
-- M27-08
+- M28-01
 scope:
   allowed_paths:
   - AGENTS.md
@@ -35,10 +36,10 @@ scope:
   - samples/golden_audit/catalog.py
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
-  - include/simcore/highres_clock.hpp
-  - tests/closeout_clock/**
+  - bench/providers/runtime_cases/device.cpp
+  - tests/closeout_benchmark/**
   - tests/CMakeLists.txt
-  - docs/evidence/M28-01-*
+  - docs/evidence/M28-02-*
   forbidden_paths:
   - abi/
   - VERSION.txt
@@ -66,19 +67,28 @@ scope:
   - docs/evidence/M25-*
   - docs/evidence/M26-*
   - docs/evidence/M27-*
+  - docs/evidence/M28-01-*
 acceptance:
-- Reproduce concurrent HighResClock initialization and concurrent owner construction on their execution
-  threads against the unchanged baseline; retain initialized TSan evidence and a deterministic causal
-  control where feasible.
-- Repair only the demonstrated clock publication/initialization defect. Preserve explicit injected-reader
-  behavior, monotonicity, fallback, independent owner lifetime and caller-thread arena binding. No new
-  global serialization on the clock read path, RT-lane allocation, or supported Runtime dependency on
-  experimental SimCore.
-- Run concurrent construction/read/destruction and repeated initialization tests, existing clock and 2/4/8-thread
-  determinism tests, applicable no-allocation checks, full instrumentation and installed legacy/current
-  target isolation. Preserve all existing tests and timing limits.
-- Activate only M28-01 from exact target baseline389e3fc84cfc2a5946b6e555befdff0962f3989a, then bind this
-  merged canonical revision/blob in the target active contract. All later M28 work remains inactive.
+- Retain the M27-03 held-submit reproducer and historical M23 failure. Separately observe provider entry,
+  backend acceptance, terminal timeout, copied output and checked cleanup before and after submit preemption.
+- Correct only the demonstrated provider accounting assumption for device-timeout-nonpublication. Define
+  exact valid state transitions for zero accepted submissions versus one accepted submission; never simply
+  relax an equality or ignore a missing terminal/output/ownership check. Preserve the original 1ms deadline,
+  case identity, schemas and historical tests.
+- Add deterministic before-acceptance and after-acceptance controls, successful submission and real accounting-error
+  negatives. Validate the actual benchmark CLI, existing catalog/result validators, installed provider
+  and complete existing benchmark suites. A new deterministic cause does not retroactively prove the exact
+  cause of the old hosted failure.
+- 'Initialized TSan of the actual held-after-acceptance provider also exposes loopback cancel reading
+  completion storage without submission publication. Within the same allowed device.cpp only, add a fixture-owned
+  command-extension observer for the single failure/timeout invocation: publish acceptance after submit
+  returns, forward cancellation only after that publication, retain nonblocking failed cancellation before
+  acceptance and checked-stop ownership. Bind final observed acceptance to backend accounting. Do not
+  change Runtime/backend sources, other workloads, deadline or schema. Retain the broader pre-existing
+  loopback backend race as unresolved outside this provider-local correction.'
+- Activate only M28-02 from exact target baseline ab22bb4580de18794fcb2bad2b72b4e8a1e104c5, bind this
+  merged canonical revision/blob before implementation, and preserve all M28-01 source/tests/evidence.
+  Later M28 work remains inactive.
 - Preserve release1.2.1, portable RT0, C ABI8/70 exports/fingerprint/SONAME8, device ABI1, public/default
   policies and supported tuples. Existing source tests/assertions/deadlines and all historical evidence
   stay unchanged; tests/CMakeLists.txt permits additive new-test wiring only.
@@ -92,16 +102,23 @@ validation:
   - ./scripts/agent-verify.sh full
   - git diff --check
   focused_tests_to_add:
-  - Reproduce concurrent HighResClock initialization and concurrent owner construction on their execution
-    threads against the unchanged baseline; retain initialized TSan evidence and a deterministic causal
-    control where feasible.
-  - Repair only the demonstrated clock publication/initialization defect. Preserve explicit injected-reader
-    behavior, monotonicity, fallback, independent owner lifetime and caller-thread arena binding. No new
-    global serialization on the clock read path, RT-lane allocation, or supported Runtime dependency on
-    experimental SimCore.
-  - Run concurrent construction/read/destruction and repeated initialization tests, existing clock and
-    2/4/8-thread determinism tests, applicable no-allocation checks, full instrumentation and installed
-    legacy/current target isolation. Preserve all existing tests and timing limits.
+  - Retain the M27-03 held-submit reproducer and historical M23 failure. Separately observe provider entry,
+    backend acceptance, terminal timeout, copied output and checked cleanup before and after submit preemption.
+  - Correct only the demonstrated provider accounting assumption for device-timeout-nonpublication. Define
+    exact valid state transitions for zero accepted submissions versus one accepted submission; never
+    simply relax an equality or ignore a missing terminal/output/ownership check. Preserve the original
+    1ms deadline, case identity, schemas and historical tests.
+  - Add deterministic before-acceptance and after-acceptance controls, successful submission and real
+    accounting-error negatives. Validate the actual benchmark CLI, existing catalog/result validators,
+    installed provider and complete existing benchmark suites. A new deterministic cause does not retroactively
+    prove the exact cause of the old hosted failure.
+  - 'Initialized TSan of the actual held-after-acceptance provider also exposes loopback cancel reading
+    completion storage without submission publication. Within the same allowed device.cpp only, add a
+    fixture-owned command-extension observer for the single failure/timeout invocation: publish acceptance
+    after submit returns, forward cancellation only after that publication, retain nonblocking failed
+    cancellation before acceptance and checked-stop ownership. Bind final observed acceptance to backend
+    accounting. Do not change Runtime/backend sources, other workloads, deadline or schema. Retain the
+    broader pre-existing loopback backend race as unresolved outside this provider-local correction.'
   required_ci:
   - All32 exact final-head target checks successful, preserving original baseline names and multiplicity;
     full canonical control validation on planning and closure.
@@ -123,7 +140,7 @@ rollback:
     immutable evidence and every final-stage obligation.
 evidence:
   output:
-  - docs/evidence/M28-01-<date>.md
+  - docs/evidence/M28-02-<date>.md
   - Exact source/tree, commands, raw failures/results, source hashes, risk review, final-head CI and guarded
     merge/closure receipts.
   claim_boundary: Portable software only. Investigation can classify an unresolved result without claiming

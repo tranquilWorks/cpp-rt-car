@@ -5,6 +5,43 @@
 namespace rtfw::benchmark::runtime::detail {
 namespace {
 constexpr std::uint64_t period=3'600'000'000'000;
+// The single failure/timeout command can outlive its graph terminal. Publish
+// submit's return before allowing cancel to inspect loopback completion storage;
+// its timeout slot otherwise has no ready-completion publication to acquire.
+struct FailureSubmission {
+    rt::HalV2CommandTimelineExtension original{},table{};
+    std::atomic<std::uint64_t> attempts{};
+    std::atomic<rt::HalV2Status> result{rt::HalV2Status::internal_error};
+    void configure(rt::HalV2BackendRegistration& registration) {
+        original=*registration.command_timeline;table=original;table.instance=this;
+        table.get_capabilities=[](void* p,rt::HalV2CommandTimelineCapabilities* out) {
+            auto& s=*static_cast<FailureSubmission*>(p);
+            return s.original.get_capabilities(s.original.instance,out);
+        };
+        table.submit=[](void* p,const rt::DeviceCommandBatch* batch) {
+            auto& s=*static_cast<FailureSubmission*>(p);
+            s.attempts.fetch_add(1,std::memory_order_relaxed);
+            const auto status=s.original.submit(s.original.instance,batch);
+            s.result.store(status,std::memory_order_release);
+            return status;
+        };
+        table.poll=[](void* p,rt::HalV2BatchCompletion* out,std::uint64_t capacity,std::uint64_t* count) {
+            auto& s=*static_cast<FailureSubmission*>(p);
+            return s.original.poll(s.original.instance,out,capacity,count);
+        };
+        table.cancel=[](void* p,std::uint64_t batch) {
+            auto& s=*static_cast<FailureSubmission*>(p);
+            if(s.result.load(std::memory_order_acquire)!=rt::HalV2Status::ok)
+                return rt::HalV2Status::invalid_argument;
+            return s.original.cancel(s.original.instance,batch);
+        };
+        table.request_stop=[](void* p) {
+            auto& s=*static_cast<FailureSubmission*>(p);
+            return s.original.request_stop(s.original.instance);
+        };
+        registration.command_timeline=&table;
+    }
+};
 struct Loopback final:Fixture {
     Case c;
     bool composition{},fault{},shedding{},replay_mode{},replaying{},valid{true};
@@ -28,6 +65,7 @@ struct Loopback final:Fixture {
     std::array<rt::RateDomainHandle,2> optional_domains{};
     std::uint64_t clock_base{1000};
     rt::SampledIoLoopbackBackend backend;
+    FailureSubmission failure_submission;
     RuntimeOwner owner;
     RuntimeOwner foreign;
     void fill_frame(std::span<std::byte> bytes,std::uint64_t channel,std::uint64_t seq,
@@ -125,7 +163,10 @@ struct Loopback final:Fixture {
             okay(owner.rt.set_live_control_replay_retention_policy(retention));
         }
         okay(owner.rt.register_state({"loopback-observation",1,state}));
-        okay(owner.rt.register_device_backend(backend.hal_v2_registration(),backend_handle));
+        auto failure_registration=backend.hal_v2_registration();
+        if(std::string_view(c.mode)=="timeout" || std::string_view(c.mode)=="failure")
+            failure_submission.configure(failure_registration);
+        okay(owner.rt.register_device_backend(failure_registration,backend_handle));
         rt::DeviceMemoryDomainHandle memory_domain;rt::HalV2MemoryDomain memory;
         require(owner.rt.device_memory_domain_at(backend_handle,0,memory_domain,memory));
         rt::DeviceBufferHandle buffer;
@@ -487,10 +528,37 @@ struct DeviceFailure final:Fixture {
             require(action.action!=rt::MixedRateActionId::sampled_publish || action.phase_index!=1 ||
                     action.terminal_status!=static_cast<std::int32_t>(rt::Status::ok));
         }
-        require(terminals==1 && fixture.backend.stats().submissions==1);
+        require(terminals==1);
+        // A terminal timeout releases the graph even while the submit callback
+        // is preempted before backend acceptance. This single atomic counter is
+        // only a lower bound until checked stop joins the submission lane.
+        const auto terminal_submissions=fixture.backend.stats().submissions;
         // Timeout ownership may be quarantined until this checked stop. Keep
         // Runtime, backend, clock and borrowed buffers alive through closure.
         okay(fixture.finish());
+        const auto settled=fixture.backend.stats();
+        require(fixture.owner.rt.state()==rt::RuntimeState::stopped);
+        require(fixture.failure_submission.attempts.load(std::memory_order_relaxed)==1);
+        const auto submitted=fixture.failure_submission.result.load(std::memory_order_acquire);
+        require(terminal_submissions<=settled.submissions && settled.submissions<=1);
+        require(settled.rejected==0 && settled.frames_copied==settled.submissions &&
+                settled.logical_actions==settled.submissions);
+        if(settled.submissions==0) {
+            // Deadline then stop can close admission before the held callback
+            // reaches the backend. No accepted command implies no device work.
+            require(timeout && submitted==rt::HalV2Status::invalid_state &&
+                    terminal_submissions==0 && settled.completions==0 &&
+                    settled.cancellations==0);
+        } else if(timeout) {
+            // Acceptance may occur before cancellation (one canceled completion)
+            // or after its unsuccessful attempt (ownership ends at shutdown).
+            require(submitted==rt::HalV2Status::ok && settled.cancellations<=1 &&
+                    settled.completions==settled.cancellations);
+        } else {
+            require(submitted==rt::HalV2Status::ok && terminal_submissions==1 &&
+                    settled.completions==1 && settled.cancellations==0);
+        }
+        require(fixture.copied_count==0 && load64(fixture.state)==0);
         rt::RuntimeMetricSnapshot snapshot;
         okay(fixture.owner.rt.metrics_snapshot(rt::RuntimeMetricWindow::cumulative,nullptr,snapshot));
         require(snapshot.samples[static_cast<std::size_t>(rt::RuntimeMetricId::device_outstanding)].value==0);
