@@ -61,8 +61,9 @@ inline void set_use_fma(bool on) {
 inline bool use_fma() {
     if constexpr (detail::kBuildAllowsFma) {
         return std::atomic_ref<bool>(use_fma_flag()).load(std::memory_order_relaxed);
+    } else {
+        return false;
     }
-    return false;
 }
 
 // Wrapper for fused multiply-add with a runtime gate. When the
