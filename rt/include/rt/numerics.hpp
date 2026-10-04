@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <cfenv>
 #include <cstdint>
 #include <cmath>
@@ -39,14 +40,19 @@ inline void init_fp_env() {
 #endif
 }
 
+// Experimental process-global policy, not per-SimCore state. Concurrent access
+// uses set_use_fma/use_fma/fma; configure policy while arithmetic is quiescent
+// for deterministic results. The legacy raw reference requires exclusive access.
+static_assert(std::atomic_ref<bool>::is_always_lock_free);
 inline bool &use_fma_flag() {
+    alignas(std::atomic_ref<bool>::required_alignment)
     static bool flag = detail::kBuildAllowsFma;
     return flag;
 }
 
 inline void set_use_fma(bool on) {
     if constexpr (detail::kBuildAllowsFma) {
-        use_fma_flag() = on;
+        std::atomic_ref<bool>(use_fma_flag()).store(on, std::memory_order_relaxed);
     } else {
         (void)on;
     }
@@ -54,9 +60,10 @@ inline void set_use_fma(bool on) {
 
 inline bool use_fma() {
     if constexpr (detail::kBuildAllowsFma) {
-        return use_fma_flag();
+        return std::atomic_ref<bool>(use_fma_flag()).load(std::memory_order_relaxed);
+    } else {
+        return false;
     }
-    return false;
 }
 
 // Wrapper for fused multiply-add with a runtime gate. When the
@@ -64,7 +71,7 @@ inline bool use_fma() {
 // multiply and add which mirrors platforms lacking hardware FMA.
 inline double fma(double a, double b, double c) {
     if constexpr (detail::kBuildAllowsFma) {
-        if (use_fma_flag())
+        if (use_fma())
             return std::fma(a, b, c);
     }
     return a * b + c;

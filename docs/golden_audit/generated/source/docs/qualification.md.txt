@@ -18,10 +18,15 @@ XDMA, combined, RT1, or RT2 behavior.
 | Promotion proposal | Deterministic `proposal_only` handoff labeled `human_matrix_change_required`. A human must still edit and review the appropriate matrix. |
 
 M18-01 produces only synthetic fixtures and offline tooling. No support tuple is
-promoted. M17-05 remains blocked by native command-capability discovery, so the
-tool rejects every non-synthetic combined proposal. The combined synthetic
-fixture exercises schema composition only and cannot establish the missing
-runtime behavior.
+promoted. M17-06 repaired the native command-capability discovery prerequisite
+retained from M17-05. M29-02 removes the obsolete blanket refusal: combined
+proposals must satisfy the same complete plan, record, artifact, threshold and
+independent review checks as other scopes. Parser fixtures, including locally
+rebound qualification-campaign labels, are still only software tests. They do not
+establish physical combined execution, authenticate an attribution or qualify a
+tuple. A non-synthetic combined proposal remains subject to independent human matrix
+promotion. Matrix changes remain independent human decisions. See
+[retained findings](retained_findings.md) for causal evidence and limitations.
 
 ## Files and independent versions
 

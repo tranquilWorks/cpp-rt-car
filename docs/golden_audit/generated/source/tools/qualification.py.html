@@ -1045,8 +1045,8 @@
 <span id="L1045">    validate_review(review.value, plan.value, record.value, plan.sha256, record.sha256, errors)</span>
 <span id="L1046">    manifest = record.value.get(&quot;artifact_manifest&quot;)</span>
 <span id="L1047">    artifact_digests = verify_artifacts(artifact_dir, manifest if isinstance(manifest, list) else [], errors)</span>
-<span id="L1048">    if plan.value.get(&quot;scope&quot;) == &quot;combined&quot; and plan.value.get(&quot;evidence_class&quot;) != &quot;synthetic_fixture&quot;:</span>
-<span id="L1049">        errors.add(&quot;combined qualification is blocked until the M17-05 native path prerequisite is repaired&quot;)</span>
+<span id="L1048">    # M17-06 repaired native command-capability discovery. Combined proposals</span>
+<span id="L1049">    # use the same complete evidence validation and human promotion boundary.</span>
 <span id="L1050">    errors.finish()</span>
 <span id="L1051">    return ValidatedSet(</span>
 <span id="L1052">        plan,</span>

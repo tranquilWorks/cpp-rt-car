@@ -645,3 +645,6 @@ add_subdirectory(closeout_audit)
 
 # M29-01 completion ownership and actual full experimental SDK consumers.
 add_subdirectory(repair_closeout)
+
+# M29-02 retained observations and bounded claim controls.
+add_subdirectory(retained_findings)

@@ -50,6 +50,18 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    "tests/retained_findings/overlay.py",
+    "docs/retained_findings.md",
+    "docs/closeout/m29-current.json",
+    "tests/retained_findings/CMakeLists.txt",
+    "tests/retained_findings/expected_overlap.py",
+    "tests/retained_findings/fma.cpp",
+    "tests/retained_findings/prepare.py",
+    "tests/retained_findings/proposal.py",
+    "tests/retained_findings/replay.cpp",
+    "tests/retained_findings/schedule.hpp",
+    "tests/retained_findings/startup.cpp",
+
     "docs/closeout/m29-followups.md",
     "tests/repair_closeout/CMakeLists.txt",
     "tests/repair_closeout/allocation_guard.hpp",
@@ -1206,7 +1218,8 @@ def validate_qualification_contract(
         "DuplicateKeyError",
         "parse_constant=_reject_constant",
         "rtfw-qualification-artifact-manifest-v1",
-        "combined qualification is blocked until the M17-05",
+        "human_matrix_change_required",
+        "review.pre_run_provenance_verified: human external pre-run verification is required",
         "proposal_only",
         "human_matrix_change_required",
         "os.link(temporary_name, path)",

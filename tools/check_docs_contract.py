@@ -3113,7 +3113,8 @@ def check_qualification_contract() -> None:
         "MAX_ARTIFACT_TOTAL_BYTES",
         "MAX_ARTIFACT_TREE_ENTRIES",
         "rtfw-qualification-artifact-manifest-v1",
-        "combined qualification is blocked until the M17-05",
+        "human_matrix_change_required",
+        "review.pre_run_provenance_verified: human external pre-run verification is required",
         "os.link(temporary_name, path)",
     ):
         if token not in tool:

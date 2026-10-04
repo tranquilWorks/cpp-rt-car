@@ -1,0 +1,4128 @@
+{
+  "schema": 1,
+  "batch": "M29-02",
+  "historical_ledger_sha256": "dbf80ec21ad551160240c935f9f6ad6a572d435d7d00a395972e42e9066415db",
+  "claims": {
+    "software_complete": false,
+    "CAP-M20_complete": false,
+    "physical_or_release_qualification": false
+  },
+  "validation_status": "Implementation and focused controls; final exact-head receipts required in target PR and canonical closure.",
+  "findings": [
+    {
+      "id": "replay-owner-refusal",
+      "historical_status": "demonstrated_repair",
+      "current_disposition": "demonstrated_repair",
+      "assessment": "Foreign outer and nested active owners are refused before live-control bookkeeping; twelve baseline active cases fail and fourteen repaired active/ordinary cases preserve capture and recovery. Scope is owner refusal only.",
+      "requirements": [
+        "CAP-M22/outcome/1",
+        "CAP-M22/scenario/1",
+        "CAP-M22/scenario/2",
+        "CAP-M22/scenario/3",
+        "CAP-M22/scenario/4",
+        "CAP-M22/scenario/5",
+        "CAP-M22/automated/1",
+        "CAP-M22/automated/2",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M27-01 trusted active replay rejection preserves capture",
+          "path": "docs/evidence/M27-01-2026-09-30.md"
+        }
+      ]
+    },
+    {
+      "id": "poll-error-conservation",
+      "historical_status": "demonstrated_repair",
+      "current_disposition": "demonstrated_repair",
+      "assessment": "Retain first unclaimed callback/count-overflow faults before and after polling until eligible delivery while continuing late-native reaping. Baseline and intermediate failures, slot-identity race and test-reset correction are retained.",
+      "requirements": [
+        "CAP-M17/outcome/1",
+        "CAP-M17/scenario/1",
+        "CAP-M17/scenario/2",
+        "CAP-M17/scenario/3",
+        "CAP-M17/scenario/4",
+        "CAP-M17/scenario/5",
+        "CAP-M17/automated/1",
+        "CAP-M17/automated/2",
+        "CAP-M17/manual/1",
+        "CAP-M21/outcome/1",
+        "CAP-M21/scenario/1",
+        "CAP-M21/scenario/2",
+        "CAP-M21/scenario/3",
+        "CAP-M21/scenario/4",
+        "CAP-M21/scenario/5",
+        "CAP-M21/automated/1",
+        "CAP-M21/automated/2",
+        "CAP-M21/automated/3",
+        "CAP-M21/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M27-02 startup and device poll failure conservation",
+          "path": "docs/evidence/M27-02-2026-09-30.md"
+        }
+      ]
+    },
+    {
+      "id": "experimental-worker-lifetime",
+      "historical_status": "demonstrated_repair",
+      "current_disposition": "demonstrated_repair",
+      "assessment": "Worker startup arena binding and dispatch generation publication are ordered; six baseline schedule controls fail at 2/4/8 workers and corrected original hashes pass.",
+      "requirements": [
+        "CAP-M23/outcome/1",
+        "CAP-M23/scenario/1",
+        "CAP-M23/scenario/2",
+        "CAP-M23/scenario/3",
+        "CAP-M23/scenario/4",
+        "CAP-M23/scenario/5",
+        "CAP-M23/automated/1",
+        "CAP-M23/automated/2",
+        "CAP-M23/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M27-03 submission and experimental timeout investigation",
+          "path": "docs/evidence/M27-03-2026-10-01.md"
+        }
+      ]
+    },
+    {
+      "id": "experimental-watchdog",
+      "historical_status": "demonstrated_repair",
+      "current_disposition": "demonstrated_repair",
+      "assessment": "Watchdog trip effects drain at a coordinator boundary, teardown joins before dependent destruction, and stop publication holds the predicate mutex. Mid-phase and lost-wake baseline controls fail and repaired controls pass.",
+      "requirements": [
+        "CAP-M23/outcome/1",
+        "CAP-M23/scenario/1",
+        "CAP-M23/scenario/2",
+        "CAP-M23/scenario/3",
+        "CAP-M23/scenario/4",
+        "CAP-M23/scenario/5",
+        "CAP-M23/automated/1",
+        "CAP-M23/automated/2",
+        "CAP-M23/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M27-03 submission and experimental timeout investigation",
+          "path": "docs/evidence/M27-03-2026-10-01.md"
+        }
+      ]
+    },
+    {
+      "id": "experimental-clock-sampling",
+      "historical_status": "demonstrated_repair",
+      "current_disposition": "demonstrated_repair",
+      "assessment": "Reject invalid/outlier clock samples before publication and preserve monotonic floor with compare/exchange. Independent outlier and floor controls fail the old source and pass repaired source.",
+      "requirements": [
+        "CAP-M23/outcome/1",
+        "CAP-M23/scenario/1",
+        "CAP-M23/scenario/2",
+        "CAP-M23/scenario/3",
+        "CAP-M23/scenario/4",
+        "CAP-M23/scenario/5",
+        "CAP-M23/automated/1",
+        "CAP-M23/automated/2",
+        "CAP-M23/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M27-03 submission and experimental timeout investigation",
+          "path": "docs/evidence/M27-03-2026-10-01.md"
+        }
+      ]
+    },
+    {
+      "id": "experimental-clock-initialization",
+      "historical_status": "demonstrated_repair",
+      "current_disposition": "demonstrated_repair",
+      "assessment": "Writer calibration and atomic generation publication fix the independently reproduced process-global initialization race. Concurrent caller-thread owners and original clock tests pass instrumented checks.",
+      "requirements": [
+        "CAP-M23/outcome/1",
+        "CAP-M23/scenario/1",
+        "CAP-M23/scenario/2",
+        "CAP-M23/scenario/3",
+        "CAP-M23/scenario/4",
+        "CAP-M23/scenario/5",
+        "CAP-M23/automated/1",
+        "CAP-M23/automated/2",
+        "CAP-M23/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M28-01 concurrent experimental clock initialization",
+          "path": "docs/evidence/M28-01-2026-10-02.md"
+        }
+      ]
+    },
+    {
+      "id": "benchmark-acceptance-accounting",
+      "historical_status": "demonstrated_repair",
+      "current_disposition": "demonstrated_repair",
+      "assessment": "Provider checks settled acceptance after checked stop and forwards cancellation only after acceptance publication. Held-before/after controls and 26 accounting scenarios establish the scoped correction.",
+      "requirements": [
+        "CAP-M23/outcome/1",
+        "CAP-M23/scenario/1",
+        "CAP-M23/scenario/2",
+        "CAP-M23/scenario/3",
+        "CAP-M23/scenario/4",
+        "CAP-M23/scenario/5",
+        "CAP-M23/automated/1",
+        "CAP-M23/automated/2",
+        "CAP-M23/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M28-02 benchmark timeout and submission accounting",
+          "path": "docs/evidence/M28-02-2026-10-03.md"
+        }
+      ]
+    },
+    {
+      "id": "loopback-cancel-submit",
+      "historical_status": "unresolved_software",
+      "current_disposition": "demonstrated_repair",
+      "assessment": "M29-01 exclusive completion ownership; target300/control623.",
+      "requirements": [
+        "CAP-M21/outcome/1",
+        "CAP-M21/scenario/1",
+        "CAP-M21/scenario/2",
+        "CAP-M21/scenario/3",
+        "CAP-M21/scenario/4",
+        "CAP-M21/scenario/5",
+        "CAP-M21/automated/1",
+        "CAP-M21/automated/2",
+        "CAP-M21/automated/3",
+        "CAP-M21/manual/1",
+        "CAP-M23/outcome/1",
+        "CAP-M23/scenario/1",
+        "CAP-M23/scenario/2",
+        "CAP-M23/scenario/3",
+        "CAP-M23/scenario/4",
+        "CAP-M23/scenario/5",
+        "CAP-M23/automated/1",
+        "CAP-M23/automated/2",
+        "CAP-M23/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M28-02 benchmark timeout and submission accounting",
+          "path": "docs/evidence/M28-02-2026-10-03.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "optional-sdk-hal-header",
+      "historical_status": "unresolved_software",
+      "current_disposition": "demonstrated_repair",
+      "assessment": "M29-01 actual full-owner CPack dependency repair; target300/control623.",
+      "requirements": [
+        "CAP-M25/outcome/1",
+        "CAP-M25/scenario/1",
+        "CAP-M25/scenario/2",
+        "CAP-M25/scenario/3",
+        "CAP-M25/scenario/4",
+        "CAP-M25/scenario/5",
+        "CAP-M25/scenario/6",
+        "CAP-M25/automated/1",
+        "CAP-M25/automated/2",
+        "CAP-M25/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M28-01 concurrent experimental clock initialization",
+          "path": "docs/evidence/M28-01-2026-10-02.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "historical-benchmark-predicate",
+      "historical_status": "unresolved_observation",
+      "current_disposition": "historical_provenance_limit",
+      "assessment": "Missing original predicate cannot be reconstructed. M28-02 repaired the independently demonstrated accounting assumption.",
+      "requirements": [
+        "CAP-M23/outcome/1",
+        "CAP-M23/scenario/1",
+        "CAP-M23/scenario/2",
+        "CAP-M23/scenario/3",
+        "CAP-M23/scenario/4",
+        "CAP-M23/scenario/5",
+        "CAP-M23/automated/1",
+        "CAP-M23/automated/2",
+        "CAP-M23/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M27-03 submission and experimental timeout investigation",
+          "path": "docs/evidence/M27-03-2026-10-01.md"
+        },
+        {
+          "anchor": "# M28-02 benchmark timeout and submission accounting",
+          "path": "docs/evidence/M28-02-2026-10-03.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "sampled-startup-pending-cleanup",
+      "historical_status": "unresolved_observation",
+      "current_disposition": "characterized_scheduling_limit",
+      "assessment": "Original assertion fails under source-linked native-tail scheduling; -2 preserves pending ownership, later checked cleanup succeeds. Historical exact schedules unknown.",
+      "requirements": [
+        "CAP-M17/outcome/1",
+        "CAP-M17/scenario/1",
+        "CAP-M17/scenario/2",
+        "CAP-M17/scenario/3",
+        "CAP-M17/scenario/4",
+        "CAP-M17/scenario/5",
+        "CAP-M17/automated/1",
+        "CAP-M17/automated/2",
+        "CAP-M17/manual/1",
+        "CAP-M21/outcome/1",
+        "CAP-M21/scenario/1",
+        "CAP-M21/scenario/2",
+        "CAP-M21/scenario/3",
+        "CAP-M21/scenario/4",
+        "CAP-M21/scenario/5",
+        "CAP-M21/automated/1",
+        "CAP-M21/automated/2",
+        "CAP-M21/automated/3",
+        "CAP-M21/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M27-02 startup and device poll failure conservation",
+          "path": "docs/evidence/M27-02-2026-09-30.md"
+        },
+        {
+          "anchor": "# M28-03 sampled startup and cleanup timing investigation",
+          "path": "docs/evidence/M28-03-2026-10-03.md"
+        },
+        {
+          "anchor": "# M28-05 predecessor integration observations",
+          "path": "docs/evidence/M28-05-predecessors.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "windows-startup-2024ms",
+      "historical_status": "unresolved_observation",
+      "current_disposition": "characterized_scheduling_limit",
+      "assessment": "Source-linked fixture gate delay causes unchanged two-second driver timeout; historic exact Windows schedule unknown. Actual hosted Windows controls required.",
+      "requirements": [
+        "CAP-M17/outcome/1",
+        "CAP-M17/scenario/1",
+        "CAP-M17/scenario/2",
+        "CAP-M17/scenario/3",
+        "CAP-M17/scenario/4",
+        "CAP-M17/scenario/5",
+        "CAP-M17/automated/1",
+        "CAP-M17/automated/2",
+        "CAP-M17/manual/1",
+        "CAP-M21/outcome/1",
+        "CAP-M21/scenario/1",
+        "CAP-M21/scenario/2",
+        "CAP-M21/scenario/3",
+        "CAP-M21/scenario/4",
+        "CAP-M21/scenario/5",
+        "CAP-M21/automated/1",
+        "CAP-M21/automated/2",
+        "CAP-M21/automated/3",
+        "CAP-M21/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M28-03 sampled startup and cleanup timing investigation",
+          "path": "docs/evidence/M28-03-2026-10-03.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "windows-negative-overlap",
+      "historical_status": "unresolved_observation",
+      "current_disposition": "characterized_scheduling_limit",
+      "assessment": "Unchanged overlap oracle fails with controlled coordinator delay despite valid clock; historic exact Windows schedule unknown. Actual Windows control required.",
+      "requirements": [
+        "CAP-M23/outcome/1",
+        "CAP-M23/scenario/1",
+        "CAP-M23/scenario/2",
+        "CAP-M23/scenario/3",
+        "CAP-M23/scenario/4",
+        "CAP-M23/scenario/5",
+        "CAP-M23/automated/1",
+        "CAP-M23/automated/2",
+        "CAP-M23/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M28-05 predecessor integration observations",
+          "path": "docs/evidence/M28-05-predecessors.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "native-frame-tsan-deadline",
+      "historical_status": "instrumentation_limitation",
+      "current_disposition": "characterized_instrumentation_limit",
+      "assessment": "Original500us initialized TSan failure and source-linked deadline/quarantine control retained; no timing repair or RT claim.",
+      "requirements": [
+        "CAP-M17/outcome/1",
+        "CAP-M17/scenario/1",
+        "CAP-M17/scenario/2",
+        "CAP-M17/scenario/3",
+        "CAP-M17/scenario/4",
+        "CAP-M17/scenario/5",
+        "CAP-M17/automated/1",
+        "CAP-M17/automated/2",
+        "CAP-M17/manual/1",
+        "CAP-M21/outcome/1",
+        "CAP-M21/scenario/1",
+        "CAP-M21/scenario/2",
+        "CAP-M21/scenario/3",
+        "CAP-M21/scenario/4",
+        "CAP-M21/scenario/5",
+        "CAP-M21/automated/1",
+        "CAP-M21/automated/2",
+        "CAP-M21/automated/3",
+        "CAP-M21/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M27-07 native golden XDMA preparation",
+          "path": "docs/evidence/M27-07-2026-10-02.md"
+        },
+        {
+          "anchor": "# M28-04: native full-frame deadline investigation (2026-10-03)",
+          "path": "docs/evidence/M28-04-2026-10-03.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "partial-runtime-tsan",
+      "historical_status": "instrumentation_limitation",
+      "current_disposition": "superseded_partial_instrumentation",
+      "assessment": "Original partial report excluded; complete-source instrumentation and bindings required.",
+      "requirements": [
+        "CAP-M22/outcome/1",
+        "CAP-M22/scenario/1",
+        "CAP-M22/scenario/2",
+        "CAP-M22/scenario/3",
+        "CAP-M22/scenario/4",
+        "CAP-M22/scenario/5",
+        "CAP-M22/automated/1",
+        "CAP-M22/automated/2",
+        "CAP-M25/outcome/1",
+        "CAP-M25/scenario/1",
+        "CAP-M25/scenario/2",
+        "CAP-M25/scenario/3",
+        "CAP-M25/scenario/4",
+        "CAP-M25/scenario/5",
+        "CAP-M25/scenario/6",
+        "CAP-M25/automated/1",
+        "CAP-M25/automated/2",
+        "CAP-M25/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M27-05 ordinary public-API regression evidence",
+          "path": "docs/evidence/M27-05-2026-10-02.md"
+        },
+        {
+          "anchor": "# M27-05 source and compatibility review",
+          "path": "docs/evidence/M27-05-risk-review.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "offline-diagnostic-warning",
+      "historical_status": "instrumentation_limitation",
+      "current_disposition": "characterized_diagnostic_limit",
+      "assessment": "Renamed-main unused default branch warned; wrapper selects explicit-return frame paths; never shipped or claimed warning-free.",
+      "requirements": [
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M28-05 predecessor integration observations",
+          "path": "docs/evidence/M28-05-predecessors.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "replay-transactionality",
+      "historical_status": "unproven_boundary",
+      "current_disposition": "explicit_product_boundary",
+      "assessment": "Fixed malformed controls preserve pre-effect state/capture. Post-effect callback side effects require caller recovery; no universal rollback promise.",
+      "requirements": [
+        "CAP-M22/outcome/1",
+        "CAP-M22/scenario/1",
+        "CAP-M22/scenario/2",
+        "CAP-M22/scenario/3",
+        "CAP-M22/scenario/4",
+        "CAP-M22/scenario/5",
+        "CAP-M22/automated/1",
+        "CAP-M22/automated/2",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M27-01 trusted active replay rejection preserves capture",
+          "path": "docs/evidence/M27-01-2026-09-30.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "experimental-global-policy",
+      "historical_status": "unproven_boundary",
+      "current_disposition": "demonstrated_repair_with_boundary",
+      "assessment": "Forced-FMA baseline race repaired by atomic access; process-global policy and host-quiescent deterministic configuration remain explicit.",
+      "requirements": [
+        "CAP-M23/outcome/1",
+        "CAP-M23/scenario/1",
+        "CAP-M23/scenario/2",
+        "CAP-M23/scenario/3",
+        "CAP-M23/scenario/4",
+        "CAP-M23/scenario/5",
+        "CAP-M23/automated/1",
+        "CAP-M23/automated/2",
+        "CAP-M23/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# M28-01 concurrent experimental clock initialization",
+          "path": "docs/evidence/M28-01-2026-10-02.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "application-models",
+      "historical_status": "claim_boundary",
+      "current_disposition": "explicit_product_boundary",
+      "assessment": "Framework integer examples do not deliver production vehicle/plant models or safety validation.",
+      "requirements": [
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [],
+      "evidence": [
+        {
+          "anchor": "# Portable golden-system reference",
+          "path": "samples/golden_system/README.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "excluded-generated-campaigns",
+      "historical_status": "owner_excluded",
+      "current_disposition": "planned_M29-03",
+      "assessment": "Original exclusion reopened by owner; not yet delivered.",
+      "requirements": [
+        "CAP-M20/outcome/1",
+        "CAP-M20/scenario/1",
+        "CAP-M20/scenario/2",
+        "CAP-M20/scenario/3",
+        "CAP-M20/scenario/4",
+        "CAP-M20/automated/1",
+        "CAP-M20/manual/1"
+      ],
+      "cards": [
+        "M20-02-fuzz-static-security-signing"
+      ],
+      "evidence": [
+        {
+          "anchor": "# M27-05 ordinary public-API regression evidence",
+          "path": "docs/evidence/M27-05-2026-10-02.md"
+        },
+        {
+          "anchor": "# M27-05 source and compatibility review",
+          "path": "docs/evidence/M27-05-risk-review.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "excluded-signature-fixtures",
+      "historical_status": "owner_excluded",
+      "current_disposition": "planned_M29-03",
+      "assessment": "Original exclusion reopened for throwaway local test identities; not yet delivered.",
+      "requirements": [
+        "CAP-M20/outcome/1",
+        "CAP-M20/scenario/1",
+        "CAP-M20/scenario/2",
+        "CAP-M20/scenario/3",
+        "CAP-M20/scenario/4",
+        "CAP-M20/automated/1",
+        "CAP-M20/manual/1"
+      ],
+      "cards": [
+        "M20-02-fuzz-static-security-signing"
+      ],
+      "evidence": [
+        {
+          "anchor": "# M27-06 independent build/provenance evidence",
+          "path": "docs/evidence/M27-06-2026-10-02.md"
+        },
+        {
+          "anchor": "# M27-06 review",
+          "path": "docs/evidence/M27-06-risk-review.md"
+        },
+        {
+          "path": "docs/retained_findings.md"
+        },
+        {
+          "path": "docs/evidence/M29-02-2026-10-04.md"
+        }
+      ]
+    },
+    {
+      "id": "physical-cuda",
+      "historical_status": "external_acceptance",
+      "current_disposition": "external_acceptance",
+      "assessment": "No named NVIDIA tuple has new physical correctness, profiling, thermal, saturation, device-loss/reset, shutdown or endurance acceptance from these software batches.",
+      "requirements": [
+        "CAP-M17/outcome/1",
+        "CAP-M17/scenario/1",
+        "CAP-M17/scenario/2",
+        "CAP-M17/scenario/3",
+        "CAP-M17/scenario/4",
+        "CAP-M17/scenario/5",
+        "CAP-M17/automated/1",
+        "CAP-M17/automated/2",
+        "CAP-M17/manual/1",
+        "CAP-M18/outcome/1",
+        "CAP-M18/scenario/1",
+        "CAP-M18/scenario/2",
+        "CAP-M18/scenario/3",
+        "CAP-M18/automated/1",
+        "CAP-M18/manual/1",
+        "CAP-M24/outcome/1",
+        "CAP-M24/scenario/1",
+        "CAP-M24/scenario/2",
+        "CAP-M24/scenario/3",
+        "CAP-M24/scenario/4",
+        "CAP-M24/scenario/5",
+        "CAP-M24/automated/1",
+        "CAP-M24/automated/2",
+        "CAP-M24/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [
+        "M18-02-nvidia-tuple"
+      ],
+      "evidence": [
+        {
+          "anchor": "# Qualification records and promotion proposals",
+          "path": "docs/qualification.md"
+        },
+        {
+          "anchor": "# M27-07 native golden XDMA preparation",
+          "path": "docs/evidence/M27-07-2026-10-02.md"
+        }
+      ]
+    },
+    {
+      "id": "physical-xdma",
+      "historical_status": "external_acceptance",
+      "current_disposition": "external_acceptance",
+      "assessment": "M27-07 supplies native host preparation and injected-driver evidence, not a physical golden run, FPGA/driver validation, safe-output acceptance or native replay.",
+      "requirements": [
+        "CAP-M17/outcome/1",
+        "CAP-M17/scenario/1",
+        "CAP-M17/scenario/2",
+        "CAP-M17/scenario/3",
+        "CAP-M17/scenario/4",
+        "CAP-M17/scenario/5",
+        "CAP-M17/automated/1",
+        "CAP-M17/automated/2",
+        "CAP-M17/manual/1",
+        "CAP-M18/outcome/1",
+        "CAP-M18/scenario/1",
+        "CAP-M18/scenario/2",
+        "CAP-M18/scenario/3",
+        "CAP-M18/automated/1",
+        "CAP-M18/manual/1",
+        "CAP-M21/outcome/1",
+        "CAP-M21/scenario/1",
+        "CAP-M21/scenario/2",
+        "CAP-M21/scenario/3",
+        "CAP-M21/scenario/4",
+        "CAP-M21/scenario/5",
+        "CAP-M21/automated/1",
+        "CAP-M21/automated/2",
+        "CAP-M21/automated/3",
+        "CAP-M21/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [
+        "M18-03-xdma-tuple"
+      ],
+      "evidence": [
+        {
+          "anchor": "# Qualification records and promotion proposals",
+          "path": "docs/qualification.md"
+        },
+        {
+          "anchor": "# Native golden XDMA host preparation",
+          "path": "samples/golden_xdma_native/README.md"
+        },
+        {
+          "anchor": "# M27-07 native golden XDMA preparation",
+          "path": "docs/evidence/M27-07-2026-10-02.md"
+        }
+      ]
+    },
+    {
+      "id": "physical-combined",
+      "historical_status": "external_acceptance",
+      "current_disposition": "external_acceptance",
+      "assessment": "Explicit host staging is implemented; physical combined execution and promotion remain unperformed. The existing qualification tool still refuses non-synthetic combined proposals under its retained prerequisite boundary.",
+      "requirements": [
+        "CAP-M17/outcome/1",
+        "CAP-M17/scenario/1",
+        "CAP-M17/scenario/2",
+        "CAP-M17/scenario/3",
+        "CAP-M17/scenario/4",
+        "CAP-M17/scenario/5",
+        "CAP-M17/automated/1",
+        "CAP-M17/automated/2",
+        "CAP-M17/manual/1",
+        "CAP-M18/outcome/1",
+        "CAP-M18/scenario/1",
+        "CAP-M18/scenario/2",
+        "CAP-M18/scenario/3",
+        "CAP-M18/automated/1",
+        "CAP-M18/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [
+        "M18-04-combined-deployment"
+      ],
+      "evidence": [
+        {
+          "anchor": "# Qualification records and promotion proposals",
+          "path": "docs/qualification.md"
+        },
+        {
+          "anchor": "# Golden XDMA and combined source kit",
+          "path": "samples/golden_xdma/README.md"
+        }
+      ]
+    },
+    {
+      "id": "rt-policy-endurance",
+      "historical_status": "external_acceptance",
+      "current_disposition": "external_acceptance",
+      "assessment": "Representative native policy inspection, named RT1/optionalRT2 and physical endurance remain open. Fixed4096-cycle portable repetitions and accounted provider regions are not physical endurance or universal memory conservation.",
+      "requirements": [
+        "CAP-M15/outcome/1",
+        "CAP-M15/scenario/1",
+        "CAP-M15/scenario/2",
+        "CAP-M15/scenario/3",
+        "CAP-M15/scenario/4",
+        "CAP-M15/automated/1",
+        "CAP-M15/automated/2",
+        "CAP-M15/automated/3",
+        "CAP-M15/manual/1",
+        "CAP-M18/outcome/1",
+        "CAP-M18/scenario/1",
+        "CAP-M18/scenario/2",
+        "CAP-M18/scenario/3",
+        "CAP-M18/automated/1",
+        "CAP-M18/manual/1",
+        "CAP-M21/outcome/1",
+        "CAP-M21/scenario/1",
+        "CAP-M21/scenario/2",
+        "CAP-M21/scenario/3",
+        "CAP-M21/scenario/4",
+        "CAP-M21/scenario/5",
+        "CAP-M21/automated/1",
+        "CAP-M21/automated/2",
+        "CAP-M21/automated/3",
+        "CAP-M21/manual/1",
+        "CAP-M24/outcome/1",
+        "CAP-M24/scenario/1",
+        "CAP-M24/scenario/2",
+        "CAP-M24/scenario/3",
+        "CAP-M24/scenario/4",
+        "CAP-M24/scenario/5",
+        "CAP-M24/automated/1",
+        "CAP-M24/automated/2",
+        "CAP-M24/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [
+        "M18-05-rt1-rt2-and-endurance"
+      ],
+      "evidence": [
+        {
+          "anchor": "# Qualification records and promotion proposals",
+          "path": "docs/qualification.md"
+        },
+        {
+          "anchor": "# Real-Time Readiness Gates",
+          "path": "docs/real_time_readiness_checklist.md"
+        },
+        {
+          "anchor": "# M27-08 platform migration and bounded portable readiness",
+          "path": "docs/evidence/M27-08-2026-10-02.md"
+        }
+      ]
+    },
+    {
+      "id": "real-unreal",
+      "historical_status": "external_acceptance",
+      "current_disposition": "external_acceptance",
+      "assessment": "Extension ABI and independent host examples are delivered; real engine jobs/allocator/clock, world lifecycle, multiple instances, unload and complete editor/packaged sample remain unperformed.",
+      "requirements": [
+        "CAP-M19/outcome/1",
+        "CAP-M19/scenario/1",
+        "CAP-M19/scenario/2",
+        "CAP-M19/scenario/3",
+        "CAP-M19/automated/1",
+        "CAP-M19/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [
+        "M19-02-unreal-jobs-allocator-clock",
+        "M19-03-world-lifecycle-multiple-instances-unload",
+        "M19-04-complete-engine-sample"
+      ],
+      "evidence": [
+        {
+          "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
+          "path": "docs/evidence/M19-01-2026-08-12.md"
+        },
+        {
+          "anchor": "# Extension registration ABI v1",
+          "path": "docs/extension_registration.md"
+        }
+      ]
+    },
+    {
+      "id": "controlled-performance",
+      "historical_status": "external_acceptance",
+      "current_disposition": "external_acceptance",
+      "assessment": "Portable benchmark inventories and offline analysis are delivered. Controlled-host baseline/threshold review and physical/profile capture are unperformed; uncontrolled timing cannot establish RT or near-optimality.",
+      "requirements": [
+        "CAP-M20/outcome/1",
+        "CAP-M20/scenario/1",
+        "CAP-M20/scenario/2",
+        "CAP-M20/scenario/3",
+        "CAP-M20/scenario/4",
+        "CAP-M20/automated/1",
+        "CAP-M20/manual/1",
+        "CAP-M23/outcome/1",
+        "CAP-M23/scenario/1",
+        "CAP-M23/scenario/2",
+        "CAP-M23/scenario/3",
+        "CAP-M23/scenario/4",
+        "CAP-M23/scenario/5",
+        "CAP-M23/automated/1",
+        "CAP-M23/automated/2",
+        "CAP-M23/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [
+        "CAP-M23/manual/1",
+        "M20-01-controlled-performance-gates"
+      ],
+      "evidence": [
+        {
+          "anchor": "# Benchmark analysis and extension kit",
+          "path": "docs/benchmark_analysis.md"
+        },
+        {
+          "anchor": "# M28-02 benchmark timeout and submission accounting",
+          "path": "docs/evidence/M28-02-2026-10-03.md"
+        }
+      ]
+    },
+    {
+      "id": "unfamiliar-consumer",
+      "historical_status": "external_acceptance",
+      "current_disposition": "external_acceptance",
+      "assessment": "Installed recipe/relocation automation is delivered; first-use walkthrough by a consumer unfamiliar with internals is not performed by this agent.",
+      "requirements": [
+        "CAP-M25/outcome/1",
+        "CAP-M25/scenario/1",
+        "CAP-M25/scenario/2",
+        "CAP-M25/scenario/3",
+        "CAP-M25/scenario/4",
+        "CAP-M25/scenario/5",
+        "CAP-M25/scenario/6",
+        "CAP-M25/automated/1",
+        "CAP-M25/automated/2",
+        "CAP-M25/manual/1",
+        "CAP-M26/outcome/1",
+        "CAP-M26/scenario/1",
+        "CAP-M26/scenario/2",
+        "CAP-M26/scenario/3",
+        "CAP-M26/scenario/4",
+        "CAP-M26/scenario/5",
+        "CAP-M26/automated/1",
+        "CAP-M26/manual/1"
+      ],
+      "cards": [
+        "CAP-M25/manual/1",
+        "M25-06"
+      ],
+      "evidence": [
+        {
+          "anchor": "# M25-06 installed documentation, reference and recipes",
+          "path": "docs/evidence/M25-06-2026-09-28.md"
+        },
+        {
+          "anchor": "# Installed SDK recipes",
+          "path": "docs/sdk/recipes.md"
+        }
+      ]
+    },
+    {
+      "id": "platform-release-review",
+      "historical_status": "external_acceptance",
+      "current_disposition": "external_acceptance",
+      "assessment": "Current supported-tuple discovery, modern/legacy target parity and bounded portable soak are delivered. New tuple expansion, actual historical-binary compatibility, controlled soak/release review and production deployment are not established.",
+      "requirements": [
+        "CAP-M20/outcome/1",
+        "CAP-M20/scenario/1",
+        "CAP-M20/scenario/2",
+        "CAP-M20/scenario/3",
+        "CAP-M20/scenario/4",
+        "CAP-M20/automated/1",
+        "CAP-M20/manual/1"
+      ],
+      "cards": [
+        "M20-04-platform-migration-soak-and-release"
+      ],
+      "evidence": [
+        {
+          "anchor": "# M27-08 platform migration and bounded portable readiness",
+          "path": "docs/evidence/M27-08-2026-10-02.md"
+        },
+        {
+          "anchor": "# Migrating a portable RTFW 1.x application",
+          "path": "docs/migration.md"
+        }
+      ]
+    },
+    {
+      "id": "production-signing-release",
+      "historical_status": "external_acceptance",
+      "current_disposition": "external_acceptance",
+      "assessment": "Production identity/key custody, authenticated signing/provenance, release approval/publication and deployment remain unperformed. Matching local unsigned archives prove only the recorded local comparison.",
+      "requirements": [
+        "CAP-M20/outcome/1",
+        "CAP-M20/scenario/1",
+        "CAP-M20/scenario/2",
+        "CAP-M20/scenario/3",
+        "CAP-M20/scenario/4",
+        "CAP-M20/automated/1",
+        "CAP-M20/manual/1"
+      ],
+      "cards": [
+        "M20-02-fuzz-static-security-signing",
+        "M20-04-platform-migration-soak-and-release"
+      ],
+      "evidence": [
+        {
+          "anchor": "# Release and Compatibility Policy",
+          "path": "docs/release_policy.md"
+        },
+        {
+          "anchor": "# M27-06 independent build/provenance evidence",
+          "path": "docs/evidence/M27-06-2026-10-02.md"
+        }
+      ]
+    }
+  ],
+  "requirements": [
+    {
+      "id": "CAP-M15/outcome/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M15-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M15-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M15/scenario/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M15-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M15-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M15/scenario/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M15-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M15-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M15/scenario/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M15-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M15-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M15/scenario/4",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M15-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M15-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M15/automated/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M15-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M15-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M15/automated/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M15-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M15-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M15/automated/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M15-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M15-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M15/manual/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M15-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M15-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M15/limit/1",
+      "historical_status": "claim_limit",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M15-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M15-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M16/outcome/1",
+      "historical_status": "retained_portable_evidence",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M16-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M16-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M16/scenario/1",
+      "historical_status": "retained_portable_evidence",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M16-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M16-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M16/scenario/2",
+      "historical_status": "retained_portable_evidence",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M16-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M16-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M16/scenario/3",
+      "historical_status": "retained_portable_evidence",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M16-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M16-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M16/scenario/4",
+      "historical_status": "retained_portable_evidence",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M16-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M16-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M16/scenario/5",
+      "historical_status": "retained_portable_evidence",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M16-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M16-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M16/automated/1",
+      "historical_status": "retained_portable_evidence",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M16-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M16-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M16/automated/2",
+      "historical_status": "retained_portable_evidence",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M16-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M16-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M16/automated/3",
+      "historical_status": "retained_portable_evidence",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M16-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M16-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M16/limit/1",
+      "historical_status": "claim_limit",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M16-04 retained evidence \u2014 2026-08-05",
+          "path": "docs/evidence/M16-04-2026-08-05.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M17/outcome/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M17-06 retained implementation evidence",
+          "path": "docs/evidence/M17-06-2026-08-23.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M17/scenario/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M17-06 retained implementation evidence",
+          "path": "docs/evidence/M17-06-2026-08-23.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M17/scenario/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M17-06 retained implementation evidence",
+          "path": "docs/evidence/M17-06-2026-08-23.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M17/scenario/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M17-06 retained implementation evidence",
+          "path": "docs/evidence/M17-06-2026-08-23.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M17/scenario/4",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M17-06 retained implementation evidence",
+          "path": "docs/evidence/M17-06-2026-08-23.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M17/scenario/5",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M17-06 retained implementation evidence",
+          "path": "docs/evidence/M17-06-2026-08-23.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M17/automated/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M17-06 retained implementation evidence",
+          "path": "docs/evidence/M17-06-2026-08-23.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M17/automated/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M17-06 retained implementation evidence",
+          "path": "docs/evidence/M17-06-2026-08-23.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M17/manual/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M17-06 retained implementation evidence",
+          "path": "docs/evidence/M17-06-2026-08-23.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M17/limit/1",
+      "historical_status": "claim_limit",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M17-06 retained implementation evidence",
+          "path": "docs/evidence/M17-06-2026-08-23.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M18/outcome/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M18-01 qualification schema and promotion-tool evidence",
+          "path": "docs/evidence/M18-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M18/scenario/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M18-01 qualification schema and promotion-tool evidence",
+          "path": "docs/evidence/M18-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M18/scenario/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M18-01 qualification schema and promotion-tool evidence",
+          "path": "docs/evidence/M18-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M18/scenario/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M18-01 qualification schema and promotion-tool evidence",
+          "path": "docs/evidence/M18-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M18/automated/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M18-01 qualification schema and promotion-tool evidence",
+          "path": "docs/evidence/M18-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M18/manual/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M18-01 qualification schema and promotion-tool evidence",
+          "path": "docs/evidence/M18-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M18/limit/1",
+      "historical_status": "claim_limit",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M18-01 qualification schema and promotion-tool evidence",
+          "path": "docs/evidence/M18-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M19/outcome/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "real-unreal"
+      ],
+      "dispositions": {
+        "real-unreal": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
+          "path": "docs/evidence/M19-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M19/scenario/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "real-unreal"
+      ],
+      "dispositions": {
+        "real-unreal": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
+          "path": "docs/evidence/M19-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M19/scenario/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "real-unreal"
+      ],
+      "dispositions": {
+        "real-unreal": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
+          "path": "docs/evidence/M19-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M19/scenario/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "real-unreal"
+      ],
+      "dispositions": {
+        "real-unreal": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
+          "path": "docs/evidence/M19-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M19/automated/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "real-unreal"
+      ],
+      "dispositions": {
+        "real-unreal": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
+          "path": "docs/evidence/M19-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M19/manual/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "real-unreal"
+      ],
+      "dispositions": {
+        "real-unreal": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
+          "path": "docs/evidence/M19-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M19/limit/1",
+      "historical_status": "claim_limit",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M19-01 retained evidence \u2014 2026-08-12",
+          "path": "docs/evidence/M19-01-2026-08-12.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M20/outcome/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "excluded-generated-campaigns",
+        "excluded-signature-fixtures",
+        "controlled-performance",
+        "platform-release-review",
+        "production-signing-release"
+      ],
+      "dispositions": {
+        "excluded-generated-campaigns": "planned_M29-03",
+        "excluded-signature-fixtures": "planned_M29-03",
+        "controlled-performance": "external_acceptance",
+        "platform-release-review": "external_acceptance",
+        "production-signing-release": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M20-PRE-01 retained implementation evidence",
+          "path": "docs/evidence/M20-PRE-01-2026-08-26.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M20/scenario/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "excluded-generated-campaigns",
+        "excluded-signature-fixtures",
+        "controlled-performance",
+        "platform-release-review",
+        "production-signing-release"
+      ],
+      "dispositions": {
+        "excluded-generated-campaigns": "planned_M29-03",
+        "excluded-signature-fixtures": "planned_M29-03",
+        "controlled-performance": "external_acceptance",
+        "platform-release-review": "external_acceptance",
+        "production-signing-release": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M20-PRE-01 retained implementation evidence",
+          "path": "docs/evidence/M20-PRE-01-2026-08-26.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M20/scenario/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "excluded-generated-campaigns",
+        "excluded-signature-fixtures",
+        "controlled-performance",
+        "platform-release-review",
+        "production-signing-release"
+      ],
+      "dispositions": {
+        "excluded-generated-campaigns": "planned_M29-03",
+        "excluded-signature-fixtures": "planned_M29-03",
+        "controlled-performance": "external_acceptance",
+        "platform-release-review": "external_acceptance",
+        "production-signing-release": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M20-PRE-01 retained implementation evidence",
+          "path": "docs/evidence/M20-PRE-01-2026-08-26.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M20/scenario/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "excluded-generated-campaigns",
+        "excluded-signature-fixtures",
+        "controlled-performance",
+        "platform-release-review",
+        "production-signing-release"
+      ],
+      "dispositions": {
+        "excluded-generated-campaigns": "planned_M29-03",
+        "excluded-signature-fixtures": "planned_M29-03",
+        "controlled-performance": "external_acceptance",
+        "platform-release-review": "external_acceptance",
+        "production-signing-release": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M27-04 optional non-RT telemetry \u2014 implementation candidate",
+          "path": "docs/evidence/M27-04-2026-10-01.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M20/scenario/4",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "excluded-generated-campaigns",
+        "excluded-signature-fixtures",
+        "controlled-performance",
+        "platform-release-review",
+        "production-signing-release"
+      ],
+      "dispositions": {
+        "excluded-generated-campaigns": "planned_M29-03",
+        "excluded-signature-fixtures": "planned_M29-03",
+        "controlled-performance": "external_acceptance",
+        "platform-release-review": "external_acceptance",
+        "production-signing-release": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M20-PRE-01 retained implementation evidence",
+          "path": "docs/evidence/M20-PRE-01-2026-08-26.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M20/automated/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "excluded-generated-campaigns",
+        "excluded-signature-fixtures",
+        "controlled-performance",
+        "platform-release-review",
+        "production-signing-release"
+      ],
+      "dispositions": {
+        "excluded-generated-campaigns": "planned_M29-03",
+        "excluded-signature-fixtures": "planned_M29-03",
+        "controlled-performance": "external_acceptance",
+        "platform-release-review": "external_acceptance",
+        "production-signing-release": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M20-PRE-01 retained implementation evidence",
+          "path": "docs/evidence/M20-PRE-01-2026-08-26.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M20/manual/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "excluded-generated-campaigns",
+        "excluded-signature-fixtures",
+        "controlled-performance",
+        "platform-release-review",
+        "production-signing-release"
+      ],
+      "dispositions": {
+        "excluded-generated-campaigns": "planned_M29-03",
+        "excluded-signature-fixtures": "planned_M29-03",
+        "controlled-performance": "external_acceptance",
+        "platform-release-review": "external_acceptance",
+        "production-signing-release": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M20-PRE-01 retained implementation evidence",
+          "path": "docs/evidence/M20-PRE-01-2026-08-26.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M20/limit/1",
+      "historical_status": "claim_limit",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M20-PRE-01 retained implementation evidence",
+          "path": "docs/evidence/M20-PRE-01-2026-08-26.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M21/outcome/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "loopback-cancel-submit",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-xdma",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-xdma": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M21-05 implementation evidence \u2014 2026-08-27",
+          "path": "docs/evidence/M21-05-2026-08-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M21/scenario/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "loopback-cancel-submit",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-xdma",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-xdma": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M21-05 implementation evidence \u2014 2026-08-27",
+          "path": "docs/evidence/M21-05-2026-08-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M21/scenario/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "loopback-cancel-submit",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-xdma",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-xdma": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M21-05 implementation evidence \u2014 2026-08-27",
+          "path": "docs/evidence/M21-05-2026-08-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M21/scenario/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "loopback-cancel-submit",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-xdma",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-xdma": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M21-05 implementation evidence \u2014 2026-08-27",
+          "path": "docs/evidence/M21-05-2026-08-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M21/scenario/4",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "loopback-cancel-submit",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-xdma",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-xdma": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M21-05 implementation evidence \u2014 2026-08-27",
+          "path": "docs/evidence/M21-05-2026-08-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M21/scenario/5",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "loopback-cancel-submit",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-xdma",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-xdma": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M21-05 implementation evidence \u2014 2026-08-27",
+          "path": "docs/evidence/M21-05-2026-08-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M21/automated/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "loopback-cancel-submit",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-xdma",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-xdma": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M21-05 implementation evidence \u2014 2026-08-27",
+          "path": "docs/evidence/M21-05-2026-08-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M21/automated/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "loopback-cancel-submit",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-xdma",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-xdma": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M21-05 implementation evidence \u2014 2026-08-27",
+          "path": "docs/evidence/M21-05-2026-08-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M21/automated/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "loopback-cancel-submit",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-xdma",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-xdma": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M21-05 implementation evidence \u2014 2026-08-27",
+          "path": "docs/evidence/M21-05-2026-08-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M21/manual/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "poll-error-conservation",
+        "loopback-cancel-submit",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "native-frame-tsan-deadline",
+        "physical-xdma",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "poll-error-conservation": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "physical-xdma": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M21-05 implementation evidence \u2014 2026-08-27",
+          "path": "docs/evidence/M21-05-2026-08-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M21/limit/1",
+      "historical_status": "claim_limit",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M21-05 implementation evidence \u2014 2026-08-27",
+          "path": "docs/evidence/M21-05-2026-08-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M22/outcome/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "partial-runtime-tsan",
+        "replay-transactionality"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "replay-transactionality": "explicit_product_boundary"
+      },
+      "evidence": [
+        {
+          "anchor": "# M22-04 assurance evidence",
+          "path": "docs/evidence/M22-04-2026-09-01.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M22/scenario/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "partial-runtime-tsan",
+        "replay-transactionality"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "replay-transactionality": "explicit_product_boundary"
+      },
+      "evidence": [
+        {
+          "anchor": "# M22-04 assurance evidence",
+          "path": "docs/evidence/M22-04-2026-09-01.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M22/scenario/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "partial-runtime-tsan",
+        "replay-transactionality"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "replay-transactionality": "explicit_product_boundary"
+      },
+      "evidence": [
+        {
+          "anchor": "# M22-04 assurance evidence",
+          "path": "docs/evidence/M22-04-2026-09-01.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M22/scenario/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "partial-runtime-tsan",
+        "replay-transactionality"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "replay-transactionality": "explicit_product_boundary"
+      },
+      "evidence": [
+        {
+          "anchor": "# M22-04 assurance evidence",
+          "path": "docs/evidence/M22-04-2026-09-01.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M22/scenario/4",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "partial-runtime-tsan",
+        "replay-transactionality"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "replay-transactionality": "explicit_product_boundary"
+      },
+      "evidence": [
+        {
+          "anchor": "# M22-04 assurance evidence",
+          "path": "docs/evidence/M22-04-2026-09-01.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M22/scenario/5",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "partial-runtime-tsan",
+        "replay-transactionality"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "replay-transactionality": "explicit_product_boundary"
+      },
+      "evidence": [
+        {
+          "anchor": "# M22-04 assurance evidence",
+          "path": "docs/evidence/M22-04-2026-09-01.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M22/automated/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "partial-runtime-tsan",
+        "replay-transactionality"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "replay-transactionality": "explicit_product_boundary"
+      },
+      "evidence": [
+        {
+          "anchor": "# M22-04 assurance evidence",
+          "path": "docs/evidence/M22-04-2026-09-01.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M22/automated/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "partial-runtime-tsan",
+        "replay-transactionality"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "replay-transactionality": "explicit_product_boundary"
+      },
+      "evidence": [
+        {
+          "anchor": "# M22-04 assurance evidence",
+          "path": "docs/evidence/M22-04-2026-09-01.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M22/limit/1",
+      "historical_status": "claim_limit",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M22-04 assurance evidence",
+          "path": "docs/evidence/M22-04-2026-09-01.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M23/outcome/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "historical-benchmark-predicate",
+        "windows-negative-overlap",
+        "experimental-global-policy",
+        "controlled-performance"
+      ],
+      "dispositions": {
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "controlled-performance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M23-05 analysis and extension implementation evidence",
+          "path": "docs/evidence/M23-05-2026-09-25.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M23/scenario/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "historical-benchmark-predicate",
+        "windows-negative-overlap",
+        "experimental-global-policy",
+        "controlled-performance"
+      ],
+      "dispositions": {
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "controlled-performance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M23-05 analysis and extension implementation evidence",
+          "path": "docs/evidence/M23-05-2026-09-25.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M23/scenario/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "historical-benchmark-predicate",
+        "windows-negative-overlap",
+        "experimental-global-policy",
+        "controlled-performance"
+      ],
+      "dispositions": {
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "controlled-performance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M23-05 analysis and extension implementation evidence",
+          "path": "docs/evidence/M23-05-2026-09-25.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M23/scenario/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "historical-benchmark-predicate",
+        "windows-negative-overlap",
+        "experimental-global-policy",
+        "controlled-performance"
+      ],
+      "dispositions": {
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "controlled-performance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M23-05 analysis and extension implementation evidence",
+          "path": "docs/evidence/M23-05-2026-09-25.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M23/scenario/4",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "historical-benchmark-predicate",
+        "windows-negative-overlap",
+        "experimental-global-policy",
+        "controlled-performance"
+      ],
+      "dispositions": {
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "controlled-performance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M23-05 analysis and extension implementation evidence",
+          "path": "docs/evidence/M23-05-2026-09-25.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M23/scenario/5",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "historical-benchmark-predicate",
+        "windows-negative-overlap",
+        "experimental-global-policy",
+        "controlled-performance"
+      ],
+      "dispositions": {
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "controlled-performance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M23-05 analysis and extension implementation evidence",
+          "path": "docs/evidence/M23-05-2026-09-25.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M23/automated/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "historical-benchmark-predicate",
+        "windows-negative-overlap",
+        "experimental-global-policy",
+        "controlled-performance"
+      ],
+      "dispositions": {
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "controlled-performance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M23-05 analysis and extension implementation evidence",
+          "path": "docs/evidence/M23-05-2026-09-25.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M23/automated/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "historical-benchmark-predicate",
+        "windows-negative-overlap",
+        "experimental-global-policy",
+        "controlled-performance"
+      ],
+      "dispositions": {
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "controlled-performance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M23-05 analysis and extension implementation evidence",
+          "path": "docs/evidence/M23-05-2026-09-25.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M23/manual/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "historical-benchmark-predicate",
+        "windows-negative-overlap",
+        "experimental-global-policy",
+        "controlled-performance"
+      ],
+      "dispositions": {
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "controlled-performance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M23-05 analysis and extension implementation evidence",
+          "path": "docs/evidence/M23-05-2026-09-25.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M23/limit/1",
+      "historical_status": "claim_limit",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M23-05 analysis and extension implementation evidence",
+          "path": "docs/evidence/M23-05-2026-09-25.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M24/outcome/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M24-04 CUDA benchmark and maturity verification",
+          "path": "docs/evidence/M24-04-2026-09-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M24/scenario/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M24-04 CUDA benchmark and maturity verification",
+          "path": "docs/evidence/M24-04-2026-09-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M24/scenario/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M24-04 CUDA benchmark and maturity verification",
+          "path": "docs/evidence/M24-04-2026-09-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M24/scenario/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M24-04 CUDA benchmark and maturity verification",
+          "path": "docs/evidence/M24-04-2026-09-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M24/scenario/4",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M24-04 CUDA benchmark and maturity verification",
+          "path": "docs/evidence/M24-04-2026-09-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M24/scenario/5",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M24-04 CUDA benchmark and maturity verification",
+          "path": "docs/evidence/M24-04-2026-09-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M24/automated/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M24-04 CUDA benchmark and maturity verification",
+          "path": "docs/evidence/M24-04-2026-09-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M24/automated/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M24-04 CUDA benchmark and maturity verification",
+          "path": "docs/evidence/M24-04-2026-09-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M24/manual/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "physical-cuda",
+        "rt-policy-endurance"
+      ],
+      "dispositions": {
+        "physical-cuda": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M24-04 CUDA benchmark and maturity verification",
+          "path": "docs/evidence/M24-04-2026-09-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M24/limit/1",
+      "historical_status": "claim_limit",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M24-04 CUDA benchmark and maturity verification",
+          "path": "docs/evidence/M24-04-2026-09-27.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M25/outcome/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "optional-sdk-hal-header",
+        "partial-runtime-tsan",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M25-06 installed documentation, reference and recipes",
+          "path": "docs/evidence/M25-06-2026-09-28.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M25/scenario/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "optional-sdk-hal-header",
+        "partial-runtime-tsan",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M25-06 installed documentation, reference and recipes",
+          "path": "docs/evidence/M25-06-2026-09-28.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M25/scenario/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "optional-sdk-hal-header",
+        "partial-runtime-tsan",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M25-06 installed documentation, reference and recipes",
+          "path": "docs/evidence/M25-06-2026-09-28.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M25/scenario/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "optional-sdk-hal-header",
+        "partial-runtime-tsan",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M25-06 installed documentation, reference and recipes",
+          "path": "docs/evidence/M25-06-2026-09-28.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M25/scenario/4",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "optional-sdk-hal-header",
+        "partial-runtime-tsan",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M25-06 installed documentation, reference and recipes",
+          "path": "docs/evidence/M25-06-2026-09-28.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M25/scenario/5",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "optional-sdk-hal-header",
+        "partial-runtime-tsan",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M25-06 installed documentation, reference and recipes",
+          "path": "docs/evidence/M25-06-2026-09-28.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M25/scenario/6",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "optional-sdk-hal-header",
+        "partial-runtime-tsan",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M25-06 installed documentation, reference and recipes",
+          "path": "docs/evidence/M25-06-2026-09-28.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M25/automated/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "optional-sdk-hal-header",
+        "partial-runtime-tsan",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M25-06 installed documentation, reference and recipes",
+          "path": "docs/evidence/M25-06-2026-09-28.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M25/automated/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "optional-sdk-hal-header",
+        "partial-runtime-tsan",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M25-06 installed documentation, reference and recipes",
+          "path": "docs/evidence/M25-06-2026-09-28.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M25/manual/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "optional-sdk-hal-header",
+        "partial-runtime-tsan",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M25-06 installed documentation, reference and recipes",
+          "path": "docs/evidence/M25-06-2026-09-28.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M25/limit/1",
+      "historical_status": "claim_limit",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M25-06 installed documentation, reference and recipes",
+          "path": "docs/evidence/M25-06-2026-09-28.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M26/outcome/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "poll-error-conservation",
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "optional-sdk-hal-header",
+        "historical-benchmark-predicate",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "windows-negative-overlap",
+        "native-frame-tsan-deadline",
+        "partial-runtime-tsan",
+        "offline-diagnostic-warning",
+        "replay-transactionality",
+        "experimental-global-policy",
+        "application-models",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance",
+        "real-unreal",
+        "controlled-performance",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "poll-error-conservation": "demonstrated_repair",
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "offline-diagnostic-warning": "characterized_diagnostic_limit",
+        "replay-transactionality": "explicit_product_boundary",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "application-models": "explicit_product_boundary",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance",
+        "real-unreal": "external_acceptance",
+        "controlled-performance": "external_acceptance",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M26-05 Windows configuration correction and full local pass",
+          "path": "docs/evidence/M26-05-2026-09-30.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M26/scenario/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "poll-error-conservation",
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "optional-sdk-hal-header",
+        "historical-benchmark-predicate",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "windows-negative-overlap",
+        "native-frame-tsan-deadline",
+        "partial-runtime-tsan",
+        "offline-diagnostic-warning",
+        "replay-transactionality",
+        "experimental-global-policy",
+        "application-models",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance",
+        "real-unreal",
+        "controlled-performance",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "poll-error-conservation": "demonstrated_repair",
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "offline-diagnostic-warning": "characterized_diagnostic_limit",
+        "replay-transactionality": "explicit_product_boundary",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "application-models": "explicit_product_boundary",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance",
+        "real-unreal": "external_acceptance",
+        "controlled-performance": "external_acceptance",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M26-05 Windows configuration correction and full local pass",
+          "path": "docs/evidence/M26-05-2026-09-30.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M26/scenario/2",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "poll-error-conservation",
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "optional-sdk-hal-header",
+        "historical-benchmark-predicate",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "windows-negative-overlap",
+        "native-frame-tsan-deadline",
+        "partial-runtime-tsan",
+        "offline-diagnostic-warning",
+        "replay-transactionality",
+        "experimental-global-policy",
+        "application-models",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance",
+        "real-unreal",
+        "controlled-performance",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "poll-error-conservation": "demonstrated_repair",
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "offline-diagnostic-warning": "characterized_diagnostic_limit",
+        "replay-transactionality": "explicit_product_boundary",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "application-models": "explicit_product_boundary",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance",
+        "real-unreal": "external_acceptance",
+        "controlled-performance": "external_acceptance",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M26-05 Windows configuration correction and full local pass",
+          "path": "docs/evidence/M26-05-2026-09-30.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M26/scenario/3",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "poll-error-conservation",
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "optional-sdk-hal-header",
+        "historical-benchmark-predicate",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "windows-negative-overlap",
+        "native-frame-tsan-deadline",
+        "partial-runtime-tsan",
+        "offline-diagnostic-warning",
+        "replay-transactionality",
+        "experimental-global-policy",
+        "application-models",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance",
+        "real-unreal",
+        "controlled-performance",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "poll-error-conservation": "demonstrated_repair",
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "offline-diagnostic-warning": "characterized_diagnostic_limit",
+        "replay-transactionality": "explicit_product_boundary",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "application-models": "explicit_product_boundary",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance",
+        "real-unreal": "external_acceptance",
+        "controlled-performance": "external_acceptance",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M26-05 Windows configuration correction and full local pass",
+          "path": "docs/evidence/M26-05-2026-09-30.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M26/scenario/4",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "poll-error-conservation",
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "optional-sdk-hal-header",
+        "historical-benchmark-predicate",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "windows-negative-overlap",
+        "native-frame-tsan-deadline",
+        "partial-runtime-tsan",
+        "offline-diagnostic-warning",
+        "replay-transactionality",
+        "experimental-global-policy",
+        "application-models",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance",
+        "real-unreal",
+        "controlled-performance",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "poll-error-conservation": "demonstrated_repair",
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "offline-diagnostic-warning": "characterized_diagnostic_limit",
+        "replay-transactionality": "explicit_product_boundary",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "application-models": "explicit_product_boundary",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance",
+        "real-unreal": "external_acceptance",
+        "controlled-performance": "external_acceptance",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M26-05 Windows configuration correction and full local pass",
+          "path": "docs/evidence/M26-05-2026-09-30.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M26/scenario/5",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "poll-error-conservation",
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "optional-sdk-hal-header",
+        "historical-benchmark-predicate",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "windows-negative-overlap",
+        "native-frame-tsan-deadline",
+        "partial-runtime-tsan",
+        "offline-diagnostic-warning",
+        "replay-transactionality",
+        "experimental-global-policy",
+        "application-models",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance",
+        "real-unreal",
+        "controlled-performance",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "poll-error-conservation": "demonstrated_repair",
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "offline-diagnostic-warning": "characterized_diagnostic_limit",
+        "replay-transactionality": "explicit_product_boundary",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "application-models": "explicit_product_boundary",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance",
+        "real-unreal": "external_acceptance",
+        "controlled-performance": "external_acceptance",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M26-05 Windows configuration correction and full local pass",
+          "path": "docs/evidence/M26-05-2026-09-30.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M26/automated/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "poll-error-conservation",
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "optional-sdk-hal-header",
+        "historical-benchmark-predicate",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "windows-negative-overlap",
+        "native-frame-tsan-deadline",
+        "partial-runtime-tsan",
+        "offline-diagnostic-warning",
+        "replay-transactionality",
+        "experimental-global-policy",
+        "application-models",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance",
+        "real-unreal",
+        "controlled-performance",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "poll-error-conservation": "demonstrated_repair",
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "offline-diagnostic-warning": "characterized_diagnostic_limit",
+        "replay-transactionality": "explicit_product_boundary",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "application-models": "explicit_product_boundary",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance",
+        "real-unreal": "external_acceptance",
+        "controlled-performance": "external_acceptance",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M26-05 Windows configuration correction and full local pass",
+          "path": "docs/evidence/M26-05-2026-09-30.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M26/manual/1",
+      "historical_status": "retained_evidence_with_obligations",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [
+        "replay-owner-refusal",
+        "poll-error-conservation",
+        "experimental-worker-lifetime",
+        "experimental-watchdog",
+        "experimental-clock-sampling",
+        "experimental-clock-initialization",
+        "benchmark-acceptance-accounting",
+        "loopback-cancel-submit",
+        "optional-sdk-hal-header",
+        "historical-benchmark-predicate",
+        "sampled-startup-pending-cleanup",
+        "windows-startup-2024ms",
+        "windows-negative-overlap",
+        "native-frame-tsan-deadline",
+        "partial-runtime-tsan",
+        "offline-diagnostic-warning",
+        "replay-transactionality",
+        "experimental-global-policy",
+        "application-models",
+        "physical-cuda",
+        "physical-xdma",
+        "physical-combined",
+        "rt-policy-endurance",
+        "real-unreal",
+        "controlled-performance",
+        "unfamiliar-consumer"
+      ],
+      "dispositions": {
+        "replay-owner-refusal": "demonstrated_repair",
+        "poll-error-conservation": "demonstrated_repair",
+        "experimental-worker-lifetime": "demonstrated_repair",
+        "experimental-watchdog": "demonstrated_repair",
+        "experimental-clock-sampling": "demonstrated_repair",
+        "experimental-clock-initialization": "demonstrated_repair",
+        "benchmark-acceptance-accounting": "demonstrated_repair",
+        "loopback-cancel-submit": "demonstrated_repair",
+        "optional-sdk-hal-header": "demonstrated_repair",
+        "historical-benchmark-predicate": "historical_provenance_limit",
+        "sampled-startup-pending-cleanup": "characterized_scheduling_limit",
+        "windows-startup-2024ms": "characterized_scheduling_limit",
+        "windows-negative-overlap": "characterized_scheduling_limit",
+        "native-frame-tsan-deadline": "characterized_instrumentation_limit",
+        "partial-runtime-tsan": "superseded_partial_instrumentation",
+        "offline-diagnostic-warning": "characterized_diagnostic_limit",
+        "replay-transactionality": "explicit_product_boundary",
+        "experimental-global-policy": "demonstrated_repair_with_boundary",
+        "application-models": "explicit_product_boundary",
+        "physical-cuda": "external_acceptance",
+        "physical-xdma": "external_acceptance",
+        "physical-combined": "external_acceptance",
+        "rt-policy-endurance": "external_acceptance",
+        "real-unreal": "external_acceptance",
+        "controlled-performance": "external_acceptance",
+        "unfamiliar-consumer": "external_acceptance"
+      },
+      "evidence": [
+        {
+          "anchor": "# M26-05 Windows configuration correction and full local pass",
+          "path": "docs/evidence/M26-05-2026-09-30.md"
+        }
+      ]
+    },
+    {
+      "id": "CAP-M26/limit/1",
+      "historical_status": "claim_limit",
+      "current_assessment": "Portable implementation and retained findings are assessed without closing separately listed qualification/manual obligations.",
+      "findings": [],
+      "dispositions": {},
+      "evidence": [
+        {
+          "anchor": "# M26-05 Windows configuration correction and full local pass",
+          "path": "docs/evidence/M26-05-2026-09-30.md"
+        }
+      ]
+    }
+  ],
+  "existing_cards": [
+    {
+      "blob": "cfe72dd40080626953df24355880703e437aa83a",
+      "id": "CAP-M23/manual/1",
+      "path": "products/cpp-rt-car/acceptance.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/acceptance.yaml"
+    },
+    {
+      "blob": "cfe72dd40080626953df24355880703e437aa83a",
+      "id": "CAP-M25/manual/1",
+      "path": "products/cpp-rt-car/acceptance.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/acceptance.yaml"
+    },
+    {
+      "blob": "3c163b8a4c563e9fe71c52d7f769ccb9d2b93578",
+      "id": "M18-02-nvidia-tuple",
+      "path": "products/cpp-rt-car/roadmap.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml"
+    },
+    {
+      "blob": "3c163b8a4c563e9fe71c52d7f769ccb9d2b93578",
+      "id": "M18-03-xdma-tuple",
+      "path": "products/cpp-rt-car/roadmap.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml"
+    },
+    {
+      "blob": "3c163b8a4c563e9fe71c52d7f769ccb9d2b93578",
+      "id": "M18-04-combined-deployment",
+      "path": "products/cpp-rt-car/roadmap.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml"
+    },
+    {
+      "blob": "3c163b8a4c563e9fe71c52d7f769ccb9d2b93578",
+      "id": "M18-05-rt1-rt2-and-endurance",
+      "path": "products/cpp-rt-car/roadmap.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml"
+    },
+    {
+      "blob": "3c163b8a4c563e9fe71c52d7f769ccb9d2b93578",
+      "id": "M19-02-unreal-jobs-allocator-clock",
+      "path": "products/cpp-rt-car/roadmap.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml"
+    },
+    {
+      "blob": "3c163b8a4c563e9fe71c52d7f769ccb9d2b93578",
+      "id": "M19-03-world-lifecycle-multiple-instances-unload",
+      "path": "products/cpp-rt-car/roadmap.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml"
+    },
+    {
+      "blob": "3c163b8a4c563e9fe71c52d7f769ccb9d2b93578",
+      "id": "M19-04-complete-engine-sample",
+      "path": "products/cpp-rt-car/roadmap.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml"
+    },
+    {
+      "blob": "3c163b8a4c563e9fe71c52d7f769ccb9d2b93578",
+      "id": "M20-01-controlled-performance-gates",
+      "path": "products/cpp-rt-car/roadmap.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml"
+    },
+    {
+      "blob": "3c163b8a4c563e9fe71c52d7f769ccb9d2b93578",
+      "id": "M20-02-fuzz-static-security-signing",
+      "path": "products/cpp-rt-car/roadmap.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml"
+    },
+    {
+      "blob": "3c163b8a4c563e9fe71c52d7f769ccb9d2b93578",
+      "id": "M20-04-platform-migration-soak-and-release",
+      "path": "products/cpp-rt-car/roadmap.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/roadmap.yaml"
+    },
+    {
+      "blob": "ac12e901ec4c12d945d83beda7535d5e84defc22",
+      "id": "M25-06",
+      "path": "products/cpp-rt-car/batches/M25-06.yaml",
+      "repository": "tranquilWorks/portfolio-control",
+      "revision": "7cae639252f16bb921a22839f738fb72dc91ae3b",
+      "url": "https://github.com/tranquilWorks/portfolio-control/blob/7cae639252f16bb921a22839f738fb72dc91ae3b/products/cpp-rt-car/batches/M25-06.yaml"
+    }
+  ],
+  "additional_software_prerequisite": {
+    "id": "combined-proposal-M17-05",
+    "disposition": "stale software gate repaired; qualification/review/matrix boundaries retained"
+  },
+  "next_batch": "M29-03"
+}
