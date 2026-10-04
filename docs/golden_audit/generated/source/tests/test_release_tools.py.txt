@@ -1323,7 +1323,8 @@ class QualificationToolTests(unittest.TestCase):
                 copies.append(destination)
             with self.assertRaises(qualification.ValidationFailure) as context:
                 qualification.validate_set(*copies, artifacts)
-            self.assertTrue(any("M17-05" in message for message in context.exception.errors))
+            self.assertTrue(any("plan_sha256" in message for message in context.exception.errors))
+            self.assertTrue(any("record_sha256" in message for message in context.exception.errors))
 
             raw = root / "m12-evidence.json"
             raw.write_text(

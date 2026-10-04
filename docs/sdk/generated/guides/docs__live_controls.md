@@ -414,3 +414,13 @@ ownership cannot be recovered from old v1 artifacts; unsupported incomplete
 histories are rejected before restore. V2 does not infer payload bytes from hashes
 or repair counters to match an expected final hash. No hardware or RT qualification
 follows from replay success.
+
+## Failure and application-side-effect boundary
+
+Malformed pre-effect refusals and post-effect execution failures have different
+conservation guarantees. Once replay restores a checkpoint and invokes an input
+callback, arbitrary application changes made by that callback are not implicitly
+rolled back when it fails. The result reports unsuccessful progress/mismatch; the
+caller owns side-effect recovery. Explicit replay from a valid retained checkpoint
+can restore registered state, but cannot undo external effects. See the finite
+[retained replay controls](https://github.com/tranquilWorks/cpp-rt-car/blob/912ce878ad311d38e452a5d2916ee0daa6ee3f72/docs/retained_findings.md#replay-and-application-ownership).

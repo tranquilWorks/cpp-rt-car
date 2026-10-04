@@ -3,12 +3,12 @@
 Canonical plan: portfolio-control M29, activation
 `c50198dfc5a4aafb93b088ab2e5d3923b8e59902`; target baseline
 `6ead6d8428bad2240936498ce356305a3bacdd2a`.
-The owner requested exactly three batches and selected the first.
+M29-01 is merged as target300/control623. The owner selected M29-02 next.
 
 | Batch | Scope | State |
 | --- | --- | --- |
-| M29-01 | Direct loopback completion publication/ownership and actual installed full-SimCore HAL dependency; causal controls, concurrency/lifecycle/allocation, instrumentation and package proof. | Active repair delivery; final PR/canonical closure records exact tested and merged identities. |
-| M29-02 | Retained startup/benchmark/Windows observations, instrumentation and replay/global-policy boundaries, application-model claims, combined proposal software prerequisite and complete remaining-finding reconciliation. | Planned; narrow cause-specific paths at selection. |
+| M29-01 | Direct loopback completion publication/ownership and actual installed full-SimCore HAL dependency; causal controls, concurrency/lifecycle/allocation, instrumentation and package proof. | Delivered as target300/control623. |
+| M29-02 | Retained startup/benchmark/Windows observations, instrumentation and replay/global-policy boundaries, application-model claims, combined proposal software prerequisite and complete remaining-finding reconciliation. | Selected under control624; implementation and verification tracked in M29-02 evidence. |
 | M29-03 | Previously excluded generated-input/corpus/seed/minimization and deterministic automation work, throwaway-identity signature verification fixtures, then actual final packages, bounded modern/legacy soak and independent unsigned rebuilds. | Planned; the latest owner request explicitly reopens this software scope. |
 
 M29-02 must distinguish a repaired defect, an evidence-backed operating limit,
@@ -55,3 +55,7 @@ Callers retain their existing terminal polling and checked cleanup obligations.
 Experimental full owners retain FMA-off, caller-thread arena ownership and the
 experimental support boundary. Passing that consumer does not prove concurrent
 global policy changes or qualify SimCore as the supported portable Runtime.
+
+## M29-02 current disposition
+
+The [retained-finding review](../retained_findings.md) and [complete current overlay](m29-current.json) reconcile all112 requirements,30 original findings and13 original card identities. They preserve the immutable ledger and failed observations. M29-03 remains planned; final software completion is not claimed.

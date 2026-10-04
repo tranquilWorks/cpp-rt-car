@@ -1045,8 +1045,8 @@ def validate_set(
     validate_review(review.value, plan.value, record.value, plan.sha256, record.sha256, errors)
     manifest = record.value.get("artifact_manifest")
     artifact_digests = verify_artifacts(artifact_dir, manifest if isinstance(manifest, list) else [], errors)
-    if plan.value.get("scope") == "combined" and plan.value.get("evidence_class") != "synthetic_fixture":
-        errors.add("combined qualification is blocked until the M17-05 native path prerequisite is repaired")
+    # M17-06 repaired native command-capability discovery. Combined proposals
+    # use the same complete evidence validation and human promotion boundary.
     errors.finish()
     return ValidatedSet(
         plan,

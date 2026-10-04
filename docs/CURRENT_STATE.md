@@ -1,3 +1,16 @@
+## M29-02 retained findings
+
+M29-01 target300/control623 is complete. Selected M29-02 repairs the FMA-enabled
+experimental global flag race and obsolete combined-proposal prerequisite, and
+adds causal original-fixture scheduling and bounded replay controls. See
+[retained findings](retained_findings.md), the [complete current overlay](closeout/m29-current.json)
+and [evidence](evidence/M29-02-2026-10-04.md) for source-bound outcomes and limits.
+Exact-head full/all32, actual Windows and package evidence plus guarded integration
+remain mandatory. Historical causes are not invented. M29-03 remains planned;
+all actual owner-stage hardware/RT/engine/human/production acceptance stays deferred.
+
+## Historical checkpoints
+
 ## M29-01 combined repairs; three-batch software follow-up
 
 The owner selected three batches in [the M29 plan](closeout/m29-followups.md):

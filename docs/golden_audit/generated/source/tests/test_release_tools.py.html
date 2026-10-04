@@ -1323,138 +1323,139 @@
 <span id="L1323">                copies.append(destination)</span>
 <span id="L1324">            with self.assertRaises(qualification.ValidationFailure) as context:</span>
 <span id="L1325">                qualification.validate_set(*copies, artifacts)</span>
-<span id="L1326">            self.assertTrue(any(&quot;M17-05&quot; in message for message in context.exception.errors))</span>
-<span id="L1327"></span>
-<span id="L1328">            raw = root / &quot;m12-evidence.json&quot;</span>
-<span id="L1329">            raw.write_text(</span>
-<span id="L1330">                json.dumps(HardwareEvidenceTests.evidence(&quot;cuda&quot;)) + &quot;\n&quot;,</span>
-<span id="L1331">                encoding=&quot;utf-8&quot;,</span>
-<span id="L1332">            )</span>
-<span id="L1333">            with self.assertRaises(qualification.ValidationFailure):</span>
-<span id="L1334">                qualification.load_document(raw, &quot;qualification_record&quot;)</span>
-<span id="L1335"></span>
-<span id="L1336">    def test_validation_isolation_and_recovery_after_failure(self) -&gt; None:</span>
-<span id="L1337">        plan, record, review, artifacts = self.fixture_paths(&quot;nvidia&quot;)</span>
-<span id="L1338">        validated = qualification.validate_set(plan, record, review, artifacts)</span>
-<span id="L1339">        self.assertEqual(validated.plan.value[&quot;tuple_id&quot;], &quot;fixture-nvidia-tuple&quot;)</span>
-<span id="L1340">        with tempfile.TemporaryDirectory() as temporary:</span>
-<span id="L1341">            bad_artifacts = pathlib.Path(temporary) / &quot;artifacts&quot;</span>
-<span id="L1342">            shutil.copytree(artifacts, bad_artifacts)</span>
-<span id="L1343">            (bad_artifacts / &quot;raw.json&quot;).write_bytes(b&quot;corrupt&quot;)</span>
-<span id="L1344">            with self.assertRaises(qualification.ValidationFailure):</span>
-<span id="L1345">                qualification.validate_set(plan, record, review, bad_artifacts)</span>
-<span id="L1346">        recovered = qualification.validate_set(plan, record, review, artifacts)</span>
-<span id="L1347">        self.assertEqual(recovered.plan.sha256, validated.plan.sha256)</span>
-<span id="L1348"></span>
+<span id="L1326">            self.assertTrue(any(&quot;plan_sha256&quot; in message for message in context.exception.errors))</span>
+<span id="L1327">            self.assertTrue(any(&quot;record_sha256&quot; in message for message in context.exception.errors))</span>
+<span id="L1328"></span>
+<span id="L1329">            raw = root / &quot;m12-evidence.json&quot;</span>
+<span id="L1330">            raw.write_text(</span>
+<span id="L1331">                json.dumps(HardwareEvidenceTests.evidence(&quot;cuda&quot;)) + &quot;\n&quot;,</span>
+<span id="L1332">                encoding=&quot;utf-8&quot;,</span>
+<span id="L1333">            )</span>
+<span id="L1334">            with self.assertRaises(qualification.ValidationFailure):</span>
+<span id="L1335">                qualification.load_document(raw, &quot;qualification_record&quot;)</span>
+<span id="L1336"></span>
+<span id="L1337">    def test_validation_isolation_and_recovery_after_failure(self) -&gt; None:</span>
+<span id="L1338">        plan, record, review, artifacts = self.fixture_paths(&quot;nvidia&quot;)</span>
+<span id="L1339">        validated = qualification.validate_set(plan, record, review, artifacts)</span>
+<span id="L1340">        self.assertEqual(validated.plan.value[&quot;tuple_id&quot;], &quot;fixture-nvidia-tuple&quot;)</span>
+<span id="L1341">        with tempfile.TemporaryDirectory() as temporary:</span>
+<span id="L1342">            bad_artifacts = pathlib.Path(temporary) / &quot;artifacts&quot;</span>
+<span id="L1343">            shutil.copytree(artifacts, bad_artifacts)</span>
+<span id="L1344">            (bad_artifacts / &quot;raw.json&quot;).write_bytes(b&quot;corrupt&quot;)</span>
+<span id="L1345">            with self.assertRaises(qualification.ValidationFailure):</span>
+<span id="L1346">                qualification.validate_set(plan, record, review, bad_artifacts)</span>
+<span id="L1347">        recovered = qualification.validate_set(plan, record, review, artifacts)</span>
+<span id="L1348">        self.assertEqual(recovered.plan.sha256, validated.plan.sha256)</span>
 <span id="L1349"></span>
-<span id="L1350">class HardwareEvidenceTests(unittest.TestCase):</span>
-<span id="L1351">    @staticmethod</span>
-<span id="L1352">    def evidence(backend: str) -&gt; dict:</span>
-<span id="L1353">        if backend == &quot;cuda&quot;:</span>
-<span id="L1354">            labels = (&quot;host_to_device&quot;, &quot;kernel&quot;, &quot;device_to_host&quot;)</span>
-<span id="L1355">            label_key = &quot;stage&quot;</span>
-<span id="L1356">            identity = {</span>
-<span id="L1357">                &quot;backend_id&quot;: &quot;rtfw.cuda.driver.v1&quot;,</span>
-<span id="L1358">                &quot;os&quot;: &quot;linux&quot;,</span>
-<span id="L1359">                &quot;device_name&quot;: &quot;test gpu&quot;,</span>
-<span id="L1360">                &quot;pci_bus_id&quot;: &quot;0000:01:00.0&quot;,</span>
-<span id="L1361">                &quot;compute_capability&quot;: &quot;8.0&quot;,</span>
-<span id="L1362">                &quot;cuda_toolkit_version&quot;: 12000,</span>
-<span id="L1363">                &quot;cuda_driver_version&quot;: 12000,</span>
-<span id="L1364">            }</span>
-<span id="L1365">        else:</span>
-<span id="L1366">            labels = (&quot;h2c&quot;, &quot;c2h&quot;)</span>
-<span id="L1367">            label_key = &quot;direction&quot;</span>
-<span id="L1368">            identity = {</span>
-<span id="L1369">                &quot;backend_id&quot;: &quot;rtfw.xdma.xilinx_linux_aximm.v1&quot;,</span>
-<span id="L1370">                &quot;pci_bdf&quot;: &quot;0000:01:00.0&quot;,</span>
-<span id="L1371">                &quot;driver_id&quot;: &quot;test-driver&quot;,</span>
-<span id="L1372">                &quot;bitstream_id&quot;: &quot;test-bitstream&quot;,</span>
-<span id="L1373">                &quot;h2c_path&quot;: &quot;/dev/xdma0_h2c_0&quot;,</span>
-<span id="L1374">                &quot;c2h_path&quot;: &quot;/dev/xdma0_c2h_0&quot;,</span>
-<span id="L1375">                &quot;device_offset&quot;: 0,</span>
-<span id="L1376">                &quot;transfer_bytes&quot;: 4096,</span>
-<span id="L1377">            }</span>
-<span id="L1378">        warmup = 1</span>
-<span id="L1379">        measurement = 2</span>
-<span id="L1380">        samples = []</span>
-<span id="L1381">        for iteration in range(measurement):</span>
-<span id="L1382">            for label in labels:</span>
-<span id="L1383">                samples.append(</span>
-<span id="L1384">                    {</span>
-<span id="L1385">                        &quot;iteration&quot;: iteration,</span>
-<span id="L1386">                        label_key: label,</span>
-<span id="L1387">                        &quot;submit_call_ns&quot;: 1,</span>
-<span id="L1388">                        &quot;completion_wait_ns&quot;: 2,</span>
-<span id="L1389">                        &quot;poll_call_ns&quot;: 1,</span>
-<span id="L1390">                        &quot;poll_count&quot;: 1,</span>
-<span id="L1391">                    }</span>
-<span id="L1392">                )</span>
-<span id="L1393">        total = (warmup + measurement) * len(labels)</span>
-<span id="L1394">        return {</span>
-<span id="L1395">            &quot;schema_version&quot;: 1,</span>
-<span id="L1396">            &quot;runtime_version&quot;: &quot;1.0.0&quot;,</span>
-<span id="L1397">            &quot;result&quot;: &quot;pass&quot;,</span>
-<span id="L1398">            &quot;qualification_claim&quot;: &quot;evidence_only&quot;,</span>
-<span id="L1399">            **identity,</span>
-<span id="L1400">            &quot;warmup_iterations&quot;: warmup,</span>
-<span id="L1401">            &quot;measurement_iterations&quot;: measurement,</span>
-<span id="L1402">            &quot;health&quot;: {</span>
-<span id="L1403">                &quot;submissions&quot;: total,</span>
-<span id="L1404">                &quot;completions&quot;: total,</span>
-<span id="L1405">                &quot;timeouts&quot;: 0,</span>
-<span id="L1406">                &quot;errors&quot;: 0,</span>
-<span id="L1407">                &quot;losses&quot;: 0,</span>
-<span id="L1408">            },</span>
-<span id="L1409">            &quot;samples&quot;: samples,</span>
-<span id="L1410">        }</span>
-<span id="L1411"></span>
-<span id="L1412">    def test_cuda_and_xdma_evidence_only_schemas(self) -&gt; None:</span>
-<span id="L1413">        for backend in (&quot;cuda&quot;, &quot;xdma&quot;):</span>
-<span id="L1414">            with self.subTest(backend=backend):</span>
-<span id="L1415">                evidence = self.evidence(backend)</span>
-<span id="L1416">                self.assertEqual(</span>
-<span id="L1417">                    hardware_evidence.validate_evidence(</span>
-<span id="L1418">                        evidence,</span>
-<span id="L1419">                        backend,</span>
-<span id="L1420">                        &quot;1.0.0&quot;,</span>
-<span id="L1421">                    ),</span>
-<span id="L1422">                    [],</span>
-<span id="L1423">                )</span>
-<span id="L1424"></span>
-<span id="L1425">                promoted = copy.deepcopy(evidence)</span>
-<span id="L1426">                promoted[&quot;qualification_claim&quot;] = &quot;qualified&quot;</span>
-<span id="L1427">                errors = hardware_evidence.validate_evidence(</span>
-<span id="L1428">                    promoted,</span>
-<span id="L1429">                    backend,</span>
-<span id="L1430">                    &quot;1.0.0&quot;,</span>
-<span id="L1431">                )</span>
-<span id="L1432">                self.assertTrue(</span>
-<span id="L1433">                    any(&quot;evidence_only&quot; in error for error in errors)</span>
-<span id="L1434">                )</span>
-<span id="L1435"></span>
-<span id="L1436">                duplicated = copy.deepcopy(evidence)</span>
-<span id="L1437">                duplicated[&quot;samples&quot;][1] = copy.deepcopy(</span>
-<span id="L1438">                    duplicated[&quot;samples&quot;][0]</span>
-<span id="L1439">                )</span>
-<span id="L1440">                errors = hardware_evidence.validate_evidence(</span>
-<span id="L1441">                    duplicated,</span>
-<span id="L1442">                    backend,</span>
-<span id="L1443">                    &quot;1.0.0&quot;,</span>
-<span id="L1444">                )</span>
-<span id="L1445">                self.assertTrue(any(&quot;duplicates&quot; in error for error in errors))</span>
-<span id="L1446"></span>
-<span id="L1447">                unhealthy = copy.deepcopy(evidence)</span>
-<span id="L1448">                unhealthy[&quot;health&quot;][&quot;errors&quot;] = 1</span>
-<span id="L1449">                errors = hardware_evidence.validate_evidence(</span>
-<span id="L1450">                    unhealthy,</span>
-<span id="L1451">                    backend,</span>
-<span id="L1452">                    &quot;1.0.0&quot;,</span>
-<span id="L1453">                )</span>
-<span id="L1454">                self.assertTrue(</span>
-<span id="L1455">                    any(&quot;must be zero&quot; in error for error in errors)</span>
-<span id="L1456">                )</span>
-<span id="L1457"></span>
+<span id="L1350"></span>
+<span id="L1351">class HardwareEvidenceTests(unittest.TestCase):</span>
+<span id="L1352">    @staticmethod</span>
+<span id="L1353">    def evidence(backend: str) -&gt; dict:</span>
+<span id="L1354">        if backend == &quot;cuda&quot;:</span>
+<span id="L1355">            labels = (&quot;host_to_device&quot;, &quot;kernel&quot;, &quot;device_to_host&quot;)</span>
+<span id="L1356">            label_key = &quot;stage&quot;</span>
+<span id="L1357">            identity = {</span>
+<span id="L1358">                &quot;backend_id&quot;: &quot;rtfw.cuda.driver.v1&quot;,</span>
+<span id="L1359">                &quot;os&quot;: &quot;linux&quot;,</span>
+<span id="L1360">                &quot;device_name&quot;: &quot;test gpu&quot;,</span>
+<span id="L1361">                &quot;pci_bus_id&quot;: &quot;0000:01:00.0&quot;,</span>
+<span id="L1362">                &quot;compute_capability&quot;: &quot;8.0&quot;,</span>
+<span id="L1363">                &quot;cuda_toolkit_version&quot;: 12000,</span>
+<span id="L1364">                &quot;cuda_driver_version&quot;: 12000,</span>
+<span id="L1365">            }</span>
+<span id="L1366">        else:</span>
+<span id="L1367">            labels = (&quot;h2c&quot;, &quot;c2h&quot;)</span>
+<span id="L1368">            label_key = &quot;direction&quot;</span>
+<span id="L1369">            identity = {</span>
+<span id="L1370">                &quot;backend_id&quot;: &quot;rtfw.xdma.xilinx_linux_aximm.v1&quot;,</span>
+<span id="L1371">                &quot;pci_bdf&quot;: &quot;0000:01:00.0&quot;,</span>
+<span id="L1372">                &quot;driver_id&quot;: &quot;test-driver&quot;,</span>
+<span id="L1373">                &quot;bitstream_id&quot;: &quot;test-bitstream&quot;,</span>
+<span id="L1374">                &quot;h2c_path&quot;: &quot;/dev/xdma0_h2c_0&quot;,</span>
+<span id="L1375">                &quot;c2h_path&quot;: &quot;/dev/xdma0_c2h_0&quot;,</span>
+<span id="L1376">                &quot;device_offset&quot;: 0,</span>
+<span id="L1377">                &quot;transfer_bytes&quot;: 4096,</span>
+<span id="L1378">            }</span>
+<span id="L1379">        warmup = 1</span>
+<span id="L1380">        measurement = 2</span>
+<span id="L1381">        samples = []</span>
+<span id="L1382">        for iteration in range(measurement):</span>
+<span id="L1383">            for label in labels:</span>
+<span id="L1384">                samples.append(</span>
+<span id="L1385">                    {</span>
+<span id="L1386">                        &quot;iteration&quot;: iteration,</span>
+<span id="L1387">                        label_key: label,</span>
+<span id="L1388">                        &quot;submit_call_ns&quot;: 1,</span>
+<span id="L1389">                        &quot;completion_wait_ns&quot;: 2,</span>
+<span id="L1390">                        &quot;poll_call_ns&quot;: 1,</span>
+<span id="L1391">                        &quot;poll_count&quot;: 1,</span>
+<span id="L1392">                    }</span>
+<span id="L1393">                )</span>
+<span id="L1394">        total = (warmup + measurement) * len(labels)</span>
+<span id="L1395">        return {</span>
+<span id="L1396">            &quot;schema_version&quot;: 1,</span>
+<span id="L1397">            &quot;runtime_version&quot;: &quot;1.0.0&quot;,</span>
+<span id="L1398">            &quot;result&quot;: &quot;pass&quot;,</span>
+<span id="L1399">            &quot;qualification_claim&quot;: &quot;evidence_only&quot;,</span>
+<span id="L1400">            **identity,</span>
+<span id="L1401">            &quot;warmup_iterations&quot;: warmup,</span>
+<span id="L1402">            &quot;measurement_iterations&quot;: measurement,</span>
+<span id="L1403">            &quot;health&quot;: {</span>
+<span id="L1404">                &quot;submissions&quot;: total,</span>
+<span id="L1405">                &quot;completions&quot;: total,</span>
+<span id="L1406">                &quot;timeouts&quot;: 0,</span>
+<span id="L1407">                &quot;errors&quot;: 0,</span>
+<span id="L1408">                &quot;losses&quot;: 0,</span>
+<span id="L1409">            },</span>
+<span id="L1410">            &quot;samples&quot;: samples,</span>
+<span id="L1411">        }</span>
+<span id="L1412"></span>
+<span id="L1413">    def test_cuda_and_xdma_evidence_only_schemas(self) -&gt; None:</span>
+<span id="L1414">        for backend in (&quot;cuda&quot;, &quot;xdma&quot;):</span>
+<span id="L1415">            with self.subTest(backend=backend):</span>
+<span id="L1416">                evidence = self.evidence(backend)</span>
+<span id="L1417">                self.assertEqual(</span>
+<span id="L1418">                    hardware_evidence.validate_evidence(</span>
+<span id="L1419">                        evidence,</span>
+<span id="L1420">                        backend,</span>
+<span id="L1421">                        &quot;1.0.0&quot;,</span>
+<span id="L1422">                    ),</span>
+<span id="L1423">                    [],</span>
+<span id="L1424">                )</span>
+<span id="L1425"></span>
+<span id="L1426">                promoted = copy.deepcopy(evidence)</span>
+<span id="L1427">                promoted[&quot;qualification_claim&quot;] = &quot;qualified&quot;</span>
+<span id="L1428">                errors = hardware_evidence.validate_evidence(</span>
+<span id="L1429">                    promoted,</span>
+<span id="L1430">                    backend,</span>
+<span id="L1431">                    &quot;1.0.0&quot;,</span>
+<span id="L1432">                )</span>
+<span id="L1433">                self.assertTrue(</span>
+<span id="L1434">                    any(&quot;evidence_only&quot; in error for error in errors)</span>
+<span id="L1435">                )</span>
+<span id="L1436"></span>
+<span id="L1437">                duplicated = copy.deepcopy(evidence)</span>
+<span id="L1438">                duplicated[&quot;samples&quot;][1] = copy.deepcopy(</span>
+<span id="L1439">                    duplicated[&quot;samples&quot;][0]</span>
+<span id="L1440">                )</span>
+<span id="L1441">                errors = hardware_evidence.validate_evidence(</span>
+<span id="L1442">                    duplicated,</span>
+<span id="L1443">                    backend,</span>
+<span id="L1444">                    &quot;1.0.0&quot;,</span>
+<span id="L1445">                )</span>
+<span id="L1446">                self.assertTrue(any(&quot;duplicates&quot; in error for error in errors))</span>
+<span id="L1447"></span>
+<span id="L1448">                unhealthy = copy.deepcopy(evidence)</span>
+<span id="L1449">                unhealthy[&quot;health&quot;][&quot;errors&quot;] = 1</span>
+<span id="L1450">                errors = hardware_evidence.validate_evidence(</span>
+<span id="L1451">                    unhealthy,</span>
+<span id="L1452">                    backend,</span>
+<span id="L1453">                    &quot;1.0.0&quot;,</span>
+<span id="L1454">                )</span>
+<span id="L1455">                self.assertTrue(</span>
+<span id="L1456">                    any(&quot;must be zero&quot; in error for error in errors)</span>
+<span id="L1457">                )</span>
 <span id="L1458"></span>
-<span id="L1459">if __name__ == &quot;__main__&quot;:</span>
-<span id="L1460">    unittest.main()</span></pre></html>
+<span id="L1459"></span>
+<span id="L1460">if __name__ == &quot;__main__&quot;:</span>
+<span id="L1461">    unittest.main()</span></pre></html>
