@@ -1,3 +1,28 @@
+# M29-03 portable closeout with cyber criteria unsatisfied
+
+Canonical scope627 `ac3f8520816bde9330ac66a5f453108e945c82a5` (batch blob `4ded58dcb09eccf0463a904cec165e5ce2039229`) binds
+baseline `da7ac12f072e0b085b6ea61b155e980096704107`. The owner narrowed
+continuation on 2026-10-06: finish the remaining non-cyber
+stories and leave cyber-related acceptance unsatisfied. This supersedes the
+prior campaign/signature-fixture reopening. The unfinished draft is archived
+outside the delivery at `/workspace/cpp-rt-car/deferred-20261006/`.
+
+Deliver final default/optional packages, complete relocated consumers, modern
+and legacy 4096-cycle fixed soaks, two unsigned independent builds, full local
+and original32 hosted checks, acceptance reconciliation and ordered handoff.
+Final receipts and guarded target/control integration are required before scoped
+story delivery. No new campaign/signature tools or workflow are included.
+
+[The current overlay](closeout/m29-final.json), [handoff](closeout/m29-final-handoff.md)
+and [evidence](evidence/M29-03-2026-10-06.md) preserve all112 requirements,30 findings
+and13 cards. Generated-input/continuous/scanner expansion and expanded signature
+fixtures remain excluded by owner and unsatisfied. Software-complete and CAP-M20
+completion stay false. Actual hardware/RT/Unreal/human/controlled-performance/
+production signing/release/deployment remains deferred. Standing scoped publication
+and guarded integration authority persists.
+
+## Historical checkpoints
+
 ## M29-02 retained findings
 
 M29-01 target300/control623 is complete. Selected M29-02 repairs the FMA-enabled

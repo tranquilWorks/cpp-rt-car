@@ -830,3 +830,16 @@ Canonical M29-01 binding amendment `ad9d37acd2b8740a003d23f73965efa26d02e31a` ad
 ## M29-02 retained findings activation
 
 Canonical selection `a0dcb1cfaf17a44073de1a39f08b040166c15439` binds target300 main `14cfe44571678c727cdd4cbbfa8fefb230dc6bbd`. Only narrowed M29-02 is active under standing scoped publication and guarded integration. Preserve original timing assertions/deadlines, immutable ledger and prior evidence. The card explicitly supersedes only the stale blanket M17-05 proposal assertion and its two substring checks if prerequisite repair is proven; all actual evidence/review gates remain. Numerics synchronization retains process-global policy and raw-reference source compatibility. Any new Runtime defect requires a cause-specific amendment. Full local/all32, applicable instrumentation/static/no-allocation/actual packages and actual Windows controls remain required. M29-03 and final owner stage stay inactive.
+
+## M29-03 owner scope narrowing (2026-10-06)
+
+The owner requests finishing the non-cyber stories while leaving cyber acceptance
+unsatisfied. Preserve the earlier draft outside the delivered tree. Deliver final
+portable packages/compatibility, modern/legacy4096-cycle soaks, two unsigned rebuilds,
+full local/original32 hosted gates, original-identity overlay and ordered handoff.
+Add no generated-input/crash/minimization/seeded-defect/scanner campaign or expanded
+signature fixtures, and no campaign workflow. Explicitly leave those original
+requirements/finding identities unsatisfied; software_complete/CAP-M20 stay false.
+Production, ABI, defaults, original tests/deadlines/tools and historical ledgers stay
+unchanged. Standing scoped publication and guarded integration persists; actual
+hardware/RT/Unreal/human/controlled-performance/production release stays deferred.

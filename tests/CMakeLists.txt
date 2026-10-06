@@ -648,3 +648,6 @@ add_subdirectory(repair_closeout)
 
 # M29-02 retained observations and bounded claim controls.
 add_subdirectory(retained_findings)
+
+# M29-03 preserve original acceptance identities and unsatisfied owner exclusions.
+add_subdirectory(portable_closeout)
