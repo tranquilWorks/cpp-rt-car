@@ -1,3 +1,20 @@
+# M30-01 remaining non-cyber host-profile delivery
+
+Owner requested other remaining batches on2026-10-06 after completed M29-03.
+Canonical plan629 at `b2350944feaf5eb5c855657e39efa29688058572` activates only optional
+nonpersistent host-profile tooling and remaining-card audit from target302
+`a1c5652db7f7fe4e6d0b3077a8734692ab94992b`. Actual local XDMA metadata/open-close/
+host-copy observations are within existing owner authorization. Endpoint traffic,
+FPGA design/output changes, hardware/RT promotion and production remain excluded.
+No configured A100/Unreal connection supplied; their actual runs remain NOT RUN.
+See [host profiles](host_profiles.md), [remaining batches](remaining_batches.md)
+and [M30 evidence](evidence/M30-01-2026-10-06.md). Exact-head full/all32 and guarded
+integration remain required. Cyber criteria are unsatisfied; software_complete/
+CAP-M20 remain false. Existing compiled source, ABI/defaults and prior tests stay
+protected. No worker/service, release or deployment is activated.
+
+## Historical checkpoints
+
 ## M29-02 retained findings
 
 M29-01 target300/control623 is complete. Selected M29-02 repairs the FMA-enabled

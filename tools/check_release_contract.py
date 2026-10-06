@@ -50,6 +50,12 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'docs/host_profiles.md',
+    'docs/remaining_batches.md',
+    'tests/host_profiles/CMakeLists.txt',
+    'tests/host_profiles/test_profile.py',
+    'tools/host_profiles/profile.py',
+
     'docs/closeout/m29-final-handoff.md',
     'docs/closeout/m29-final.json',
     'docs/portable_closeout.md',
