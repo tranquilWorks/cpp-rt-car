@@ -1,9 +1,10 @@
 schema_version: 1
 batch:
-  id: M29-02
-  title: Resolve retained software findings and claim boundaries
-  goal: Resolve the retained software/instrumentation observations and unproven boundaries so no actionable
-    portable software finding is silently moved to the owner stage.
+  id: M29-03
+  title: Finish portable verification and handoff with cyber criteria unsatisfied
+  goal: 'Complete remaining non-cyber stories: final portable packages, compatibility, bounded soak, unsigned
+    rebuild verification, evidence reconciliation and handoff. Leave generated-input/continuous campaigns
+    and expanded signature fixtures explicitly unsatisfied.'
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
@@ -11,18 +12,19 @@ sources:
   - products/cpp-rt-car/acceptance.yaml#CAP-M21
   - products/cpp-rt-car/acceptance.yaml#CAP-M25
   - products/cpp-rt-car/acceptance.yaml#CAP-M26
-  milestone: products/cpp-rt-car/milestones/M29.md#m29-02
-  baseline_commit: 14cfe44571678c727cdd4cbbfa8fefb230dc6bbd
+  milestone: products/cpp-rt-car/milestones/M29.md#m29-03
+  baseline_commit: da7ac12f072e0b085b6ea61b155e980096704107
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M29-02.yaml
+  control_plane_path: products/cpp-rt-car/batches/M29-03.yaml
   activation: owner_selected
-  owner_scope: Owner selected next retained-findings batch after completed M29-01 and requested retry.
-    Standing scoped publication and guarded integration persists. M29-03 and final owner-stage actions
-    remain inactive.
-  control_plane_revision: a0dcb1cfaf17a44073de1a39f08b040166c15439
-  canonical_batch_blob: 9438c71863fad9ad137eff967c7e23f111459c86
+  owner_scope: 'Owner narrowed M29-03 on 2026-10-06: avoid cyber-related work and finish the other stories,
+    leaving that area unsatisfied. This supersedes the earlier reopening of M27-05/06 campaign and signature-fixture
+    obligations. Standing scoped publication and guarded integration persists; actual owner-stage actions
+    remain deferred.'
+  control_plane_revision: ac3f8520816bde9330ac66a5f453108e945c82a5
+  canonical_batch_blob: 4ded58dcb09eccf0463a904cec165e5ce2039229
 dependencies:
-- M29-01
+- M29-02
 scope:
   allowed_paths:
   - AGENTS.md
@@ -30,24 +32,20 @@ scope:
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
   - docs/roadmap.md
-  - docs/closeout/m29-followups.md
-  - docs/closeout/m29-current.json
-  - docs/retained_findings.md
-  - docs/qualification.md
-  - docs/live_controls.md
-  - docs/experimental.md
+  - docs/migration.md
   - docs/sdk/generated/**
   - docs/golden_audit/**
-  - docs/evidence/M29-02-*
-  - rt/include/rt/numerics.hpp
-  - tests/retained_findings/**
+  - docs/closeout/m29-followups.md
+  - docs/closeout/m29-final.json
+  - docs/closeout/m29-final-handoff.md
+  - docs/portable_closeout.md
+  - docs/release_policy.md
+  - docs/evidence/M29-03-*
+  - tests/portable_closeout/**
   - tests/CMakeLists.txt
-  - tools/qualification.py
-  - tools/check_docs_contract.py
+  - tools/portable_closeout/**
   - tools/check_release_contract.py
-  - tests/test_release_tools.py
   - release/rtfw-release-contract.json
-  - docs/cuda_capabilities.json
   forbidden_paths:
   - abi/
   - VERSION.txt
@@ -75,65 +73,42 @@ scope:
   - docs/evidence/M26-*
   - docs/evidence/M27-*
   - docs/evidence/M28-*
-  - .github/workflows/
-  - rt/src/
-  - include/simcore/SimCore.hpp
+  - rt/
+  - core/
+  - include/
   - bench/
+  - samples/
+  - .github/workflows/ci.yml
   - docs/closeout/ledger.json
-  - tests/test_gpu_stub.cpp
-  - tests/package_consumer/sampled_io_simulation_consumer.cpp
+  - docs/closeout/m29-current.json
+  - tests/retained_findings/
+  - tools/provenance.py
+  - tools/run_fuzz_smoke.py
+  - tools/release_rebuild.py
+  - tools/portable_soak/
+  - scripts/verify-portable-assurance.sh
+  - .github/workflows/portable-closeout.yml
 acceptance:
-- 'Inventory every retained non-external finding after01: historical benchmark predicate; mock/native8ms
-  startup -2 versus -18; Windows2024ms startup; Windows negative GPU overlap; native-frame TSan500us limitation;
-  partial-runtime instrumentation; offline diagnostic warning; broader replay transactionality; experimental
-  global FMA policy; application model boundary. Preserve original raw failures, workload, deadlines,
-  assertions and source identities.'
-- For actionable behavior reproduce the cause using bounded source-linked controls and actual supported
-  OS/compiler evidence, then repair and validate it within cause-specific paths narrowed at selection.
-  Investigate the original fixture scheduling and Windows observations; an unchanged retry never counts
-  as a repair. Examine broader replay failure conservation and global-policy concurrency against the declared
-  contracts. A provable product boundary must be made explicit and tested where applicable; a missing
-  historical trace is not invented.
-- 'Give each item a concrete disposition: demonstrated repair; superseded partial-instrumentation result
-  with full instrumentation; characterized instrumentation/platform limitation with supported behavior
-  boundaries; or explicit existing product non-goal. Historical exact causes may remain unknowable, with
-  provenance limits retained, but actionable software defects cannot be relabeled final-stage work. If
-  evidence cannot discharge a software obligation, report the blocker and do not claim only final-stage
-  work remains.'
-- Audit software prerequisites for owner procedures, including the retained non-synthetic combined-proposal
-  restriction; repair any independently established stale software gate without manufacturing physical
-  evidence, editing qualification matrices or weakening independent review. Application-owned physics/calibration/safety
-  remain actual owner/application scope, not fictional delivered models.
-- Complete focused baseline/corrected and applicable sanitizer/static/no-allocation/package/platform checks,
-  exact-head full/all32 and guarded integration. Reconcile all112 requirements, all retained finding IDs
-  and existing cards in the M29 overlay; preserve frozen M28 ledger/evidence. M29-03 remains separately
-  selected; no bench/Unreal/human/production signing activity.
-- Before implementation bind the merged canonical revision/blob to the exact refreshed main baseline.
-  For planned02/03 narrow cause-specific implementation paths at selection; planning alone activates neither.
-  Preserve release1.2.1 portable RT0, stable C ABI8/70 exports/fingerprint/SONAME8, device ABI1, default
-  policies, license, original tests/deadlines and all historical evidence.
-- 'Initial investigation isolates an unprotected process-global bool in rt/include/rt/numerics.hpp on
-  FMA-enabled builds. Reproduce with complete standalone forced-FMA instrumentation, then synchronize
-  existing setter/reader accesses without changing defaults or the raw bool-reference source signature.
-  Preserve process-global semantics: policy changes are host-quiescent; no per-owner policy isolation
-  claim. Test same-policy concurrency and observable mixed-policy limitation. No unrelated numerics change.'
-- Add source-linked bounded original-fixture scheduling and GPU overlap controls, exercised on Linux and
-  actual hosted Windows inside existing check names. Preserve all original 8ms/2s/500us/overlap assertions
-  and test files. Controls distinguish pending cleanup and host scheduling from guaranteed physical timing;
-  unknown historical causes remain unknown.
-- 'Audit M17-06 capability repair and original M17-05 gate. If confirmed stale, remove only the unconditional
-  non-synthetic-combined rejection in tools/qualification.py. Explicit narrow exception to old-assertion
-  preservation: replace only its obsolete M17-05-message assertion and the two associated permanent substring
-  checks with cause-specific invalid-evidence and proposal-only checks. Preserve the existing forged-fixture
-  refusal, all digest/reviewer/artifact/threshold checks, schemas, matrices, independent human promotion
-  and original historical evidence. Add valid rebinding, tamper, rejected-review and CLI nonmutation controls;
-  fixture qualification_campaign labels are parser tests, never real qualification.'
-- Additional replay pre-effect malformed refusal and post-effect callback-failure controls must identify
-  exact conservation/nontransactional boundaries. Any newly reproduced Runtime defect requires a separate
-  cause-specific canonical amendment before production editing. Do not silently classify an actionable
-  defect as a product non-goal.
-- Refresh only the existing rt/include/rt/numerics.hpp SHA256 product_sources binding in docs/cuda_capabilities.json
-  after the scoped FMA repair. Preserve all inventory, coverage rows, statuses and qualification claims.
+- Honor the 2026-10-06 owner narrowing. Generated-input discovery/corpus/seed/crash replay/minimization,
+  seeded-defect demonstration, continuous campaign/scanner automation and expanded throwaway signature/provenance
+  fixtures are not performed and remain explicitly unsatisfied under their original finding and requirement
+  identities. Preserve unfinished draft artifacts outside the delivery. Existing baseline deterministic
+  checks remain unchanged.
+- Rerun final exact-source clean default/applicable optional CPack and complete relocated consumers; both
+  4096-cycle modern/legacy fixed portable soaks; two actual independent unsigned package builds; supported-platform
+  evidence; all original 32 hosted names/multiplicity, full local and applicable instrumentation/static/ABI/no-allocation
+  gates. Retain every failure and guarded merge/closure receipt. Add no campaign gate or workflow.
+- Produce the current acceptance/finding overlay, artifact/evidence index, rollback and ordered original-card
+  owner handoff. Preserve all 112 requirements, 30 findings and 13 cards and immutable M28/M29-02 records.
+  Explicitly retain cyber-related obligations as excluded_by_owner_unsatisfied, never passed, waived or
+  moved into completed owner acceptance. software_complete and CAP-M20_complete remain false. Scoped non-cyber
+  story delivery may complete independently of these unsatisfied criteria.
+- Bind the amended canonical revision/blob to the exact refreshed main baseline before final validation.
+  Preserve release 1.2.1 portable RT0, stable C ABI v8/70 exports/fingerprint/SONAME8, device ABI1, policies,
+  license, original tests/deadlines and historical evidence. No Runtime implementation changes.
+- Use only a separately validated final overlay and minimal additive test wiring. Preserve all predecessor
+  tooling and tests. Actual hardware/RT/endurance, licensed Unreal, controlled performance, independent
+  human review, production signing/release/deployment remain deferred under existing card identities.
 validation:
   local:
   - ./scripts/agent-verify.sh contract
@@ -141,20 +116,11 @@ validation:
   - ./scripts/agent-verify.sh full
   - git diff --check
   focused_tests_to_add:
-  - 'Inventory every retained non-external finding after01: historical benchmark predicate; mock/native8ms
-    startup -2 versus -18; Windows2024ms startup; Windows negative GPU overlap; native-frame TSan500us
-    limitation; partial-runtime instrumentation; offline diagnostic warning; broader replay transactionality;
-    experimental global FMA policy; application model boundary. Preserve original raw failures, workload,
-    deadlines, assertions and source identities.'
-  - For actionable behavior reproduce the cause using bounded source-linked controls and actual supported
-    OS/compiler evidence, then repair and validate it within cause-specific paths narrowed at selection.
-    Investigate the original fixture scheduling and Windows observations; an unchanged retry never counts
-    as a repair. Examine broader replay failure conservation and global-policy concurrency against the
-    declared contracts. A provable product boundary must be made explicit and tested where applicable;
-    a missing historical trace is not invented.
+  - Validate preserved identities, explicit owner-excluded unsatisfied dispositions, retained claims and
+    requirement mappings; reject omitted identities, false completion or silently transferred exclusions.
   required_ci:
-  - All32 original exact-head hosted names/multiplicity successful; full canonical control validation;
-    only03 may add its explicitly scoped deterministic gate.
+  - All 32 original exact-head hosted names/multiplicity successful; full canonical control validation;
+    no added cyber campaign gate.
   manual:
   - None in these software batches; final actual owner-stage hardware/engine/human/performance/production
     acceptance remains deferred.
@@ -173,8 +139,9 @@ rollback:
     assertions, failures and exact receipts.
 evidence:
   output:
-  - docs/evidence/M29-02-<date>.md
+  - docs/evidence/M29-03-<date>.md
   - Baseline/corrected source hashes, raw commands/results, instrumentation status, packages, risk, exact-head
     CI and guarded closure receipts.
-  claim_boundary: Portable software delivery only. No physical/RT/engine/human/controlled-performance/production
-    authenticity/release/deployment claim from these batches.
+  claim_boundary: Scoped non-cyber portable story delivery only. Cyber campaign/signature acceptance remains
+    unsatisfied. software_complete and CAP-M20_complete remain false; no physical/RT/engine/human/controlled-performance/production
+    authenticity/release/deployment claim.

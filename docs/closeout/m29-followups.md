@@ -59,3 +59,13 @@ global policy changes or qualify SimCore as the supported portable Runtime.
 ## M29-02 current disposition
 
 The [retained-finding review](../retained_findings.md) and [complete current overlay](m29-current.json) reconcile all112 requirements,30 original findings and13 original card identities. They preserve the immutable ledger and failed observations. M29-03 remains planned; final software completion is not claimed.
+
+## M29-03 narrowed continuation (2026-10-06)
+
+M29-02 is delivered as target301/control625. The owner now excludes the cyber
+campaign/signature portions of control626. Complete final portable verification,
+acceptance reconciliation and handoff; [the current overlay](m29-final.json)
+retains those original findings as `excluded_by_owner_unsatisfied`. No campaign
+workflow/tooling is delivered. This supersedes earlier reopened-scope wording
+without rewriting the frozen M28 or M29-02 evidence. Scoped story completion
+is distinct from software-complete/CAP-M20 claims, which remain false.

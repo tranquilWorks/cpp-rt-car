@@ -50,6 +50,12 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'docs/closeout/m29-final-handoff.md',
+    'docs/closeout/m29-final.json',
+    'docs/portable_closeout.md',
+    'tests/portable_closeout/CMakeLists.txt',
+    'tests/portable_closeout/test_overlay.py',
+    'tools/portable_closeout/overlay.py',
     "tests/retained_findings/overlay.py",
     "docs/retained_findings.md",
     "docs/closeout/m29-current.json",
