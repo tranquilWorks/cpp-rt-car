@@ -654,3 +654,5 @@ add_subdirectory(portable_closeout)
 
 # M30-01 optional host observations; normal tests never operate live devices.
 add_subdirectory(host_profiles)
+
+add_subdirectory(host_lifecycle)

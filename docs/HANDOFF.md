@@ -1,3 +1,13 @@
+# M31-01 portable host lifecycle integration
+
+Owner requested finishing integration that requires neither hardware nor owner participation. M30 target303 is merged at `544c27226654474fd28cd365dde088c986828ef3`; canonical closing630 at `df2c41a2f445219ec7b6f0075aab4300a33617d5`. Canonical plan631 `861cf0e6bdc0b73986bc4fc8e4eb387fdf51eb74` (batch blob `38532378f085ff1a7b6fdb8bc877e05307fb0760`) activates only the engine-independent lifecycle/time source kit and its real Runtime/shared-module/relocated tests.
+
+The kit owns fixed Runtime world slots, retains borrowed module/clock/provider/job owners, checks generations and shutdown retries, and guards actual module unload. Integer frame/deadline/nominal-release conversion is checked. The existing host-adapter, telemetry and portable system kits remain delivered. Read [host lifecycle](host_lifecycle.md), [remaining batches](remaining_batches.md) and [M31 evidence](evidence/M31-01-2026-10-06.md). Full local/all32 hosted, installed consumer and source/risk/guarded integration evidence are required and retained in the delivery and canonical closing records.
+
+Original M19-02/03/04 still require actual Unreal bindings and approved engine builds/world/PIE/packaged runs. Hardware/RT/performance/endurance, independent human and signing/release/deployment remain open. Cyber criteria stay unsatisfied; software_complete/CAP-M20_complete remain false. No live hardware/host change, worker/service, release or deployment is activated.
+
+## Historical checkpoints
+
 # M30-01 remaining non-cyber host-profile delivery
 
 Owner requested other remaining batches on2026-10-06 after completed M29-03.

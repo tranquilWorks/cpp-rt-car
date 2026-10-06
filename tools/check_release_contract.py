@@ -50,6 +50,18 @@ PINNED_ACTIONS = {
 }
 
 HASHED_CONTRACT_PATHS = {
+    'docs/host_lifecycle.md',
+    'integrations/host_lifecycle/CMakeLists.txt',
+    'integrations/host_lifecycle/README.md',
+    'integrations/host_lifecycle/library.hpp',
+    'integrations/host_lifecycle/lifecycle.hpp',
+    'integrations/host_lifecycle/main.cpp',
+    'integrations/host_lifecycle/plugin.c',
+    'integrations/host_lifecycle/time.hpp',
+    'tests/host_lifecycle/CMakeLists.txt',
+    'tests/host_lifecycle/test_lifecycle.cpp',
+    'tests/host_lifecycle/verify_package.py',
+
     'docs/host_profiles.md',
     'docs/remaining_batches.md',
     'tests/host_profiles/CMakeLists.txt',

@@ -1510,3 +1510,15 @@ install(FILES
   samples/golden_xdma_native/README.md
   DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/examples/golden_xdma_native)
 install(FILES docs/golden_xdma_native.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+
+# Engine-independent source kit; no default SDK target/header additions.
+install(FILES
+  integrations/host_lifecycle/CMakeLists.txt
+  integrations/host_lifecycle/README.md
+  integrations/host_lifecycle/lifecycle.hpp
+  integrations/host_lifecycle/time.hpp
+  integrations/host_lifecycle/library.hpp
+  integrations/host_lifecycle/main.cpp
+  integrations/host_lifecycle/plugin.c
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/integrations/host_lifecycle)
+install(FILES docs/host_lifecycle.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
