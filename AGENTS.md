@@ -843,3 +843,17 @@ requirements/finding identities unsatisfied; software_complete/CAP-M20 stay fals
 Production, ABI, defaults, original tests/deadlines/tools and historical ledgers stay
 unchanged. Standing scoped publication and guarded integration persists; actual
 hardware/RT/Unreal/human/controlled-performance/production release stays deferred.
+
+## M30-01 remaining non-cyber host-profile continuation
+
+Owner asks other remaining batches in the same manner. Canonical plan629
+`b2350944feaf5eb5c855657e39efa29688058572` activates only M30-01 optional host-profile tools,
+additive tests/wiring/hash bindings and current evidence-linked status. Existing
+owner-2026-08-22-cpp-basic-xdma permits metadata/open-close/host copies, not unknown
+bitstream transfers or register/output actions. Configured remote inventory only;
+no guessed wake/login or service changes. Normal tests never operate live devices.
+Preserve compiled production, ABI/defaults, prior tests/deadlines/workflows, frozen
+ledgers and unsatisfied cyber criteria. Full/all32 original exact-head gates,
+risk review and guarded target/canonical integration remain mandatory under standing
+scoped authorization. Actual hardware/RT/Unreal/human/performance/signing/release
+acceptance cannot be manufactured from tools or fixtures.

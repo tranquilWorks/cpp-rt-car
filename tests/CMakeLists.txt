@@ -651,3 +651,6 @@ add_subdirectory(retained_findings)
 
 # M29-03 preserve original acceptance identities and unsatisfied owner exclusions.
 add_subdirectory(portable_closeout)
+
+# M30-01 optional host observations; normal tests never operate live devices.
+add_subdirectory(host_profiles)

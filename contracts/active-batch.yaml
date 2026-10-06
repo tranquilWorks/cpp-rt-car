@@ -1,30 +1,30 @@
 schema_version: 1
 batch:
-  id: M29-03
-  title: Finish portable verification and handoff with cyber criteria unsatisfied
-  goal: 'Complete remaining non-cyber stories: final portable packages, compatibility, bounded soak, unsigned
-    rebuild verification, evidence reconciliation and handoff. Leave generated-input/continuous campaigns
-    and expanded signature fixtures explicitly unsatisfied.'
+  id: M30-01
+  title: Advance remaining non-cyber host profiles and evidence gates
+  goal: Deliver reusable nonpersistent XDMA discovery/open-close/host-copy observations, an explicitly configured
+    read-only A100 inventory boundary, and evidence-linked remaining-batch status. Execute only available authorized
+    observations. Preserve cyber exclusions and all real qualification/review/release obligations.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
+  - products/cpp-rt-car/acceptance.yaml#CAP-M18
+  - products/cpp-rt-car/acceptance.yaml#CAP-M19
   - products/cpp-rt-car/acceptance.yaml#CAP-M20
-  - products/cpp-rt-car/acceptance.yaml#CAP-M21
-  - products/cpp-rt-car/acceptance.yaml#CAP-M25
-  - products/cpp-rt-car/acceptance.yaml#CAP-M26
-  milestone: products/cpp-rt-car/milestones/M29.md#m29-03
-  baseline_commit: da7ac12f072e0b085b6ea61b155e980096704107
+  milestone: products/cpp-rt-car/milestones/M30.md#m30-01
+  baseline_commit: a1c5652db7f7fe4e6d0b3077a8734692ab94992b
   control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M29-03.yaml
+  control_plane_path: products/cpp-rt-car/batches/M30-01.yaml
   activation: owner_selected
-  owner_scope: 'Owner narrowed M29-03 on 2026-10-06: avoid cyber-related work and finish the other stories,
-    leaving that area unsatisfied. This supersedes the earlier reopening of M27-05/06 campaign and signature-fixture
-    obligations. Standing scoped publication and guarded integration persists; actual owner-stage actions
-    remain deferred.'
-  control_plane_revision: ac3f8520816bde9330ac66a5f453108e945c82a5
-  canonical_batch_blob: 4ded58dcb09eccf0463a904cec165e5ce2039229
+  owner_scope: Owner requested working on other remaining batches in the same manner on 2026-10-06. Cyber criteria
+    stay unsatisfied. Existing owner-2026-08-22-cpp-basic-xdma authorization permits only metadata/open-close/host
+    staging; no unidentified device transfer. Existing owner-2026-08-22-cpp-remote-a100 authorization permits a
+    configured bounded nonpersistent probe; this batch performs read-only inventory only. No hardware, licensed
+    engine, independent human or production gate is inferred satisfied.
+  control_plane_revision: b2350944feaf5eb5c855657e39efa29688058572
+  canonical_batch_blob: 18f4663517ebd184620fd24a94a1649d7e791365
 dependencies:
-- M29-02
+- M29-03
 scope:
   allowed_paths:
   - AGENTS.md
@@ -32,116 +32,98 @@ scope:
   - docs/CURRENT_STATE.md
   - docs/HANDOFF.md
   - docs/roadmap.md
-  - docs/migration.md
-  - docs/sdk/generated/**
-  - docs/golden_audit/**
-  - docs/closeout/m29-followups.md
-  - docs/closeout/m29-final.json
-  - docs/closeout/m29-final-handoff.md
-  - docs/portable_closeout.md
-  - docs/release_policy.md
-  - docs/evidence/M29-03-*
-  - tests/portable_closeout/**
+  - docs/host_profiles.md
+  - docs/remaining_batches.md
+  - docs/evidence/M30-01-*
+  - tools/host_profiles/**
+  - tests/host_profiles/**
   - tests/CMakeLists.txt
-  - tools/portable_closeout/**
   - tools/check_release_contract.py
   - release/rtfw-release-contract.json
   forbidden_paths:
-  - abi/
-  - VERSION.txt
-  - LICENSE
-  - release/keys/
-  - release/signatures/
-  - qualification/
-  - profiles/
-  - configs/
-  - rt/include/rt/c_api.h
-  - rt/include/rt/device_abi.h
-  - bench/real_device/
-  - samples/unreal/
-  - docs/evidence/M15-*
-  - docs/evidence/M16-*
-  - docs/evidence/M17-*
-  - docs/evidence/M18-*
-  - docs/evidence/M19-*
-  - docs/evidence/M20-*
-  - docs/evidence/M21-*
-  - docs/evidence/M22-*
-  - docs/evidence/M23-*
-  - docs/evidence/M24-*
-  - docs/evidence/M25-*
-  - docs/evidence/M26-*
-  - docs/evidence/M27-*
-  - docs/evidence/M28-*
   - rt/
   - core/
   - include/
+  - hal/
+  - gpu/
   - bench/
   - samples/
-  - .github/workflows/ci.yml
-  - docs/closeout/ledger.json
-  - docs/closeout/m29-current.json
-  - tests/retained_findings/
+  - integrations/
+  - abi/
+  - VERSION.txt
+  - LICENSE
+  - qualification/
+  - profiles/
+  - configs/
+  - release/keys/
+  - release/signatures/
+  - .github/workflows/
+  - docs/closeout/
+  - docs/evidence/M29-*
   - tools/provenance.py
   - tools/run_fuzz_smoke.py
   - tools/release_rebuild.py
   - tools/portable_soak/
+  - tools/portable_closeout/
   - scripts/verify-portable-assurance.sh
-  - .github/workflows/portable-closeout.yml
 acceptance:
-- Honor the 2026-10-06 owner narrowing. Generated-input discovery/corpus/seed/crash replay/minimization,
-  seeded-defect demonstration, continuous campaign/scanner automation and expanded throwaway signature/provenance
-  fixtures are not performed and remain explicitly unsatisfied under their original finding and requirement
-  identities. Preserve unfinished draft artifacts outside the delivery. Existing baseline deterministic
-  checks remain unchanged.
-- Rerun final exact-source clean default/applicable optional CPack and complete relocated consumers; both
-  4096-cycle modern/legacy fixed portable soaks; two actual independent unsigned package builds; supported-platform
-  evidence; all original 32 hosted names/multiplicity, full local and applicable instrumentation/static/ABI/no-allocation
-  gates. Retain every failure and guarded merge/closure receipt. Add no campaign gate or workflow.
-- Produce the current acceptance/finding overlay, artifact/evidence index, rollback and ordered original-card
-  owner handoff. Preserve all 112 requirements, 30 findings and 13 cards and immutable M28/M29-02 records.
-  Explicitly retain cyber-related obligations as excluded_by_owner_unsatisfied, never passed, waived or
-  moved into completed owner acceptance. software_complete and CAP-M20_complete remain false. Scoped non-cyber
-  story delivery may complete independently of these unsatisfied criteria.
-- Bind the amended canonical revision/blob to the exact refreshed main baseline before final validation.
-  Preserve release 1.2.1 portable RT0, stable C ABI v8/70 exports/fingerprint/SONAME8, device ABI1, policies,
-  license, original tests/deadlines and historical evidence. No Runtime implementation changes.
-- Use only a separately validated final overlay and minimal additive test wiring. Preserve all predecessor
-  tooling and tests. Actual hardware/RT/endurance, licensed Unreal, controlled performance, independent
-  human review, production signing/release/deployment remain deferred under existing card identities.
+- Discover exactly selected Xilinx 10ee:8038 PCI tuple and bounded expected XDMA node names. Validate each character-device
+  major/minor and sysfs PCI binding before an explicitly requested O_NONBLOCK/O_CLOEXEC open, fstat identity recheck
+  and checked close. Missing fields/driver/identity/permissions/close failures remain failed or unverified. Never
+  read/write/map/ioctl an endpoint, reset/rebind or load hardware. Provide injected filesystem/operation tests and
+  actual authorized local observations.
+- Measure only bounded host-buffer copy/check observations with size/iterations/source hashes and wall duration.
+  Device DMA/bitstream/protocol/RT1/RT2/endurance remain NOT RUN without their actual prerequisite contracts. No
+  option can convert a manifest/assertion into a DMA permission.
+- A100 inventory requires an explicit configured SSH destination, batch-mode authenticated access and a finite command
+  timeout; request only fixed read-only NVIDIA/active-process/compiler inventory commands. Preserve command/error
+  status, parse exact named-device records and never launch/stop workloads, wake by an invented route, alter known
+  hosts, install software or change service/host configuration. Missing routes/access/occupied GPUs are truthful
+  NOT RUN for profiling.
+- Exercise CLI entrypoints including no-clobber output, absent devices, mismatched binding, open/fstat/close failures,
+  bounded host-copy integrity and fake remote responses/timeouts. Test fixtures never count as real-device evidence.
+  Native operations are opt-in and never run in hosted/default tests.
+- Reconcile remaining original M18/M19/M20 and independent review cards against actual source-bound evidence, including
+  M27-04 native telemetry and M29 final platform verification. Distinguish software delivered from pending qualification/manual/release
+  acceptance. Preserve all original ledger identities/112 requirements/30 findings/13 cards and owner-excluded cyber
+  status. Do not reopen delivered stories or add a replacement owner acceptance card.
+- Preserve release1.2.1 portableRT0, C ABI8/70 exports/fingerprint/SONAME8, device ABI1, default SDK, original tests/deadlines/workflows/compiled
+  production sources. Full local and all32 original exact-head hosted gates, scope/risk/source review and guarded
+  target/canonical integration required. No functional gate waived.
 validation:
   local:
+  - python3 tests/host_profiles/test_profile.py
   - ./scripts/agent-verify.sh contract
   - ./scripts/agent-verify.sh quick
   - ./scripts/agent-verify.sh full
   - git diff --check
   focused_tests_to_add:
-  - Validate preserved identities, explicit owner-excluded unsatisfied dispositions, retained claims and
-    requirement mappings; reject omitted identities, false completion or silently transferred exclusions.
+  - Temporary fake sysfs/device records and injected descriptor operations establish exact endpoint ownership/identity
+    and error preservation; fake runner tests establish fixed remote command/timeout/parser/NOT RUN behavior. CLI
+    and host-copy bounds/integrity/no-clobber outputs use real entrypoints without actual devices.
   required_ci:
-  - All 32 original exact-head hosted names/multiplicity successful; full canonical control validation;
-    no added cyber campaign gate.
+  - All32 original exact-head hosted names/multiplicity, full canonical local/hosted validation; no new workflow.
   manual:
-  - None in these software batches; final actual owner-stage hardware/engine/human/performance/production
-    acceptance remains deferred.
+  - Actual XDMA metadata/open-close is authorized; DMA/physical qualification, A100 workloads, Unreal and final
+    independent/performance/production acceptance remain separate.
 risk:
   class: high
   hazards:
-  - Ownership repair introduces a publication/reuse race or weakens bounded execution.
-  - A retry, limitation, test identity or software pass is misrepresented as global completion/qualification.
+  - A node or observation is bound to the wrong PCI function or failed cleanup is hidden.
+  - Host-copy/inventory/fixtures are overstated as physical transfer/RT/engine/release evidence.
   stop_conditions:
-  - A new public ABI/schema/default decision or forbidden path is necessary; narrow/amend canonical scope
-    before that change.
-  - Only external hardware, licensed engine, independent human or production authority can substantiate
-    a claim; retain it as final-stage acceptance.
+  - Any endpoint traffic, register operation, hardware/configuration mutation, live workload disruption or missing
+    authorization is required.
+  - An unavailable engine/remote environment or independent human gate is required for credible completion; record
+    unsatisfied and advance available observations.
 rollback:
-  strategy: Revert only this batch changes and additive wiring; preserve all previous repairs, original
-    assertions, failures and exact receipts.
+  strategy: Revert only this optional profile tool/tests/wiring/current documentation and additive hash bindings;
+    preserve original software/ledger/evidence.
 evidence:
   output:
-  - docs/evidence/M29-03-<date>.md
-  - Baseline/corrected source hashes, raw commands/results, instrumentation status, packages, risk, exact-head
-    CI and guarded closure receipts.
-  claim_boundary: Scoped non-cyber portable story delivery only. Cyber campaign/signature acceptance remains
-    unsatisfied. software_complete and CAP-M20_complete remain false; no physical/RT/engine/human/controlled-performance/production
-    authenticity/release/deployment claim.
+  - docs/evidence/M30-01-<date>.md
+  - Exact-source CLI reports/commands/errors, local/full/hosted checks, source/scope/risk and guarded merge receipts.
+  claim_boundary: Only optional host-side discovery software and actual bounded authorized metadata/open-close/host-copy
+    observations. Cyber remains excluded_by_owner_unsatisfied; global software_complete/CAP-M20 false. No device
+    transfer, hardware/RT/endurance/Unreal/human/controlled-performance/production authenticity/release/deployment
+    qualification.
