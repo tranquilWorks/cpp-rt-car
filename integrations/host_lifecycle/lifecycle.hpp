@@ -155,11 +155,11 @@ public:
         }
         return rt::Status::resource_exhausted;
     }
-    rt::Status configure_world(WorldHandle h, Configure configure, void* data) noexcept {
+    rt::Status configure_world(WorldHandle h, Configure configure, void* configuration_context) noexcept {
         if (!configure) return rt::Status::invalid_argument;
         return call(h, [=](rt::Runtime& runtime) noexcept {
             if (runtime.state() != rt::RuntimeState::configuring) return rt::Status::invalid_state;
-            const auto result = configure(data, runtime);
+            const auto result = configure(configuration_context, runtime);
             return runtime.state() == rt::RuntimeState::configuring
                 ? result : rt::Status::invalid_state;
         });
