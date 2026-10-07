@@ -1,3 +1,134 @@
+# Owner start: pull, test, then say “let's begin”
+
+The portable integration is committed and available on `main`: [target PR304](https://github.com/tranquilWorks/cpp-rt-car/pull/304), merge `f0ccac6455946834f20fd314bd39c7d057e6eecd`; [canonical closeout PR632](https://github.com/tranquilWorks/portfolio-control/pull/632), merge `7e6f8693279411b4feaf33a7d9f6924fb1e55330`. The implementation passed 197 portable and 187 strict local tests and all 32 required hosted checks. This checklist is a documentation follow-up; those receipts describe the delivered implementation, not a test run on your machine.
+
+You can begin with an ordinary development machine. You do not need to prepare every external environment before saying “let's begin.” Read this section first; older checkpoints below describe historical work and are not the current starting instructions.
+
+## 1. Get the committed checkout
+
+For a new checkout, run:
+
+```sh
+git clone --recurse-submodules https://github.com/tranquilWorks/cpp-rt-car.git
+cd cpp-rt-car
+git log -1 --format=fuller
+git status --short
+git submodule status --recursive
+```
+
+For an existing checkout, start with `git status --short`. If it prints changes, keep them and tell the agent; do not reset or clean them. With a clean checkout, run:
+
+```sh
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+git submodule update --init --recursive
+git log -1 --format=fuller
+git status --short
+git submodule status --recursive
+```
+
+If a command fails, stop there and retain its output. A divergent branch needs reconciliation, not a forced pull. These commands update only this repository; the canonical closeout is already published and is not a build dependency.
+
+## 2. Supply the starting information
+
+When ready, send this in the next session, filling only what you know:
+
+```text
+Let's begin cpp-rt-car using docs/HANDOFF.md.
+Checkout path:
+OS / architecture:
+Commit from git log -1:
+Compiler / build tools available:
+Available now: portable machine / Unreal / NVIDIA GPU / XDMA FPGA / controlled RT host
+Logs or errors from commands already attempted:
+```
+
+The agent should read `AGENTS.md`, `contracts/active-batch.yaml`, `docs/CURRENT_STATE.md` and this handoff; inspect the checkout and tools; run the portable stage first; then select the first available original card from the table below. Record missing inputs explicitly and continue independent work. An environment-dependent implementation must have its original batch scope activated before code changes. Do not automatically launch device workloads, alter host policy, sign, publish or deploy from the phrase “let's begin.” Existing scoped development authorization continues.
+
+Keep credentials, private keys and licensed engine source out of chat, commits and public evidence. Configure access locally and provide the accessible path or host alias. Provide a directory for raw logs; do not send only screenshots or a pass/fail summary.
+
+## 3. Run the portable stage
+
+Prerequisites: 64-bit Linux or Windows, Git, CMake 3.20+, Python 3, a C++20 compiler plus a C11 compiler and platform build tools. On Windows, use an x64 Visual Studio developer shell (the hosted tuple uses MSVC v143). On Linux, GCC or Clang with the matching C compiler works. Repository tests require the pinned GoogleTest submodule initialized above. The minimal installed SDK below needs no GPU, FPGA, Unreal, GoogleTest or privileged host changes.
+
+The following Bash transcript runs from the repository root. It creates a fresh temporary workspace, keeps configure/build/test logs, and stops at the first failure. Keep the printed evidence directory. Use a fresh directory for a different compiler or generator.
+
+```bash
+set -euo pipefail
+CPP_TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cpp-rt-car-owner.XXXXXX")"
+printf 'Evidence directory: %s\n' "$CPP_TEST_DIR"
+git rev-parse HEAD | tee "$CPP_TEST_DIR/source-head.txt"
+git status --short | tee "$CPP_TEST_DIR/source-status.txt"
+cmake --version | tee "$CPP_TEST_DIR/cmake-version.txt"
+python3 --version 2>&1 | tee "$CPP_TEST_DIR/python-version.txt"
+cmake -S . -B "$CPP_TEST_DIR/sdk-build" -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF -DRTFW_BUILD_EXAMPLES=OFF -DRTFW_BUILD_RUNTIME_DEMO=OFF -DRTFW_BUILD_EXPERIMENTAL=OFF 2>&1 | tee "$CPP_TEST_DIR/sdk-configure.log"
+cmake --build "$CPP_TEST_DIR/sdk-build" --config Release --parallel 2 2>&1 | tee "$CPP_TEST_DIR/sdk-build.log"
+cmake --install "$CPP_TEST_DIR/sdk-build" --config Release --prefix "$CPP_TEST_DIR/sdk" 2>&1 | tee "$CPP_TEST_DIR/sdk-install.log"
+cmake -S "$CPP_TEST_DIR/sdk/share/rtfw/examples/hello_runtime" -B "$CPP_TEST_DIR/hello-build" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$CPP_TEST_DIR/sdk" 2>&1 | tee "$CPP_TEST_DIR/hello-configure.log"
+cmake --build "$CPP_TEST_DIR/hello-build" --config Release --parallel 2 2>&1 | tee "$CPP_TEST_DIR/hello-build.log"
+ctest --test-dir "$CPP_TEST_DIR/hello-build" -C Release -V 2>&1 | tee "$CPP_TEST_DIR/hello-test.log"
+cmake -S "$CPP_TEST_DIR/sdk/share/rtfw/integrations/host_lifecycle" -B "$CPP_TEST_DIR/lifecycle-build" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$CPP_TEST_DIR/sdk" 2>&1 | tee "$CPP_TEST_DIR/lifecycle-configure.log"
+cmake --build "$CPP_TEST_DIR/lifecycle-build" --config Release --parallel 2 2>&1 | tee "$CPP_TEST_DIR/lifecycle-build.log"
+ctest --test-dir "$CPP_TEST_DIR/lifecycle-build" -C Release -V 2>&1 | tee "$CPP_TEST_DIR/lifecycle-test.log"
+```
+
+Expected results: both CTest runs report `100% tests passed`. The hello output is `hello_runtime: frames=3 produced=3 consumed=3 stopped=ok`. The lifecycle test runs the real demonstration shared module through eight reload cycles, two worlds and sixteen frames per world, including intentionally blocked cleanup, independent cleanup, retry and actual unload. That deliberate cleanup failure is part of a passing test, not a hardware fault. See the [installed lifecycle kit](../integrations/host_lifecycle/README.md) for its ownership rules.
+
+On Windows, use this equivalent PowerShell transcript from the source root. The helper checks every native command's exit code and saves each log; a failure throws before the next command. The uniquely named evidence directory is outside the checkout.
+
+```powershell
+$CppTestDir = Join-Path $env:TEMP ("cpp-rt-car-owner-" + [guid]::NewGuid().ToString())
+New-Item -ItemType Directory -Path $CppTestDir -ErrorAction Stop | Out-Null
+Write-Host "Evidence directory: $CppTestDir"
+function Invoke-CppChecked {
+    param([string]$LogName, [string]$Program, [string[]]$Arguments)
+    & $Program @Arguments 2>&1 | Tee-Object -FilePath (Join-Path $CppTestDir $LogName)
+    if ($LASTEXITCODE -ne 0) { throw "$Program failed ($LASTEXITCODE); see $LogName" }
+}
+Invoke-CppChecked source-head.txt git @('rev-parse', 'HEAD')
+Invoke-CppChecked source-status.txt git @('status', '--short')
+Invoke-CppChecked cmake-version.txt cmake @('--version')
+Invoke-CppChecked python-version.txt python @('--version')
+Invoke-CppChecked sdk-configure.log cmake @('-S', '.', '-B', "$CppTestDir/sdk-build", '-A', 'x64', '-T', 'v143', '-DENABLE_TESTS=OFF', '-DRTFW_BUILD_EXAMPLES=OFF', '-DRTFW_BUILD_RUNTIME_DEMO=OFF', '-DRTFW_BUILD_EXPERIMENTAL=OFF')
+Invoke-CppChecked sdk-build.log cmake @('--build', "$CppTestDir/sdk-build", '--config', 'Release', '--parallel', '2')
+Invoke-CppChecked sdk-install.log cmake @('--install', "$CppTestDir/sdk-build", '--config', 'Release', '--prefix', "$CppTestDir/sdk")
+Invoke-CppChecked hello-configure.log cmake @('-S', "$CppTestDir/sdk/share/rtfw/examples/hello_runtime", '-B', "$CppTestDir/hello-build", '-A', 'x64', '-T', 'v143', "-DCMAKE_PREFIX_PATH=$CppTestDir/sdk")
+Invoke-CppChecked hello-build.log cmake @('--build', "$CppTestDir/hello-build", '--config', 'Release', '--parallel', '2')
+Invoke-CppChecked hello-test.log ctest @('--test-dir', "$CppTestDir/hello-build", '-C', 'Release', '-V')
+Invoke-CppChecked lifecycle-configure.log cmake @('-S', "$CppTestDir/sdk/share/rtfw/integrations/host_lifecycle", '-B', "$CppTestDir/lifecycle-build", '-A', 'x64', '-T', 'v143', "-DCMAKE_PREFIX_PATH=$CppTestDir/sdk")
+Invoke-CppChecked lifecycle-build.log cmake @('--build', "$CppTestDir/lifecycle-build", '--config', 'Release', '--parallel', '2')
+Invoke-CppChecked lifecycle-test.log ctest @('--test-dir', "$CppTestDir/lifecycle-build", '-C', 'Release', '-V')
+```
+
+For complete contributor verification on Linux/Bash, after initializing the submodule, run from the source root:
+
+```bash
+./scripts/agent-verify.sh full
+```
+
+It runs the contract checks, portable suite and strict experimental suite. It retains timestamped logs under ignored `docs/evidence/local/`, with CTest logs under `build/agent-quick/Testing/Temporary/` and `build/agent-full/Testing/Temporary/`. The delivered M31 baseline has 197 portable and 187 strict tests; later additions may change counts. All selected tests must pass; a count alone is not acceptance. The script stops on failure. Its existing demo exercises requested policy, so retain the reported policy/readback: this is not controlled RT qualification. On Windows use the native [contributor CMake build](../README.md#contributor-build-and-test) and [verification contract](../contracts/verification.commands) with agent assistance; the Bash script itself is not a native PowerShell runner. The full contract additionally requires its declared Python/tool dependencies; have the agent check them rather than treating missing tools as a skipped pass.
+
+If a startup timeout or sanitizer launch failure occurs, retain the original complete log, exact source, tool versions and command. Known scheduling and pre-main sanitizer observations are retained in [M31 acceptance](https://github.com/tranquilWorks/portfolio-control/blob/main/products/cpp-rt-car/evidence/M31-01/acceptance.md). Do not increase deadlines, remove checks or silently rerun until green. Investigate first and record any bounded, identical retry separately.
+
+## 4. Bring these inputs for the remaining stages
+
+Each row is an original gate. You can provide one environment at a time; the agent can help collect identities from an accessible host. No row is marked passed by providing equipment. Preserve exact source/build identities, commands, exit codes, raw logs and failures for every stage.
+
+| Stage / original card | What you need to provide or decide | What happens next / completion evidence |
+| --- | --- | --- |
+| Actual Unreal integration: M19-02, then M19-03, then M19-04 | Accessible licensed engine installation/source root; exact distribution, version/build and engine source commit; Windows/VS compiler, Windows SDK, UBT/UAT tools; a disposable project/work directory; access for builds/runs; selected adapter performance thresholds. Confirm the exact-version LowLevelTasks exception in the [original M19-02 contract](https://github.com/tranquilWorks/portfolio-control/blob/main/products/cpp-rt-car/batches/M19-02.yaml) and D-009 before choosing another engine tuple. | Implement actual Unreal jobs/FMemory/clock adapters and run editor/non-editor builds/automation; implement world/PIE/multiple-instance/module bindings; then complete and run the editor/packaged sample. The portable kit is ready; these engine-specific implementations are still required. Retain engine/build manifests, automation reports, allocator/job/lifetime results and packaged-run logs. |
+| NVIDIA: M18-A100-PROFILE-01 and M18-02 | Reachable host or local checkout, configured login/SSH alias with existing host-key trust and local authentication, exact owned/idle GPU UUID and PCI identity, driver/CUDA/compiler tuple, disposable workload directory, agreed correctness/fault/thermal/endurance plan and thresholds. The previously attempted A100 route timed out at TCP22; make the route accessible first. | Begin with the [read-only inventory](host_profiles.md#configured-a100-inventory); confirm ownership/availability before actual CUDA correctness, transfer and launch characterization. Retain device/raw workload evidence and independent tuple review. No automatic wake, service change or workload eviction. |
+| FPGA: M18-XDMA-PROFILE-01 and M18-03 | Board/PCI BDF, driver version and node access; exact identity of the design currently loaded; documented register/address/channel/transfer protocol, valid ranges, safe non-output loopback behavior and fault/cleanup procedure; explicit authorization for that device workload. | Compare the loaded design with the contract before traffic. Then run approved transfer correctness/fault/thermal/endurance tests and review the named tuple. Existing node open/close and host-copy evidence does not establish DMA behavior. Do not start the production backend or qualification executable while the design/protocol is unknown. |
+| Combined deployment: M18-04 / M17-05 | Qualified NVIDIA and XDMA tuples on one actual co-resident host; CPU/GPU/FPGA/NUMA/PCI topology; selected host-staged workload, capacities, ownership and thresholds. | Run the real combined correctness/fault/performance plan and review it. A remote GPU plus local FPGA does not satisfy the topology; direct peer DMA is not assumed. |
+| Controlled performance, RT and endurance: M20-01 / M18-05 | Dedicated controlled host, OS/kernel (PREEMPT_RT if requesting RT2), permissions for agreed policy changes, available isolated cores/IRQ/NUMA layout, named workload/baseline, thresholds approved before measurement, and permission/time budget for smoke, two-hour and 24-hour runs. | Read back actual scheduler/affinity/memory policy; run staged measurements and retain raw timing, overruns, thermal/fault/cleanup/endurance records. Independent review determines acceptance and any tuple promotion. A successful preflight or a portable test is insufficient. |
+| Application telemetry: M20-03 | Application's clock domain/epoch, trace destination or OTLP endpoint (credentials configured locally), Windows trace collection route if needed, and data/operational acceptance criteria. | Configure and verify the already delivered [telemetry kit](../integrations/telemetry/README.md) against the application clock and collected output. Exporter implementation is delivered; operational use is application-specific. |
+| Independent first use: M25-06 / CAP-M25/manual/1 | A person unfamiliar with the internals, a clean machine/SDK prefix, time for the [first-use guide](getting_started.md), and a place to record steps, errors and feedback. | That person builds/runs the installed examples without relying on internal knowledge, then records the outcome. Agent-authored walkthroughs cannot supply the independent human result. |
+| Migration and final release: M20-04 | Any required actual historical binary/archive and its source/build identity; named new platform tuple if desired; independent API/compatibility reviewer; final acceptance decisions. For a later release, identify the release approver, production signing identity/key custodian, intended package/version/destination and deployment/rollback owner. | Compare actual requested binary/tuple behavior, retain review results, then separately authorize signing, release publication and deployment once the required gates are satisfied. Rebuilding old source is not a historical-binary comparison. Pulling or saying “let's begin” does not activate these production actions. |
+| Excluded cyber criteria | No preparation requested in this continuation. | Leave `excluded_by_owner_unsatisfied` and the original acceptance records unsatisfied. Do not reopen or silently mark them passed. |
+
+The framework is delivered for its documented portable RT0 scope. It is not yet globally accepted or qualified for production hardware/RT/Unreal deployment: `software_complete` and `CAP-M20_complete` remain false. See [remaining batches](remaining_batches.md) for the original obligations and [canonical owner handoff](https://github.com/tranquilWorks/portfolio-control/blob/main/products/cpp-rt-car/evidence/M31-01/owner-handoff.md) for the closeout boundaries. The next session should report the first failing or unavailable gate, the evidence retained and the exact input needed from you; complete independent available work in the meantime.
+
 # M31-01 portable host lifecycle integration
 
 Owner requested finishing integration that requires neither hardware nor owner participation. M30 target303 is merged at `544c27226654474fd28cd365dde088c986828ef3`; canonical closing630 at `df2c41a2f445219ec7b6f0075aab4300a33617d5`. Canonical plan631 `861cf0e6bdc0b73986bc4fc8e4eb387fdf51eb74` (batch blob `38532378f085ff1a7b6fdb8bc877e05307fb0760`) activates only the engine-independent lifecycle/time source kit and its real Runtime/shared-module/relocated tests.
