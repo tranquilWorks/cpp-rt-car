@@ -83,7 +83,8 @@ New-Item -ItemType Directory -Path $CppTestDir -ErrorAction Stop | Out-Null
 Write-Host "Evidence directory: $CppTestDir"
 function Invoke-CppChecked {
     param([string]$LogName, [string]$Program, [string[]]$Arguments)
-    & $Program @Arguments 2>&1 | Tee-Object -FilePath (Join-Path $CppTestDir $LogName)
+    Get-Command -Name $Program -CommandType Application -ErrorAction Stop | Out-Null
+    & $Program @Arguments 2>&1 | Tee-Object -FilePath (Join-Path $CppTestDir $LogName) -ErrorAction Stop
     if ($LASTEXITCODE -ne 0) { throw "$Program failed ($LASTEXITCODE); see $LogName" }
 }
 Invoke-CppChecked source-head.txt git @('rev-parse', 'HEAD')
