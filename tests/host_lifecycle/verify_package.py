@@ -13,6 +13,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", required=True, type=Path)
     parser.add_argument("--config", default="Release")
+    parser.add_argument("--c-compiler", required=True)
+    parser.add_argument("--cxx-compiler", required=True)
+    parser.add_argument("--sanitizers", default="")
     args = parser.parse_args()
     build = args.build.resolve(strict=True)
     source = Path(__file__).resolve().parents[2]
@@ -47,8 +50,19 @@ def main():
     consumer = work / "consumer-source"
     shutil.copytree(installed, consumer)
     consumer_build = work / "consumer-build"
+    # An instrumented installed static Runtime needs the same compiler/runtime
+    # at its consumer link. Keep both the copied kit and module instrumented.
+    toolchain = ["-DCMAKE_C_COMPILER=" + args.c_compiler,
+                 "-DCMAKE_CXX_COMPILER=" + args.cxx_compiler]
+    if args.sanitizers:
+        flags = "-fsanitize=" + args.sanitizers + " -fno-omit-frame-pointer"
+        if "cfi" in args.sanitizers.split(","):
+            flags += " -flto"
+        toolchain.extend("-D" + name + "=" + flags for name in
+                         ["CMAKE_C_FLAGS", "CMAKE_CXX_FLAGS",
+                          "CMAKE_EXE_LINKER_FLAGS", "CMAKE_SHARED_LINKER_FLAGS"])
     run(["cmake", "-S", str(consumer), "-B", str(consumer_build),
-         "-DCMAKE_BUILD_TYPE=" + config, "-DCMAKE_PREFIX_PATH=" + str(relocated)])
+         "-DCMAKE_BUILD_TYPE=" + config, "-DCMAKE_PREFIX_PATH=" + str(relocated)] + toolchain)
     run(["cmake", "--build", str(consumer_build), "--config", config, "--parallel", "2"])
     run(["ctest", "--test-dir", str(consumer_build), "--build-config", config, "--output-on-failure"])
     (work / "result.json").write_text(json.dumps({"status": "pass", "kit_sha256": hashes,

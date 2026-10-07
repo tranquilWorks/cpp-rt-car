@@ -10,9 +10,14 @@ if((WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND CMAKE_SIZEOF_VOID_P EQUAL 8
     endforeach()
     add_test(NAME host_adapter_host_lifecycle_contract COMMAND rtfw_host_lifecycle_contract)
     set_tests_properties(host_adapter_host_lifecycle_contract PROPERTIES TIMEOUT 60)
+    set(host_lifecycle_sanitizers "")
+    if(SIM_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        string(REPLACE ";" "," host_lifecycle_sanitizers "${SIM_SANITIZERS}")
+    endif()
     add_test(NAME host_lifecycle_package COMMAND ${Python3_EXECUTABLE}
         "${CMAKE_CURRENT_SOURCE_DIR}/verify_package.py" --build "${CMAKE_BINARY_DIR}"
-        --config "$<CONFIG>")
+        --config "$<CONFIG>" --c-compiler "${CMAKE_C_COMPILER}"
+        --cxx-compiler "${CMAKE_CXX_COMPILER}" "--sanitizers=${host_lifecycle_sanitizers}")
     set_tests_properties(host_lifecycle_package PROPERTIES TIMEOUT 180)
     if(TARGET rtfw_host_adapter_tests)
         add_dependencies(rtfw_host_adapter_tests rtfw_host_lifecycle_contract rtfw_host_lifecycle_demo)
