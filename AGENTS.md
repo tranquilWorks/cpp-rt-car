@@ -857,3 +857,7 @@ ledgers and unsatisfied cyber criteria. Full/all32 original exact-head gates,
 risk review and guarded target/canonical integration remain mandatory under standing
 scoped authorization. Actual hardware/RT/Unreal/human/performance/signing/release
 acceptance cannot be manufactured from tools or fixtures.
+
+## M31-01 owner-selected portable integration
+
+Owner requested finishing all available integration without hardware or owner participation, then will handle external gates. Canonical plan631 `861cf0e6bdc0b73986bc4fc8e4eb387fdf51eb74` activates only the portable world/module lifecycle and checked time source kit. Preserve protected Runtime/ABI/default SDK/old tests/workflows and prior evidence. Full local/all32 original hosted and package/source/risk/guarded integration remain mandatory under standing scoped publication/merge authority. Actual licensed Unreal bindings and hardware/RT/human/performance/production acceptance remain open; cyber remains unsatisfied.

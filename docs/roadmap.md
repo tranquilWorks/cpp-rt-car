@@ -1528,3 +1528,7 @@ inputs, exact archive/member comparisons and installed consumer checks provide
 local unsigned observations. Original06 signature expansion remains unperformed.
 M27-07 native XDMA host preparation and08 platform/migration/portable soak remain
 unactivated, alongside excluded original05 work and external qualification.
+
+## M31-01 portable integration continuation
+
+The owner selected available integration without hardware or owner participation. The installed [host lifecycle kit](host_lifecycle.md) supplies reusable world/module ownership, retryable cleanup, checked tick/frame conversion and actual shared-module unload over the existing Runtime/extension ABI. Its exact full/hosted/installed/source/risk/guarded receipts are retained in M31 delivery records. Original M19 engine bindings and real engine evidence, physical/RT/performance/endurance, independent human and production acceptance remain open. Cyber stays excluded_by_owner_unsatisfied and global completion false. No new automatic batch or external action is activated.
