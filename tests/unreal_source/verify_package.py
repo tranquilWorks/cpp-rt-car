@@ -79,12 +79,14 @@ add_test(NAME actual_installed_worlds COMMAND worlds $<TARGET_FILE:demo>)
         flags = ['-D' + key + '=' + value for key in ['CMAKE_C_FLAGS', 'CMAKE_CXX_FLAGS', 'CMAKE_EXE_LINKER_FLAGS', 'CMAKE_SHARED_LINKER_FLAGS']]
     consumer_build = work / 'consumer-build'
     run(['cmake', '-S', consumer, '-B', consumer_build, '-DCMAKE_BUILD_TYPE=' + args.config,
-         '-DCMAKE_PREFIX_PATH=' + str(relocated), '-DDATA=' + str(relocated / 'share/rtfw'),
+         '-DCMAKE_PREFIX_PATH:PATH=' + relocated.as_posix(),
+         '-DDATA:PATH=' + (relocated / 'share/rtfw').as_posix(),
          '-DCMAKE_C_COMPILER=' + args.c_compiler, '-DCMAKE_CXX_COMPILER=' + args.cxx_compiler, *flags])
     run(['cmake', '--build', consumer_build, '--config', args.config, '--parallel', '2'])
     run(['ctest', '--test-dir', consumer_build, '-C', args.config, '--output-on-failure'])
     cache = (consumer_build / 'CMakeCache.txt').read_text()
-    assert str(source) not in cache.replace(str(work), '')
+    normalized_cache = cache.replace('\\', '/')
+    assert source.as_posix() not in normalized_cache.replace(work.as_posix(), '')
     (work / 'result.json').write_text(json.dumps({'portable_installed_status': 'PASS',
         'engine_validation': 'NOT_RUN', 'original_prefix_removed': True, 'commands': records}, indent=2) + '\n')
     print('PASS actual relocated SDK/source consumer; Unreal NOT RUN; retained', work)

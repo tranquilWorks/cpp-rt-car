@@ -875,3 +875,8 @@ NOT RUN. Preserve Runtime, old tests/deadlines, workflows, frozen acceptance,
 cyber exclusions and all original engine/physical/manual/release gates. Standing
 scoped publication authority permits a draft implementation PR; do not merge it
 as engine accepted without the original actual engine/human gates.
+
+The subsequent November 3 owner instruction authorizes guarded source integration
+after remaining implementation and all standard CI gates pass, then awaiting real
+testing. Merge source as unvalidated for Unreal; do not promote M19, hardware/RT,
+global completion, excluded cyber, signing, release or deployment acceptance.

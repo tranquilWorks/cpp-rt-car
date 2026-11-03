@@ -7,6 +7,11 @@ portable world/module ownership, actual Unreal delegate/loader/PIE/sample source
 and build/automation/package entry points. Current Unreal build/automation/PIE/
 packaging remains NOT RUN; old draft results do not validate this tree.
 See [M32 evidence](evidence/M32-01-2026-11-03.md) for actual local results.
+The owner subsequently authorized source integration after standard CI passes.
+[Hosted portability repairs](evidence/M32-01-hosted-repair-2026-11-03.md) record
+the initial embedding/Windows package failures and their bounded fixes. PR306
+records the final verification and integration disposition; old publication-block
+receipts remain historical. No engine acceptance follows from a source merge.
 
 The next environment session should run the supplied engine gates, fix any
 engine-specific issues exposed, then perform the original physical/RT/manual
