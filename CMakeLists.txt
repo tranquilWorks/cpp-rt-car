@@ -1522,3 +1522,12 @@ install(FILES
   integrations/host_lifecycle/plugin.c
   DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/integrations/host_lifecycle)
 install(FILES docs/host_lifecycle.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw)
+
+# Optional source-only Unreal integration; no default SDK header/target change.
+install(DIRECTORY integrations/unreal/RTFWUnreal integrations/unreal/portable
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/integrations/unreal
+    PATTERN "Binaries" EXCLUDE PATTERN "Intermediate" EXCLUDE)
+install(FILES integrations/unreal/prepare.py integrations/unreal/run.py integrations/unreal/README.md
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/integrations/unreal)
+install(FILES docs/unreal_adapter.md DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/integrations/unreal RENAME GUIDE.md)
+install(DIRECTORY tests/unreal/ DESTINATION ${CMAKE_INSTALL_DATADIR}/rtfw/integrations/unreal/project)

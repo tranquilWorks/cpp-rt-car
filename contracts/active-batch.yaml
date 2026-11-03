@@ -1,142 +1,91 @@
 schema_version: 1
 batch:
-  id: M31-01
-  title: Complete portable host lifecycle and time integration
-  goal: Deliver a complete relocated source kit for engine-independent world/runtime/module ownership,
-    checked tick/frame conversion and actual shared-module unload after checked Runtime stop/detach. Finish
-    available non-cyber integration without hardware or owner participation. Preserve actual Unreal environment
-    and hardware/human/production gates.
+  id: M32-01
+  title: Complete Unreal source integration before environment handover
+  goal: Reconcile draft238 with current main and deliver the jobs/memory/clock adapters, world and extension lifecycle, engine sample, automation and build/package entry points without requiring owner equipment or credentials. Validate all available portable behavior; retain actual engine and hardware acceptance as unperformed.
 sources:
   product: products/cpp-rt-car/product.yaml
   requirements:
-  - products/cpp-rt-car/acceptance.yaml#CAP-M19
-  - products/cpp-rt-car/acceptance.yaml#CAP-M25
-  milestone: products/cpp-rt-car/milestones/M31.md#m31-01
-  baseline_commit: 544c27226654474fd28cd365dde088c986828ef3
-  control_plane_repository: tranquilWorks/portfolio-control
-  control_plane_path: products/cpp-rt-car/batches/M31-01.yaml
-  activation: owner_selected
-  owner_scope: Owner requested finishing all integration that does not need hardware or owner participation,
-    then will perform external gates. This explicitly authorizes portable integration work; actual Unreal
-    source bindings still require the approved licensed environment. Cyber remains unsatisfied. Standing
-    scoped publication and guarded integration authority continues; no live host/hardware, signing, release
-    or deployment action.
-  control_plane_revision: 861cf0e6bdc0b73986bc4fc8e4eb387fdf51eb74
-  canonical_batch_blob: 38532378f085ff1a7b6fdb8bc877e05307fb0760
+    - products/cpp-rt-car/acceptance.yaml#CAP-M19
+    - products/cpp-rt-car/acceptance.yaml#CAP-M25
+  milestone: docs/unreal_adapter.md
+  baseline_commit: 838dc8ffe3f4604dccdcd5545239c91a2cc7d1fa
+  activation: owner_selected_2026-11-03
+  owner_scope: User explicitly requests full implementation before providing any environment or keys. This supersedes earlier engine-availability stops for source implementation only. It does not accept engine compatibility, waive original tests, reopen cyber exclusions, or authorize real devices, host changes, release or deployment.
+  integration_authorization: On November 3 the owner explicitly requested continuing remaining source work and merging it when complete, then awaiting real testing. This permits guarded source integration after all standard CI gates pass, without engine acceptance or qualification.
+  predecessor_draft: tranquilWorks/cpp-rt-car#238@4714dc3fecabe15ee748e29aa949b3cc57eeb6ab
+  control_plane_reconciliation: Pending; this target-local scope records the current owner instruction, not a fabricated canonical activation.
 dependencies:
-- M30-01
+  - M31-01
 scope:
   allowed_paths:
-  - AGENTS.md
-  - contracts/active-batch.yaml
-  - docs/CURRENT_STATE.md
-  - docs/HANDOFF.md
-  - docs/roadmap.md
-  - docs/remaining_batches.md
-  - docs/host_lifecycle.md
-  - docs/evidence/M31-01-*
-  - integrations/host_lifecycle/**
-  - tests/host_lifecycle/**
-  - tests/CMakeLists.txt
-  - CMakeLists.txt
-  - tools/check_release_contract.py
-  - release/rtfw-release-contract.json
+    - AGENTS.md
+    - contracts/active-batch.yaml
+    - docs/CURRENT_STATE.md
+    - docs/HANDOFF.md
+    - docs/remaining_batches.md
+    - docs/unreal_adapter.md
+    - docs/evidence/M32-01-*
+    - integrations/unreal/**
+    - tests/unreal/**
+    - tests/unreal_source/**
+    - tests/CMakeLists.txt
+    - CMakeLists.txt
+    - scripts/verify-unreal.sh
+    - scripts/verify-unreal.ps1
+    - tools/check_release_contract.py
+    - release/rtfw-release-contract.json
   forbidden_paths:
-  - rt/
-  - core/
-  - include/
-  - hal/
-  - gpu/
-  - bench/
-  - samples/
-  - abi/
-  - VERSION.txt
-  - LICENSE
-  - qualification/
-  - profiles/
-  - configs/
-  - .github/workflows/
-  - docs/closeout/
-  - docs/evidence/M29-*
-  - docs/evidence/M30-*
-  - integrations/telemetry/
-  - release/keys/
-  - release/signatures/
-  - scripts/agent-verify.sh
-  - scripts/verify-portable-assurance.sh
+    - rt/
+    - core/
+    - include/
+    - hal/
+    - gpu/
+    - bench/
+    - samples/
+    - abi/
+    - qualification/
+    - profiles/
+    - configs/
+    - .github/workflows/
+    - integrations/host_lifecycle/
+    - integrations/telemetry/
+    - docs/closeout/
+    - VERSION.txt
+    - LICENSE
+    - release/keys/
+    - release/signatures/
 acceptance:
-- Fixed-capacity per-instance registry owns Runtime objects in world slots and tracks borrowed host-world
-  identities, module owners and committed extension bindings with process-local generation handles. Runtime
-  construction/configuration/finalization may allocate only on the serialized control path; registry bookkeeping
-  and run/close operations add no hidden allocation/thread/blocking wait. Reject duplicate owners, foreign/stale/exhausted
-  handles and reentry while preserving outputs.
-- Close admission before checked world shutdown. Call actual Runtime stop and detach, retaining every
-  unresolved binding and module reference on failure. Independent world cleanup continues and first failure
-  is preserved. Release a module only after every tracked Runtime binding is detached; never unload code
-  or destroy a Runtime implicitly. Bounded generation exhaustion fails closed. Scope does not promise
-  a global process/module lease against untracked callers. Unstarted configuring Runtime objects can be
-  discarded before releasing their copied callable tables; finalized/started objects require actual checked
-  stop and detach. A managed library wrapper enforces registry module release before operating-system
-  unload; no unchecked public raw-unload operation.
-- Provide checked integer tick-to-nanosecond and host-frame conversion with overflow, zero/unsupported
-  frequency and signed-duration bounds, preserved output on errors and explicit clock domain/rounding.
-  No periodic waiting, RT guarantees or change to Runtime clock semantics.
-- Build and execute a complete installed/relocated standalone host example using the supported Runtime
-  and extension ABI v1, a genuine C shared library and actual Linux/Windows host load/symbol/unload operations.
-  Exercise two isolated worlds and shared module references, failed quiescence with retry, actual unload
-  only after all detach readiness, repeated load/run/close/unload and stale handles. No experimental plugin
-  loader, hardware or engine stubs count as qualification.
-- Add meaningful real-Runtime tests for capacity/duplicates/stale/foreign handles, failed registration/output
-  preservation, configuration/start/step failures, world cleanup partial failures, multiple instances,
-  generation retirement and checked time boundaries. Existing focused host-adapter sanitizer jobs must
-  build/run new relevant tests without altering original fixtures/deadlines/gates. Relocated package consumer
-  confirms source kit is self-contained and uses only installed SDK.
-- Preserve release1.2.1 portableRT0, C ABI8/70 exports/SONAME8/fingerprint, device/extension ABI1, default
-  installed SDK targets/headers, compiled Runtime/experimental sources and all predecessor tests/workflows.
-  Add only shared-data source kit installation/hash bindings; no release policy change. Full local and
-  all32 original exact-head hosted names/multiplicity plus source/risk/compatibility review and guarded
-  target/canonical integration required.
-- Reconcile all remaining integration against existing original cards and identify exact owner/environment
-  next steps. Original M19-02/03/04 remain open for actual Unreal bindings/engine builds/world/PIE/packaged
-  evidence. Do not claim portable lifecycle kit completes those cards. Preserve frozen112/30/13 ledgers
-  and unsatisfied cyber/global acceptance; no redundant already-delivered exporter or host-adapter reimplementation.
+  - Reuse draft238 adapters and original ten automation cases on current Runtime, not a competing scheduler/allocator design. Preserve the original exact engine tuple as the first validation target; make no fresh engine result claim.
+  - Compose the existing host lifecycle Registry with fixed world-owned bindings. Keep scheduler storage, callback context and module leases alive through checked Runtime cleanup AND asynchronous engine-node retirement. Close admission, refuse stale/foreign/reentrant operations, clean independent worlds and support retries.
+  - Supply actual Unreal world-init/tick/cleanup/end-frame/pre-exit delegate wiring, checked selected-extension library close/reopen and module unload guards. Do not label arbitrary Live Coding patching safe.
+  - Supply a shared integer sample and opt-in engine game module, fifteen commandlet automation cases and actual two-instance/two-cycle PIE automation source. Supply strict staging, exact-tuple build/test, Development cook/package/run and Shipping compilation entry points.
+  - Run real Runtime, memory, module load/unload and allocation checks here plus staging/report-negative tests and installed kit checks. Preserve existing C ABI8/70 exports/SONAME8, default SDK header/target inventory, prior tests/deadlines/workflows and runtime sources.
+  - Mark current engine compilation, automation, PIE, packaging and physical/RT tests NOT RUN until actually executed. Prior draft evidence is historical and is not evidence for the reconciled source.
 validation:
   local:
-  - ./scripts/agent-verify.sh contract
-  - ./scripts/agent-verify.sh quick
-  - ./scripts/agent-verify.sh full
-  - ctest --test-dir build/agent-quick -R host_lifecycle --output-on-failure
-  - git diff --check
+    - ./scripts/agent-verify.sh full
+    - ctest --test-dir build/unreal-source -R 'unreal_worlds|unreal_source' --output-on-failure
+    - python3 tests/unreal_source/test_prepare.py
+    - git diff --check
   focused_tests_to_add:
-  - Actual Runtime and extension-bound registry tests, tick/frame arithmetic boundaries, real shared-module
-    loader example and installed/relocated consumer. Preserve failure and sanitizer results.
+    - Real Runtime isolated-world execution, deferred retirement, failed setup, callback failure, stale/foreign/reentry, allocation-free frames and actual library reload/unload refusal.
+    - Source preparation, retained adapter inventory, complete report validation and missing-environment refusal. Actual engine automation source remains unexecuted.
   required_ci:
-  - All32 original exact-head hosted names/multiplicity, new host-adapter tests in existing sanitizer
-    profiles, full canonical local/hosted validation.
-  manual:
-  - Actual engine bindings/builds/world/PIE/packaged runs, CUDA/XDMA/combined/RT/performance/endurance,
-    independent review, signing/release/deployment remain separate.
+    - All existing standard hosted checks remain mandatory; no failing gate is waived.
+    - Actual exact-tuple Unreal build/automation/PIE/package gates remain deferred and prevent engine acceptance or qualification.
 risk:
   class: high
   hazards:
-  - Unloaded module leaves borrowed Runtime callables or service ownership alive.
-  - Failed stop/detach, generation reuse or partial cleanup releases ownership falsely.
-  - Portable source kit or time conversion is overstated as actual Unreal/hardware/RT acceptance.
+    - Uncompiled engine bindings may require API, lifecycle or toolchain corrections on the actual engine.
+    - Runtime completion is earlier than engine scheduler task-node retirement; premature destruction or module unload would invalidate callbacks.
+    - Synthetic staging reports, portable tests or old draft results could be mistaken for current Unreal evidence.
   stop_conditions:
-  - Protected Runtime/ABI/default SDK/workflow/prior tests or release policy must change.
-  - 'Actual licensed engine or hardware/human/production action required: retain original gate open; finish
-    independently verifiable portable integration.'
-  - No failing functional gate may be weakened or waived.
+    - A protected runtime, ABI, old test/deadline, workflow, qualification or release policy change would be required.
+    - Real engine or physical qualification must be claimed without actual evidence.
 rollback:
-  strategy: Revert only new optional shared-data integration source kit, new tests and additive build
-    wiring, current docs/governance/hash bindings; preserve all existing Runtime, prior repairs and retained
-    failures.
+  strategy: Revert only M32 optional Unreal source/test/install wiring and current docs/hash bindings. Keep original draft238, M31 Registry, all existing Runtime and all historical evidence untouched.
 evidence:
   output:
-  - docs/evidence/M31-01-<date>.md
-  - Exact source-bound focused/local/full/hosted/package results, changed-file/ABI/package/risk review
-    and guarded integration receipts.
-  claim_boundary: Portable engine-independent integration using real Runtime/ABI/shared-library host operations
-    only. No actual Unreal, physical hardware/RT/endurance/controlled performance/independent human/production
-    authenticity/release/deployment acceptance. Cyber excluded_by_owner_unsatisfied; software_complete/CAP-M20_complete
-    remain false.
+    - docs/evidence/M32-01-2026-11-03.md
+  claim_boundary: Source implementation candidate and actual portable verification only. Current Unreal build/automation/PIE/package and physical qualification NOT RUN; original M19 and global software_complete/CAP-M20 acceptance remain open. Cyber remains excluded_by_owner_unsatisfied.

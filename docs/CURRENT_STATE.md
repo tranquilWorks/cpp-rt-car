@@ -1,3 +1,27 @@
+# M32-01 source implementation before environment handover (2026-11-03)
+
+The owner explicitly requests implementation now without providing any engine,
+hardware or credentials. The [Unreal integration guide](unreal_adapter.md)
+describes the source candidate based on draft238 and current M31 main, shared
+portable world/module ownership, actual Unreal delegate/loader/PIE/sample source,
+and build/automation/package entry points. Current Unreal build/automation/PIE/
+packaging remains NOT RUN; old draft results do not validate this tree.
+See [M32 evidence](evidence/M32-01-2026-11-03.md) for actual local results.
+The owner subsequently authorized source integration after standard CI passes.
+[Hosted portability repairs](evidence/M32-01-hosted-repair-2026-11-03.md) record
+the initial embedding/Windows package failures and their bounded fixes. PR306
+records the final verification and integration disposition; old publication-block
+receipts remain historical. No engine acceptance follows from a source merge.
+
+The next environment session should run the supplied engine gates, fix any
+engine-specific issues exposed, then perform the original physical/RT/manual
+acceptance. Do not ask the owner for keys to finish this source delivery. Earlier
+instructions below asking for engine availability before source implementation
+are historical and superseded only for the current source-candidate scope.
+M19 and global acceptance remain open; excluded cyber criteria stay unsatisfied.
+
+## Historical checkpoints
+
 # M31-01 portable host lifecycle integration
 
 Owner requested finishing integration that requires neither hardware nor owner participation. M30 target303 is merged at `544c27226654474fd28cd365dde088c986828ef3`; canonical closing630 at `df2c41a2f445219ec7b6f0075aab4300a33617d5`. Canonical plan631 `861cf0e6bdc0b73986bc4fc8e4eb387fdf51eb74` (batch blob `38532378f085ff1a7b6fdb8bc877e05307fb0760`) activates only the engine-independent lifecycle/time source kit and its real Runtime/shared-module/relocated tests.

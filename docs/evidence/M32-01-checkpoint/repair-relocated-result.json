@@ -1,0 +1,79 @@
+{
+  "portable_installed_status": "PASS",
+  "engine_validation": "NOT_RUN",
+  "original_prefix_removed": true,
+  "commands": [
+    {
+      "argv": [
+        "cmake",
+        "--install",
+        "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk",
+        "--prefix",
+        "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/original",
+        "--config",
+        "RelWithDebInfo"
+      ],
+      "exit_code": 0,
+      "log": "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/command-0.log",
+      "sha256": "e11fcb943a5bcfb58c410b5c3f56c3e7cf0bb9bdf8c2d581908c9285e52dac1c"
+    },
+    {
+      "argv": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/relocated sdk/share/rtfw/integrations/unreal/prepare.py",
+        "stage",
+        "--sdk-root",
+        "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/relocated sdk",
+        "--output",
+        "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/staged"
+      ],
+      "exit_code": 0,
+      "log": "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/command-1.log",
+      "sha256": "ecfa9043173dd82787b194dff206bbc9cf3628ea843b83301f76ab1497f61a97"
+    },
+    {
+      "argv": [
+        "cmake",
+        "-S",
+        "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/consumer",
+        "-B",
+        "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/consumer-build",
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+        "-DCMAKE_PREFIX_PATH:PATH=/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/relocated sdk",
+        "-DDATA:PATH=/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/relocated sdk/share/rtfw",
+        "-DCMAKE_C_COMPILER=cc",
+        "-DCMAKE_CXX_COMPILER=c++"
+      ],
+      "exit_code": 0,
+      "log": "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/command-2.log",
+      "sha256": "2185912db17f223bbd94f9b03e2535088ef7a8e75656c5a2f2ad2de0fcd00fb3"
+    },
+    {
+      "argv": [
+        "cmake",
+        "--build",
+        "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/consumer-build",
+        "--config",
+        "RelWithDebInfo",
+        "--parallel",
+        "2"
+      ],
+      "exit_code": 0,
+      "log": "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/command-3.log",
+      "sha256": "cebec60b25d8a033f6712469327c94beba5400d68ed218d2b7c90f1c5d224d4a"
+    },
+    {
+      "argv": [
+        "ctest",
+        "--test-dir",
+        "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/consumer-build",
+        "-C",
+        "RelWithDebInfo",
+        "--output-on-failure"
+      ],
+      "exit_code": 0,
+      "log": "/workspace/scratch/fc3af6ec81f4/cpp-rt-car/build/m32-sdk/unreal-source-package-al7m3z9s/command-4.log",
+      "sha256": "2164990580906b0518a334b629a1c80bc9aae31e5dbe8caffa0668fb116024e4"
+    }
+  ]
+}
