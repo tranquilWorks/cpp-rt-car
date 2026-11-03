@@ -1,3 +1,13 @@
+# M32 source candidate update
+
+The November3 owner instruction moves Unreal implementation ahead of environment
+handover. [M32 source integration](unreal_adapter.md) now supplies candidate
+jobs/memory/clock, world/module lifecycle, sample, commandlet/PIE automation and
+build/package source. Original M19-02/03/04 below remain **unaccepted** pending
+actual current engine compilation/execution and required review. Earlier table
+wording about implementation requiring an environment records the M31 checkpoint;
+it is superseded for source preparation only. Portable proof cannot close it.
+
 # Remaining non-cyber batches after M29
 
 The owner requested continuing remaining work on 2026-10-06, retaining cyber

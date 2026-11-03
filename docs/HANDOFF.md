@@ -1,3 +1,22 @@
+# M32-01 source implementation before environment handover (2026-11-03)
+
+The owner explicitly requests implementation now without providing any engine,
+hardware or credentials. The [Unreal integration guide](unreal_adapter.md)
+describes the source candidate based on draft238 and current M31 main, shared
+portable world/module ownership, actual Unreal delegate/loader/PIE/sample source,
+and build/automation/package entry points. Current Unreal build/automation/PIE/
+packaging remains NOT RUN; old draft results do not validate this tree.
+See [M32 evidence](evidence/M32-01-2026-11-03.md) for actual local results.
+
+The next environment session should run the supplied engine gates, fix any
+engine-specific issues exposed, then perform the original physical/RT/manual
+acceptance. Do not ask the owner for keys to finish this source delivery. Earlier
+instructions below asking for engine availability before source implementation
+are historical and superseded only for the current source-candidate scope.
+M19 and global acceptance remain open; excluded cyber criteria stay unsatisfied.
+
+## Historical checkpoints
+
 # Owner start: pull, test, then say “let's begin”
 
 The portable integration is committed and available on `main`: [target PR304](https://github.com/tranquilWorks/cpp-rt-car/pull/304), merge `f0ccac6455946834f20fd314bd39c7d057e6eecd`; [canonical closeout PR632](https://github.com/tranquilWorks/portfolio-control/pull/632), merge `7e6f8693279411b4feaf33a7d9f6924fb1e55330`. The implementation passed 197 portable and 187 strict local tests and all 32 required hosted checks. This checklist is a documentation follow-up; those receipts describe the delivered implementation, not a test run on your machine.

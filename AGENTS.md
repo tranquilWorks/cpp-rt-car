@@ -861,3 +861,17 @@ acceptance cannot be manufactured from tools or fixtures.
 ## M31-01 owner-selected portable integration
 
 Owner requested finishing all available integration without hardware or owner participation, then will handle external gates. Canonical plan631 `861cf0e6bdc0b73986bc4fc8e4eb387fdf51eb74` activates only the portable world/module lifecycle and checked time source kit. Preserve protected Runtime/ABI/default SDK/old tests/workflows and prior evidence. Full local/all32 original hosted and package/source/risk/guarded integration remain mandatory under standing scoped publication/merge authority. Actual licensed Unreal bindings and hardware/RT/human/performance/production acceptance remain open; cyber remains unsatisfied.
+
+
+## M32-01 owner-selected source integration before environment handover
+
+The November3 owner instruction explicitly requests full source implementation
+without any engine, hardware or credentials now. Activate target-local M32-01
+from main838dc8f. Reconcile and reuse draft238 and the M31 Registry, finish
+Unreal world/module/sample/automation/build source and run available portable
+verification. Earlier engine-availability stops are superseded for source
+implementation only; actual engine builds/automation/PIE/package evidence remain
+NOT RUN. Preserve Runtime, old tests/deadlines, workflows, frozen acceptance,
+cyber exclusions and all original engine/physical/manual/release gates. Standing
+scoped publication authority permits a draft implementation PR; do not merge it
+as engine accepted without the original actual engine/human gates.

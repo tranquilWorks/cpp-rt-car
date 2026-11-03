@@ -656,3 +656,4 @@ add_subdirectory(portable_closeout)
 add_subdirectory(host_profiles)
 
 add_subdirectory(host_lifecycle)
+add_subdirectory(unreal_source)
